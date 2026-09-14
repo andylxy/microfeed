@@ -11,7 +11,12 @@ import {
 } from "@/server/auth/account-admin";
 import {cloudflareAccessIdentity} from "@/server/auth/admin-protection";
 import {listOAuthApplicationAccess} from "@/server/auth/oauth-admin";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {authSession, authUser, feedContent, onboardingResult} = Astro.locals;
 const accessIdentity = cloudflareAccessIdentity(Astro.request);
 if (!authUser && !accessIdentity.detected) {
@@ -33,10 +38,10 @@ const [passkeys, sessions, applications, apiSettings] = authUser
 <AdminShell
   accountNavigation
   activeNavItem={null}
-  documentTitle="Account settings | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.accountSettings", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Account settings"
+  pageTitle={translate("pageTitle.accountSettings", adminLanguage)}
 >
   <AccountSettingsApp
     client:only="react"

@@ -1,6 +1,7 @@
 import {type FormEvent, useState} from "react";
 import {LoaderCircleIcon} from "lucide-react";
 
+import {useTranslation} from "@/client/i18n";
 import {authClient} from "@/client/auth-client";
 import {Button} from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ interface CompletionResponse {
 }
 
 export default function AdminPasswordSetupApp({email, purpose}: Props) {
+  const {t} = useTranslation();
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [error, setError] = useState("");
@@ -55,7 +57,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
       );
       const result = await response.json() as CompletionResponse;
       if (!response.ok) {
-        setError(result.error ?? "Unable to save the password.");
+        setError(result.error ?? t("passwordSetup.saveFailed"));
         return;
       }
 
@@ -70,7 +72,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
       }
       window.location.assign(adminBasePath(browserAdminPath()));
     } catch {
-      setError("Unable to save the password right now. Please try again.");
+      setError(t("passwordSetup.saveUnavailable"));
     } finally {
       setSubmitting(false);
     }
@@ -93,13 +95,13 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
           <CardHeader className="gap-2 px-7 pt-7 pb-6 sm:px-9 sm:pt-9">
             <CardTitle>
               <h1 className="text-2xl leading-tight font-semibold tracking-[-0.025em] sm:text-[1.75rem]">
-                {isReset ? "Choose a new password" : "Create your admin password"}
+                {isReset ? t("passwordSetup.resetTitle") : t("passwordSetup.createTitle")}
               </h1>
             </CardTitle>
             <p className="text-sm leading-6 text-muted-foreground">
               {isReset
-                ? "This replaces your current password and signs out other sessions."
-                : "Your dashboard stays locked until this step is complete."}
+                ? t("passwordSetup.resetDescription")
+                : t("passwordSetup.createDescription")}
             </p>
           </CardHeader>
 
@@ -107,7 +109,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
             <form onSubmit={submit}>
               <FieldGroup className="gap-5">
                 <Field>
-                  <FieldLabel htmlFor="microfeed-setup-email">Email</FieldLabel>
+                  <FieldLabel htmlFor="microfeed-setup-email">{t("passwordSetup.email")}</FieldLabel>
                   <Input
                     className="h-11 bg-muted/40 px-3 text-base md:text-base"
                     id="microfeed-setup-email"
@@ -119,7 +121,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
 
                 <Field data-invalid={Boolean(error)}>
                   <FieldLabel htmlFor="microfeed-setup-password">
-                    Password
+                    {t("passwordSetup.password")}
                   </FieldLabel>
                   <Input
                     aria-invalid={Boolean(error)}
@@ -134,12 +136,12 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
                     type="password"
                     value={password}
                   />
-                  <FieldDescription>Use 12 to 128 characters.</FieldDescription>
+                  <FieldDescription>{t("passwordSetup.passwordDescription")}</FieldDescription>
                 </Field>
 
                 <Field data-invalid={Boolean(error)}>
                   <FieldLabel htmlFor="microfeed-setup-password-confirmation">
-                    Confirm password
+                    {t("passwordSetup.confirmPassword")}
                   </FieldLabel>
                   <Input
                     aria-invalid={Boolean(error)}
@@ -180,10 +182,10 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
                     />
                   )}
                   {submitting
-                    ? "Saving…"
+                    ? t("passwordSetup.saving")
                     : isReset
-                      ? "Reset password"
-                      : "Create password"}
+                      ? t("passwordSetup.resetPassword")
+                      : t("passwordSetup.createPassword")}
                 </Button>
               </FieldGroup>
             </form>

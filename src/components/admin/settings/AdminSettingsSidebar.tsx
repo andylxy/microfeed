@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import {Input} from "@/components/ui/input";
+import {useTranslation} from "@/client/i18n";
 import {
   ADMIN_SETTINGS_SECTIONS,
   filterAdminSettingsSections,
@@ -36,6 +37,16 @@ const sectionIcons: Record<AdminSettingsSection["icon"], typeof ActivityIcon> = 
   storage: HardDriveIcon,
 };
 
+const sectionNameKeys: Record<AdminSettingsSection["id"], string> = {
+  "custom-code": "settings.websiteAppearance",
+  "tracking-urls": "settings.trackingUrls",
+  "access-control": "settings.accessControl",
+  "subscribe-methods": "settings.subscribeMethods",
+  "media-file-storage": "settings.mediaFileStorage",
+  "items-settings": "settings.itemsSettings",
+  favicon: "settings.favicon",
+};
+
 function sectionFromLocation(): AdminSettingsSection["id"] {
   if (typeof window === "undefined") {
     return ADMIN_SETTINGS_SECTIONS[0].id;
@@ -47,6 +58,7 @@ function sectionFromLocation(): AdminSettingsSection["id"] {
 }
 
 export default function AdminSettingsSidebar({data, onNavigate}: Props) {
+  const {t} = useTranslation();
   const [activeSection, setActiveSection] = useState<AdminSettingsSection["id"]>(
     ADMIN_SETTINGS_SECTIONS[0].id,
   );
@@ -123,13 +135,13 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar p-3 text-sidebar-foreground">
       <a
-        aria-label="Go to Home"
+        aria-label={t("nav.goToHome")}
         className="mb-5 inline-flex h-11 items-center gap-2 self-start rounded-xl px-3 text-base font-medium text-sidebar-foreground outline-none transition hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40"
         href={data.backUrl}
         onClick={onNavigate}
       >
         <ArrowLeftIcon aria-hidden="true" className="size-5" />
-        <span>Home</span>
+        <span>{t("common.home")}</span>
       </a>
 
       <label className="relative mb-5 block">
@@ -137,10 +149,10 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
           aria-hidden="true"
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
-        <span className="sr-only">Search settings</span>
+        <span className="sr-only">{t("nav.searchSettings")}</span>
         <Input
           className="h-11 bg-background pl-10"
-          placeholder="Search settings..."
+          placeholder={t("nav.searchSettingsPlaceholder")}
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -153,7 +165,7 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
         />
       </label>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Settings sections">
+      <nav className="min-h-0 flex-1 overflow-y-auto" aria-label={t("nav.settingsSections")}>
         {visibleSections.length ? (
           <ul className="grid gap-1">
             {visibleSections.map((section) => {
@@ -181,7 +193,7 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
                     }}
                   >
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {section.name}
+                    {t(sectionNameKeys[section.id])}
                   </a>
                 </li>
               );
@@ -189,7 +201,7 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
           </ul>
         ) : (
           <p className="px-3 py-2 text-sm text-muted-foreground">
-            No settings sections found.
+            {t("nav.noSettingsSections")}
           </p>
         )}
       </nav>

@@ -409,7 +409,7 @@ describe("source architecture", () => {
       topBar.indexOf("lg:hidden\">{pageTitle}"),
     );
     expect(headerActions).not.toContain("MenuIcon");
-    expect(mobileNavigation).toContain('aria-label="Open admin navigation"');
+    expect(mobileNavigation).toContain('t("nav.openAdminNavigation")');
   });
 
   it("uses a single back link instead of a breadcrumb trail for item editing", async () => {

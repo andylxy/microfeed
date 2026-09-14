@@ -6,6 +6,8 @@ import ThemeDraftEditorApp from "@/components/admin/themes/ThemeDraftEditorApp";
 import type {ThemeEditorLinks} from "@/components/admin/code-editor/ThemeBundleEditor";
 import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import {getFetchItemsParams} from "@/server/feed/FeedDb";
 import {activeThemeSupportsPages, listPages} from "@/server/pages/service";
 import ThemeStore from "@/server/themes/ThemeStore";
@@ -13,6 +15,9 @@ import type {PublicFeed} from "@/types";
 import AdminShell from "../../../../../../layouts/AdminShell.astro";
 
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 if (!feedContent || !feedDb || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
 }
@@ -65,16 +70,20 @@ if (draft) {
 
 <AdminShell
   activeNavItem={NAV_ITEMS.SETTINGS}
-  documentTitle={draft ? `Edit ${draft.name} | microfeed.org` : "Theme draft not found | microfeed.org"}
+  documentTitle={draft
+    ? `${translate("pageMessage.editThemeDraftTitle", adminLanguage, {name: draft.name})} | microfeed.org`
+    : translate("pageDocumentTitle.themeDraftNotFound", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle={draft ? `Edit ${draft.name}` : "Theme draft not found"}
+  pageTitle={draft
+    ? translate("pageMessage.editThemeDraftTitle", adminLanguage, {name: draft.name})
+    : translate("pageTitle.themeDraftNotFound", adminLanguage)}
   settingsActiveSection="custom-code"
   settingsNavigation
   breadcrumb={{
-    name: "Themes",
+    name: translate("pageTitle.themes", adminLanguage),
     url: adminUrl("settings/themes", Astro.params.adminPath),
-    childName: "Edit draft",
+    childName: translate("pageTitle.editDraft", adminLanguage),
   }}
 >
   {draft ? (
@@ -83,7 +92,7 @@ if (draft) {
     </ThemeDraftEditorApp>
   ) : (
     <section class="rounded-[14px] border bg-card p-5 shadow-xs">
-      <p>The requested theme draft was not found.</p>
+      <p>{translate("pageMessage.themeDraftNotFound", adminLanguage)}</p>
     </section>
   )}
 </AdminShell>

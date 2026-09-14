@@ -5,7 +5,12 @@ import {NAV_ITEMS} from "@/shared/Constants";
 import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
 import {resolvePublicBucketUrl} from "@/shared/StringUtils";
 import AdminShell from "../../../../layouts/AdminShell.astro";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -20,10 +25,10 @@ const publicBucketUrl = resolvePublicBucketUrl(
 
 <AdminShell
   activeNavItem={NAV_ITEMS.ALL_ITEMS}
-  documentTitle="All items | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.allItems", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="All items"
+  pageTitle={translate("pageTitle.allItems", adminLanguage)}
 >
   <AllItemsApp client:only="react" {itemsPerPage} {publicBucketUrl}>
     <AdminPageFallback slot="fallback" kind="list" />

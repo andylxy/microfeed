@@ -1,14 +1,19 @@
 ---
 import {env} from "cloudflare:workers";
 
-import {NAV_ITEMS, NAV_ITEMS_DICT, STATUSES} from "@/shared/Constants";
+import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import EditItemApp from "@/components/admin/items/EditItemApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "../../../../layouts/AdminShell.astro";
 import {loadFeed} from "@/server/feed/feed";
 
 const itemId = Astro.params.itemId ?? "";
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const loaded = await loadFeed(env, Astro.request, {
   adminProtection: Astro.locals.adminProtection,
   limit: 1,
@@ -25,21 +30,25 @@ if (missing) {
 
 <AdminShell
   activeNavItem={NAV_ITEMS.ALL_ITEMS}
-  documentTitle={missing ? "Item not found | microfeed.org" : `Edit item (id = ${itemId}) | microfeed.org`}
+  documentTitle={missing
+    ? translate("pageDocumentTitle.itemNotFound", adminLanguage)
+    : `${translate("pageMessage.editItemTitle", adminLanguage, {id: itemId})} | microfeed.org`}
   feedContent={loaded.content}
   onboardingResult={loaded.onboarding}
-  pageTitle={missing ? "Item not found" : "Edit item"}
+  pageTitle={missing
+    ? translate("pageTitle.itemNotFound", adminLanguage)
+    : translate("pageTitle.editItem", adminLanguage)}
   breadcrumb={{
     kind: "back",
-    name: NAV_ITEMS_DICT[NAV_ITEMS.ALL_ITEMS].name,
+    name: translate("nav.item.all_items", adminLanguage),
     url: adminUrl("items/list", Astro.params.adminPath),
   }}
 >
   {
     missing ? (
       <section class="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs" aria-labelledby="not-found-title">
-        <h1 class="mb-4 text-lg font-semibold tracking-tight" id="not-found-title">Item not found</h1>
-        <p>The requested item does not exist or has been deleted.</p>
+        <h1 class="mb-4 text-lg font-semibold tracking-tight" id="not-found-title">{translate("pageTitle.itemNotFound", adminLanguage)}</h1>
+        <p>{translate("pageMessage.itemNotFound", adminLanguage)}</p>
       </section>
     ) : (
       <EditItemApp

@@ -6,7 +6,12 @@ import ApiAuthenticationApp from "@/components/admin/api/ApiAuthenticationApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listApiKeys, readApiAccessSettings} from "@/server/api/api-keys";
 import {NAV_ITEMS} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -21,10 +26,10 @@ const [initialApiKeys, initialSettings] = await Promise.all([
   activeNavItem={NAV_ITEMS.API}
   apiActivePage="authentication"
   apiNavigation
-  documentTitle="API Authentication | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.apiAuthentication", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="API Authentication"
+  pageTitle={translate("pageTitle.apiAuthentication", adminLanguage)}
 >
   <div class="mx-auto max-w-6xl">
     <ApiAuthenticationApp client:only="react" {initialApiKeys} {initialSettings}>

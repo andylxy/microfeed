@@ -9,6 +9,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {useTranslation} from "@/client/i18n";
 import AdminSidebar from "./AdminSidebar";
 import AdminSettingsSidebar from "./settings/AdminSettingsSidebar";
 import AdminApiSidebar from "./api/AdminApiSidebar";
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function AdminMobileNavigation({accountSidebar, apiSidebar, settingsSidebar, sidebar, webhookSidebar}: Props) {
+  const {t} = useTranslation();
   const [navigationOpen, setNavigationOpen] = useState(false);
 
   return (
@@ -38,7 +40,7 @@ export default function AdminMobileNavigation({accountSidebar, apiSidebar, setti
       <SheetTrigger
         render={
           <Button
-            aria-label="Open admin navigation"
+            aria-label={t("nav.openAdminNavigation")}
             className="shrink-0 lg:hidden"
             size="icon"
             variant="ghost"
@@ -48,9 +50,9 @@ export default function AdminMobileNavigation({accountSidebar, apiSidebar, setti
         <MenuIcon aria-hidden="true" />
       </SheetTrigger>
       <SheetContent className="p-0" side="left" showCloseButton={false}>
-        <SheetTitle className="sr-only">Admin navigation</SheetTitle>
+        <SheetTitle className="sr-only">{t("nav.adminNavigation")}</SheetTitle>
         <SheetDescription className="sr-only">
-          Navigate between microfeed dashboard pages.
+          {t("nav.adminNavigationDescription")}
         </SheetDescription>
         {accountSidebar ? (
           <AdminAccountSidebar

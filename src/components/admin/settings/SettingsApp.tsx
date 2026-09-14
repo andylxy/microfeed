@@ -12,6 +12,7 @@ import MediaFileStorageSettingsApp, {
   MEDIA_FILE_STORAGE_SUBMIT_KEY,
 } from "./MediaFileStorageSettingsApp";
 import Requests from "@/client/requests";
+import i18n from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {showToast} from "@/client/ToastUtils";
 import {ONBOARDING_TYPES, SETTINGS_CATEGORIES} from "@/shared/Constants";
@@ -116,14 +117,14 @@ export default class SettingsApp extends React.Component<Props, any> {
         },
         submitForType: null,
         submitStatus: null,
-      }), () => showToast('Updated!', 'success'));
+      }), () => showToast(i18n.t('common.updated'), 'success'));
       return true;
     } catch (error: any) {
       this.setState({submitStatus: null, submitForType: null}, () => {
         if (!error.response) {
-          showToast('Network error. Please refresh the page and try again.', 'error');
+          showToast(i18n.t('common.networkError'), 'error');
         } else {
-          showToast('Failed. Please try again.', 'error');
+          showToast(i18n.t('common.failed'), 'error');
         }
       });
       return false;

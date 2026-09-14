@@ -5,7 +5,12 @@ import WebhookDeliveriesApp from "@/components/admin/webhooks/WebhookDeliveriesA
 import AdminShell from "@/layouts/AdminShell.astro";
 import {getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints} from "@/server/webhooks/store";
 import {NAV_ITEMS} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error("Admin feed context was not initialized.");
 const deliveryId = Astro.url.searchParams.get("delivery_id");
@@ -18,10 +23,10 @@ const [initialDeliveries, endpoints, initialSelected] = await Promise.all([
 
 <AdminShell
   activeNavItem={NAV_ITEMS.WEBHOOKS}
-  documentTitle="Webhook deliveries | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.webhookDeliveries", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Webhook deliveries"
+  pageTitle={translate("pageTitle.webhookDeliveries", adminLanguage)}
   webhookActivePage="deliveries"
   webhookNavigation
 >

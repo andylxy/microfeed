@@ -6,9 +6,14 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {normalizeAdminPath} from "@/shared/AdminPath";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import {loadPublicPageRoute} from "@/server/pages/public";
 
 const routeAdminPath = Astro.params.adminPath ?? "";
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const adminRequest = routeAdminPath === normalizeAdminPath(
   env.MICROFEED_ADMIN_PATH,
 );
@@ -36,10 +41,10 @@ if (!adminRequest) {
 {adminRequest && AdminShell ? (
   <AdminShell
     activeNavItem={NAV_ITEMS.ADMIN_HOME}
-    documentTitle="Admin | microfeed.org"
+    documentTitle={translate("pageDocumentTitle.admin", adminLanguage)}
     feedContent={feedContent!}
     onboardingResult={onboardingResult!}
-    pageTitle="Home"
+    pageTitle={translate("pageTitle.home", adminLanguage)}
   >
     <AdminHomeApp client:only="react" feedContent={feedContent!} onboardingResult={onboardingResult!}>
       <AdminPageFallback slot="fallback" kind="home" />
@@ -48,5 +53,5 @@ if (!adminRequest) {
 ) : publicPage?.kind === "page" ? (
   <PublicLayout {...publicPage.layout} />
 ) : (
-  <h1>Not Found</h1>
+  <h1>{translate("pageTitle.notFound", adminLanguage)}</h1>
 )}

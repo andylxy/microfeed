@@ -6,6 +6,7 @@ import {
   WebhookIcon,
 } from "lucide-react";
 
+import {useTranslation} from "@/client/i18n";
 import {
   ADMIN_WEBHOOK_PAGES,
   type AdminWebhookPage,
@@ -25,19 +26,27 @@ const pageIcons: Record<AdminWebhookPage["icon"], typeof BlocksIcon> = {
   overview: BlocksIcon,
 };
 
+const pageNameKeys: Record<AdminWebhookPage["id"], string> = {
+  overview: "webhook.overview",
+  endpoints: "webhook.endpoints",
+  event_explorer: "webhook.eventExplorer",
+  deliveries: "webhook.deliveries",
+};
+
 export default function AdminWebhookSidebar({data, onNavigate}: Props) {
+  const {t} = useTranslation();
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar p-3 text-sidebar-foreground">
       <a
-        aria-label="Go to Home"
+        aria-label={t("nav.goToHome")}
         className="mb-5 inline-flex h-11 items-center gap-2 self-start rounded-xl px-3 text-base font-medium text-sidebar-foreground outline-none transition hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40"
         href={data.backUrl}
         onClick={onNavigate}
       >
         <ArrowLeftIcon aria-hidden="true" className="size-5" />
-        <span>Home</span>
+        <span>{t("common.home")}</span>
       </a>
-      <nav className="min-h-0 flex-1" aria-label="Webhook pages">
+      <nav className="min-h-0 flex-1" aria-label={t("nav.webhookPages")}>
         <ul className="grid gap-1">
           {ADMIN_WEBHOOK_PAGES.map((page) => {
             const Icon = pageIcons[page.icon];
@@ -56,7 +65,7 @@ export default function AdminWebhookSidebar({data, onNavigate}: Props) {
                   onClick={onNavigate}
                 >
                   <Icon aria-hidden="true" className="size-[18px]" />
-                  {page.name}
+                  {t(pageNameKeys[page.id])}
                 </a>
               </li>
             );

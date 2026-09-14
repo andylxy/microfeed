@@ -7,7 +7,12 @@ import {listWebhookEndpoints, webhookOverview} from "@/server/webhooks/store";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {isLocalDevelopmentHostname} from "@/shared/StringUtils";
 import {WEBHOOK_EVENT_TYPE_SET, type WebhookEventType} from "@/shared/Webhooks";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error("Admin feed context was not initialized.");
 const [endpoints, overview] = await Promise.all([
@@ -27,10 +32,10 @@ const localPrintAvailable = isLocalDevelopmentHostname(Astro.url.hostname);
 
 <AdminShell
   activeNavItem={NAV_ITEMS.WEBHOOKS}
-  documentTitle="Webhook Event explorer | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.webhookEventExplorer", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Webhook Event explorer"
+  pageTitle={translate("pageTitle.webhookEventExplorer", adminLanguage)}
   webhookActivePage="event_explorer"
   webhookNavigation
 >

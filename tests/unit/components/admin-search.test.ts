@@ -31,7 +31,7 @@ describe("admin item search", () => {
     expect(search).toContain('role="option"');
     expect(search).toContain('event.key === "ArrowDown"');
     expect(search).toContain('event.key === "Enter"');
-    expect(search).toContain("Search items...");
+    expect(search).toContain('t("search.searchItemsPlaceholder")');
     expect(search).toContain("sm:w-44");
     expect(search).toContain("sm:text-xs");
     expect(search).toContain("lg:w-56");

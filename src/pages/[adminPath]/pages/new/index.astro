@@ -5,9 +5,14 @@ import PageEditorApp from "@/components/admin/pages/PageEditorApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {NAV_ITEMS, NAV_ITEMS_DICT} from "@/shared/Constants";
+import {NAV_ITEMS} from "@/shared/Constants";
 import {activeThemeSupportsPages} from "@/server/pages/service";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -17,11 +22,11 @@ const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
 
 <AdminShell
   activeNavItem={NAV_ITEMS.PAGES}
-  documentTitle="New Page | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.newPage", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Add Page"
-  breadcrumb={{kind: "back", name: NAV_ITEMS_DICT[NAV_ITEMS.PAGES].name, url: adminUrl("pages", Astro.params.adminPath)}}
+  pageTitle={translate("pageTitle.newPage", adminLanguage)}
+  breadcrumb={{kind: "back", name: translate("nav.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
 >
   <PageEditorApp client:only="react" {themeSupportsPages}>
     <AdminPageFallback slot="fallback" kind="form" />

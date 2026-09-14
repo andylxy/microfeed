@@ -188,9 +188,7 @@ describe("admin dashboard shell models", () => {
     );
 
     expect(dialog).toContain('import {MICROFEED_VERSION} from "@/shared/Version"');
-    expect(dialog).toContain(
-      '<dt className="text-muted-foreground">Version</dt>',
-    );
+    expect(dialog).toContain('t("about.version")');
     expect(dialog).toContain("<dd><code>{MICROFEED_VERSION}</code></dd>");
   });
 
@@ -205,11 +203,11 @@ describe("admin dashboard shell models", () => {
 
     expect(dialog).toContain("sm:grid-cols-3");
     expect(dialog).toContain("href={OUR_BRAND.documentationWebsite}");
-    expect(dialog).toContain(">Project website</span>");
+    expect(dialog).toContain('t("about.projectWebsite")');
     expect(dialog).toContain(">www.microfeed.org</span>");
-    expect(dialog).toContain(">Documentation</span>");
+    expect(dialog).toContain('t("about.documentation")');
     expect(dialog).toContain(">docs.microfeed.org</span>");
-    expect(dialog).toContain(">Github repo</span>");
+    expect(dialog).toContain('t("about.githubRepo")');
     expect(dialog).toContain(">github.com/microfeed</span>");
     expect(dialog).not.toContain(
       "Product links, deployment details, and the shortest safe update path.",

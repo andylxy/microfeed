@@ -3,7 +3,12 @@ import SettingsApp from "@/components/admin/settings/SettingsApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import {NAV_ITEMS} from "@/shared/Constants";
 import AdminShell from "../../../layouts/AdminShell.astro";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -12,10 +17,10 @@ if (!feedContent || !onboardingResult) {
 
 <AdminShell
   activeNavItem={NAV_ITEMS.SETTINGS}
-  documentTitle="Settings | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.settings", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Settings"
+  pageTitle={translate("pageTitle.settings", adminLanguage)}
   settingsNavigation
 >
   <SettingsApp client:only="react" {feedContent} {onboardingResult}>

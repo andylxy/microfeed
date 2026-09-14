@@ -1,8 +1,11 @@
 ---
 import "@fontsource-variable/geist";
 import AdminThemeMenu from "@/components/admin/AdminThemeMenu";
+import AdminLanguageMenu from "@/components/admin/AdminLanguageMenu";
 import AdminThemeScript from "@/components/admin/AdminThemeScript.astro";
+import AdminLanguageScript from "@/components/admin/AdminLanguageScript.astro";
 import adminStylesheetUrl from "@/styles/admin-stylesheet";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
 import "../styles/interactive.css";
 
 interface Props {
@@ -11,10 +14,13 @@ interface Props {
 }
 
 const {adminPath, title} = Astro.props;
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={adminLanguage}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,10 +28,14 @@ const {adminPath, title} = Astro.props;
     <title>{title}</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon/favicon-32x32.png" />
     <link rel="stylesheet" href={adminStylesheetUrl} />
+    <AdminLanguageScript />
     <AdminThemeScript />
   </head>
   <body>
-    <div class="fixed top-4 right-4 z-20"><AdminThemeMenu client:load /></div>
+    <div class="fixed top-4 right-4 z-20 flex gap-2">
+      <AdminThemeMenu client:load />
+      <AdminLanguageMenu client:load />
+    </div>
     <slot />
   </body>
 </html>

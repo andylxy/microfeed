@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {adminUrl} from "@/shared/AdminPath";
+import {useTranslation} from "@/client/i18n";
 import type {AdminIdentitySummary} from "./admin-shell-types";
 
 interface Props extends AdminIdentitySummary {
@@ -60,6 +61,7 @@ export default function AdminUserMenu({
   cloudflareAccessEmail,
   defaultOpen = false,
 }: Props) {
+  const {t} = useTranslation();
   const [error, setError] = useState("");
   const [open, setOpen] = useState(defaultOpen);
   const [signingOut, setSigningOut] = useState(false);
@@ -69,6 +71,15 @@ export default function AdminUserMenu({
     cloudflareAccessEmail,
   });
   const authenticated = identities.length > 0;
+  const identityLabel = (label: string): string => {
+    if (label === "Built-in login") return t("userMenu.builtInLogin");
+    if (label === "Cloudflare Access") return t("userMenu.cloudflareAccess");
+    return label;
+  };
+  const identityValue = (label: string, value: string): string =>
+    label === "Cloudflare Access" && value === "Protected by Cloudflare Access"
+      ? t("userMenu.protectedByCloudflareAccess")
+      : value;
 
   async function signOut() {
     setError("");
@@ -78,7 +89,7 @@ export default function AdminUserMenu({
         const {authClient} = await import("@/client/auth-client");
         const result = await authClient.signOut();
         if (result.error) {
-          throw new Error(result.error.message || "Sign out failed");
+          throw new Error(result.error.message || t("userMenu.signOutFailed"));
         }
       }
       window.location.assign(adminLogoutDestination(
@@ -87,7 +98,7 @@ export default function AdminUserMenu({
       ));
     } catch {
       setSigningOut(false);
-      setError("Unable to sign out right now. Please try again.");
+      setError(t("userMenu.signOutUnavailable"));
       setOpen(true);
     }
   }
@@ -97,7 +108,7 @@ export default function AdminUserMenu({
       <DropdownMenuTrigger
         render={
           <Button
-            aria-label="Open account menu"
+            aria-label={t("userMenu.openAccountMenu")}
             className="gap-1 rounded-full pl-2"
             variant="ghost"
           />
@@ -113,10 +124,10 @@ export default function AdminUserMenu({
               {identities.map((identity) => (
                 <span className="block" key={identity.label}>
                   <span className="block text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase">
-                    {identity.label}
+                    {identityLabel(identity.label)}
                   </span>
                   <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
-                    {identity.value}
+                    {identityValue(identity.label, identity.value)}
                   </span>
                 </span>
               ))}
@@ -126,7 +137,7 @@ export default function AdminUserMenu({
               render={<a href={adminAccountSettingsDestination(adminPath)} />}
             >
               <SettingsIcon aria-hidden="true" />
-              Account settings
+              {t("userMenu.accountSettings")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {error && (
@@ -142,16 +153,16 @@ export default function AdminUserMenu({
               }}
             >
               <LogOutIcon aria-hidden="true" />
-              {signingOut ? "Signing out…" : "Sign out"}
+              {signingOut ? t("userMenu.signingOut") : t("userMenu.signOut")}
             </DropdownMenuItem>
           </>
         ) : (
           <div className="m-1 flex gap-2 rounded-lg border border-warning-color/25 bg-warning-color/10 p-3 text-sm">
             <ShieldAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-color" />
             <span>
-              <strong className="block text-foreground">No authentication</strong>
+              <strong className="block text-foreground">{t("userMenu.noAuthentication")}</strong>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                Anyone who knows this dashboard address can open it.
+                {t("userMenu.noAuthenticationDescription")}
               </span>
             </span>
           </div>

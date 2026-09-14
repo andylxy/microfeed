@@ -7,7 +7,12 @@ import CustomCodeEditorApp, {
 } from "@/components/admin/code-editor/CustomCodeEditorApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "../../../../layouts/AdminShell.astro";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
 if (!feedContent || !feedDb || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -35,16 +40,16 @@ const themeTemplate: ThemeTemplate = {
 
 <AdminShell
   activeNavItem={NAV_ITEMS.SETTINGS}
-  documentTitle="Code Editor | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.codeEditor", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Code editor"
+  pageTitle={translate("pageTitle.codeEditor", adminLanguage)}
   settingsActiveSection="custom-code"
   settingsNavigation
   breadcrumb={{
-    name: "Settings",
+    name: translate("pageTitle.settings", adminLanguage),
     url: adminUrl("settings", Astro.params.adminPath),
-    childName: "Code Editor",
+    childName: translate("pageTitle.codeEditor", adminLanguage),
   }}
 >
   <CustomCodeEditorApp client:only="react" {feedContent} {themeTemplate}>

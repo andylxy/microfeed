@@ -10,6 +10,7 @@ import {
   currentAdminTheme,
   setAdminTheme,
 } from "@/client/admin-theme";
+import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,15 +27,16 @@ import {
 
 const themeOptions: Array<{
   icon: typeof MonitorIcon;
-  label: string;
+  labelKey: string;
   value: AdminTheme;
 }> = [
-  {icon: MonitorIcon, label: "System", value: "system"},
-  {icon: SunIcon, label: "Light", value: "light"},
-  {icon: MoonIcon, label: "Dark", value: "dark"},
+  {icon: MonitorIcon, labelKey: "themeMenu.system", value: "system"},
+  {icon: SunIcon, labelKey: "themeMenu.light", value: "light"},
+  {icon: MoonIcon, labelKey: "themeMenu.dark", value: "dark"},
 ];
 
 export default function AdminThemeMenu() {
+  const {t} = useTranslation();
   const [theme, setThemeState] = useState<AdminTheme>("light");
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function AdminThemeMenu() {
       <DropdownMenuTrigger
         render={
           <Button
-            aria-label={`Color theme: ${theme}`}
+            aria-label={t("themeMenu.colorThemeLabel", {theme: t(themeOptions.find((option) => option.value === theme)?.labelKey ?? "themeMenu.light")})}
             className="rounded-full"
             size="icon"
             variant="ghost"
@@ -65,7 +67,7 @@ export default function AdminThemeMenu() {
         <ActiveIcon aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel>Color theme</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("themeMenu.colorTheme")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={theme}
           onValueChange={(value) => {
@@ -74,10 +76,10 @@ export default function AdminThemeMenu() {
             setAdminTheme(nextTheme);
           }}
         >
-          {themeOptions.map(({icon: Icon, label, value}) => (
+          {themeOptions.map(({icon: Icon, labelKey, value}) => (
             <DropdownMenuRadioItem key={value} value={value}>
               <Icon aria-hidden="true" />
-              {label}
+              {t(labelKey)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

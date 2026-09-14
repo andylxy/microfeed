@@ -1,5 +1,6 @@
 import {useRef, useState, type ReactNode} from "react";
 
+import {useTranslation} from "@/client/i18n";
 import {
   Combobox,
   ComboboxChip,
@@ -65,22 +66,25 @@ const optionText = <Option extends AdminSelectOption>(option: Option) =>
 export default function AdminSelect<Option extends AdminSelectOption>(
   props: AdminSelectProps<Option>,
 ) {
+  const {t} = useTranslation();
   const {
     ariaLabel,
     disabled = false,
-    emptyText = "No options found.",
+    emptyText,
     isOptionDisabled = () => false,
     label,
     labelComponent = null,
     options,
-    placeholder = "Select...",
-    searchPlaceholder = placeholder,
+    placeholder,
+    searchPlaceholder,
   } = props;
+  const resolvedPlaceholder = placeholder ?? t("select.placeholder");
+  const resolvedSearchPlaceholder = searchPlaceholder ?? resolvedPlaceholder;
   const anchorRef = useRef<HTMLDivElement>(null);
   const [singleInputValue, setSingleInputValue] = useState("");
   const [singleOpen, setSingleOpen] = useState(false);
   const accessibleLabel = ariaLabel ??
-    (typeof label === "string" ? label : "Select an option");
+    (typeof label === "string" ? label : t("select.selectOption"));
   const visibleOptions = props.multiple
     ? options.filter((option) => !props.value.some(
       (selected) => selected.value === option.value,
@@ -97,7 +101,7 @@ export default function AdminSelect<Option extends AdminSelectOption>(
   };
   const optionList = (
     <>
-      <ComboboxEmpty className="px-3 py-2">{emptyText}</ComboboxEmpty>
+      <ComboboxEmpty className="px-3 py-2">{emptyText ?? t("select.noOptions")}</ComboboxEmpty>
       <ComboboxList className="p-1">
         {(option: Option) => (
           <ComboboxItem
@@ -144,7 +148,7 @@ export default function AdminSelect<Option extends AdminSelectOption>(
                     ))}
                     <ComboboxInput
                       aria-label={accessibleLabel}
-                      placeholder={selectedOptions.length > 0 ? "" : placeholder}
+                      placeholder={selectedOptions.length > 0 ? "" : resolvedPlaceholder}
                       disabled={disabled}
                       className="h-9 px-1 py-1 text-sm"
                     />
@@ -227,7 +231,7 @@ export default function AdminSelect<Option extends AdminSelectOption>(
                 }
                 placeholder={props.value
                   ? ""
-                  : (singleOpen ? searchPlaceholder : placeholder)
+                  : (singleOpen ? resolvedSearchPlaceholder : resolvedPlaceholder)
                 }
                 disabled={disabled}
               />

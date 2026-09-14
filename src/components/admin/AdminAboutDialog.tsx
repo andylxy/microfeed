@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {useTranslation} from "@/client/i18n";
 import {OUR_BRAND} from "@/shared/Constants";
 import {
   MICROFEED_MANAGE_COMMAND,
@@ -78,6 +79,7 @@ export function adminSourceCommitView(
 }
 
 export default function AdminAboutDialog({defaultOpen = false, deployment}: Props) {
+  const {t} = useTranslation();
   const [copied, setCopied] = useState<"commit" | "prompt" | null>(null);
   const sourceCommit = adminSourceCommitView(deployment);
   const updatePrompt = adminUpdatePrompt(deployment);
@@ -99,19 +101,19 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
         }
       >
         <img
-          alt="microfeed by Listen Notes"
+          alt={t("about.microfeedAlt")}
           className="h-auto w-full max-w-48 object-contain dark:hidden"
           src="/assets/brands/microfeed/horizontal-logo.png"
         />
         <img
-          alt="microfeed by Listen Notes"
+          alt={t("about.microfeedAlt")}
           className="hidden h-auto w-full max-w-48 object-contain dark:block"
           src="/assets/brands/microfeed/horizontal-logo-dark.png"
         />
       </DialogTrigger>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="text-xl">About this microfeed</DialogTitle>
+          <DialogTitle className="text-xl">{t("about.aboutMicrofeed")}</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -123,7 +125,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
           >
             <GlobeIcon aria-hidden="true" className="size-5 text-brand-light" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Project website</span>
+              <span className="block text-sm font-semibold">{t("about.projectWebsite")}</span>
               <span className="block text-xs font-normal text-muted-foreground">www.microfeed.org</span>
             </span>
             <ExternalLinkIcon aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -136,7 +138,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
           >
             <BookOpenIcon aria-hidden="true" className="size-5 text-brand-light" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Documentation</span>
+              <span className="block text-sm font-semibold">{t("about.documentation")}</span>
               <span className="block text-xs font-normal text-muted-foreground">docs.microfeed.org</span>
             </span>
             <ExternalLinkIcon aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -149,7 +151,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
           >
             <GitForkIcon aria-hidden="true" className="size-5 text-brand-light" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Github repo</span>
+              <span className="block text-sm font-semibold">{t("about.githubRepo")}</span>
               <span className="block text-xs font-normal text-muted-foreground">github.com/microfeed</span>
             </span>
             <ExternalLinkIcon aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -157,14 +159,14 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
         </div>
 
         <section className="rounded-xl border bg-muted/30 p-4" aria-labelledby="deployment-details-title">
-          <h3 className="text-sm font-semibold" id="deployment-details-title">Deployment details</h3>
+          <h3 className="text-sm font-semibold" id="deployment-details-title">{t("about.deploymentDetails")}</h3>
           <dl className="mt-3 grid gap-3 text-sm">
             <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:items-center">
-              <dt className="text-muted-foreground">Version</dt>
+              <dt className="text-muted-foreground">{t("about.version")}</dt>
               <dd><code>{MICROFEED_VERSION}</code></dd>
             </div>
             <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:items-center">
-              <dt className="text-muted-foreground">Deployed</dt>
+              <dt className="text-muted-foreground">{t("about.deployed")}</dt>
               <dd>
                 <time dateTime={deployment.deployedAt} suppressHydrationWarning>
                   {new Intl.DateTimeFormat(undefined, {dateStyle: "medium", timeStyle: "short"}).format(new Date(deployment.deployedAt))}
@@ -172,16 +174,16 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
               </dd>
             </div>
             <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:items-center">
-              <dt className="text-muted-foreground">Source commit</dt>
+              <dt className="text-muted-foreground">{t("about.sourceCommit")}</dt>
               <dd className="min-w-0">
                 {sourceCommit.kind === "authenticated-required" ? (
-                  <span className="text-muted-foreground">Enable dashboard authentication to view</span>
+                  <span className="text-muted-foreground">{t("about.enableAuthToView")}</span>
                 ) : sourceCommit.kind === "commit" ? (
                   <span className="flex items-center gap-2">
                     <GitCommitHorizontalIcon aria-hidden="true" className="size-4 shrink-0 text-brand-light" />
                     <code className="truncate text-xs">{sourceCommit.short}</code>
                     <Button
-                      aria-label="Copy full source commit"
+                      aria-label={t("about.copyFullSourceCommit")}
                       className="ml-auto"
                       onClick={() => void copy(sourceCommit.full, "commit")}
                       size="icon-sm"
@@ -191,7 +193,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
                     </Button>
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">Available after the next <code>{managementCommand("deploy")}</code>.</span>
+                  <span className="text-muted-foreground">{t("about.availableAfterDeploy", {command: managementCommand("deploy")})}</span>
                 )}
               </dd>
             </div>
@@ -199,16 +201,16 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
         </section>
 
         <section aria-labelledby="update-title">
-          <h3 className="text-sm font-semibold" id="update-title">Update to the latest version</h3>
+          <h3 className="text-sm font-semibold" id="update-title">{t("about.updateToLatest")}</h3>
           <ol className="mt-3 grid gap-2 text-sm text-muted-foreground">
-            <li className="flex gap-3"><span className="font-semibold text-brand-light">1</span><span>Open a local AI coding agent in any folder.</span></li>
-            <li className="flex gap-3"><span className="font-semibold text-brand-light">2</span><span>Paste the prompt below.</span></li>
-            <li className="flex gap-3"><span className="font-semibold text-brand-light">3</span><span>Complete any requested Cloudflare browser authorization or choices while the agent deploys and verifies the site.</span></li>
+            <li className="flex gap-3"><span className="font-semibold text-brand-light">1</span><span>{t("about.updateStep1")}</span></li>
+            <li className="flex gap-3"><span className="font-semibold text-brand-light">2</span><span>{t("about.updateStep2")}</span></li>
+            <li className="flex gap-3"><span className="font-semibold text-brand-light">3</span><span>{t("about.updateStep3")}</span></li>
           </ol>
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-brand-dark p-3 text-white dark:bg-background dark:ring-1 dark:ring-border">
             <code className="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-relaxed">{updatePrompt}</code>
             <Button
-              aria-label="Copy update prompt"
+              aria-label={t("about.copyUpdatePrompt")}
               className="shrink-0 text-white hover:bg-white/10 hover:text-white"
               onClick={() => void copy(updatePrompt, "prompt")}
               size="icon-sm"

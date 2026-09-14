@@ -1,10 +1,18 @@
 ---
+import {translate} from "@/shared/i18n";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+
 interface Props {
   kind: "editor" | "form" | "home" | "list" | "settings";
   label?: string;
 }
 
-const {kind, label = "Loading admin page"} = Astro.props;
+const {kind, label} = Astro.props;
+const fallbackLabel = translate(
+  "common.loading",
+  languageFromAcceptLanguage(Astro.request.headers.get("accept-language")),
+);
+const resolvedLabel = label ?? fallbackLabel;
 const rowCounts = {
   editor: 12,
   form: 9,
@@ -23,7 +31,7 @@ const rowCounts = {
   aria-busy="true"
   aria-live="polite"
 >
-  <span class="sr-only">{label}</span>
+  <span class="sr-only">{resolvedLabel}</span>
   <div class="h-8 w-48 animate-pulse rounded-[10px] bg-muted"></div>
   <div class="mt-8 grid gap-6" aria-hidden="true">
     {

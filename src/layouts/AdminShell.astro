@@ -9,6 +9,7 @@ import AdminAccountSidebar from "@/components/admin/account/AdminAccountSidebar"
 import AdminSettingsSidebar from "@/components/admin/settings/AdminSettingsSidebar";
 import AdminWebhookSidebar from "@/components/admin/webhooks/AdminWebhookSidebar";
 import AdminThemeScript from "@/components/admin/AdminThemeScript.astro";
+import AdminLanguageScript from "@/components/admin/AdminLanguageScript.astro";
 import AdminTopBar from "@/components/admin/AdminTopBar.astro";
 import {Toaster} from "@/components/ui/sonner";
 import {adminChannelSummary} from "@/components/admin/admin-shell-types";
@@ -24,6 +25,10 @@ import type {
 } from "@/components/admin/admin-shell-types";
 import {cloudflareAccessIdentity} from "@/server/auth/admin-protection";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
+import {
+  languageFromAcceptLanguage,
+  type AdminLanguage,
+} from "@/shared/AdminLanguage";
 import {
   getAdminNavigationItems,
   type AdminNavItemId,
@@ -85,6 +90,9 @@ const {
   webhookNavigation = false,
 } = Astro.props;
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
+const adminLanguage: AdminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const accessIdentity = cloudflareAccessIdentity(Astro.request);
 const identity: AdminIdentitySummary = {
   builtInEmail: Astro.locals.authUser?.email,
@@ -186,7 +194,7 @@ const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
 <!doctype html>
 <html
   class="lg:h-full lg:overflow-hidden"
-  lang="en"
+  lang={adminLanguage}
   transition:name="admin-root"
   transition:animate="none"
 >
@@ -204,6 +212,7 @@ const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
     <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon/favicon-16x16.png" />
     <link rel="manifest" href="/assets/favicon/site.webmanifest" />
     <link rel="stylesheet" href={adminStylesheetUrl} />
+    <AdminLanguageScript />
     <AdminThemeScript />
     <ClientRouter fallback="swap" />
   </head>

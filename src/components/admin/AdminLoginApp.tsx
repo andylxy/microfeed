@@ -5,6 +5,7 @@ import {
   adminBasePath,
   browserAdminPath,
 } from "@/shared/AdminPath";
+import {useTranslation} from "@/client/i18n";
 import {authClient} from "@/client/auth-client";
 import {Button} from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ function safeAuthorizationRedirect(value: unknown): string | null {
 }
 
 export default function AdminLoginApp() {
+  const {t} = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -62,7 +64,7 @@ export default function AdminLoginApp() {
         rememberMe: true,
       });
       if (result.error) {
-        setError("The email or password is incorrect.");
+        setError(t("login.incorrectCredentials"));
         return;
       }
       const response = result.data as {url?: unknown} | null;
@@ -70,7 +72,7 @@ export default function AdminLoginApp() {
         safeAuthorizationRedirect(response?.url) ?? safeRedirect(),
       );
     } catch {
-      setError("Unable to sign in right now. Please try again.");
+      setError(t("login.signInUnavailable"));
     } finally {
       setSubmitting(false);
     }
@@ -82,7 +84,7 @@ export default function AdminLoginApp() {
     try {
       const result = await authClient.signIn.passkey();
       if (result.error) {
-        setError(result.error.message || "Passkey sign-in failed.");
+        setError(result.error.message || t("login.passkeyFailed"));
         return;
       }
       const response = result.data as {url?: unknown} | null;
@@ -90,7 +92,7 @@ export default function AdminLoginApp() {
         safeAuthorizationRedirect(response?.url) ?? safeRedirect(),
       );
     } catch {
-      setError("Unable to sign in with a passkey right now.");
+      setError(t("login.passkeyUnavailable"));
     } finally {
       setPasskeySubmitting(false);
     }
@@ -113,7 +115,7 @@ export default function AdminLoginApp() {
           <CardHeader className="gap-0 px-7 pt-7 pb-6 sm:px-9 sm:pt-9">
             <CardTitle>
               <h1 className="text-2xl leading-tight font-semibold tracking-[-0.025em] sm:text-[1.75rem]">
-                Sign in to the admin dashboard
+                {t("login.signInTitle")}
               </h1>
             </CardTitle>
           </CardHeader>
@@ -123,7 +125,7 @@ export default function AdminLoginApp() {
               <FieldGroup className="gap-5">
                 <Field data-invalid={Boolean(error)}>
                   <FieldLabel htmlFor="microfeed-login-email">
-                    Email
+                    {t("login.email")}
                   </FieldLabel>
                   <Input
                     aria-invalid={Boolean(error)}
@@ -132,7 +134,7 @@ export default function AdminLoginApp() {
                     className="h-11 px-3 text-base md:text-base"
                     id="microfeed-login-email"
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@example.com"
+                    placeholder={t("login.emailPlaceholder")}
                     required
                     type="email"
                     value={email}
@@ -141,7 +143,7 @@ export default function AdminLoginApp() {
 
                 <Field data-invalid={Boolean(error)}>
                   <FieldLabel htmlFor="microfeed-login-password">
-                    Password
+                    {t("login.password")}
                   </FieldLabel>
                   <Input
                     aria-invalid={Boolean(error)}
@@ -151,7 +153,7 @@ export default function AdminLoginApp() {
                     maxLength={128}
                     minLength={12}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter your password"
+                    placeholder={t("login.passwordPlaceholder")}
                     required
                     type="password"
                     value={password}
@@ -180,11 +182,11 @@ export default function AdminLoginApp() {
                       data-icon="inline-start"
                     />
                   )}
-                  {submitting ? "Signing in…" : "Sign in"}
+                  {submitting ? t("login.signingIn") : t("login.signIn")}
                 </Button>
 
                 <div className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                  or
+                  {t("login.or")}
                 </div>
                 <Button
                   className="h-11 w-full text-base font-medium"
@@ -197,7 +199,7 @@ export default function AdminLoginApp() {
                   {passkeySubmitting && (
                     <LoaderCircleIcon aria-hidden="true" className="animate-spin" />
                   )}
-                  {passkeySubmitting ? "Waiting for passkey…" : "Sign in with a passkey"}
+                  {passkeySubmitting ? t("login.passkeyWaiting") : t("login.passkeySignIn")}
                 </Button>
               </FieldGroup>
             </form>

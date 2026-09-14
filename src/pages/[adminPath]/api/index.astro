@@ -8,7 +8,12 @@ import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 import AdminShell from "../../../layouts/AdminShell.astro";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -24,10 +29,10 @@ const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
   activeNavItem={NAV_ITEMS.API}
   apiActivePage="overview"
   apiNavigation
-  documentTitle="API Overview | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.apiOverview", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="API Overview"
+  pageTitle={translate("pageTitle.apiOverview", adminLanguage)}
 >
   <div class="mx-auto max-w-5xl">
     <ApiOverviewApp

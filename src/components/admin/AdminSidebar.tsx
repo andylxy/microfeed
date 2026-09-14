@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import {buttonVariants} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
+import {useTranslation} from "@/client/i18n";
 import {NAV_ITEMS} from "@/shared/Constants";
 import type {AdminNavItemId} from "@/shared/AdminNavigation";
 import AdminAboutDialog from "./AdminAboutDialog";
@@ -43,6 +44,7 @@ const navigationIcons: Record<AdminNavItemId, typeof HomeIcon> = {
 };
 
 export default function AdminSidebar({data, onNavigate}: Props) {
+  const {t} = useTranslation();
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="p-3">
@@ -50,7 +52,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
           <DialogTrigger
             render={
               <button
-                aria-label={`Open public access links for ${data.channel.title}`}
+                aria-label={t("nav.openPublicAccess", {title: data.channel.title})}
                 className="group flex min-h-16 w-full items-center gap-3 rounded-[var(--radius-card)] border border-sidebar-border bg-sidebar px-3 py-2.5 text-left shadow-xs outline-none transition hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40"
                 type="button"
               />
@@ -75,10 +77,10 @@ export default function AdminSidebar({data, onNavigate}: Props) {
           </DialogTrigger>
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-0 sm:max-w-3xl">
             <DialogTitle className="sr-only">
-              Public access for {data.channel.title}
+              {t("nav.publicAccess", {title: data.channel.title})}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              Copy or open this channel's public web, RSS, and JSON feed addresses.
+              {t("nav.publicAccessDescription")}
             </DialogDescription>
             <AdminPublicAccess
               className="border-0 shadow-none"
@@ -98,7 +100,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
             )}
           >
             <PlusIcon aria-hidden="true" />
-            Add new item
+            {t("nav.addNewItem")}
           </span>
         ) : (
           <a
@@ -111,12 +113,12 @@ export default function AdminSidebar({data, onNavigate}: Props) {
             onClick={onNavigate}
           >
             <PlusIcon aria-hidden="true" />
-            Add new item
+            {t("nav.addNewItem")}
           </a>
         )}
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label="Admin navigation">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label={t("nav.adminNavigation")}>
         <ul className="grid gap-1">
           {data.items.map((item) => {
             const Icon = navigationIcons[item.id];
@@ -124,7 +126,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
               "relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-base font-medium outline-none transition-colors",
               item.active
                 ? "bg-brand-light/12 text-brand-dark before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand-light dark:text-brand-light"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
               item.disabled ? "cursor-not-allowed opacity-45" : "",
             ].filter(Boolean).join(" ");
 
@@ -133,7 +135,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
                 {item.disabled ? (
                   <span aria-disabled="true" className={classes}>
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {item.name}
+                    {t(`nav.item.${item.id}`)}
                   </span>
                 ) : (
                   <a
@@ -144,7 +146,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
                     onClick={onNavigate}
                   >
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {item.name}
+                    {t(`nav.item.${item.id}`)}
                   </a>
                 )}
               </li>

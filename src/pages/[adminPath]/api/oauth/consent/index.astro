@@ -6,8 +6,13 @@ import AdminLoginShell from "@/layouts/AdminLoginShell.astro";
 import {getOAuthClientSummary} from "@/server/auth/oauth-admin";
 import {oauthConnectionHandoff} from "@/server/auth/account-security";
 import {normalizeAdminPath} from "@/shared/AdminPath";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const clientId = Astro.url.searchParams.get("client_id")?.trim() ?? "";
 const requestedScopes = Astro.url.searchParams.get("scope")?.split(" ").filter(Boolean) ?? [];
 const client = clientId
@@ -27,7 +32,7 @@ const connection = await oauthConnectionHandoff(
 );
 ---
 
-<AdminLoginShell title={`Authorize ${client.name} | microfeed`} {adminPath}>
+<AdminLoginShell title={translate("pageDocumentTitle.authorize", adminLanguage, {name: client.name})} {adminPath}>
   <OAuthConsentApp
     client:load
     {client}

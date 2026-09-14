@@ -12,5 +12,6 @@ export default defineConfig({
     exclude: ["tests/worker/**", "node_modules/**", "dist/**"],
     globals: true,
     include: ["tests/unit/**/*.test.ts"],
+    setupFiles: ["tests/unit/i18n-setup.ts"],
   },
 });

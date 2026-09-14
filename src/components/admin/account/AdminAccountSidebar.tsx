@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import {scrollToAdminSettingsSection} from "@/client/AdminSettingsScroll";
+import {useTranslation} from "@/client/i18n";
 import {Input} from "@/components/ui/input";
 import {
   ADMIN_ACCOUNT_SECTIONS,
@@ -30,6 +31,13 @@ const icons: Record<AdminAccountSection["icon"], typeof BlocksIcon> = {
   sessions: MonitorSmartphoneIcon,
 };
 
+const sectionNameKeys: Record<AdminAccountSection["id"], string> = {
+  "login-identity": "account.loginIdentity",
+  passkeys: "account.passkeys",
+  "active-sessions": "account.activeSessions",
+  "app-access": "account.appAccess",
+};
+
 function locationSection(): AdminAccountSection["id"] {
   const hash = typeof window === "undefined" ? "" : window.location.hash.slice(1);
   return ADMIN_ACCOUNT_SECTIONS.find(({id}) => id === hash)?.id ??
@@ -37,6 +45,7 @@ function locationSection(): AdminAccountSection["id"] {
 }
 
 export default function AdminAccountSidebar({data, onNavigate}: Props) {
+  const {t} = useTranslation();
   const [active, setActive] = useState<AdminAccountSection["id"]>(
     locationSection,
   );
@@ -89,14 +98,14 @@ export default function AdminAccountSidebar({data, onNavigate}: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar p-3 text-sidebar-foreground">
       <a className="mb-5 inline-flex h-11 items-center gap-2 self-start rounded-xl px-3 text-base font-medium outline-none transition hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40" href={data.backUrl} onClick={onNavigate}>
-        <ArrowLeftIcon aria-hidden="true" className="size-5" /> Home
+        <ArrowLeftIcon aria-hidden="true" className="size-5" /> {t("common.home")}
       </a>
       <label className="relative mb-5 block">
         <SearchIcon aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <span className="sr-only">Search account settings</span>
-        <Input className="h-11 bg-background pl-10" onChange={(event) => setQuery(event.target.value)} placeholder="Search account settings..." type="search" value={query} />
+        <span className="sr-only">{t("nav.searchAccountSettings")}</span>
+        <Input className="h-11 bg-background pl-10" onChange={(event) => setQuery(event.target.value)} placeholder={t("nav.searchAccountSettingsPlaceholder")} type="search" value={query} />
       </label>
-      <nav aria-label="Account settings sections" className="min-h-0 flex-1 overflow-y-auto">
+      <nav aria-label={t("nav.accountSections")} className="min-h-0 flex-1 overflow-y-auto">
         {visible.length ? (
           <ul className="grid gap-1">
             {visible.map((section) => {
@@ -105,13 +114,13 @@ export default function AdminAccountSidebar({data, onNavigate}: Props) {
               return (
                 <li key={section.id}>
                   <a aria-current={selected ? "location" : undefined} className={["relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-base font-medium outline-none transition-colors", selected ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand-light" : "hover:bg-sidebar-accent"].join(" ")} href={`${data.sectionsUrl}#${section.id}`} onClick={(event) => { event.preventDefault(); open(section); }}>
-                    <Icon aria-hidden="true" className="size-[18px]" /> {section.name}
+                    <Icon aria-hidden="true" className="size-[18px]" /> {t(sectionNameKeys[section.id])}
                   </a>
                 </li>
               );
             })}
           </ul>
-        ) : <p className="px-3 py-2 text-sm text-muted-foreground">No account sections found.</p>}
+        ) : <p className="px-3 py-2 text-sm text-muted-foreground">{t("nav.noAccountSections")}</p>}
       </nav>
       <div className="-mx-3 -mb-3 mt-3 border-t border-sidebar-border p-3">
         <AdminAboutDialog deployment={data.deployment} />

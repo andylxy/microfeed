@@ -1,6 +1,7 @@
 import type {ReactNode} from "react";
 
 import {Button} from "@/components/ui/button";
+import {useTranslation} from "@/client/i18n";
 import type {
   AutosavePhase,
   AutosaveState,
@@ -12,21 +13,23 @@ interface Props extends AutosaveState {
   idleMessage?: string;
 }
 
-const STATUS_TEXT: Record<Exclude<AutosavePhase, "idle">, string> = {
-  error: "Couldn’t save. Your changes are still on this page.",
-  pending: "Unsaved changes",
-  saved: "All changes saved",
-  saving: "Saving…",
-};
-
 export default function AdminSaveAction({
-  buttonLabel = "Save now",
+  buttonLabel,
   children,
   dirty,
-  idleMessage = "Changes save automatically after five seconds.",
+  idleMessage,
   phase,
 }: Props) {
-  const message = phase === "idle" ? idleMessage : STATUS_TEXT[phase];
+  const {t} = useTranslation();
+  const statusKeys: Record<Exclude<AutosavePhase, "idle">, string> = {
+    error: "saveAction.error",
+    pending: "saveAction.pending",
+    saved: "saveAction.saved",
+    saving: "saveAction.saving",
+  };
+  const message = phase === "idle"
+    ? (idleMessage ?? t("saveAction.idleMessage"))
+    : t(statusKeys[phase]);
   const failed = phase === "error";
   const saving = phase === "saving";
 
@@ -46,7 +49,7 @@ export default function AdminSaveAction({
         size="lg"
         type="submit"
       >
-        {failed ? "Retry save" : buttonLabel}
+        {failed ? t("saveAction.retry") : (buttonLabel ?? t("saveAction.saveNow"))}
       </Button>
       {children && <div className="mt-4 border-t pt-4">{children}</div>}
     </div>

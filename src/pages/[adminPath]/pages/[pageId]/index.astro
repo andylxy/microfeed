@@ -4,9 +4,14 @@ import {env} from "cloudflare:workers";
 import PageEditorApp from "@/components/admin/pages/PageEditorApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {NAV_ITEMS, NAV_ITEMS_DICT} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {NAV_ITEMS} from "@/shared/Constants";
 import {activeThemeSupportsPages, getPageById} from "@/server/pages/service";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
@@ -20,11 +25,15 @@ const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
 
 <AdminShell
   activeNavItem={NAV_ITEMS.PAGES}
-  documentTitle={page ? `Edit ${page.title} | microfeed.org` : "Page not found | microfeed.org"}
+  documentTitle={page
+    ? `${translate("pageMessage.editPageTitle", adminLanguage, {title: page.title})} | microfeed.org`
+    : translate("pageDocumentTitle.pageNotFound", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle={page ? "Edit Page" : "Page not found"}
-  breadcrumb={{kind: "back", name: NAV_ITEMS_DICT[NAV_ITEMS.PAGES].name, url: adminUrl("pages", Astro.params.adminPath)}}
+  pageTitle={page
+    ? translate("pageTitle.editPage", adminLanguage)
+    : translate("pageTitle.pageNotFound", adminLanguage)}
+  breadcrumb={{kind: "back", name: translate("nav.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
 >
-  {page ? <PageEditorApp client:only="react" {page} {themeSupportsPages} /> : <section class="rounded-[14px] border bg-card p-5 shadow-xs"><h1 class="font-semibold">Page not found</h1></section>}
+  {page ? <PageEditorApp client:only="react" {page} {themeSupportsPages} /> : <section class="rounded-[14px] border bg-card p-5 shadow-xs"><h1 class="font-semibold">{translate("pageTitle.pageNotFound", adminLanguage)}</h1></section>}
 </AdminShell>

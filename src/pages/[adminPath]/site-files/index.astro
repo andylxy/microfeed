@@ -3,14 +3,19 @@ import SiteFilesApp from "@/components/admin/site-files/SiteFilesApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {NAV_ITEMS} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error("Admin feed context was not initialized.");
 }
 ---
 
-<AdminShell activeNavItem={NAV_ITEMS.SITE_FILES} documentTitle="Site Files | microfeed.org" {feedContent} {onboardingResult} pageTitle="Site Files">
+<AdminShell activeNavItem={NAV_ITEMS.SITE_FILES} documentTitle={translate("pageDocumentTitle.siteFiles", adminLanguage)} {feedContent} {onboardingResult} pageTitle={translate("pageTitle.siteFiles", adminLanguage)}>
   <SiteFilesApp client:only="react">
     <AdminPageFallback slot="fallback" kind="list" />
   </SiteFilesApp>

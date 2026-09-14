@@ -5,7 +5,12 @@ import WebhookEndpointsApp from "@/components/admin/webhooks/WebhookEndpointsApp
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listWebhookEndpoints, webhookOverview} from "@/server/webhooks/store";
 import {NAV_ITEMS} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
+const adminLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error("Admin feed context was not initialized.");
 const [initialEndpoints, overview] = await Promise.all([
@@ -17,10 +22,10 @@ const initialQuickstart = Astro.url.searchParams.get("quickstart") === "1";
 
 <AdminShell
   activeNavItem={NAV_ITEMS.WEBHOOKS}
-  documentTitle="Webhook endpoints | microfeed.org"
+  documentTitle={translate("pageDocumentTitle.webhookEndpoints", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle="Webhook endpoints"
+  pageTitle={translate("pageTitle.webhookEndpoints", adminLanguage)}
   webhookActivePage="endpoints"
   webhookNavigation
 >
