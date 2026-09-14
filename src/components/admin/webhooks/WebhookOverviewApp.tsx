@@ -31,6 +31,7 @@ import {
   WEBHOOK_QUICKSTART_ENDPOINT_URL,
   type WebhookQuickstartLanguage,
 } from "@/shared/WebhookQuickstarts";
+import i18n, {useTranslation} from "@/client/i18n";
 import type {WebhookOverview} from "@/shared/Webhooks";
 import {WEBHOOK_EVENT_TYPES, WEBHOOK_LIMITS} from "@/shared/Webhooks";
 
@@ -53,7 +54,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<any> {
   });
   const payload = await response.json().catch(() => ({})) as {error?: string};
   if (!response.ok) {
-    throw new Error(payload.error ?? "The webhook request failed.");
+    throw new Error(payload.error ?? i18n.t("webhookCommon.requestFailed"));
   }
   return payload;
 }
@@ -66,6 +67,7 @@ export default function WebhookOverviewApp({
   overview: initialOverview,
 }: Props) {
   const [overview, setOverview] = useState(initialOverview);
+  const {t} = useTranslation();
   const remaining = Math.max(
     overview.dailyLimit - overview.deliveriesToday,
     0,
@@ -99,7 +101,7 @@ export default function WebhookOverviewApp({
 
   const copy = async (value: string, label: string) => {
     await navigator.clipboard.writeText(value);
-    showToast(`${label} copied.`, "success");
+    showToast(t("webhookOverview.copied", {label}), "success");
   };
 
   return (
@@ -116,8 +118,8 @@ export default function WebhookOverviewApp({
           localDevelopment={localDevelopment}
           onCopy={copy}
         />}
-        description="Queue-backed, signed notifications for content integrations and AI agents."
-        title="Webhook availability"
+        description={t("webhookOverview.availabilityDescription")}
+        title={t("webhookOverview.availabilityTitle")}
       >
         <div className="flex items-start gap-3">
           {localSimulationEnabled || overview.enabled
@@ -127,24 +129,24 @@ export default function WebhookOverviewApp({
             <p className="font-medium">
               {localDevelopment
                 ? localSimulationEnabled
-                  ? "Webhook simulation is running locally"
-                  : "Webhook simulation is disabled for this run"
+                  ? t("webhookOverview.simulationRunning")
+                  : t("webhookOverview.simulationDisabled")
                 : overview.enabled
-                ? `${deploymentLabel} webhooks are enabled`
+                ? t("webhookOverview.enabled", {label: deploymentLabel})
                 : infrastructureState === "disabled"
-                ? `${deploymentLabel} webhooks are disabled`
-                : `${deploymentLabel} webhooks have not been provisioned`}
+                ? t("webhookOverview.disabled", {label: deploymentLabel})
+                : t("webhookOverview.notProvisioned", {label: deploymentLabel})}
             </p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               {localDevelopment
                 ? localSimulationEnabled
-                  ? `${managementCommand("dev")} uses Wrangler's local Queue simulation. It creates no Cloudflare resources, requests no Queue permissions, and incurs no Cloudflare charge.`
-                  : `This ${managementCommand("dev")} run omitted the local Queue and Cron simulation. The saved preview and production webhook states were not changed.`
+                  ? t("webhookOverview.simulationRunningDetail", {command: managementCommand("dev")})
+                  : t("webhookOverview.simulationDisabledDetail", {command: managementCommand("dev")})
                 : overview.enabled
-                ? "Deliveries are stored in D1 and dispatched through this deployment's dedicated Cloudflare Queue. Reconciliation runs hourly and cleanup runs once daily while at least one endpoint is configured."
+                ? t("webhookOverview.enabledDetail")
                 : infrastructureState === "disabled"
-                ? "The dedicated Queue, signing-secret encryption key, endpoint configuration, and delivery history are preserved. The Queue is paused and detached, and this Worker has no Queue consumer or Cron trigger."
-                : "Ordinary deployments keep webhooks off. Enable them explicitly only when this deployment is ready to create and use a dedicated Cloudflare Queue."}
+                ? t("webhookOverview.disabledDetail")
+                : t("webhookOverview.notProvisionedDetail")}
             </p>
             {!localDevelopment && !overview.enabled && (
               <div className="mt-3 flex items-start gap-2 rounded-lg bg-muted p-3">
@@ -152,9 +154,9 @@ export default function WebhookOverviewApp({
                   {deploymentCommand}
                 </code>
                 <button
-                  aria-label="Copy deployment command"
+                  aria-label={t("webhookOverview.copyAria", {label: t("webhookOverview.deployCommandNoun")})}
                   className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
-                  onClick={() => void copy(deploymentCommand, "Deployment command")}
+                  onClick={() => void copy(deploymentCommand, t("webhookOverview.deployCommandNoun"))}
                   type="button"
                 >
                   <CopyIcon aria-hidden="true" className="size-4" />
@@ -166,10 +168,10 @@ export default function WebhookOverviewApp({
       </AdminSectionCard>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Endpoints" value={`${overview.endpoints} configured`}>
-          <p>{overview.activeEndpoints} active · limit {overview.endpointLimit}</p>
+        <Metric label={t("webhookOverview.metricEndpoints")} value={t("webhookOverview.configured", {count: overview.endpoints})}>
+          <p>{t("webhookOverview.activeLimit", {active: overview.activeEndpoints, limit: overview.endpointLimit})}</p>
           <a className="font-medium text-foreground underline underline-offset-4" href={endpointUrl}>
-            Manage endpoints
+            {t("webhookOverview.manageEndpoints")}
           </a>
         </Metric>
         <BudgetMetric
@@ -181,20 +183,20 @@ export default function WebhookOverviewApp({
           remaining={remaining}
         />
         <Metric
-          label="Estimated Queue operations today"
+          label={t("webhookOverview.metricQueueOps")}
           value={`~${overview.estimatedQueueOperationsToday.toLocaleString("en-US")}`}
         >
-          <p>Usually 3 per delivery; retries can raise that to 8.</p>
+          <p>{t("webhookOverview.queueOpsNote")}</p>
         </Metric>
-        <Metric label="Failures in the last 24 hours" value={overview.recentFailures}>
-          <p>Terminal delivery failures after all configured attempts.</p>
+        <Metric label={t("webhookOverview.metricFailures")} value={overview.recentFailures}>
+          <p>{t("webhookOverview.failuresNote")}</p>
         </Metric>
       </div>
 
       {overview.alerts.length > 0 && (
         <AdminSectionCard
-          description="These conditions need an administrator's attention."
-          title="Webhook alerts"
+          description={t("webhookOverview.alertsDescription")}
+          title={t("webhookOverview.alertsTitle")}
         >
           <ul className="grid gap-3">
             {overview.alerts.map((alert) => (
@@ -217,18 +219,18 @@ export default function WebhookOverviewApp({
       />
 
       <AdminSectionCard
-        description={`${WEBHOOK_EVENT_TYPES.length} versioned event types are documented in this instance's generated OpenAPI contract.`}
-        title="Use webhooks safely"
+        description={t("webhookOverview.safeDescription", {count: WEBHOOK_EVENT_TYPES.length})}
+        title={t("webhookOverview.safeTitle")}
       >
         <div className="grid gap-3 text-sm leading-6 text-muted-foreground">
-          <p>Verify the Standard Webhooks signature against the exact request bytes, deduplicate delivery IDs, durably save work, and acknowledge before running a model or external tool.</p>
-          <p>The daily delivery budget is an owner-controlled cost guard, not a microfeed pricing tier. Fanout, tests, and manual redeliveries reserve deliveries; retries add Queue reads without reserving another delivery.</p>
+          <p>{t("webhookOverview.safeBody1")}</p>
+          <p>{t("webhookOverview.safeBody2")}</p>
           <details>
-            <summary className="cursor-pointer font-medium text-foreground">{WEBHOOK_EVENT_TYPES.length} event types</summary>
+            <summary className="cursor-pointer font-medium text-foreground">{t("webhookOverview.safeEventTypes", {count: WEBHOOK_EVENT_TYPES.length})}</summary>
             <p className="mt-2 font-mono text-xs">{WEBHOOK_EVENT_TYPES.join(", ")}</p>
           </details>
           <a className="inline-flex w-fit items-center gap-1.5 font-medium text-foreground underline underline-offset-4" href="https://docs.microfeed.org/automation/" rel="noreferrer" target="_blank">
-            Content automation guide <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+            {t("webhookOverview.contentAutomationGuide")} <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
           </a>
         </div>
       </AdminSectionCard>
@@ -290,6 +292,7 @@ function FirstEndpointQuickstart({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
+  const {t} = useTranslation();
   const [mode, setMode] = useState<FirstEndpointMode>(initialMode);
   const [language, setLanguage] =
     useState<WebhookQuickstartLanguage>("javascript");
@@ -302,14 +305,14 @@ function FirstEndpointQuickstart({
     <AdminSectionCard
       description={mode === "no_code"
         ? localDevelopment
-          ? "Inspect signed events immediately with the local CLI listener—no receiver code required."
-          : "Inspect a real signed delivery on this computer through a temporary public tunnel—no receiver code required."
+          ? t("webhookOverview.noCodeLocalDesc")
+          : t("webhookOverview.noCodeDeployedDesc")
         : localDevelopment
-        ? "Scaffold a complete local receiver, create an endpoint, and send a real signed test."
-        : "Start from a complete receiver, deploy it at a public HTTPS address, and send a real signed test."}
-      title="Build and test your first endpoint"
+        ? t("webhookOverview.codeLocalDesc")
+        : t("webhookOverview.codeDeployedDesc")}
+      title={t("webhookOverview.firstEndpointTitle")}
     >
-      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Webhook testing mode">
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={t("webhookOverview.testModeAria")}>
         <Button
           aria-selected={mode === "no_code"}
           onClick={() => setMode("no_code")}
@@ -318,7 +321,7 @@ function FirstEndpointQuickstart({
           type="button"
           variant={mode === "no_code" ? "default" : "outline"}
         >
-          No-code testing
+          {t("webhookOverview.tabNoCode")}
         </Button>
         <Button
           aria-selected={mode === "code"}
@@ -328,7 +331,7 @@ function FirstEndpointQuickstart({
           type="button"
           variant={mode === "code" ? "default" : "outline"}
         >
-          Build with code
+          {t("webhookOverview.tabCode")}
         </Button>
       </div>
 
@@ -342,92 +345,63 @@ function FirstEndpointQuickstart({
         : <div className="grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(22rem,1.15fr)]">
           <div className="grid content-start gap-3 text-sm leading-6">
             <QuickstartStep
-              description={`Create the ${quickstart.label} receiver project in the repository root.`}
+              description={t("webhookOverview.scaffoldDescription", {label: quickstart.label})}
               number={1}
-              title={`Scaffold the ${quickstart.label} receiver`}
+              title={t("webhookOverview.scaffoldTitle", {label: quickstart.label})}
             >
-              <p>
-                From the microfeed repository root, run the command below. It
-                writes to the ignored <code>.microfeed/webhooks/</code>
-                {" "}workspace—not <code>packages/cli/.microfeed/</code>—and does
-                not install or start anything.
-              </p>
+              <p>{t("webhookOverview.scaffoldBody")}</p>
               <QuickstartCommand onCopy={onCopy} value={quickstart.scaffoldCommand} />
               {localDevelopment
-                ? <p>
-                  After it starts in step 3, this receiver will listen at
-                  {" "}<code>{WEBHOOK_QUICKSTART_ENDPOINT_URL}</code>.
-                </p>
-                : <p>
-                  Before deploying, replace the generated server file with the
-                  public-host version shown here. It binds to
-                  {" "}<code>0.0.0.0</code> and honors the hosting platform's
-                  {" "}<code>PORT</code>. Never register <code>0.0.0.0</code>
-                  {" "}as the endpoint URL.
-                </p>}
+                ? <p>{t("webhookOverview.scaffoldBodyLocal", {url: WEBHOOK_QUICKSTART_ENDPOINT_URL})}</p>
+                : <p>{t("webhookOverview.scaffoldBodyDeployed")}</p>}
             </QuickstartStep>
 
             <QuickstartStep
               description={localDevelopment
-                ? "Register the local URL and reveal its signing secret."
-                : "Register the receiver's public HTTPS URL and reveal its signing secret."}
+                ? t("webhookOverview.createEndpointDescLocal")
+                : t("webhookOverview.createEndpointDescDeployed")}
               number={2}
-              title="Create the webhook endpoint"
+              title={t("webhookOverview.createEndpointTitle")}
             >
               <p>
                 {localDevelopment
-                  ? <>Open the prefilled endpoint form, enter a name, choose the events you want, and create the endpoint for <code>{WEBHOOK_QUICKSTART_ENDPOINT_URL}</code>.</>
-                  : <>Reserve or choose the public HTTPS address from your hosting platform, such as <code>{PUBLIC_RECEIVER_ENDPOINT_EXAMPLE}</code>. Open Endpoints, choose <strong>Add endpoint</strong>, and paste that exact public URL.</>}
+                  ? t("webhookOverview.createEndpointBodyLocal", {url: WEBHOOK_QUICKSTART_ENDPOINT_URL})
+                  : t("webhookOverview.createEndpointBodyDeployed", {example: PUBLIC_RECEIVER_ENDPOINT_EXAMPLE})}
               </p>
               <Button
                 render={<a href={localDevelopment ? endpointCreateUrl : endpointUrl} rel="noreferrer" target="_blank" />}
                 size="sm"
               >
-                {localDevelopment ? "Create endpoint" : "Open Endpoints"}
+                {localDevelopment ? t("webhookOverview.createEndpointButtonLocal") : t("webhookOverview.openEndpoints")}
               </Button>
-              <p>
-                Open <strong>Signing secret</strong> and reveal the
-                {" "}<code>whsec_…</code> value. Store it as
-                {" "}<code>MICROFEED_WEBHOOK_SECRET</code>. It authenticates
-                microfeed and detects changed request bytes, so no additional
-                passcode is needed.
-              </p>
+              <p>{t("webhookOverview.signingSecretBody")}</p>
             </QuickstartStep>
 
             <QuickstartStep
               description={localDevelopment
-                ? `Install ${quickstart.label} dependencies and start the loopback server.`
-                : `Install ${quickstart.label} dependencies and deploy the public receiver.`}
+                ? t("webhookOverview.installDescLocal", {label: quickstart.label})
+                : t("webhookOverview.installDescDeployed", {label: quickstart.label})}
               number={3}
               title={localDevelopment
-                ? `Install and run the ${quickstart.label} receiver`
-                : `Configure and deploy the ${quickstart.label} receiver`}
+                ? t("webhookOverview.installTitleLocal", {label: quickstart.label})
+                : t("webhookOverview.installTitleDeployed", {label: quickstart.label})}
             >
-              <p>
-                Enter the generated directory and install its dependencies.
-              </p>
+              <p>{t("webhookOverview.installBody1")}</p>
               <QuickstartCommand onCopy={onCopy} value={quickstart.directoryCommand} />
               {quickstart.installCommands.map((command) => (
                 <QuickstartCommand key={command} onCopy={onCopy} value={command} />
               ))}
               {localDevelopment
                 ? <>
-                  <p>Replace <code>whsec_...</code> with the secret revealed in step 2.</p>
+                  <p>{t("webhookOverview.installBodyLocal1")}</p>
                   <QuickstartCommand onCopy={onCopy} value={quickstart.runCommand} />
-                  <p>Keep this terminal open. It should print <code>Listening at {WEBHOOK_QUICKSTART_ENDPOINT_URL}</code>.</p>
+                  <p>{t("webhookOverview.installBodyLocal2", {url: WEBHOOK_QUICKSTART_ENDPOINT_URL})}</p>
                 </>
                 : <>
                   <p>
-                    Add <code>MICROFEED_WEBHOOK_SECRET</code> through the hosting
-                    platform's secret settings, use
-                    {" "}<code>{language === "javascript" ? "yarn start" : "python server.py"}</code>
-                    {" "}as the start command, and deploy. The platform should
-                    terminate HTTPS and route <code>/webhook</code> to this process.
+                    {t("webhookOverview.installBodyDeployed1", {cmd: language === "javascript" ? "yarn start" : "python server.py"})}
                   </p>
-                  <p>
-                    Confirm that the public URL from step 2 responds. Do not put
-                    the secret in source code, the endpoint URL, or a shell command.
-                  </p>
+                  <p>{t("webhookOverview.installBodyDeployed2")}</p>
                 </>}
             </QuickstartStep>
 
@@ -436,7 +410,7 @@ function FirstEndpointQuickstart({
 
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex gap-2" role="tablist" aria-label="Receiver language">
+              <div className="flex gap-2" role="tablist" aria-label={t("webhookOverview.receiverLanguageAria")}>
                 {(["javascript", "python"] as const).map((value) => (
                   <Button
                     aria-selected={language === value}
@@ -452,17 +426,17 @@ function FirstEndpointQuickstart({
                 ))}
               </div>
               <Button
-                onClick={() => void onCopy(receiverSource, `${quickstart.label} receiver code`)}
+                onClick={() => void onCopy(receiverSource, t("webhookOverview.receiverAriaLabel", {label: quickstart.label}))}
                 size="sm"
                 type="button"
                 variant="outline"
               >
                 <CopyIcon aria-hidden="true" className="size-4" />
-                Copy {quickstart.filename}
+                {t("webhookOverview.copyReceiver", {filename: quickstart.filename})}
               </Button>
             </div>
             <AdminCodeEditor
-              ariaLabel={`${quickstart.label} webhook receiver code`}
+              ariaLabel={t("webhookOverview.receiverAriaLabel", {label: quickstart.label})}
               code={receiverSource}
               language={quickstart.highlightLanguage}
               maxHeight="36rem"
@@ -470,13 +444,9 @@ function FirstEndpointQuickstart({
               readOnly
             />
             <div className="mt-3 rounded-xl border border-amber-500/35 bg-amber-500/8 p-4 text-sm leading-6">
-              <p className="font-medium">Starter receiver, not production architecture</p>
+              <p className="font-medium">{t("webhookOverview.starterWarningTitle")}</p>
               <p className="mt-1 text-muted-foreground">
-                Duplicate state resets on restart, no job is durably queued,
-                and production effects are intentionally absent. Add durable
-                acknowledgement, background work, idempotency, loop
-                prevention, approvals, audit logs, and cost alerts before
-                production use.
+                {t("webhookOverview.starterWarningBody")}
               </p>
             </div>
           </div>
@@ -496,6 +466,7 @@ function NoCodeQuickstart({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
+  const {t} = useTranslation();
   const listenCommand = localDevelopment
     ? "yarn microfeed webhook listen"
     : "yarn microfeed webhook listen --tunnel";
@@ -504,76 +475,60 @@ function NoCodeQuickstart({
     <div className="grid max-w-4xl content-start gap-3 text-sm leading-6">
       <QuickstartStep
         description={localDevelopment
-          ? "Start the verified inspector on this computer."
-          : "Start the verified inspector and expose it through a temporary public URL."}
+          ? t("webhookOverview.noCodeStep1DescLocal")
+          : t("webhookOverview.noCodeStep1DescDeployed")}
         number={1}
         title={localDevelopment
-          ? "Start the local webhook listener"
-          : "Start the temporary webhook listener"}
+          ? t("webhookOverview.noCodeStep1TitleLocal")
+          : t("webhookOverview.noCodeStep1TitleDeployed")}
       >
         <p>
-          From the microfeed repository root, run the command below. It starts
-          a verified inspector and waits for the endpoint signing secret.
-          {!localDevelopment && <> It also starts a free Cloudflare Quick Tunnel. If <code>cloudflared</code> is unavailable, the CLI can download a pinned, verified copy after asking for approval.</>}
+          {t("webhookOverview.noCodeStep1Body")}
+          {!localDevelopment && t("webhookOverview.noCodeStep1BodyDeployedExtra")}
         </p>
         <QuickstartCommand onCopy={onCopy} value={listenCommand} />
         {localDevelopment
-          ? <p>Leave the terminal waiting at the signing-secret prompt. The listener will use <code>{LOCAL_LISTENER_ENDPOINT_URL}</code>.</p>
-          : <p>Wait for <strong>Temporary public webhook endpoint</strong>. The CLI prints an exact URL like <code>https://…trycloudflare.com/webhook</code> before asking for the secret. Keep this terminal open.</p>}
+          ? <p>{t("webhookOverview.noCodeStep1BodyLocal", {url: LOCAL_LISTENER_ENDPOINT_URL})}</p>
+          : <p>{t("webhookOverview.noCodeStep1BodyDeployed")}</p>}
       </QuickstartStep>
 
       <QuickstartStep
         description={localDevelopment
-          ? "Copy the loopback URL into a new endpoint and reveal its signing secret."
-          : "Copy the exact Quick Tunnel URL into a new endpoint and reveal its signing secret."}
+          ? t("webhookOverview.noCodeStep2DescLocal")
+          : t("webhookOverview.noCodeStep2DescDeployed")}
         number={2}
-        title="Create the webhook endpoint"
+        title={t("webhookOverview.noCodeStep2Title")}
       >
         {localDevelopment
           ? <>
-            <p>Copy this URL, open Endpoints in another tab, choose <strong>Add endpoint</strong>, and paste it into <strong>Endpoint URL</strong>.</p>
-            <QuickstartCommand copyLabel="Endpoint URL" onCopy={onCopy} value={LOCAL_LISTENER_ENDPOINT_URL} />
+            <p>{t("webhookOverview.noCodeStep2BodyLocal")}</p>
+            <QuickstartCommand copyLabel={t("webhookOverview.endpointUrlNoun")} onCopy={onCopy} value={LOCAL_LISTENER_ENDPOINT_URL} />
           </>
-          : <p>
-            Copy the complete <code>https://…trycloudflare.com/webhook</code>
-            {" "}URL printed by step 1. Open Endpoints in another tab, choose
-            {" "}<strong>Add endpoint</strong>, and paste that exact value into
-            {" "}<strong>Endpoint URL</strong>. The example text is not a real URL.
-          </p>}
+          : <p>{t("webhookOverview.noCodeStep2BodyDeployed")}</p>}
         <Button
           render={<a href={endpointUrl} rel="noreferrer" target="_blank" />}
           size="sm"
         >
-          Open Endpoints
+          {t("webhookOverview.openEndpoints")}
         </Button>
-        <p>
-          After creation, copy the one-time <code>whsec_…</code> signing secret.
-          If you close it, use the endpoint's <strong>Signing secret</strong>
-          {" "}action to reveal it again.
-        </p>
+        <p>{t("webhookOverview.noCodeStep2Body3")}</p>
       </QuickstartStep>
 
       <QuickstartStep
-        description="Authenticate the listener before it accepts or prints deliveries."
+        description={t("webhookOverview.noCodeStep3Desc")}
         number={3}
-        title="Enter the signing secret"
+        title={t("webhookOverview.noCodeStep3Title")}
       >
-        <p>
-          Return to the listener terminal, paste the signing secret into its
-          prompt, and submit it. The CLI does not print the secret. Wait for
-          {" "}<strong>Listening for verified microfeed webhooks</strong>.
-        </p>
+        <p>{t("webhookOverview.noCodeStep3Body")}</p>
       </QuickstartStep>
 
       <TestEventStep explorerUrl={explorerUrl} />
 
       {!localDevelopment && (
         <div className="rounded-xl border border-amber-500/35 bg-amber-500/8 p-4">
-          <p className="font-medium">Temporary testing only</p>
+          <p className="font-medium">{t("webhookOverview.tempTestingTitle")}</p>
           <p className="mt-1 text-muted-foreground">
-            Quick Tunnels have no uptime guarantee and are not a deployed
-            receiver. Pressing Ctrl+C stops the listener and tunnel. Delete
-            the temporary endpoint afterward; the next run receives a new URL.
+            {t("webhookOverview.tempTestingBody")}
           </p>
         </div>
       )}
@@ -582,29 +537,22 @@ function NoCodeQuickstart({
 }
 
 function TestEventStep({explorerUrl}: {explorerUrl: string}) {
+  const {t} = useTranslation();
   return (
     <QuickstartStep
-      description="Send a signed webhook.test and confirm it reaches the receiver."
+      description={t("webhookOverview.sendTestDescription")}
       number={4}
-      title="Send and verify a test event"
+      title={t("webhookOverview.sendTestTitle")}
     >
-      <p>
-        Open Event Explorer. Select the endpoint from step 2 and
-        {" "}<code>webhook.test</code>, keep the generated example, then choose
-        {" "}<strong>Send test delivery</strong> and confirm the budgeted delivery.
-      </p>
+      <p>{t("webhookOverview.sendTestBody")}</p>
       <Button
         render={<a href={explorerUrl} rel="noreferrer" target="_blank" />}
         size="sm"
         variant="outline"
       >
-        Open Event Explorer
+        {t("webhookOverview.openEventExplorer")}
       </Button>
-      <p>
-        The terminal should print the delivery ID, event type,
-        {" "}<code>test: true</code>, duplicate status, and formatted payload.
-        A <code>204</code> response marks the delivery as accepted.
-      </p>
+      <p>{t("webhookOverview.sendTestFooter")}</p>
     </QuickstartStep>
   );
 }
@@ -645,7 +593,7 @@ function QuickstartStep({
 }
 
 function QuickstartCommand({
-  copyLabel = "Command",
+  copyLabel = "command",
   onCopy,
   value,
 }: {
@@ -653,17 +601,17 @@ function QuickstartCommand({
   onCopy: (value: string, label: string) => Promise<void>;
   value: string;
 }) {
+  const {t} = useTranslation();
+  const label = copyLabel === "command" ? t("webhookOverview.commandNoun") : copyLabel;
   return (
     <div className="flex items-start gap-2 rounded-lg bg-muted p-3 text-foreground">
       <code className="min-w-0 flex-1 overflow-x-auto text-xs leading-5">
         {value}
       </code>
       <button
-        aria-label={copyLabel === "Command"
-          ? `Copy command: ${value}`
-          : `Copy ${copyLabel.toLowerCase()}`}
+        aria-label={t("webhookOverview.copyAria", {label})}
         className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
-        onClick={() => void onCopy(value, copyLabel)}
+        onClick={() => void onCopy(value, label)}
         type="button"
       >
         <CopyIcon aria-hidden="true" className="size-4" />
@@ -699,6 +647,7 @@ function BudgetMetric({
   overview: WebhookOverview;
   remaining: number;
 }) {
+  const {t} = useTranslation();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(overview.dailyLimit));
   const [acknowledged, setAcknowledged] = useState(false);
@@ -722,7 +671,7 @@ function BudgetMetric({
       });
       onUpdate(result.settings.dailyDeliveryLimit);
       setOpen(false);
-      showToast("Daily delivery budget updated.", "success");
+      showToast(t("webhookOverview.budgetUpdated"), "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
     } finally {
@@ -732,23 +681,29 @@ function BudgetMetric({
 
   return (
     <div className="rounded-xl border bg-card p-5 shadow-xs">
-      <p className="text-sm text-muted-foreground">Daily delivery budget</p>
+      <p className="text-sm text-muted-foreground">{t("webhookOverview.dailyBudgetLabel")}</p>
       <p className="mt-2 text-2xl font-semibold tracking-tight">
-        {overview.deliveriesToday.toLocaleString("en-US")} used of {overview.dailyLimit.toLocaleString("en-US")}
+        {t("webhookOverview.usedOf", {
+          used: overview.deliveriesToday.toLocaleString("en-US"),
+          limit: overview.dailyLimit.toLocaleString("en-US"),
+        })}
       </p>
       <div
-        aria-label="Daily delivery budget used"
+        aria-label={t("webhookOverview.dailyBudgetLabel")}
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={Math.round(percentage)}
-        aria-valuetext={`${overview.deliveriesToday.toLocaleString("en-US")} used of ${overview.dailyLimit.toLocaleString("en-US")}`}
+        aria-valuetext={t("webhookOverview.usedOf", {
+          used: overview.deliveriesToday.toLocaleString("en-US"),
+          limit: overview.dailyLimit.toLocaleString("en-US"),
+        })}
         className="mt-3 h-2 overflow-hidden rounded-full bg-muted"
         role="progressbar"
       >
         <div className="h-full rounded-full bg-brand-light" style={{width: `${percentage}%`}} />
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {remaining.toLocaleString("en-US")} available · resets at 00:00 UTC
+        {t("webhookOverview.availableReset", {remaining: remaining.toLocaleString("en-US")})}
       </p>
       <Dialog onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
@@ -758,14 +713,13 @@ function BudgetMetric({
         }
       }} open={open}>
         <DialogTrigger render={<Button className="mt-3" size="sm" type="button" variant="outline" />}>
-          Change budget
+          {t("webhookOverview.changeBudget")}
         </DialogTrigger>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Change the daily delivery budget</DialogTitle>
+            <DialogTitle>{t("webhookOverview.changeBudgetTitle")}</DialogTitle>
             <DialogDescription>
-              This owner-controlled guard limits new deliveries reserved each
-              UTC day. It is not a microfeed pricing tier and changes immediately.
+              {t("webhookOverview.changeBudgetDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -777,49 +731,41 @@ function BudgetMetric({
               ))}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="webhook-daily-budget">Deliveries per UTC day</Label>
+              <Label htmlFor="webhook-daily-budget">{t("webhookOverview.deliveriesPerDay")}</Label>
               <Input id="webhook-daily-budget" max={WEBHOOK_LIMITS.maximumDailyDeliveries} min={0} onChange={(event) => {
                 setValue(event.target.value);
                 setAcknowledged(false);
               }} step={1} type="number" value={value} />
               <p className="text-xs text-muted-foreground">
-                Choose 0 to stop new reservations. Existing queued deliveries
-                and attempts continue. Maximum: {WEBHOOK_LIMITS.maximumDailyDeliveries.toLocaleString("en-US")}.
+                {t("webhookOverview.budgetHint", {max: WEBHOOK_LIMITS.maximumDailyDeliveries.toLocaleString("en-US")})}
               </p>
             </div>
             {Number.isFinite(numericValue) && numericValue >= 0 && (
               <div className="rounded-xl bg-muted p-4 text-sm leading-6">
-                <p>Projected ordinary Queue operations: about {(numericValue * 3).toLocaleString("en-US")} per full-budget day.</p>
-                <p>Worst case with six attempts: up to {(numericValue * 8).toLocaleString("en-US")}.</p>
+                <p>{t("webhookOverview.projectedOps", {value: (numericValue * 3).toLocaleString("en-US")})}</p>
+                <p>{t("webhookOverview.worstCaseOps", {value: (numericValue * 8).toLocaleString("en-US")})}</p>
               </div>
             )}
             {higherBudget && (
               <label className="flex items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/8 p-4 text-sm leading-6">
                 <input checked={acknowledged} className="mt-1" onChange={(event) => setAcknowledged(event.target.checked)} type="checkbox" />
                 <span>
-                  I understand Cloudflare Queue allowances are account-wide,
-                  retries add operations, Worker execution is separately
-                  metered, and this higher budget can create charges.
+                  {t("webhookOverview.higherBudgetAck")}
                 </span>
               </label>
             )}
             <p className="text-xs text-muted-foreground">
-              Lowering the budget below today's usage leaves zero available
-              until you raise it or the budget resets at 00:00 UTC.
+              {t("webhookOverview.lowerBudgetHint")}
             </p>
             <p className="text-xs leading-5 text-muted-foreground">
-              Cloudflare currently includes 10,000 Queue operations per day on
-              Workers Free. Workers Paid includes 1,000,000 operations per
-              month, then charges $0.40 per million. The allowance is shared
-              account-wide, Worker execution is separate, and pricing can
-              change.
+              {t("webhookOverview.pricingNote")}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button disabled={busy || !Number.isInteger(numericValue) || numericValue < 0 || numericValue > WEBHOOK_LIMITS.maximumDailyDeliveries || higherBudget && !acknowledged} onClick={() => void save()} type="button">
-                Save budget
+                {t("webhookOverview.saveBudget")}
               </Button>
               <a className="inline-flex items-center gap-1.5 px-2 text-sm font-medium underline underline-offset-4" href="https://developers.cloudflare.com/queues/platform/pricing/" rel="noreferrer" target="_blank">
-                Current Queue pricing <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+                {t("webhookOverview.currentQueuePricing")} <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
               </a>
             </div>
           </div>
@@ -850,78 +796,59 @@ function WebhookEnablementDialog({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
+  const {t} = useTranslation();
   return (
     <Dialog>
       <DialogTrigger render={<Button size="sm" type="button" variant="outline" />}>
         {localDevelopment
-          ? "How local simulation works"
+          ? t("webhookOverview.enableDialogLocalTitle")
           : enabled
-          ? "Enable or stop webhooks"
+          ? t("webhookOverview.enableDialogEnabledTitle")
           : infrastructureState === "disabled"
-          ? `Re-enable ${deploymentLabel.toLowerCase()} webhooks`
-          : `Enable ${deploymentLabel.toLowerCase()} webhooks`}
+          ? t("webhookOverview.enableDialogDisabledTitle", {label: deploymentLabel})
+          : t("webhookOverview.enableDialogProvisionTitle", {label: deploymentLabel})}
       </DialogTrigger>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Local simulation and deployed webhook opt-in</DialogTitle>
+          <DialogTitle>{t("webhookOverview.enableDialogHeading")}</DialogTitle>
           <DialogDescription>
-            Local development is free and automatic. Cloudflare deployment is
-            explicit because it changes account resources and usage.
+            {t("webhookOverview.enableDialogDesc")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 text-sm leading-6">
           <div className="rounded-xl border p-4">
-            <p className="font-medium">Local development</p>
+            <p className="font-medium">{t("webhookOverview.localDevTitle")}</p>
             <p className="mt-1 text-muted-foreground">
-              Plain <code>{managementCommand("dev")}</code> runs Wrangler's local Queue simulation
-              with an isolated D1 database and local secret. It requires no
-              Cloudflare permission, resource, deployment, or payment. Use
-              <code> {managementCommand("dev --disable-webhooks")}</code> to omit the Queue and
-              Cron simulation for one run without changing a deployed site.
+              {t("webhookOverview.localDevBody", {command: managementCommand("dev"), devDisable: managementCommand("dev --disable-webhooks")})}
             </p>
           </div>
           <div className="rounded-xl border p-4">
-            <p className="font-medium">Preview and production</p>
+            <p className="font-medium">{t("webhookOverview.previewProdTitle")}</p>
             <p className="mt-1 text-muted-foreground">
-              The explicit deployment option requests Queue authorization,
-              creates a dedicated Queue and Worker bindings, enables the
-              hourly reconciliation trigger, and creates the endpoint-secret
-              encryption key. The same trigger performs retention cleanup once
-              daily at 00:00 UTC. When no non-deleted endpoint is configured,
-              it exits after one D1 existence check without reconciling,
-              cleaning, or using the Queue. Queue operations share the
-              Cloudflare account's allowance, and Worker execution is metered
-              separately. Sites that do not use webhooks should not provision
-              these resources. Re-enabling a previously disabled environment
-              reuses its exact Queue and encryption secret.
+              {t("webhookOverview.previewProdBody")}
             </p>
-            <p className="mt-3 font-medium">Run it manually</p>
-            <QuickstartCommand copyLabel="Deployment command" onCopy={onCopy} value={command} />
-            <p className="mt-3 font-medium">Ask a coding agent</p>
+            <p className="mt-3 font-medium">{t("webhookOverview.runManuallyTitle")}</p>
+            <QuickstartCommand copyLabel={t("webhookOverview.deployCommandNoun")} onCopy={onCopy} value={command} />
+            <p className="mt-3 font-medium">{t("webhookOverview.askAgentTitle")}</p>
             <p className="mt-1 text-muted-foreground">
-              Give a local coding agent this prompt from a trusted microfeed
-              checkout. It will follow the same project-owned deployment flow.
+              {t("webhookOverview.askAgentBody")}
             </p>
-            <QuickstartCommand copyLabel="Coding-agent prompt" onCopy={onCopy} value={agentPrompt} />
+            <QuickstartCommand copyLabel={t("webhookOverview.codingAgentPromptNoun")} onCopy={onCopy} value={agentPrompt} />
           </div>
           <div className="rounded-xl border p-4">
-            <p className="font-medium">Stop webhook delivery</p>
+            <p className="font-medium">{t("webhookOverview.stopTitle")}</p>
             <p className="mt-1 text-muted-foreground">
-              Disable webhook infrastructure to pause and purge the dedicated
-              Queue, cancel pending deliveries, and remove its Worker binding,
-              consumer, and Cron trigger. Endpoint settings, delivery history,
-              Queue identity, and encryption secret remain available for later
-              re-enablement. This differs from disabling individual endpoints
-              in <a className="font-medium text-foreground underline underline-offset-4" href={endpointUrl}>Webhooks → Endpoints</a>.
+              {t("webhookOverview.stopBodyBefore")}
+              <a className="font-medium text-foreground underline underline-offset-4" href={endpointUrl}>{t("webhookOverview.webhooksEndpointsLink")}</a>
+              {t("webhookOverview.stopBodyAfter")}
             </p>
             {!localDevelopment && (
-              <QuickstartCommand copyLabel="Disable command" onCopy={onCopy} value={disableCommand} />
+              <QuickstartCommand copyLabel={t("webhookOverview.disableCommandNoun")} onCopy={onCopy} value={disableCommand} />
             )}
           </div>
           {localDevelopment && (
             <p className="rounded-xl bg-emerald-500/10 p-4">
-              You are viewing a loopback-hosted Admin session, so webhook Queue
-              behavior is being simulated locally right now.
+              {t("webhookOverview.loopbackNote")}
             </p>
           )}
         </div>

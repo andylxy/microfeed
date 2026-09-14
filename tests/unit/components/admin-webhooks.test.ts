@@ -226,7 +226,7 @@ describe("Webhook Admin", () => {
     expect(disabledOutput).toContain(
       "npx @microfeed/cli manage deploy --enable-webhooks --instance personal",
     );
-    expect(disabledOutput).toContain("Enable production webhooks");
+    expect(disabledOutput).toContain("Enable Production webhooks");
 
     const retainedOutput = renderToStaticMarkup(React.createElement(
       WebhookOverviewApp,
@@ -248,7 +248,7 @@ describe("Webhook Admin", () => {
     ));
     expect(retainedOutput).toContain("Production webhooks are disabled");
     expect(retainedOutput).toContain("Queue is paused and detached");
-    expect(retainedOutput).toContain("Re-enable production webhooks");
+    expect(retainedOutput).toContain("Re-enable Production webhooks");
     expect(retainedOutput).toContain(
       "npx @microfeed/cli manage deploy --enable-webhooks --instance personal",
     );
@@ -361,10 +361,10 @@ describe("Webhook Admin", () => {
       "../../../src/components/admin/webhooks/WebhookEndpointsApp.tsx",
       import.meta.url,
     ), "utf8");
-    expect(source).toContain("Reveal signing secret");
-    expect(source).toContain("Copy signing secret");
-    expect(source).toContain("Rotate signing secret");
-    expect(source).toContain("previous secret remains valid for 24 hours");
+    expect(source).toContain('t("webhookEndpoints.revealSecret")');
+    expect(source).toContain('t("webhookEndpoints.copySecret")');
+    expect(source).toContain('t("webhookEndpoints.rotateButton")');
+    expect(source).toContain('t("webhookEndpoints.rotateNote")');
 
     const activeEndpoints = renderToStaticMarkup(React.createElement(
       WebhookEndpointsApp,

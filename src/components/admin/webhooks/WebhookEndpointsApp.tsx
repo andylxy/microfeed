@@ -21,6 +21,8 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Switch} from "@/components/ui/switch";
 import {showToast} from "@/client/ToastUtils";
+import {useTranslation} from "@/client/i18n";
+import i18n from "@/client/i18n";
 import type {WebhookEndpointSummary} from "@/shared/Webhooks";
 import {adminUrl, browserAdminPath} from "@/shared/AdminPath";
 import {WEBHOOK_QUICKSTART_ENDPOINT_URL} from "@/shared/WebhookQuickstarts";
@@ -51,7 +53,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<any> {
     headers: {"content-type": "application/json", ...init?.headers},
   });
   const payload = await response.json().catch(() => ({})) as {error?: string};
-  if (!response.ok) throw new Error(payload.error ?? "The webhook request failed.");
+  if (!response.ok) throw new Error(payload.error ?? i18n.t("webhookCommon.requestFailed"));
   return payload;
 }
 
@@ -60,6 +62,7 @@ export default function WebhookEndpointsApp({
   initialEndpoints,
   initialQuickstart = false,
 }: Props) {
+  const {t} = useTranslation();
   const [endpoints, setEndpoints] = useState(initialEndpoints);
   const [form, setForm] = useState<FormValue>(() => ({
     ...emptyForm,
@@ -75,7 +78,10 @@ export default function WebhookEndpointsApp({
   const [secretValue, setSecretValue] = useState<string>();
   const [secretVisible, setSecretVisible] = useState(false);
 
-  const slotDescription = `${endpoints.length} of ${WEBHOOK_LIMITS.endpointCount} endpoint slots are in use. Disabled and auto-paused endpoints count until deleted.`;
+  const slotDescription = t("webhookEndpoints.slotDescription", {
+    count: endpoints.length,
+    limit: WEBHOOK_LIMITS.endpointCount,
+  });
   const closeForm = () => {
     setFormOpen(false);
     setEditingId(undefined);
@@ -118,7 +124,7 @@ export default function WebhookEndpointsApp({
         {body: JSON.stringify(form), method: editingId ? "PUT" : "POST"},
       );
       await refresh();
-      showToast(editingId ? "Webhook endpoint updated." : "Webhook endpoint created.", "success");
+      showToast(editingId ? t("webhookEndpoints.updatedToast") : t("webhookEndpoints.addedToast"), "success");
       closeForm();
       if (result.secret && result.endpoint) {
         openSecret(result.endpoint, result.secret);
@@ -130,7 +136,7 @@ export default function WebhookEndpointsApp({
     }
   };
   const action = async (endpoint: WebhookEndpointSummary, actionName: string) => {
-    if (actionName === "delete" && !window.confirm(`Delete ${endpoint.name}? Pending deliveries will be canceled.`)) return;
+    if (actionName === "delete" && !window.confirm(t("webhookEndpoints.deleteConfirm", {name: endpoint.name}))) return;
     setBusy(true);
     try {
       const method = actionName === "delete" ? "DELETE" : "POST";
@@ -139,7 +145,7 @@ export default function WebhookEndpointsApp({
         {body: method === "POST" ? "{}" : undefined, method},
       );
       await refresh();
-      showToast(actionName === "test" ? "Test delivery queued." : `Endpoint ${actionName} complete.`, "success");
+      showToast(actionName === "test" ? t("webhookEndpoints.testQueuedToast") : t("webhookEndpoints.actionCompleteToast", {action: actionName}), "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
     } finally {
@@ -157,7 +163,7 @@ export default function WebhookEndpointsApp({
         method: "PUT",
       });
       await refresh();
-      showToast(active ? "Endpoint enabled." : "Endpoint disabled.", "success");
+      showToast(active ? t("webhookEndpoints.enabledToast") : t("webhookEndpoints.disabledToast"), "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
     } finally {
@@ -199,11 +205,11 @@ export default function WebhookEndpointsApp({
   const copySecret = async () => {
     if (!secretValue) return;
     await navigator.clipboard.writeText(secretValue);
-    showToast("Signing secret copied.", "success");
+    showToast(t("webhookEndpoints.secretCopiedToast"), "success");
   };
   const rotateSecret = async () => {
     if (!secretEndpoint || !window.confirm(
-      `Rotate the signing secret for “${secretEndpoint.name}”? The current secret will remain valid for 24 hours so you can update the receiver.`,
+      t("webhookEndpoints.rotateConfirm", {name: secretEndpoint.name}),
     )) return;
     setSecretBusy(true);
     try {
@@ -212,14 +218,14 @@ export default function WebhookEndpointsApp({
         {body: "{}", method: "POST"},
       );
       if (!result.secret || !result.endpoint) {
-        throw new Error("The rotated signing secret was not returned.");
+        throw new Error(t("webhookEndpoints.secretNotReturned"));
       }
       setSecretEndpoint(result.endpoint);
       setSecretValue(result.secret);
       setSecretVisible(true);
       await refresh();
       showToast(
-        "Signing secret rotated. The previous secret remains valid for 24 hours.",
+        t("webhookEndpoints.rotatedToast"),
         "success",
       );
     } catch (error) {
@@ -241,11 +247,10 @@ export default function WebhookEndpointsApp({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <LockKeyholeIcon aria-hidden="true" className="size-4" />
-              Signing secret
+              {t("webhookEndpoints.signingSecretTitle")}
             </DialogTitle>
             <DialogDescription>
-              Use this endpoint-specific secret to verify that webhook events
-              come from microfeed. You can reveal or rotate it here.
+              {t("webhookEndpoints.signingSecretDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex min-w-0 items-center gap-1 rounded-lg bg-muted p-2">
@@ -255,22 +260,22 @@ export default function WebhookEndpointsApp({
                 : `whsec_${"•".repeat(24)}`}
             </code>
             <Button
-              aria-label={secretVisible ? "Hide signing secret" : "Reveal signing secret"}
+              aria-label={secretVisible ? t("webhookEndpoints.hideSecret") : t("webhookEndpoints.revealSecret")}
               disabled={secretBusy}
               onClick={() => void toggleSecret()}
               size="icon-sm"
-              title={secretVisible ? "Hide signing secret" : "Reveal signing secret"}
+              title={secretVisible ? t("webhookEndpoints.hideSecret") : t("webhookEndpoints.revealSecret")}
               type="button"
               variant="ghost"
             >
               {secretVisible ? <EyeOffIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}
             </Button>
             <Button
-              aria-label="Copy signing secret"
+              aria-label={t("webhookEndpoints.copySecret")}
               disabled={secretBusy || !secretValue}
               onClick={() => void copySecret()}
               size="icon-sm"
-              title="Copy signing secret"
+              title={t("webhookEndpoints.copySecret")}
               type="button"
               variant="ghost"
             >
@@ -278,14 +283,10 @@ export default function WebhookEndpointsApp({
             </Button>
           </div>
           <p className="text-sm leading-6 text-muted-foreground">
-            Store it in <code>MICROFEED_WEBHOOK_SECRET</code>, never in source
-            code or the endpoint URL. The signature is the authentication;
-            no separate passcode or bearer token is needed.
+            {t("webhookEndpoints.secretStorage")}
           </p>
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-3 text-sm leading-6">
-            Rotating creates a new secret immediately. The previous secret
-            remains valid for 24 hours so you can update the receiver without
-            interrupting deliveries.
+            {t("webhookEndpoints.rotateNote")}
           </div>
           <DialogFooter>
             <Button
@@ -295,14 +296,14 @@ export default function WebhookEndpointsApp({
               variant="outline"
             >
               <RefreshCwIcon aria-hidden="true" />
-              Rotate signing secret
+              {t("webhookEndpoints.rotateButton")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {endpoints.length === 0 && (
-        <AdminSectionCard description={slotDescription} title="Add endpoint">
+        <AdminSectionCard description={slotDescription} title={t("webhookEndpoints.addEndpointTitle")}>
           <EndpointForm
             busy={busy}
             editing={false}
@@ -326,7 +327,7 @@ export default function WebhookEndpointsApp({
         >
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl lg:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>{editingId ? "Edit endpoint" : "Add endpoint"}</DialogTitle>
+              <DialogTitle>{editingId ? t("webhookEndpoints.editEndpointTitle") : t("webhookEndpoints.addEndpointTitle")}</DialogTitle>
               <DialogDescription>{slotDescription}</DialogDescription>
             </DialogHeader>
             <EndpointForm
@@ -347,20 +348,20 @@ export default function WebhookEndpointsApp({
         action={endpoints.length > 0 ? (
           <Button
             disabled={busy || !enabled || endpoints.length >= WEBHOOK_LIMITS.endpointCount}
-            onClick={openCreate}
-            size="sm"
-            type="button"
-          >
-            Add endpoint
-          </Button>
+              onClick={openCreate}
+              size="sm"
+              type="button"
+            >
+              {t("webhookEndpoints.addEndpointButton")}
+            </Button>
         ) : undefined}
         description={endpoints.length > 0
-          ? <>{slotDescription} Tests and redeliveries count toward the daily delivery budget.</>
-          : "Tests and redeliveries count toward the daily delivery budget."}
-        title="Configured endpoints"
+          ? <>{slotDescription} {t("webhookEndpoints.testsBudgetNote")}</>
+          : t("webhookEndpoints.testsBudgetNote")}
+        title={t("webhookEndpoints.configuredEndpoints")}
       >
         {endpoints.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No webhook endpoints have been created.</p>
+          <p className="text-sm text-muted-foreground">{t("webhookEndpoints.noEndpoints")}</p>
         ) : (
           <ul className="grid gap-4">
             {endpoints.map((endpoint) => (
@@ -371,7 +372,7 @@ export default function WebhookEndpointsApp({
                       <h3 className="font-semibold">{endpoint.name}</h3>
                       <div className="flex items-center gap-2">
                         <Switch
-                          aria-label={`${endpoint.name} endpoint status`}
+                          aria-label={t("webhookEndpoints.endpointStatusAria", {name: endpoint.name})}
                           checked={endpoint.status === "active"}
                           disabled={busy || endpoint.status === "auto_paused"}
                           id={`webhook-endpoint-status-${endpoint.id}`}
@@ -386,27 +387,27 @@ export default function WebhookEndpointsApp({
                           htmlFor={`webhook-endpoint-status-${endpoint.id}`}
                         >
                           {endpoint.status === "auto_paused"
-                            ? "Auto-paused"
+                            ? t("webhookEndpoints.statusAutoPaused")
                             : endpoint.status === "active"
-                            ? "Active"
-                            : "Disabled"}
+                            ? t("webhookEndpoints.statusActive")
+                            : t("webhookEndpoints.statusDisabled")}
                         </Label>
                       </div>
                     </div>
                     <p className="mt-1 break-all text-sm text-muted-foreground">{endpoint.url}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">{endpoint.events.join(", ")} · {endpoint.consecutiveTerminalFailures} consecutive terminal failures</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{endpoint.events.join(", ")} · {t("webhookEndpoints.consecutiveFailures", {count: endpoint.consecutiveTerminalFailures})}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button disabled={busy} onClick={() => openEdit(endpoint)} size="sm" type="button" variant="outline">Edit</Button>
-                    <Button disabled={busy || endpoint.status === "disabled"} onClick={() => openTest(endpoint)} size="sm" type="button" variant="outline">Test</Button>
-                    <Button disabled={busy} onClick={() => openSecret(endpoint)} size="sm" type="button" variant="outline">Signing secret</Button>
+                    <Button disabled={busy} onClick={() => openEdit(endpoint)} size="sm" type="button" variant="outline">{t("webhookEndpoints.editButton")}</Button>
+                    <Button disabled={busy || endpoint.status === "disabled"} onClick={() => openTest(endpoint)} size="sm" type="button" variant="outline">{t("webhookEndpoints.testButton")}</Button>
+                    <Button disabled={busy} onClick={() => openSecret(endpoint)} size="sm" type="button" variant="outline">{t("webhookEndpoints.signingSecretButton")}</Button>
                     {endpoint.status === "auto_paused" ? (
-                      <Button disabled={busy || !endpoint.resumeTestedAt} onClick={() => action(endpoint, "resume")} size="sm" type="button">Resume</Button>
+                      <Button disabled={busy || !endpoint.resumeTestedAt} onClick={() => action(endpoint, "resume")} size="sm" type="button">{t("webhookEndpoints.resumeButton")}</Button>
                     ) : null}
-                    <Button disabled={busy} onClick={() => action(endpoint, "delete")} size="sm" type="button" variant="destructive">Delete</Button>
+                    <Button disabled={busy} onClick={() => action(endpoint, "delete")} size="sm" type="button" variant="destructive">{t("webhookEndpoints.deleteButton")}</Button>
                   </div>
                 </div>
-                {endpoint.status === "auto_paused" && <p className="mt-3 rounded-lg bg-amber-500/10 p-3 text-sm">This endpoint was paused after 10 consecutive terminal failures. Send a successful test, then explicitly resume it.</p>}
+                {endpoint.status === "auto_paused" && <p className="mt-3 rounded-lg bg-amber-500/10 p-3 text-sm">{t("webhookEndpoints.autoPausedNote")}</p>}
               </li>
             ))}
           </ul>
@@ -435,33 +436,28 @@ function EndpointForm({
   onChange: (form: FormValue) => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
+  const {t} = useTranslation();
   return (
     <form className="grid gap-5" onSubmit={onSubmit}>
       <div className="grid gap-2">
-        <Label htmlFor="webhook-name">Name</Label>
+        <Label htmlFor="webhook-name">{t("webhookEndpoints.formName")}</Label>
         <Input id="webhook-name" maxLength={80} onChange={(event) => onChange({...form, name: event.target.value})} required value={form.name} />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="webhook-url">Endpoint URL</Label>
-        <Input id="webhook-url" onChange={(event) => onChange({...form, url: event.target.value})} placeholder="https://automation.example.com/webhook" required type="url" value={form.url} />
-        <p className="text-xs text-muted-foreground">HTTPS is required when deployed. Local development permits http://127.0.0.1:&lt;port&gt;/webhook.</p>
+        <Label htmlFor="webhook-url">{t("webhookEndpoints.formUrl")}</Label>
+        <Input id="webhook-url" onChange={(event) => onChange({...form, url: event.target.value})} placeholder={t("webhookEndpoints.formUrlPlaceholder")} required type="url" value={form.url} />
+        <p className="text-xs text-muted-foreground">{t("webhookEndpoints.formUrlHint")}</p>
       </div>
       {!editing && (
         <div className="rounded-xl bg-muted p-4 text-sm leading-6">
-          <p className="font-medium">Authentication</p>
+          <p className="font-medium">{t("webhookEndpoints.authTitle")}</p>
           <p className="mt-1 text-muted-foreground">
-            microfeed generates one unique Standard Webhooks signing secret
-            for this endpoint. Your receiver verifies the
-            exact raw body, delivery ID, timestamp, and signature with that
-            secret. You can reveal or rotate it later from the endpoint's
-            <strong> Signing secret</strong> dialog. Put it in
-            <code> MICROFEED_WEBHOOK_SECRET</code>; do not add a passcode,
-            bearer token, URL credential, or custom authentication header.
+            {t("webhookEndpoints.authBody")}
           </p>
         </div>
       )}
       <fieldset>
-        <legend className="text-sm font-medium">Subscribed events</legend>
+        <legend className="text-sm font-medium">{t("webhookEndpoints.subscribedEventsLegend")}</legend>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {selectableEvents.map((eventType) => (
             <label className="flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm" key={eventType}>
@@ -476,8 +472,8 @@ function EndpointForm({
         </div>
       </fieldset>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={busy || !enabled || endpointCount >= WEBHOOK_LIMITS.endpointCount && !editing} type="submit">{editing ? "Save endpoint" : "Create endpoint"}</Button>
-        {onCancel && <Button disabled={busy} onClick={onCancel} type="button" variant="outline">Cancel</Button>}
+        <Button disabled={busy || !enabled || endpointCount >= WEBHOOK_LIMITS.endpointCount && !editing} type="submit">{editing ? t("webhookEndpoints.saveEndpoint") : t("webhookEndpoints.createEndpoint")}</Button>
+        {onCancel && <Button disabled={busy} onClick={onCancel} type="button" variant="outline">{t("common.cancel")}</Button>}
       </div>
     </form>
   );
