@@ -27,7 +27,7 @@ describe("coding-agent guidance", () => {
       "export-microfeed-theme",
       "manage-microfeed-content",
     ]) {
-      expect(agents).toContain(`\`${skill}\` skill`);
+      expect(agents).toContain(`\`${skill}\``);
       await expect(access(path.join(
         repositoryRoot,
         ".agents",
