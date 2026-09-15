@@ -258,15 +258,27 @@
 - 分支 `chore/admin-i18n`（提交 `8f821f8`，未推送）：通过全局实例使用
   i18next + react-i18next（后台是 Astro islands，没有共享的 React
   Provider）。资源在 `src/shared/i18n/en.ts` 与 `zh-CN.ts`；zh-CN 的键
-  形状必须镜像 en（编译期检查）。语言偏好镜像主题机制
-  （`src/shared/AdminLanguage.ts`、`src/client/admin-language.ts`、
-  `AdminLanguageScript.astro`、`AdminLanguageMenu.tsx`）；切换语言会刷新
-  页面，使服务端渲染的标题与 `<html lang>` 保持一致。
-- 已翻译批次 1 覆盖框架界面：登录、密码设置、导航与全部侧边栏、顶栏与用户
-  菜单、搜索、设置外壳、通用控件，以及 28 个管理页面的标题与面包屑。
-  工作树中有 webhook 模块（WebhookOverviewApp、WebhookEndpointsApp）的
-  第二批次扩展。待办批次：服务端错误消息（视为 API 契约）、account、
-  themes、site-files、items 模块文案，以及日期/数字本地化（`humanizeMs`
-  硬编码 en-US，其输出是公开 feed 的一部分，需要单独谨慎修改）。
+  形状必须镜像 en（编译期检查）。
+- **语言解析顺序（三处必须一致）**：显式偏好 cookie `microfeed-admin-language`
+  → `Accept-Language` / `navigator.language`。服务端用
+  `adminLanguageFromRequest(request)`；内联脚本 `AdminLanguageScript.astro`
+  与客户端 `detectBrowserLanguage()`（`src/client/i18n.ts`）用同样的顺序。
+  任一处漏掉 cookie，首屏就会渲染成错的语言（先英文、水合后翻中文的闪烁）。
+- 切换语言会 `location.reload()`，使服务端渲染的标题与 `<html lang>` 一致。
+- **有文案的岛屿用 `client:only="react"`**：`client:load` 会服务端渲染，而
+  服务端 i18next 单例恒为 en（没有 `window`）→ 首屏出英文。保留 `client:load`
+  的仅限无文案（`Toaster`）或纯图标触发器（`AdminThemeMenu`、
+  `AdminLanguageMenu`，语言切换器必须立即可用）。
+- 已翻译批次：① 框架界面（登录、密码设置、导航与全部侧边栏、顶栏与用户菜单、
+  搜索、设置外壳、通用控件、28 个页面标题与面包屑）；② webhook 模块；
+  ③ account / themes / site-files / items 模块；④ 服务端错误消息（公开
+  feed/media 404、内部 service 层、管理员可见错误）。
+- **公开 API 错误正文按 `Accept-Language` 本地化，不读管理端 cookie**，
+  避免公开契约随管理员偏好变化；响应头与状态码一律不变。
+- 待办：日期/数字本地化（`humanizeMs` 硬编码 en-US，其输出是公开 feed 的
+  一部分，需要单独谨慎修改）。`apiInsufficientScopeResponse` 的
+  `insufficient_scope` 是 OAuth 标准错误码，有意保持英文。
 - 新增翻译键时：en.ts 是键形状的唯一事实来源，zh-CN 用类型约束镜像；在
-  `tests/unit/i18n.test.ts` 中保持键一致性测试通过。
+  `tests/unit/i18n.test.ts` 中保持键一致性测试通过。改完还要跑「键存在性 +
+  中英文一致性」校验（`tsc` 通过 ≠ 键正确）：键存在性扫描的正则必须能覆盖
+  含空格与撇号的英文整句，否则会漏报。
