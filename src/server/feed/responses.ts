@@ -11,12 +11,15 @@ import {
   isPublicFeedOffline,
   loadPublishedFeed,
 } from "./feed";
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, notFoundResponse} from "@/server/http";
 import {publicSiteFileResponse} from "@/server/site-files/public";
 
-function feedUnavailable(content: FeedContent): Response | null {
+function feedUnavailable(
+  request: Request,
+  content: FeedContent,
+): Response | null {
   if (isPublicFeedOffline(content)) {
-    return new Response("Not Found", {status: 404, statusText: "Not Found"});
+    return notFoundResponse(request, {statusText: "Not Found"});
   }
   return null;
 }
@@ -53,7 +56,7 @@ export async function jsonFeedResponse(
 ): Promise<Response> {
   const itemId = itemSlug ? getIdFromSlug(itemSlug) : undefined;
   if (itemSlug && !itemId) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
   const loaded = await loadPublishedFeed(env, request, itemId
     ? {
@@ -64,7 +67,9 @@ export async function jsonFeedResponse(
         },
       }
     : {});
-  const unavailable = checkAccessPolicy ? feedUnavailable(loaded.content) : null;
+  const unavailable = checkAccessPolicy
+    ? feedUnavailable(request, loaded.content)
+    : null;
   if (unavailable) {
     return unavailable;
   }
@@ -73,10 +78,10 @@ export async function jsonFeedResponse(
     return redirect;
   }
   if (checkSubscription && subscriptionDisabled(loaded.content, "json")) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
   if (itemId && loaded.publicFeed.items.length === 0) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
   return jsonResponse(loaded.publicFeed, {
     headers: {
@@ -92,7 +97,7 @@ export async function rssFeedResponse(
 ): Promise<Response> {
   const itemId = itemSlug ? getIdFromSlug(itemSlug) : undefined;
   if (itemSlug && !itemId) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
   const loaded = await loadPublishedFeed(env, request, itemId
     ? {
@@ -103,7 +108,7 @@ export async function rssFeedResponse(
         },
       }
     : {});
-  const unavailable = feedUnavailable(loaded.content);
+  const unavailable = feedUnavailable(request, loaded.content);
   if (unavailable) {
     return unavailable;
   }
@@ -112,10 +117,10 @@ export async function rssFeedResponse(
     return redirect;
   }
   if (subscriptionDisabled(loaded.content, "rss")) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
   if (itemId && loaded.publicFeed.items.length === 0) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
 
   const rss = new FeedPublicRssBuilder(

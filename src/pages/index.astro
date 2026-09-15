@@ -4,6 +4,7 @@ import {env} from "cloudflare:workers";
 import {CODE_TYPES} from "@/shared/Constants";
 import Theme from "@/server/themes/Theme";
 import PublicLayout from "../layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {navigationPages} from "@/server/pages/service";
@@ -50,7 +51,7 @@ const sharedTheme = new Theme(
 ---
 
 {unavailable ? (
-  <h1>Not Found</h1>
+  <PublicNotFoundHeading />
 ) : (
   <PublicLayout
     title={loaded.publicFeed.title}

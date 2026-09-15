@@ -3,6 +3,7 @@ import {useRef} from "react";
 import type {ChangeEventHandler, KeyboardEvent} from "react";
 
 import {cn} from "@/lib/utils";
+import {useTranslation} from "@/client/i18n";
 
 export function isCaretOnLastLine(
   value: string,
@@ -26,16 +27,19 @@ interface Props {
 }
 
 export default function AdminCodeEditor({
-  ariaLabel = "Code editor",
+  ariaLabel,
   code,
   fontSize = 12,
   language,
   maxHeight,
   minHeight = "50vh",
   onChange,
-  placeholder = "Please enter code here, including html, javascript, and css",
+  placeholder,
   readOnly = false,
 }: Props) {
+  const {t} = useTranslation();
+  const resolvedAriaLabel = ariaLabel ?? t("shared.codeEditorAriaLabel");
+  const resolvedPlaceholder = placeholder ?? t("shared.codeEditorPlaceholder");
   const scrollContainerRef = useRef<HTMLLabelElement>(null);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -69,10 +73,10 @@ export default function AdminCodeEditor({
     style={{maxHeight}}
   >
     <CodeEditor
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       value={code}
       language={language}
-      placeholder={placeholder}
+      placeholder={resolvedPlaceholder}
       onChange={onChange}
       onKeyDown={onKeyDown}
       readOnly={readOnly}

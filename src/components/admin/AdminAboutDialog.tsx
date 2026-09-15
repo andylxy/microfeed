@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {useTranslation} from "@/client/i18n";
+import {formatAdminTimestamp} from "@/client/admin-date-format";
 import {OUR_BRAND} from "@/shared/Constants";
 import {
   MICROFEED_MANAGE_COMMAND,
@@ -26,6 +27,9 @@ import {
 import {MICROFEED_VERSION} from "@/shared/Version";
 import type {AdminDeploymentSummary} from "./admin-shell-types";
 
+// Deliberately NOT translated. This text is copied into an AI coding agent, and
+// it embeds shell commands; keeping it in one language keeps it parseable, and
+// `tests/unit/components/admin-dashboard-shell.test.ts` pins it verbatim.
 export const ADMIN_UPDATE_PROMPT =
   `Run \`${MICROFEED_MANAGE_COMMAND}\` and follow every instruction it prints ` +
   "to update this microfeed site to the latest version. Continue until " +
@@ -169,7 +173,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
               <dt className="text-muted-foreground">{t("about.deployed")}</dt>
               <dd>
                 <time dateTime={deployment.deployedAt} suppressHydrationWarning>
-                  {new Intl.DateTimeFormat(undefined, {dateStyle: "medium", timeStyle: "short"}).format(new Date(deployment.deployedAt))}
+                  {formatAdminTimestamp(deployment.deployedAt)}
                 </time>
               </dd>
             </div>

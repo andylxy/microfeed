@@ -1,8 +1,9 @@
 import {describe, expect, it} from "vitest";
 
+import i18n from "@/client/i18n";
 import {
   labelRichEditorToolbar,
-  RICH_EDITOR_TOOLBAR_LABELS,
+  RICH_EDITOR_TOOLBAR_LABEL_KEYS,
 } from "@/client/RichEditorToolbar";
 
 describe("labelRichEditorToolbar", () => {
@@ -11,7 +12,7 @@ describe("labelRichEditorToolbar", () => {
       attributes: Map<string, string>;
       setAttribute(name: string, value: string): void;
     }>(
-      RICH_EDITOR_TOOLBAR_LABELS.map(([selector]) => [
+      RICH_EDITOR_TOOLBAR_LABEL_KEYS.map(([selector]) => [
         selector,
         {
           attributes: new Map<string, string>(),
@@ -30,16 +31,19 @@ describe("labelRichEditorToolbar", () => {
 
     labelRichEditorToolbar(container);
 
-    RICH_EDITOR_TOOLBAR_LABELS.forEach(([selector, label]) => {
+    RICH_EDITOR_TOOLBAR_LABEL_KEYS.forEach(([selector, key]) => {
+      const label = i18n.t(key);
+      expect(label).not.toBe(key);
       expect(controls.get(selector)?.attributes.get("aria-label")).toBe(label);
       expect(controls.get(selector)?.attributes.get("title")).toBe(label);
     });
   });
 
   it("keeps the clear-formatting control explicitly labeled", () => {
-    expect(RICH_EDITOR_TOOLBAR_LABELS).toContainEqual([
+    expect(RICH_EDITOR_TOOLBAR_LABEL_KEYS).toContainEqual([
       "button.ql-clean",
-      "Clear formatting",
+      "richEditor.clearFormatting",
     ]);
+    expect(i18n.t("richEditor.clearFormatting")).toBe("Clear formatting");
   });
 });

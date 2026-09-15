@@ -95,9 +95,9 @@ describe("source architecture", () => {
     expect(settingsSource).toContain("itemsOrder,");
     expect(settingsSource).toContain("itemsSort,");
     expect(settingsSource).not.toContain("itemsSortOrder");
-    expect(settingsSource).toContain("Published at");
-    expect(settingsSource).toContain("Created at");
-    expect(settingsSource).toContain("Updated at");
+    expect(settingsSource).toContain('t("settings.sortPublishedAt")');
+    expect(settingsSource).toContain('t("settings.sortCreatedAt")');
+    expect(settingsSource).toContain('t("settings.sortUpdatedAt")');
   });
 
   it("has no legacy source roots or references", async () => {
@@ -263,7 +263,7 @@ describe("source architecture", () => {
     expect(apiRoute).toContain("<ApiSettingsApp");
     expect(apiRoute).toContain("apiNavigation");
     expect(apiSettings).toContain("onChange={(enabled) => save");
-    expect(apiSettings).toContain("Publish API docs");
+    expect(apiSettings).toContain('t("api.publishApiDocs")');
     expect(settingsPage).not.toContain("ApiSettingsApp");
   });
 
@@ -318,10 +318,10 @@ describe("source architecture", () => {
     expect(settingsPage).toContain('id="items-settings"');
     expect(settingsPage).toContain('id="favicon"');
     expect(settingsPage).toContain('className="h-[50vh]"');
-    expect(mediaStorage).toContain('title="Media file storage"');
-    expect(mediaStorage).toContain('label="R2 public bucket URL"');
-    expect(itemsSettings).toContain('title="Items settings"');
-    expect(faviconSettings).toContain('title="Favicon"');
+    expect(mediaStorage).toContain('title={t("settings.mediaFileStorage")}');
+    expect(mediaStorage).toContain('label={t("settings.r2PublicBucketUrl")}');
+    expect(itemsSettings).toContain('title={t("settings.itemsSettings")}');
+    expect(faviconSettings).toContain('title={t("settings.favicon")}');
     expect([mediaStorage, itemsSettings, faviconSettings].join("\n"))
       .not.toContain("<details");
   });
@@ -375,10 +375,10 @@ describe("source architecture", () => {
     expect(itemEditor).toContain("new AutosaveCoordinator");
     expect(channelEditor).toContain("delayMs: null");
     expect(channelEditor).toContain("<AdminSaveAction");
-    expect(channelEditor).toContain('buttonLabel="Save changes"');
+    expect(channelEditor).toMatch(/buttonLabel=\{t\(["']channel\.saveChanges["']\)\}/u);
     expect(itemEditor).toContain("<AdminSaveAction");
     expect(itemEditor).toContain("status: STATUSES.UNPUBLISHED");
-    expect(itemEditor).toContain("Start editing to create an unpublished draft.");
+    expect(itemEditor).toMatch(/t\(["']items\.saveActionIdleCreate["']\)/u);
     expect(adminPageApp).not.toContain("<Toaster");
     expect(adminShell).toContain('transition:persist="admin-toaster"');
     expect(adminShell).toContain('position="top-right"');

@@ -6,6 +6,7 @@ import {
   type ThemeListOptions,
   type ThemeAdminTab,
 } from "./ThemeContract";
+import {AppError} from "../errors";
 
 export function parseThemeAdminTab(
   searchParams: URLSearchParams,
@@ -15,7 +16,7 @@ export function parseThemeAdminTab(
   if (THEME_ADMIN_TABS.includes(requested as ThemeAdminTab)) {
     return requested as ThemeAdminTab;
   }
-  throw new Error("Unknown theme tab.");
+  throw new AppError("errors.theme.unknownTab");
 }
 
 export function parseThemeListOptions(
@@ -23,16 +24,18 @@ export function parseThemeListOptions(
 ): ThemeListOptions {
   const q = (searchParams.get("q") ?? "").trim();
   if (q.length > THEME_SEARCH_MAX_LENGTH) {
-    throw new Error(`Theme search is limited to ${THEME_SEARCH_MAX_LENGTH} characters.`);
+    throw new AppError("errors.theme.searchTooLong", 400, {
+      max: String(THEME_SEARCH_MAX_LENGTH),
+    });
   }
   const requestedSort = searchParams.get("sort") ?? "status";
   const sort = THEME_LIST_SORTS.includes(requestedSort as ThemeListSort)
     ? requestedSort as ThemeListSort
     : null;
-  if (!sort) throw new Error("Unknown theme sort order.");
+  if (!sort) throw new AppError("errors.theme.unknownSort");
   const requestedPage = searchParams.get("page") ?? "1";
   if (!/^\d+$/u.test(requestedPage) || Number(requestedPage) < 1) {
-    throw new Error("Theme page must be a positive integer.");
+    throw new AppError("errors.theme.pageMustBePositive");
   }
   return {page: Number(requestedPage), q, sort};
 }

@@ -5,6 +5,7 @@ import {CODE_TYPES, STATUSES} from "@/shared/Constants";
 import {getIdFromSlug, PUBLIC_URLS} from "@/shared/StringUtils";
 import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {navigationPages} from "@/server/pages/service";
@@ -68,7 +69,7 @@ const canonicalUrl = itemId && item
 {notFoundPage?.kind === "page" ? (
   <PublicLayout {...notFoundPage.layout} />
 ) : unavailable || !item ? (
-  <h1>Not Found</h1>
+  <PublicNotFoundHeading />
 ) : (
   <PublicLayout
     title={String(item.title ?? "Untitled")}

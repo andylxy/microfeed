@@ -3,7 +3,7 @@ import {env} from "cloudflare:workers";
 
 import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import EditItemApp from "@/components/admin/items/EditItemApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
@@ -11,9 +11,7 @@ import AdminShell from "../../../../layouts/AdminShell.astro";
 import {loadFeed} from "@/server/feed/feed";
 
 const itemId = Astro.params.itemId ?? "";
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const loaded = await loadFeed(env, Astro.request, {
   adminProtection: Astro.locals.adminProtection,
   limit: 1,

@@ -1,5 +1,6 @@
 import {FileCode2Icon, PlusIcon} from "lucide-react";
 
+import {useTranslation} from "@/client/i18n";
 import {useAdminCollection} from "@/client/useAdminCollection";
 import {
   AdminCollectionError,
@@ -14,14 +15,15 @@ import type {
 } from "@/shared/AdminCollections";
 
 export function SiteFilesList({files}: {files: AdminSiteFileSummary[]}) {
+  const {t} = useTranslation();
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Root-level text files use Mustache templates and are published without a theme. You can customize built-in files or add your own.
+          {t("siteFiles.intro")}
         </p>
         <a className={cn(buttonVariants(), "!text-white hover:!text-white")} href={ADMIN_URLS.newSiteFile()}>
-          <PlusIcon aria-hidden="true" /> Add Site File
+          <PlusIcon aria-hidden="true" /> {t("siteFiles.addSiteFile")}
         </a>
       </div>
       <div className="grid gap-3">
@@ -42,7 +44,7 @@ export function SiteFilesList({files}: {files: AdminSiteFileSummary[]}) {
                   file.enabled
                     ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
                     : "bg-muted text-muted-foreground",
-                )}>{file.enabled ? "Published" : "Draft"}</span>
+                )}>{file.enabled ? t("siteFiles.published") : t("siteFiles.draft")}</span>
               </div>
             </div>
           </a>
@@ -53,15 +55,16 @@ export function SiteFilesList({files}: {files: AdminSiteFileSummary[]}) {
 }
 
 export default function SiteFilesApp() {
+  const {t} = useTranslation();
   const {data, error, loading, retry} =
     useAdminCollection<AdminSiteFileListResponse>(
       ADMIN_URLS.ajaxSiteFiles(),
-      "Could not load Site Files.",
+      t("siteFiles.loadFailed"),
     );
   if (!data) {
     return error
       ? <AdminCollectionError message={error} retry={retry} />
-      : <AdminCollectionLoading label="Loading Site Files" />;
+      : <AdminCollectionLoading label={t("siteFiles.loading")} />;
   }
   return (
     <div>

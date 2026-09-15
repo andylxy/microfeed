@@ -1,4 +1,5 @@
 import {WEBHOOK_EVENT_TYPE_SET, type WebhookEventType} from "@/shared/Webhooks";
+import {AppError} from "@/shared/errors";
 
 const PRIVATE_IPV4 = [
   /^10\./u,
@@ -63,9 +64,11 @@ function ipv6IsPrivate(hostname: string): boolean {
   return (mapped || compatible) && ipv4IsPrivate(bytes.slice(12).join("."));
 }
 
-export class WebhookRequestError extends Error {}
-export class WebhookEndpointLimitError extends Error {}
-export class WebhookUnavailableError extends Error {}
+// All three extend AppError so `webhookLocalized` can translate them. A plain
+// Error would surface the raw i18n key instead of its message.
+export class WebhookRequestError extends AppError {}
+export class WebhookEndpointLimitError extends AppError {}
+export class WebhookUnavailableError extends AppError {}
 
 export function validateWebhookEndpointUrl(
   value: string,
@@ -75,13 +78,13 @@ export function validateWebhookEndpointUrl(
   try {
     url = new URL(value);
   } catch {
-    throw new WebhookRequestError("Enter a valid absolute webhook URL.");
+    throw new WebhookRequestError("errors.webhook.urlRequiredAbsolute");
   }
   if (url.username || url.password) {
-    throw new WebhookRequestError("Webhook URLs cannot contain credentials.");
+    throw new WebhookRequestError("errors.webhook.urlNoCredentials");
   }
   if (url.hash) {
-    throw new WebhookRequestError("Webhook URLs cannot contain fragments.");
+    throw new WebhookRequestError("errors.webhook.urlNoFragments");
   }
   const hostname = url.hostname.toLowerCase();
   const ipv6 = hostname.replace(/^\[|\]$/gu, "");
@@ -93,19 +96,19 @@ export function validateWebhookEndpointUrl(
       url.pathname !== "/webhook" || url.search
     ) {
       throw new WebhookRequestError(
-        "Local webhook URLs must use http://127.0.0.1:<port>/webhook.",
+        "errors.webhook.localUrlFormat",
       );
     }
   } else if (url.protocol !== "https:") {
-    throw new WebhookRequestError("Deployed webhook URLs must use HTTPS.");
+    throw new WebhookRequestError("errors.webhook.deployedUrlHttps");
   } else if (loopback || hostname.endsWith(".local")) {
     throw new WebhookRequestError(
-      "Deployed webhook URLs cannot target a local or private address.",
+      "errors.webhook.deployedUrlPrivateAddress",
     );
   }
   if (url.origin === new URL(options.siteOrigin).origin) {
     throw new WebhookRequestError(
-      "A microfeed instance cannot send webhooks to itself.",
+      "errors.webhook.selfTarget",
     );
   }
   return url.toString();
@@ -113,7 +116,7 @@ export function validateWebhookEndpointUrl(
 
 export function validateWebhookEvents(values: unknown): WebhookEventType[] {
   if (!Array.isArray(values) || values.length === 0) {
-    throw new WebhookRequestError("Choose at least one webhook event.");
+    throw new WebhookRequestError("errors.webhook.chooseAtLeastOneEvent");
   }
   const unique = [...new Set(values)];
   if (
@@ -122,7 +125,7 @@ export function validateWebhookEvents(values: unknown): WebhookEventType[] {
       value === "webhook.test"
     )
   ) {
-    throw new WebhookRequestError("One or more webhook events are invalid.");
+    throw new WebhookRequestError("errors.webhook.invalidEvents");
   }
   return unique as WebhookEventType[];
 }

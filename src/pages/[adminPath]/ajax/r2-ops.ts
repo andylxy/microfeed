@@ -1,7 +1,7 @@
 import {cache, env, waitUntil} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "../../../server/http";
+import {jsonResponse, localizedError} from "../../../server/http";
 import FeedDb from "@/server/feed/FeedDb";
 import {
   parseDeleteImageRequest,
@@ -40,11 +40,11 @@ export async function deleteAdminImage(
   try {
     rawInput = await request.json();
   } catch {
-    return jsonResponse({error: "Invalid image deletion request."}, {status: 400});
+    return localizedError(request, "errors.r2.invalidImageDeletion", 400);
   }
   const input = parseDeleteImageRequest(rawInput);
   if (!input) {
-    return jsonResponse({error: "Invalid image deletion request."}, {status: 400});
+    return localizedError(request, "errors.r2.invalidImageDeletion", 400);
   }
 
   try {
@@ -63,7 +63,7 @@ export async function deleteAdminImage(
       error: error instanceof Error ? error.message : String(error),
       message: "Failed to remove image metadata",
     }));
-    return jsonResponse({error: "Failed to remove image metadata."}, {status: 500});
+    return localizedError(request, "errors.r2.metadataRemovalFailed", 500);
   }
 }
 

@@ -1,4 +1,6 @@
 import {loadFeed, loadPublishedFeed} from "@/server/feed/feed";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import FeedPublicRssBuilder from "@/server/feed/FeedPublicRssBuilder";
 import Theme from "@/server/themes/Theme";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
@@ -78,7 +80,13 @@ export async function themePreviewResponse(
     !["feed", "item", "rss", "rss-stylesheet", "page", "search"].includes(view) ||
     (!supportsPagesAndSearch && (view === "page" || view === "search"))
   ) {
-    return new Response("Unknown preview view.", {status: 400});
+    return new Response(
+      translate(
+        "errors.theme.unknownPreviewView",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 400},
+    );
   }
   const requestedData = requestUrl.searchParams.get("data");
   if (
@@ -86,7 +94,13 @@ export async function themePreviewResponse(
     requestedData !== "fixture" &&
     requestedData !== "site"
   ) {
-    return new Response("Unknown preview data source.", {status: 400});
+    return new Response(
+      translate(
+        "errors.theme.unknownPreviewDataSource",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 400},
+    );
   }
   const dataSource = requestedData ??
     (previewTheme.previewFixture ? "fixture" : "site");

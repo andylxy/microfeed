@@ -124,7 +124,7 @@ describe("admin Page editor routes", () => {
     );
 
     expect(editor).toContain("page?.is_not_found_page");
-    expect(editor).toContain("Default 404 Page");
+    expect(editor).toContain('t("pages.default404Page")');
     expect(editor).toContain("page && !isNotFoundPage");
   });
 
@@ -163,7 +163,7 @@ describe("admin Page editor routes", () => {
     expect(editor).toContain(
       "window.sessionStorage.removeItem(PAGE_CREATED_TOAST_KEY)",
     );
-    expect(editor).toContain('showToast("Page created.", "success")');
+    expect(editor).toContain('showToast(t("pages.created"), "success")');
   });
 
   it("updates the View action from the last saved visibility and URL", async () => {
@@ -195,20 +195,22 @@ describe("admin Page editor routes", () => {
       "utf8",
     );
 
-    expect(editor).toContain("Search and social description");
+    expect(editor).toContain('t("pages.helpDescriptionTitle")');
     expect(editor).toContain("AdminHelpLabel");
-    expect(editor).toContain("Plain text for search results and link previews.");
-    expect(editor).toContain('placeholder="e.g., about"');
-    expect(editor).toContain("One top-level path only. Slashes are removed automatically");
+    expect(editor).toContain('t("pages.descriptionHelp")');
+    expect(editor).toContain('placeholder={t("pages.urlPathPlaceholder")}');
+    expect(editor).toContain('t("pages.urlPathHelp")');
     expect(editor).not.toContain("leave blank to use the title");
     expect(editor).not.toContain("slugifyPageTitle");
-    expect(editor).toContain('placeholder="e.g., About"');
-    expect(editor).toContain("Enter a URL path, such as about.");
-    expect(editor).toContain("Enter a navigation label, or turn off Show in navigation.");
-    expect(editor).toContain("Page navigation is website-only");
-    expect(editor).toContain("Choose how people can find and open this Page.");
-    expect(editor).toContain("turns off and disables Show in navigation.");
-    expect(editor).toContain("return to the Pages screen and drag");
+    expect(editor).toContain(
+      'placeholder={t("pages.navigationLabelPlaceholder")}',
+    );
+    expect(editor).toContain('t("pages.needUrlPath")');
+    expect(editor).toContain('t("pages.needNavLabel")');
+    expect(editor).toContain('t("pages.helpNavRssJsonNote")');
+    expect(editor).toContain('t("pages.helpVisibilityDescription")');
+    expect(editor).toContain('t("pages.helpNavUnlistedCantAppear")');
+    expect(editor).toContain('t("pages.helpNavChangeOrder")');
     expect(editor).not.toContain("Navigation order");
     expect(editor).not.toContain("navigation_order");
     expect(editor).toContain("disabled={!draft.show_in_navigation}");
@@ -243,7 +245,7 @@ describe("admin Page editor routes", () => {
       "utf8",
     );
 
-    expect(list).toContain("Website navigation");
+    expect(list).toContain('t("pages.websiteNavigation")');
     expect(list).toContain("GripVerticalIcon");
     expect(list).toContain("ajaxPageOrder");
     expect(list).toContain('event.key === "ArrowUp"');

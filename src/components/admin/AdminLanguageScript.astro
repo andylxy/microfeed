@@ -15,6 +15,12 @@
         );
         if (match && allowed.has(match[1])) return match[1];
       } catch {}
+      // Prefer the language the server already rendered with. It resolved from
+      // `Accept-Language`, which is not always the same as `navigator.language`;
+      // overriding it here would desync `<html lang>` from the painted text.
+      if (allowed.has(document.documentElement.lang)) {
+        return document.documentElement.lang;
+      }
       return navigator.language && /^zh([-_]|$)/i.test(navigator.language)
         ? "zh-CN"
         : "en";

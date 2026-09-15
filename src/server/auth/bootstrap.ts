@@ -1,4 +1,5 @@
 import {hashPassword} from "better-auth/crypto";
+import {notFoundResponse} from "@/server/http";
 
 import {
   normalizeAdminEmail,
@@ -98,10 +99,9 @@ export async function bootstrapAdmin(
   }
 }
 
-function notFound(): Response {
-  return new Response("404", {
+function notFound(request: Request): Response {
+  return notFoundResponse(request, {
     headers: {"content-type": "text/plain; charset=utf-8"},
-    status: 404,
   });
 }
 
@@ -110,13 +110,13 @@ export async function handleAdminBootstrap(
   request: Request,
 ): Promise<Response> {
   if (request.method !== "POST") {
-    return notFound();
+    return notFound(request);
   }
 
   try {
     const status = await bootstrapAdmin(runtimeEnv);
     if (status === "unavailable") {
-      return notFound();
+      return notFound(request);
     }
     if (status === "invalid") {
       return Response.json(

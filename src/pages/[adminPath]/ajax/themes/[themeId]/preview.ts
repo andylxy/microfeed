@@ -3,6 +3,7 @@ import type {APIRoute} from "astro";
 
 import ThemeStore from "@/server/themes/ThemeStore";
 import {themePreviewResponse} from "@/server/themes/ThemePreview";
+import {localizedError} from "@/server/http";
 
 export const GET: APIRoute = async ({params, request}) => {
   const theme = await new ThemeStore(env.FEED_DB).getVersion(
@@ -10,5 +11,5 @@ export const GET: APIRoute = async ({params, request}) => {
   );
   return theme
     ? themePreviewResponse(env, request, theme)
-    : new Response("Theme not found.", {status: 404});
+    : localizedError(request, "errors.theme.notFound", 404);
 };

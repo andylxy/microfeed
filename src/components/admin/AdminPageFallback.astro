@@ -1,6 +1,6 @@
 ---
 import {translate} from "@/shared/i18n";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 
 interface Props {
   kind: "editor" | "form" | "home" | "list" | "settings";
@@ -10,7 +10,7 @@ interface Props {
 const {kind, label} = Astro.props;
 const fallbackLabel = translate(
   "common.loading",
-  languageFromAcceptLanguage(Astro.request.headers.get("accept-language")),
+  adminLanguageFromRequest(Astro.request),
 );
 const resolvedLabel = label ?? fallbackLabel;
 const rowCounts = {

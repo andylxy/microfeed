@@ -41,7 +41,7 @@ function webhookEncryptionSecret(runtimeEnv: Env): string {
   const value = runtimeEnv.WEBHOOK_SECRET_KEY?.trim();
   if (!value) {
     throw new WebhookUnavailableError(
-      "Webhooks are not enabled for this microfeed deployment.",
+      "errors.webhook.notEnabledDeployment",
     );
   }
   return value;
@@ -124,11 +124,11 @@ export async function createWebhookEndpoint(
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 80) {
     throw new WebhookRequestError(
-      "Endpoint names must contain 1–80 characters.",
+      "errors.webhook.endpointNameLength",
     );
   }
   if (typeof input.url !== "string") {
-    throw new WebhookRequestError("Enter a webhook URL.");
+    throw new WebhookRequestError("errors.webhook.urlRequired");
   }
   const url = validateWebhookEndpointUrl(input.url, {
     local: !runtimeEnv.MICROFEED_CLOUDFLARE_ACCOUNT_ID?.trim(),
@@ -159,7 +159,9 @@ export async function createWebhookEndpoint(
   } catch (error) {
     if (String(error).includes("webhook_endpoint_limit")) {
       throw new WebhookEndpointLimitError(
-        `A microfeed instance supports at most ${WEBHOOK_LIMITS.endpointCount} non-deleted webhook endpoints.`,
+        "errors.webhook.endpointLimit",
+        409,
+        {max: String(WEBHOOK_LIMITS.endpointCount)},
       );
     }
     throw error;
@@ -182,7 +184,7 @@ export async function updateWebhookEndpoint(
     : "";
   if (!name || name.length > 80) {
     throw new WebhookRequestError(
-      "Endpoint names must contain 1–80 characters.",
+      "errors.webhook.endpointNameLength",
     );
   }
   const url = input.url === undefined
@@ -193,7 +195,7 @@ export async function updateWebhookEndpoint(
         siteOrigin,
       })
     : (() => {
-        throw new WebhookRequestError("Enter a webhook URL.");
+        throw new WebhookRequestError("errors.webhook.urlRequired");
       })();
   const events = input.events === undefined
     ? existing.events
@@ -203,11 +205,11 @@ export async function updateWebhookEndpoint(
     input.status !== undefined &&
     status !== "active" && status !== "disabled"
   ) {
-    throw new WebhookRequestError("Choose active or disabled.");
+    throw new WebhookRequestError("errors.webhook.chooseActiveOrDisabled");
   }
   if (existing.status === "auto_paused" && status === "active") {
     throw new WebhookRequestError(
-      "Send a successful test and use the explicit resume action.",
+      "errors.webhook.successfulTestForResume",
     );
   }
   const activating = existing.status === "disabled" && status === "active";
@@ -256,13 +258,16 @@ export async function rotateWebhookEndpointSecret(
     secret,
     webhookEncryptionSecret(runtimeEnv),
   );
+  const previousSecretExpiresAt = new Date(
+    Date.now() + 24 * 60 * 60 * 1_000,
+  ).toISOString();
   await runtimeEnv.FEED_DB.prepare(`
     UPDATE webhook_endpoints
     SET previous_secret_ciphertext = secret_ciphertext,
-      previous_secret_expires_at = datetime('now', '+24 hours'),
+      previous_secret_expires_at = ?,
       secret_ciphertext = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND deleted_at IS NULL
-  `).bind(encrypted, id).run();
+  `).bind(previousSecretExpiresAt, encrypted, id).run();
   return {endpoint: (await getWebhookEndpoint(runtimeEnv.FEED_DB, id))!, secret};
 }
 
@@ -281,7 +286,7 @@ export async function resumeWebhookEndpoint(
     const endpoint = await getWebhookEndpoint(database, id);
     if (!endpoint) return null;
     throw new WebhookRequestError(
-      "Send a successful test delivery before resuming this endpoint.",
+      "errors.webhook.successfulTestBeforeResume",
     );
   }
   return getWebhookEndpoint(database, id);
@@ -502,13 +507,15 @@ export async function updateWebhookSettings(
       Number(dailyDeliveryLimit) < 0 ||
       Number(dailyDeliveryLimit) > WEBHOOK_LIMITS.maximumDailyDeliveries) {
     throw new WebhookRequestError(
-      `The daily delivery budget must be a whole number from 0 to ${WEBHOOK_LIMITS.maximumDailyDeliveries.toLocaleString("en-US")}.`,
+      "errors.webhook.dailyBudgetRange",
+      400,
+      {max: WEBHOOK_LIMITS.maximumDailyDeliveries.toLocaleString("en-US")},
     );
   }
   if (Number(dailyDeliveryLimit) > WEBHOOK_LIMITS.dailyDeliveries &&
       input.highCostAcknowledged !== true) {
     throw new WebhookRequestError(
-      "Confirm that a higher budget can exceed Cloudflare's account-wide Queue allowance and create charges.",
+      "errors.webhook.budgetAcknowledgementRequired",
     );
   }
   await database.prepare(`

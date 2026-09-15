@@ -1,6 +1,8 @@
 import {useEffect, useState, type ReactNode} from "react";
 import {CircleHelpIcon, CopyIcon, SearchIcon} from "lucide-react";
 
+import i18n, {useTranslation} from "@/client/i18n";
+import {formatAdminTimestamp} from "@/client/admin-date-format";
 import {showToast} from "@/client/ToastUtils";
 import ThemeInstallHelpDialog from "@/components/admin/themes/ThemeInstallHelpDialog";
 import ThemePreviewDialog from "@/components/admin/themes/ThemePreviewDialog";
@@ -43,18 +45,18 @@ async function requestJson(url: string, init?: RequestInit): Promise<any> {
     headers: {"content-type": "application/json", ...init?.headers},
   });
   const body = await response.json().catch(() => ({})) as Record<string, any>;
-  if (!response.ok) throw new Error(body.error ?? "Theme operation failed.");
+  if (!response.ok) throw new Error(body.error ?? i18n.t("themes.operationFailed"));
   return body;
 }
 
-function Status({theme, state}: {state: ThemeState; theme: ThemeVersionSummary}) {
+function Status({state, theme}: {state: ThemeState; theme: ThemeVersionSummary}) {
   if (state.activeThemeId === theme.id) {
-    return <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">Active</span>;
+    return <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">{i18n.t("themes.statusActive")}</span>;
   }
   if (state.previousThemeId === theme.id) {
-    return <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">Previous</span>;
+    return <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">{i18n.t("themes.statusPrevious")}</span>;
   }
-  return <span className="rounded-full bg-muted px-2 py-1 text-xs">Inactive</span>;
+  return <span className="rounded-full bg-muted px-2 py-1 text-xs">{i18n.t("themes.statusInactive")}</span>;
 }
 
 function InstalledAt({value}: {value: string}) {
@@ -65,14 +67,9 @@ function InstalledAt({value}: {value: string}) {
   const valid = !Number.isNaN(date.getTime());
   return (
     <p className="mt-1 text-xs text-muted-foreground">
-      Installed at{" "}
+      {i18n.t("themes.installedAt")}{" "}
       <time dateTime={valid ? date.toISOString() : value}>
-        {valid
-          ? new Intl.DateTimeFormat(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          }).format(date)
-          : value}
+        {valid ? formatAdminTimestamp(date) : value}
       </time>
     </p>
   );
@@ -83,7 +80,7 @@ function originThemeLabel(theme: ThemeVersionSummary): string {
   if (theme.originThemeName && theme.originThemeVersion) {
     return `${theme.originThemeName} · ${theme.originThemeVersion}`;
   }
-  return "Source version is no longer available";
+  return i18n.t("themes.originUnavailable");
 }
 
 interface VersionCardProps {
@@ -119,6 +116,7 @@ function VersionCard({
   state,
   theme,
 }: VersionCardProps) {
+  const {t} = useTranslation();
   const canUpdate = builtIn || Boolean(theme.sourceUrl || theme.sourcePath);
   const updateCommand = builtIn && builtInSource
     ? managementCommand(`theme install ${builtInSource} --instance ${instanceName}`)
@@ -128,10 +126,23 @@ function VersionCard({
       `--output ~/microfeed-themes/${theme.packageId}-${theme.version} --git`,
   );
   const updatePrompt = builtIn
-    ? `Update the ${theme.packageId} theme on ${siteUrl} to the latest Built-in version. Use ${MICROFEED_MANAGE_COMMAND}, connect the existing site if needed, install the update inactive, ask before activation, then verify the site afterward.`
-    : `Update the theme on ${siteUrl} to the latest version from ${theme.sourceUrl ?? theme.sourcePath}. Use ${MICROFEED_MANAGE_COMMAND}, connect the existing site if needed, install the update inactive, ask before activation, then verify the site afterward.`;
-  const exportPrompt =
-    `Export the exact installed theme ${theme.packageId}@${theme.version} (ID ${theme.id}) from ${siteUrl} into a standalone local theme repository for continued development. Use ${MICROFEED_MANAGE_COMMAND}, connect the existing site if needed, verify the export, and stop before committing or publishing anything.`;
+    ? t("themes.updateBuiltInPrompt", {
+      command: MICROFEED_MANAGE_COMMAND,
+      packageId: theme.packageId,
+      siteUrl,
+    })
+    : t("themes.updateSourcePrompt", {
+      command: MICROFEED_MANAGE_COMMAND,
+      siteUrl,
+      source: theme.sourceUrl ?? theme.sourcePath ?? "",
+    });
+  const exportPrompt = t("themes.exportPrompt", {
+    command: MICROFEED_MANAGE_COMMAND,
+    id: theme.id,
+    packageId: theme.packageId,
+    siteUrl,
+    version: theme.version,
+  });
   return (
     <article className="rounded-xl border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -140,17 +151,17 @@ function VersionCard({
             <h3 className="font-medium">{theme.name}</h3>
             {builtIn && (
               <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
-                Built-in
+                {t("themes.badgeBuiltIn")}
               </span>
             )}
             {currentVersion === theme.version && (
               <span className="rounded-full bg-violet-100 px-2 py-1 text-xs text-violet-800">
-                Current release
+                {t("themes.badgeCurrentRelease")}
               </span>
             )}
             {builtIn && theme.manifest.previewFixture && (
               <span className="rounded-full bg-cyan-100 px-2 py-1 text-xs text-cyan-800">
-                Demo content
+                {t("themes.badgeDemoContent")}
               </span>
             )}
             <Status state={state} theme={theme} />
@@ -162,14 +173,14 @@ function VersionCard({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={() => onCreateVersion(theme.id)} variant="outline">
-            Create new version
+            {t("themes.createNewVersion")}
           </Button>
-          <Button onClick={() => onPreview(theme)} variant="outline">Preview</Button>
+          <Button onClick={() => onPreview(theme)} variant="outline">{t("themes.preview")}</Button>
           <Button
             disabled={busy || state.activeThemeId === theme.id}
             onClick={() => onActivate(theme)}
           >
-            Activate
+            {t("themes.activate")}
           </Button>
           {!builtIn && (
             <Button
@@ -177,7 +188,7 @@ function VersionCard({
               onClick={() => onDelete(theme)}
               variant="destructive"
             >
-              Delete
+              {t("themes.delete")}
             </Button>
           )}
         </div>
@@ -191,44 +202,43 @@ function VersionCard({
 
       {builtIn && (
         <p className="mt-3 rounded-lg bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
-          This Built-in theme is maintained by the current microfeed release and
-          synchronized during deployment. Create a Custom version to change it.
+          {t("themes.builtInNote")}
         </p>
       )}
 
       <details className="mt-3 border-t pt-3 text-xs">
-        <summary className="cursor-pointer font-medium text-muted-foreground">Details</summary>
+        <summary className="cursor-pointer font-medium text-muted-foreground">{t("themes.details")}</summary>
         <dl className="mt-3 grid gap-1 text-muted-foreground md:grid-cols-2">
-          <div><dt className="inline font-medium text-foreground">Author: </dt><dd className="inline">{theme.manifest.author}</dd></div>
-          <div><dt className="inline font-medium text-foreground">License: </dt><dd className="inline">{theme.manifest.license}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Compatibility: </dt><dd className="inline">{theme.manifest.microfeed}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Assets: </dt><dd className="inline">{theme.assetCount}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Demo content: </dt><dd className="inline">{theme.manifest.previewFixture ? "Included" : "Not provided"}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Source: </dt><dd className="inline break-all">{theme.sourceUrl ?? theme.sourcePath ?? theme.sourceKind}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Commit: </dt><dd className="inline break-all">{theme.sourceCommit ?? "—"}</dd></div>
-          <div><dt className="inline font-medium text-foreground">Origin theme: </dt><dd className="inline">{originThemeLabel(theme)}</dd></div>
-          <div className="md:col-span-2"><dt className="inline font-medium text-foreground">Checksum: </dt><dd className="inline break-all">{theme.checksumSha256}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailAuthor")} </dt><dd className="inline">{theme.manifest.author}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailLicense")} </dt><dd className="inline">{theme.manifest.license}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailCompatibility")} </dt><dd className="inline">{theme.manifest.microfeed}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailAssets")} </dt><dd className="inline">{theme.assetCount}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailDemoContent")} </dt><dd className="inline">{theme.manifest.previewFixture ? t("themes.detailIncluded") : t("themes.detailNotProvided")}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailSource")} </dt><dd className="inline break-all">{theme.sourceUrl ?? theme.sourcePath ?? theme.sourceKind}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailCommit")} </dt><dd className="inline break-all">{theme.sourceCommit ?? "—"}</dd></div>
+          <div><dt className="inline font-medium text-foreground">{t("themes.detailOriginTheme")} </dt><dd className="inline">{originThemeLabel(theme)}</dd></div>
+          <div className="md:col-span-2"><dt className="inline font-medium text-foreground">{t("themes.detailChecksum")} </dt><dd className="inline break-all">{theme.checksumSha256}</dd></div>
         </dl>
         <div className="mt-4 grid gap-3">
           {canUpdate && (
             <div className="rounded-lg border bg-muted/50 p-3">
               <p className="mb-2 text-muted-foreground">
-                <strong className="text-foreground">Update with an AI coding agent:</strong>{" "}
+                <strong className="text-foreground">{t("themes.updateWithAgent")}</strong>{" "}
                 {builtIn
-                  ? "Install the current Built-in release as an inactive version. Preview it before activating."
-                  : "Check its original source and install a newer SemVer as another inactive version."}
+                  ? t("themes.updateBuiltInHint")
+                  : t("themes.updateSourceHint")}
               </p>
               <div className="flex items-center gap-2 rounded-lg bg-muted p-2">
                 <p className="min-w-0 flex-1 font-mono text-xs leading-5">{updatePrompt}</p>
-                <Button aria-label="Copy update prompt" onClick={() => copy(updatePrompt)} size="icon-sm" variant="ghost">
+                <Button aria-label={t("themes.copyUpdatePromptAria")} onClick={() => copy(updatePrompt)} size="icon-sm" variant="ghost">
                   <CopyIcon />
                 </Button>
               </div>
               <details className="mt-2">
-                <summary className="cursor-pointer text-muted-foreground">Manual CLI command</summary>
+                <summary className="cursor-pointer text-muted-foreground">{t("themes.manualCliCommand")}</summary>
                 <div className="mt-2 flex items-center gap-2 rounded-lg bg-muted p-2">
                   <code className="min-w-0 flex-1 overflow-x-auto">{updateCommand}</code>
-                  <Button aria-label="Copy update command" onClick={() => copy(updateCommand)} size="icon-sm" variant="ghost">
+                  <Button aria-label={t("themes.copyUpdateCommandAria")} onClick={() => copy(updateCommand)} size="icon-sm" variant="ghost">
                     <CopyIcon />
                   </Button>
                 </div>
@@ -237,22 +247,20 @@ function VersionCard({
           )}
           <div className="rounded-lg border bg-muted/50 p-3">
             <p className="mb-2 text-muted-foreground">
-              <strong className="text-foreground">Export with an AI coding agent:</strong>{" "}
-              Write the installed package and inherited assets to a standalone
-              directory for backup or continued development. Exporting does not
-              change the live site.
+              <strong className="text-foreground">{t("themes.exportWithAgent")}</strong>{" "}
+              {t("themes.exportWithAgentDesc")}
             </p>
             <div className="flex items-center gap-2 rounded-lg bg-muted p-2">
               <p className="min-w-0 flex-1 font-mono text-xs leading-5">{exportPrompt}</p>
-              <Button aria-label="Copy export prompt" onClick={() => copy(exportPrompt)} size="icon-sm" variant="ghost">
+              <Button aria-label={t("themes.copyExportPromptAria")} onClick={() => copy(exportPrompt)} size="icon-sm" variant="ghost">
                 <CopyIcon />
               </Button>
             </div>
             <details className="mt-2">
-              <summary className="cursor-pointer text-muted-foreground">Manual CLI command</summary>
+              <summary className="cursor-pointer text-muted-foreground">{t("themes.manualCliCommand")}</summary>
               <div className="mt-2 flex items-center gap-2 rounded-lg bg-muted p-2">
                 <code className="min-w-0 flex-1 overflow-x-auto">{exportCommand}</code>
-                <Button aria-label="Copy export command" onClick={() => copy(exportCommand)} size="icon-sm" variant="ghost">
+                <Button aria-label={t("themes.copyExportCommandAria")} onClick={() => copy(exportCommand)} size="icon-sm" variant="ghost">
                   <CopyIcon />
                 </Button>
               </div>
@@ -278,6 +286,7 @@ export default function ThemesApp({
   instanceName,
   siteUrl,
 }: Props) {
+  const {t} = useTranslation();
   const [listing, setListing] = useState(initialListing);
   const [query, setQuery] = useState(initialQuery);
   const [sort, setSort] = useState<ThemeListSort>(initialSort);
@@ -312,7 +321,7 @@ export default function ThemesApp({
         setListing(next);
       } catch (error) {
         if (!controller.signal.aborted) {
-          showToast(error instanceof Error ? error.message : "Could not load themes.", "error");
+          showToast(error instanceof Error ? error.message : t("themes.loadFailed"), "error");
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -329,7 +338,7 @@ export default function ThemesApp({
     try {
       await operation();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Theme operation failed.", "error");
+      showToast(error instanceof Error ? error.message : t("themes.operationFailed"), "error");
       setBusy(false);
     }
   };
@@ -342,11 +351,11 @@ export default function ThemesApp({
   });
   const activate = (theme: ThemeVersionSummary) => {
     const details = [
-      `Activate ${theme.packageId}@${theme.version}?`,
-      `Origin: ${theme.sourceUrl ?? theme.sourceKind}`,
-      theme.originThemeId ? `Origin theme: ${originThemeLabel(theme)}` : null,
-      theme.sourceCommit ? `Commit: ${theme.sourceCommit}` : null,
-      `Checksum: ${theme.checksumSha256}`,
+      t("themes.activateConfirmTitle", {packageId: theme.packageId, version: theme.version}),
+      t("themes.activateConfirmOrigin", {origin: theme.sourceUrl ?? theme.sourceKind}),
+      theme.originThemeId ? t("themes.activateConfirmOriginTheme", {label: originThemeLabel(theme)}) : null,
+      theme.sourceCommit ? t("themes.activateConfirmCommit", {commit: theme.sourceCommit}) : null,
+      t("themes.activateConfirmChecksum", {checksum: theme.checksumSha256}),
     ].filter(Boolean).join("\n");
     if (!window.confirm(details)) return;
     run(async () => {
@@ -358,7 +367,11 @@ export default function ThemesApp({
     });
   };
   const deleteTheme = (theme: ThemeVersionSummary) => {
-    if (!window.confirm(`Delete theme ${theme.id}?\n\n${theme.packageId}@${theme.version}`)) return;
+    if (!window.confirm(t("themes.deleteConfirm", {
+      id: theme.id,
+      packageId: theme.packageId,
+      version: theme.version,
+    }))) return;
     run(async () => {
       await requestJson(ADMIN_URLS.ajaxTheme(theme.id), {method: "DELETE"});
       window.location.reload();
@@ -366,7 +379,7 @@ export default function ThemesApp({
   };
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value);
-    showToast("Copied to clipboard.", "success");
+    showToast(t("themes.copied"), "success");
   };
   const previewTheme = (theme: ThemeVersionSummary) => setPreview({
     description: theme.manifest.description,
@@ -397,6 +410,10 @@ export default function ThemesApp({
     document.getElementById(`${next}-theme-tab`)?.focus();
   };
 
+  const builtInThemeWord = listing.counts.builtInThemes === 1 ? t("themes.theme") : t("themes.themes");
+  const builtInVersionWord = listing.counts.builtInVersions === 1 ? t("themes.version") : t("themes.versions");
+  const customVersionWord = listing.counts.customVersions === 1 ? t("themes.version") : t("themes.versions");
+
   const cardProps = {
     busy,
     copy,
@@ -412,26 +429,23 @@ export default function ThemesApp({
   return (
     <div className="grid gap-5">
       <p className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-        For theme updates and exports, copy a prompt below into a local AI
-        coding agent that can run shell commands, such as Codex or Claude Code.
-        Manual CLI commands remain available in each theme&apos;s details.
+        {t("themes.intro")}
       </p>
       <section className="rounded-[14px] border bg-card p-5 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Themes</h2>
+            <h2 className="text-lg font-semibold">{t("themes.heading")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Preview a managed Built-in design or create and install immutable
-              Custom versions.
+              {t("themes.subheading")}
             </p>
           </div>
           <Button onClick={() => setInstallHelpOpen(true)} variant="outline">
             <CircleHelpIcon aria-hidden="true" />
-            How to install a theme
+            {t("themes.howToInstall")}
           </Button>
         </div>
 
-        <div aria-label="Theme type" className="mt-5 flex gap-2 border-b" role="tablist">
+        <div aria-label={t("themes.tablistAria")} className="mt-5 flex gap-2 border-b" role="tablist">
           <Button
             aria-controls="built-in-theme-panel"
             aria-selected={tab === "built-in"}
@@ -443,8 +457,12 @@ export default function ThemesApp({
             tabIndex={tab === "built-in" ? 0 : -1}
             variant={tab === "built-in" ? "default" : "ghost"}
           >
-            Built-in themes ({listing.counts.builtInThemes} {listing.counts.builtInThemes === 1 ? "theme" : "themes"} ·{" "}
-            {listing.counts.builtInVersions} {listing.counts.builtInVersions === 1 ? "version" : "versions"})
+            {t("themes.builtInTab", {
+              themeWord: builtInThemeWord,
+              themes: listing.counts.builtInThemes,
+              versionWord: builtInVersionWord,
+              versions: listing.counts.builtInVersions,
+            })}
           </Button>
           <Button
             aria-controls="custom-theme-panel"
@@ -457,22 +475,23 @@ export default function ThemesApp({
             tabIndex={tab === "custom" ? 0 : -1}
             variant={tab === "custom" ? "default" : "ghost"}
           >
-            Custom themes ({listing.counts.customVersions} {listing.counts.customVersions === 1 ? "version" : "versions"})
+            {t("themes.customTab", {
+              versionWord: customVersionWord,
+              versions: listing.counts.customVersions,
+            })}
           </Button>
         </div>
 
         {tab === "built-in" && (
           <div aria-labelledby="built-in-theme-tab" className="mt-5 grid gap-3" id="built-in-theme-panel" role="tabpanel">
             <p className="text-sm text-muted-foreground">
-              Built-in themes are synchronized from the current microfeed release.
-              Updates are installed inactive and never change the public site
-              until you activate them.
+              {t("themes.builtInIntro")}
             </p>
             {listing.builtInGroups.length === 0 && (
               <div className="rounded-xl border border-dashed p-10 text-center">
-                <h3 className="font-medium">No Built-in themes installed</h3>
+                <h3 className="font-medium">{t("themes.noBuiltInTitle")}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Run a deployment to synchronize the Built-in catalog.
+                  {t("themes.noBuiltInBody")}
                 </p>
               </div>
             )}
@@ -484,7 +503,7 @@ export default function ThemesApp({
                   {history.length > 0 && (
                     <details className="mt-4 border-t pt-3">
                       <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
-                        Version history ({history.length})
+                        {t("themes.versionHistory", {count: history.length})}
                       </summary>
                       <div className="mt-3 grid gap-3">
                         {history.map((theme) => (
@@ -504,9 +523,9 @@ export default function ThemesApp({
             {listing.drafts.length > 0 && (
               <section className="rounded-xl border p-4">
                 <div>
-                  <h3 className="font-semibold">Version drafts</h3>
+                  <h3 className="font-semibold">{t("themes.versionDrafts")}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {listing.drafts.length} of {listing.limits.drafts} draft slots used.
+                    {t("themes.draftSlots", {limit: listing.limits.drafts, used: listing.drafts.length})}
                   </p>
                 </div>
                 <div className="mt-4 grid gap-3">
@@ -516,7 +535,7 @@ export default function ThemesApp({
                         <div className="font-medium">{draft.name}</div>
                         <code className="text-xs text-muted-foreground">{draft.packageId}@{draft.version}</code>
                       </div>
-                      <Button render={<a href={ADMIN_URLS.themeDraft(draft.id)} />} variant="outline">Edit draft</Button>
+                      <Button render={<a href={ADMIN_URLS.themeDraft(draft.id)} />} variant="outline">{t("themes.editDraft")}</Button>
                     </div>
                   ))}
                 </div>
@@ -525,59 +544,58 @@ export default function ThemesApp({
 
             <section>
               <div>
-                <h3 className="font-semibold">Installed Custom versions</h3>
+                <h3 className="font-semibold">{t("themes.installedCustom")}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {listing.counts.customVersions} of {listing.limits.customInstalled}{" "}
-                  Custom theme versions used. Built-in themes do not use this quota.
+                  {t("themes.customQuota", {limit: listing.limits.customInstalled, used: listing.counts.customVersions})}
                 </p>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
                 <label className="relative">
-                  <span className="sr-only">Search Custom themes</span>
+                  <span className="sr-only">{t("themes.searchAria")}</span>
                   <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     className="pl-9"
                     maxLength={100}
                     onChange={(event) => {setQuery(event.target.value); setPage(1);}}
-                    placeholder="Search name, package, version, author, or source"
+                    placeholder={t("themes.searchPlaceholder")}
                     type="search"
                     value={query}
                   />
                 </label>
                 <label>
-                  <span className="sr-only">Sort Custom themes</span>
+                  <span className="sr-only">{t("themes.sortAria")}</span>
                   <select
                     className="h-10 w-full cursor-pointer rounded-[10px] border border-input bg-background px-3 text-sm"
                     onChange={(event) => {setSort(event.target.value as ThemeListSort); setPage(1);}}
                     value={sort}
                   >
-                    <option value="status">Status</option>
-                    <option value="installed-desc">Newest installed</option>
-                    <option value="installed-asc">Oldest installed</option>
-                    <option value="name-asc">Name A–Z</option>
-                    <option value="name-desc">Name Z–A</option>
+                    <option value="status">{t("themes.sortStatus")}</option>
+                    <option value="installed-desc">{t("themes.sortNewest")}</option>
+                    <option value="installed-asc">{t("themes.sortOldest")}</option>
+                    <option value="name-asc">{t("themes.sortNameAsc")}</option>
+                    <option value="name-desc">{t("themes.sortNameDesc")}</option>
                   </select>
                 </label>
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                <p>{loading ? "Updating…" : `${listing.pagination.total} result${listing.pagination.total === 1 ? "" : "s"}`}</p>
-                {listing.pagination.totalPages > 0 && <p>Page {listing.pagination.page} of {listing.pagination.totalPages}</p>}
+                <p>{loading ? t("themes.updating") : (listing.pagination.total === 1 ? t("themes.resultOne", {count: listing.pagination.total}) : t("themes.resultOther", {count: listing.pagination.total}))}</p>
+                {listing.pagination.totalPages > 0 && <p>{t("themes.pageOf", {page: listing.pagination.page, total: listing.pagination.totalPages})}</p>}
               </div>
               <div className="mt-4 grid gap-3">
                 {listing.customThemes.length === 0 && (
                   <div className="rounded-xl border border-dashed p-10 text-center">
-                    <h3 className="font-medium">No Custom themes found</h3>
+                    <h3 className="font-medium">{t("themes.noCustomTitle")}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Create a version from a Built-in theme or install a trusted theme package.
+                      {t("themes.noCustomBody")}
                     </p>
                   </div>
                 )}
                 {listing.customThemes.map((theme) => <VersionCard {...cardProps} key={theme.id} theme={theme} />)}
               </div>
               {listing.pagination.totalPages > 1 && (
-                <nav aria-label="Custom theme pages" className="mt-5 flex justify-between gap-3">
-                  <Button disabled={loading || listing.pagination.page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} variant="outline">Previous</Button>
-                  <Button disabled={loading || listing.pagination.page >= listing.pagination.totalPages} onClick={() => setPage((value) => value + 1)} variant="outline">Next</Button>
+                <nav aria-label={t("themes.paginationAria")} className="mt-5 flex justify-between gap-3">
+                  <Button disabled={loading || listing.pagination.page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} variant="outline">{t("themes.previous")}</Button>
+                  <Button disabled={loading || listing.pagination.page >= listing.pagination.totalPages} onClick={() => setPage((value) => value + 1)} variant="outline">{t("themes.next")}</Button>
                 </nav>
               )}
             </section>

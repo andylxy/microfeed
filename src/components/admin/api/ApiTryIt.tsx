@@ -10,6 +10,7 @@ import AdminSectionCard from "@/components/admin/shared/AdminSectionCard";
 import {Button} from "@/components/ui/button";
 import {Label} from "@/components/ui/label";
 import {showToast} from "@/client/ToastUtils";
+import {useTranslation} from "@/client/i18n";
 import {cn} from "@/lib/utils";
 import type {ApiAccessSettings, ApiKeyRecord} from "@/shared/Api";
 
@@ -91,6 +92,7 @@ export default function ApiTryIt({
   settings,
   settingsUrl,
 }: Props) {
+  const {t} = useTranslation();
   const [selectedId, setSelectedId] = useState(apiKeys[0]?.id ?? "");
   const [language, setLanguage] = useState<ExampleLanguage>("javascript");
   const [copied, setCopied] = useState(false);
@@ -107,7 +109,7 @@ export default function ApiTryIt({
     await navigator.clipboard.writeText(code[language]);
     setCopied(true);
     showToast(
-      `${language === "curl" ? "cURL" : "JavaScript"} example copied.`,
+      t("api.exampleCopied", {lang: language === "curl" ? "cURL" : "JavaScript"}),
       "success",
     );
     window.setTimeout(() => setCopied(false), 1500);
@@ -132,7 +134,7 @@ export default function ApiTryIt({
       setOutput({data, ok: response.ok, status: response.status});
     } catch (error) {
       setOutput({
-        error: error instanceof Error ? error.message : "The request failed.",
+        error: error instanceof Error ? error.message : t("api.requestFailed"),
         ok: false,
       });
     } finally {
@@ -144,15 +146,14 @@ export default function ApiTryIt({
     <AdminSectionCard
       description={
         <>
-          Select an API key to prefill a same-origin example. The selected API
-          key stays in memory and is never persisted by this page.
+          {t("api.tryItDescription")}
         </>
       }
-      title="Try it now"
+      title={t("api.tryItNow")}
     >
         {apiKeys.length ? (
           <div className="mb-5 max-w-md">
-            <Label htmlFor="overview-api-key">API key for this example</Label>
+            <Label htmlFor="overview-api-key">{t("api.apiKeyForExample")}</Label>
             <select
               className="mt-2 h-10 w-full cursor-pointer rounded-[10px] border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
               id="overview-api-key"
@@ -170,13 +171,13 @@ export default function ApiTryIt({
         ) : (
           <p className="mb-5 text-sm text-muted-foreground">
             <a className="underline underline-offset-4" href={authenticationUrl}>
-              Create an API key
-            </a>{" "}to prefill and run these examples.
+              {t("api.createAnApiKey")}
+            </a>{" "}{t("api.toPrefillAndRun")}
           </p>
         )}
 
         <div
-          aria-label="API example language"
+          aria-label={t("api.exampleLanguageAria")}
           className="mb-3 inline-flex rounded-[10px] bg-muted p-1"
           role="tablist"
         >
@@ -231,13 +232,11 @@ export default function ApiTryIt({
                 type="button"
               >
                 <PlayIcon aria-hidden="true" />
-                {running ? "Running..." : "Run"}
+                {running ? t("api.running") : t("api.run")}
               </Button>
             )}
             <Button
-              aria-label={
-                `Copy ${language === "curl" ? "cURL" : "JavaScript"} example`
-              }
+              aria-label={t("api.copyExample", {lang: language === "curl" ? "cURL" : "JavaScript"})}
               onClick={() => void copyCode()}
               size="icon-sm"
               type="button"
@@ -252,10 +251,10 @@ export default function ApiTryIt({
 
         {!settings.enabled && (
           <p className="mt-3 text-sm text-muted-foreground">
-            API access is disabled.{" "}
+            {t("api.apiAccessDisabled")}{" "}
             <a className="underline underline-offset-4" href={settingsUrl}>
-              Enable it in API Settings
-            </a>{" "}to run the JavaScript example.
+              {t("api.enableInSettings")}
+            </a>{" "}{t("api.toRunExample")}
           </p>
         )}
 
@@ -265,9 +264,9 @@ export default function ApiTryIt({
             className="mt-4 rounded-xl border bg-background p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="font-medium">Output</h3>
+              <h3 className="font-medium">{t("api.output")}</h3>
               <Button
-                aria-label="Clear output"
+                aria-label={t("api.clearOutput")}
                 onClick={() => setOutput(undefined)}
                 size="icon-sm"
                 type="button"

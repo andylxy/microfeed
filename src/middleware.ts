@@ -9,6 +9,11 @@ import {
   normalizeAdminPath,
 } from "@/shared/AdminPath";
 import {STATUSES} from "@/shared/Constants";
+import {
+  adminLanguageFromRequest,
+  languageFromAcceptLanguage,
+} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import {apiWebhookContextHeadersSchema} from "@/shared/ApiSchemas";
 import {itemQueryForStatusFilter} from "@/shared/ItemList";
 import {ITEM_ORDERS, ITEM_SORTS} from "@/shared/ItemPagination";
@@ -40,21 +45,33 @@ import {applyWorkerCachePolicy} from "@/server/cache/public-cache";
 import {publicSiteFileResponse} from "@/server/site-files/public";
 
 const AUTH_BASE_PATH = "/api/auth";
-function apiNotFoundResponse(): Response {
-  return new Response("404", {
-    headers: {"content-type": "text/plain; charset=utf-8"},
-    status: 404,
-  });
+// These two answer public `/api/*` callers, so they resolve the language from
+// `accept-language` only: an API client has no admin preference cookie, and
+// letting that cookie steer a public response would be a contract change.
+function apiNotFoundResponse(request: Request): Response {
+  return new Response(
+    translate(
+      "errors.general.notFound",
+      languageFromAcceptLanguage(request.headers.get("accept-language")),
+    ),
+    {headers: {"content-type": "text/plain; charset=utf-8"}, status: 404},
+  );
 }
 
-function apiUnauthorizedResponse(): Response {
-  return new Response("Unauthorized", {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "www-authenticate": 'Bearer realm="microfeed"',
+function apiUnauthorizedResponse(request: Request): Response {
+  return new Response(
+    translate(
+      "errors.api.unauthorized",
+      languageFromAcceptLanguage(request.headers.get("accept-language")),
+    ),
+    {
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "www-authenticate": 'Bearer realm="microfeed"',
+      },
+      status: 401,
     },
-    status: 401,
-  });
+  );
 }
 
 function apiInsufficientScopeResponse(): Response {
@@ -132,19 +149,13 @@ const handleRequest = defineMiddleware(async (context, next) => {
       adminPath,
     )
   ) {
-    return new Response("404", {
-      headers: {"content-type": "text/plain; charset=utf-8"},
-      status: 404,
-    });
+    return apiNotFoundResponse(context.request);
   }
 
   if (isBetterAuthPath(pathname)) {
     return builtInAuthEnabled
       ? next()
-      : new Response("404", {
-          headers: {"content-type": "text/plain; charset=utf-8"},
-          status: 404,
-        });
+      : apiNotFoundResponse(context.request);
   }
 
   if (pathname.startsWith("/api/")) {
@@ -162,11 +173,11 @@ const handleRequest = defineMiddleware(async (context, next) => {
       );
     }
     if (decision === "not-found") {
-      return apiNotFoundResponse();
+      return apiNotFoundResponse(context.request);
     }
     if (decision === "unauthorized") {
       return addLegacyApiDeprecationHeaders(
-        apiUnauthorizedResponse(),
+        apiUnauthorizedResponse(context.request),
         context.url,
         pathname,
       );
@@ -216,10 +227,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
     const loginPath = adminUrl("login", adminPath);
     const passwordSetupPath = isAdminPasswordSetupPath(pathname, adminPath);
     if (!builtInAuthEnabled && passwordSetupPath) {
-      return new Response("404", {
-        headers: {"content-type": "text/plain; charset=utf-8"},
-        status: 404,
-      });
+      return apiNotFoundResponse(context.request);
     }
     let protection = adminProtectionStatus(context.request, false);
     if (builtInAuthEnabled) {
@@ -241,6 +249,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
               instanceName: env.MICROFEED_INSTANCE_NAME,
               local: !env.MICROFEED_CLOUDFLARE_ACCOUNT_ID?.trim(),
             },
+            adminLanguageFromRequest(context.request),
           ),
           authSessionHeaders,
         );
@@ -259,8 +268,19 @@ const handleRequest = defineMiddleware(async (context, next) => {
       }
       if (!authSession) {
         if (wantsJson(context.request, pathname)) {
+          // Stays a bare 401: this path never carried content-type or
+          // www-authenticate, and adding the Bearer challenge would make
+          // browsers pop a native auth dialog.
           return withAuthSessionCookies(
-            new Response("Unauthorized", {status: 401}),
+            new Response(
+              translate(
+                "errors.api.unauthorized",
+                languageFromAcceptLanguage(
+                  context.request.headers.get("accept-language"),
+                ),
+              ),
+              {status: 401},
+            ),
             authSessionHeaders,
           );
         }
@@ -289,7 +309,13 @@ const handleRequest = defineMiddleware(async (context, next) => {
       isUnsafeMethod(context.request.method) &&
       !isSameOrigin(context.request, context.url.origin)
     ) {
-      return new Response("Forbidden", {status: 403});
+      return new Response(
+        translate(
+          "errors.api.forbidden",
+          adminLanguageFromRequest(context.request),
+        ),
+        {status: 403},
+      );
     }
 
     if (isAdminAjax(pathname, adminPath)) {

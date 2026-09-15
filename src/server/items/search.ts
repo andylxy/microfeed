@@ -182,7 +182,7 @@ function decodeSearchCursor(
 ): SearchCursor | undefined {
   if (!value) return undefined;
   const decoded = decodeBase64Url(value);
-  if (!decoded) throw new ItemSearchRequestError("Invalid next_cursor.");
+  if (!decoded) throw new ItemSearchRequestError("errors.page.invalidNextCursor");
   try {
     const cursor = JSON.parse(decoded) as Partial<SearchCursor>;
     if (
@@ -198,7 +198,7 @@ function decodeSearchCursor(
     }
     return cursor as SearchCursor;
   } catch {
-    throw new ItemSearchRequestError("Invalid next_cursor.");
+    throw new ItemSearchRequestError("errors.page.invalidNextCursor");
   }
 }
 

@@ -1,7 +1,7 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, localizedError} from "@/server/http";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {
   ItemSearchRequestError,
@@ -19,10 +19,13 @@ export const GET: APIRoute = async ({request}) => {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
   if (query.length < 2 || query.length > 200) {
-    return jsonResponse({error: "Use a search query between 2 and 200 characters."}, {
-      headers: {"cache-control": "private, no-store"},
-      status: 400,
-    });
+    return localizedError(
+      request,
+      "errors.search.queryLength",
+      400,
+      undefined,
+      {headers: {"cache-control": "private, no-store"}},
+    );
   }
   const loaded = await loadPublishedFeed(env, request, {
     includeActiveTheme: true,
@@ -32,7 +35,7 @@ export const GET: APIRoute = async ({request}) => {
     shouldHidePublicWeb(loaded.content) ||
     !themeSupportsPagesAndSearch(loaded.content.activeTheme)
   ) {
-    return jsonResponse({error: "Not found."}, {status: 404});
+    return localizedError(request, "errors.search.notFound", 404);
   }
   try {
     const searchItemDestination = activeThemeSearchItemDestination(

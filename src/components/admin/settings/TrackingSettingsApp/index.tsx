@@ -4,6 +4,7 @@ import {Button} from "@/components/ui/button";
 import {buildAudioUrlWithTracking} from "@/shared/StringUtils";
 import SettingsBase from '../SettingsBase';
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
+import i18n from "@/client/i18n";
 
 export default class TrackingSettingsApp extends React.Component<any, any> {
   constructor(props: any) {
@@ -24,6 +25,7 @@ export default class TrackingSettingsApp extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {trackingUrls, savedTrackingUrls, currentType} = this.state;
     const {submitting, submitForType, setChanged} = this.props;
     const urls = trackingUrls.trim() !== '' ? trackingUrls.trim().split(/\n/) : [];
@@ -31,25 +33,25 @@ export default class TrackingSettingsApp extends React.Component<any, any> {
     const submittingForThis = submitForType === currentType;
     const exampleAudio = 'https://example.com/audio.mp3';
     return (<SettingsBase
-      title="Tracking urls"
+      title={t("settings.trackingUrls")}
       submitting={submitting}
       submitForType={submitForType}
       currentType={currentType}
     >
       <div>
         <AdminTextarea
-          placeholder="Put a tracking url on each line, e.g., https://op3.dev/e/ or https://pdst.fm/e/"
+          placeholder={t("settings.trackingPlaceholder")}
           value={trackingUrls}
           onChange={(e: any) => this.setState({trackingUrls: e.target.value}, () => setChanged())}
         />
       </div>
       <div className="mt-4 text-xs text-helper-color">
-        microfeed will automatically add 3rd-party tracking urls (e.g., <a href="https://op3.dev/">OP3</a>, <a
-        href="http://analytics.podtrac.com/">Podtrac</a>...) before the url of a media file, so you can easily track download stats. This is a <a href="https://lowerstreet.co/blog/podcast-tracking" target="_blank" rel="noopener noreferrer">common practice in the podcast industry</a>.
+        {t("settings.trackingDescBefore")}<a href="https://op3.dev/">OP3</a>、<a
+        href="http://analytics.podtrac.com/">Podtrac</a>...){t("settings.trackingDescMiddle")}<a href="https://lowerstreet.co/blog/podcast-tracking" target="_blank" rel="noopener noreferrer">{t("settings.trackingIndustryPractice")}</a>{t("settings.trackingDescEnd")}
       </div>
       {urls.length > 0 && <div className="mt-4 text-xs break-all text-helper-color">
         <div className="mb-2">
-          Example: if an audio url is {exampleAudio}, then the final url in the rss feed will be:
+          {t("settings.trackingExample", {example: exampleAudio})}
         </div>
         <b>{buildAudioUrlWithTracking(exampleAudio, urls)}</b>
       </div>}
@@ -67,7 +69,7 @@ export default class TrackingSettingsApp extends React.Component<any, any> {
               });
           }}
         >
-          {submittingForThis ? 'Updating...' : 'Update'}
+          {submittingForThis ? t("settings.updating") : t("settings.update")}
         </Button>
       </div>}
     </SettingsBase>);

@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from "@/client/i18n";
 import Requests from '@/client/requests';
 import {
   ADMIN_URLS,
@@ -25,19 +26,20 @@ import MediaStorageUnavailableDialog from "@/components/admin/shared/MediaStorag
 const UPLOAD_STATUS__START = 1;
 
 function PreviewCurrentMediaFile({url, contentType, category, durationSecond, sizeByte, setRef, updateDuration}: any) {
+  const t = i18n.t.bind(i18n);
   return (<div className="mb-8">
-      <div className="mb-2 text-sm font-semibold text-foreground">Current {category}</div>
+      <div className="mb-2 text-sm font-semibold text-foreground">{t('items.current', {category})}</div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {category === ENCLOSURE_CATEGORIES.AUDIO && <div>
           <audio controls preload="metadata" ref={setRef} onLoadedMetadata={updateDuration}>
             <source src={url} type={contentType}/>
-            Your browser does not support the audio element.
+            {t('items.audioUnsupported')}
           </audio>
         </div>}
         {category === ENCLOSURE_CATEGORIES.VIDEO && <div>
           <video width="80%" preload="metadata" controls ref={setRef} onLoadedMetadata={updateDuration}>
             <source src={url} type={contentType} />
-            Your browser does not support the video tag.
+            {t('items.videoUnsupported')}
           </video>
         </div>}
         {category === ENCLOSURE_CATEGORIES.IMAGE && <div>
@@ -45,16 +47,16 @@ function PreviewCurrentMediaFile({url, contentType, category, durationSecond, si
         </div>}
         <div className="text-sm">
           <div className="mb-1">
-            <span className="text-helper-color">Content type:</span> {contentType}
+            <span className="text-helper-color">{t('items.contentType')}</span> {contentType}
           </div>
           <div className="mb-1">
-            <span className="text-helper-color">File size:</span> {humanFileSize(sizeByte)}
+            <span className="text-helper-color">{t('items.fileSize')}</span> {humanFileSize(sizeByte)}
           </div>
           {[ENCLOSURE_CATEGORIES.AUDIO, ENCLOSURE_CATEGORIES.VIDEO].includes(category) && <div className="mb-1">
-            <span className="text-helper-color">Duration:</span> {secondsToHHMMSS(durationSecond)}
+            <span className="text-helper-color">{t('items.duration')}</span> {secondsToHHMMSS(durationSecond)}
           </div>}
           <div className="break-all">
-            <span className="text-helper-color">Download url:</span> <a href={url} className="text-xs" target="_blank">{url}</a>
+            <span className="text-helper-color">{t('items.downloadUrl')}</span> <a href={url} className="text-xs" target="_blank">{url}</a>
           </div>
         </div>
       </div>
@@ -66,10 +68,12 @@ function MediaUploader(
   {url, category, contentType, sizeByte, durationSecond, setRef, uploading, progressText,
     onFileUpload, onMediaStorageUnavailable, updateDuration, publicBucketUrl,
     mediaStorageReady}: any) {
+  const t = i18n.t.bind(i18n);
   const {fileTypes} = (ENCLOSURE_CATEGORIES_DICT[category] as any);
   const fileNotExist = !!url;
-  const headerTitle = fileNotExist ? `Upload a new ${category} file to replace this one` :
-    `Upload a new ${category} file`;
+  const headerTitle = fileNotExist
+    ? t('items.uploadNewFileReplace', {category})
+    : t('items.uploadNewFile', {category});
   return (<div>
     {url && <PreviewCurrentMediaFile
       url={urlJoinWithRelative(publicBucketUrl, url)}
@@ -82,8 +86,7 @@ function MediaUploader(
     />}
     {url && <div className="border-t pt-2 mb-2"/>}
     {!mediaStorageReady && <div className="mb-3 rounded-sm border p-3 text-sm text-helper-color">
-      File uploads are unavailable until R2 media storage is enabled. You can
-      still choose <strong>external URL</strong> above.
+      {t('items.uploadsUnavailable')}
     </div>}
     <details className="lh-upload-wrapper w-full" open={!fileNotExist}>
       <summary className="m-page-summary mt-4 text-sm">
@@ -101,12 +104,12 @@ function MediaUploader(
       >
         <div className="w-full h-24 lh-upload-box mt-2 p-4 flex items-center justify-center">
           {uploading ? <div className="text-helper-color">
-            <div className="font-semibold">Uploading...</div>
+            <div className="font-semibold">{t('items.uploading')}</div>
             <div className="text-sm">{progressText}</div>
           </div> : <div className="text-brand-light">
             <div className="flex items-center">
               <div className="mr-1"><CloudUploadIcon className="w-8"/></div>
-              <div className="font-semibold">Click or drag here to upload {category}</div>
+              <div className="font-semibold">{t('items.clickOrDrag', {category})}</div>
             </div>
             <div className="text-sm">{fileTypes.join(', ')}</div>
           </div>}
@@ -117,12 +120,13 @@ function MediaUploader(
 }
 
 function UrlEditor({url, onUpdateUrl}: any) {
+  const t = i18n.t.bind(i18n);
   const bookmarkletCode = `javascript:window.location=%22${ADMIN_URLS.newItem(getPublicBaseUrl())}?media_category=external_url&` +
     'media_url=%22+encodeURIComponent(document.location)+%22&title=%22+encodeURIComponent(document.title)';
   const bookmarklet = `<a href="${bookmarkletCode}" onclick="return false" rel="nofollow">to microfeed</a>`;
   return (<div>
     <AdminInput
-      placeholder="e.g., https://www.nytimes.com/2022/11/13/us/politics/senate-democrats-republicans.html"
+      placeholder={`${i18n.t("common.examplePrefix")}https://www.nytimes.com/2022/11/13/us/politics/senate-democrats-republicans.html`}
       customClass="text-xs"
       type="url"
       value={url}
@@ -130,10 +134,10 @@ function UrlEditor({url, onUpdateUrl}: any) {
     />
     <details className="mt-4 text-helper-color">
       <summary className="hover:opacity-50 text-sm cursor-pointer">
-        Bookmarklet: add a "to microfeed" button to browser
+        {t('items.bookmarkletTitle')}
       </summary>
       <div className="mt-4 text-sm">
-        Drag this link to your browser, so you can easily curate web pages here -
+        {t('items.bookmarkletDesc')}
         <div className="mt-4 underline" dangerouslySetInnerHTML={{__html: bookmarklet}} />
       </div>
     </details>
@@ -239,14 +243,14 @@ export default class MediaManager extends React.Component<any, any> {
     }, (cdnUrl: any) => {
         updateState(cdnUrl);
     }, () => {
-      showToast('Failed to upload. Please refresh this page and try again.', 'error', 2000);
+      showToast(i18n.t('items.uploadFailed'), 'error', 2000);
       this.setState({...this.initState});
     }, (error: any) => {
       this.setState({...this.initState}, () => {
         if (!error.response) {
-          showToast('Network error. Please refresh the page and try again.', 'error');
+          showToast(i18n.t('common.networkError'), 'error');
         } else {
-          showToast('Failed. Please try again.', 'error');
+          showToast(i18n.t('common.failed'), 'error');
         }
       });
     });
@@ -257,6 +261,7 @@ export default class MediaManager extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {
       category, url, contentType, sizeByte, durationSecond,
       uploadStatus, progressText, publicBucketUrl,
@@ -272,7 +277,7 @@ export default class MediaManager extends React.Component<any, any> {
       {labelComponent}
       <div className="flex">
         <AdminRadioGroup
-          ariaLabel="Media category"
+          ariaLabel={t('items.mediaCategoryAria')}
           name="category"
           className="font-semibold"
           value={category}
@@ -291,7 +296,7 @@ export default class MediaManager extends React.Component<any, any> {
             if (url) {
               const {name} = (ENCLOSURE_CATEGORIES_DICT[category] as any);
               const newName = (ENCLOSURE_CATEGORIES_DICT[nextCategory] as any).name;
-              const ok = confirm(`To switch to ${newName}, you should discard ${name} first. This will delete existing ${name}. Do you want to proceed?`);
+              const ok = confirm(i18n.t('items.switchCategoryConfirm', {newName, name}));
               if (!ok) {
                 return;
               }

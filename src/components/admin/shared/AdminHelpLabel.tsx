@@ -3,6 +3,7 @@ import {CircleArrowRightIcon} from "lucide-react";
 
 import {cn} from "@/lib/utils";
 import {ADMIN_URLS, PUBLIC_URLS} from "@/shared/StringUtils";
+import {useTranslation} from "@/client/i18n";
 
 import AdminDialog from "./AdminDialog";
 import ExternalLink from "./ExternalLink";
@@ -42,6 +43,7 @@ export default function AdminHelpLabel({
   onClick,
   required = false,
 }: AdminHelpLabelProps) {
+  const {t} = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const label = children ?? help?.linkName;
 
@@ -79,11 +81,11 @@ export default function AdminHelpLabel({
               {help.rss ? (
                 <div>
                   <div>
-                    <ExternalLink text="in rss" url={PUBLIC_URLS.rssFeed()} />
+                    <ExternalLink text={t("shared.inRss")} url={PUBLIC_URLS.rssFeed()} />
                   </div>
                   <code className="m-code">{help.rss}</code>
                   <div className="text-muted-color mt-2 text-xs">
-                    Learn more about Podcasts RSS at{" "}
+                    {t("shared.learnMorePodcastsRss")}{" "}
                     <a
                       className="text-helper-color"
                       href="https://help.apple.com/itc/podcasts_connect/#/itcb54353390"
@@ -95,16 +97,16 @@ export default function AdminHelpLabel({
                   </div>
                 </div>
               ) : (
-                <em>{help.linkName} is not in rss feed</em>
+                <em>{t("shared.notInRssFeed", {label: help.linkName})}</em>
               )}
               {help.json ? (
                 <div>
                   <div>
-                    <ExternalLink text="in json" url={PUBLIC_URLS.jsonFeed()} />
+                    <ExternalLink text={t("shared.inJson")} url={PUBLIC_URLS.jsonFeed()} />
                   </div>
                   <code className="m-code">{help.json}</code>
                   <div className="text-muted-color mt-2 text-xs">
-                    Learn more about JSON Feed at{" "}
+                    {t("shared.learnMoreJsonFeed")}{" "}
                     <a
                       className="text-helper-color"
                       href="https://www.jsonfeed.org/"
@@ -112,17 +114,17 @@ export default function AdminHelpLabel({
                       target="_blank"
                     >
                       jsonfeed.org
-                    </a>. See the generated schema and examples in{" "}
+                    </a>. {t("shared.seeGeneratedSchema")}{" "}
                     <a
                       className="text-helper-color"
                       href={ADMIN_URLS.apiExplorer()}
                     >
-                      API Explorer
+                      {t("shared.apiExplorer")}
                     </a>.
                   </div>
                 </div>
               ) : (
-                <em>{help.linkName} is not in json feed</em>
+                <em>{t("shared.notInJsonFeed", {label: help.linkName})}</em>
               )}
             </div>
           </div>

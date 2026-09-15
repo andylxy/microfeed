@@ -7,15 +7,13 @@ import CustomCodeEditorApp, {
 } from "@/components/admin/code-editor/CustomCodeEditorApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "../../../../layouts/AdminShell.astro";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
 if (!feedContent || !feedDb || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 
 const requestedCodeType = Astro.url.searchParams.get("type");

@@ -1,4 +1,5 @@
 import React from "react";
+import i18n from "@/client/i18n";
 import 'quill/dist/quill.snow.css';
 import {formatHtmlForEditing} from "@/client/HtmlUtils";
 import {stripTransientRichEditorAttributes} from "@/client/RichEditorMedia";
@@ -43,13 +44,13 @@ export default class AdminRichEditor extends React.Component<any, any> {
         {labelComponent}
         <div className="mb-4 max-h-20">
           <AdminRadioGroup
-            ariaLabel="Editor mode"
+            ariaLabel={i18n.t("shared.editorMode")}
             className="text-sm text-helper-color"
             name="richOrHtml"
             value={mode}
             options={[
-              {value: 'rich', label: 'visual editor'},
-              {value: 'html', label: 'html source'},
+              {value: 'rich', label: i18n.t("shared.visualEditor")},
+              {value: 'html', label: i18n.t("shared.htmlSource")},
             ]}
             onValueChange={(value) => this.setState({mode: value})}
           />

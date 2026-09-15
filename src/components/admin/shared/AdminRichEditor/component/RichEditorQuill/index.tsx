@@ -1,5 +1,6 @@
 import React from "react";
 import Quill, {Delta, type EmitterSource} from "quill";
+import i18n from "@/client/i18n";
 import {
   serializeRichEditorHtml,
   shouldReplaceRichEditorHtml,
@@ -458,10 +459,10 @@ export default class RichEditorQuill extends React.Component<any, any> {
     };
     const errors = {
       ...(!isValidMediaDimension(mediaSettings.width, "width") && {
-        width: "Enter a valid CSS width, such as 100%, 640px, or auto.",
+        width: i18n.t("shared.invalidWidth"),
       }),
       ...(!isValidMediaDimension(mediaSettings.height, "height") && {
-        height: "Enter a valid CSS height, such as auto or 360px.",
+        height: i18n.t("shared.invalidHeight"),
       }),
     };
     if (Object.keys(errors).length > 0) {

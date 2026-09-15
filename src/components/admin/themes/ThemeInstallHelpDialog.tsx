@@ -1,5 +1,6 @@
 import {BookOpenIcon, ExternalLinkIcon} from "lucide-react";
 
+import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {
   MICROFEED_MANAGE_COMMAND,
@@ -36,31 +37,28 @@ export default function ThemeInstallHelpDialog({
   onOpenChange,
   open,
 }: Props) {
+  const {t} = useTranslation();
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl lg:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>How to install or change a theme</DialogTitle>
+          <DialogTitle>{t("themes.installHelpTitle")}</DialogTitle>
           <DialogDescription>
-            Install trusted theme packages with the management CLI, or derive a
-            new immutable version from one that is already installed.
+            {t("themes.installHelpDesc")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6 text-sm leading-relaxed">
           <p className="rounded-lg border bg-muted/40 p-3 text-muted-foreground">
-            Run these commands from any folder. If this computer has not saved
-            the site yet, first give a local coding agent{" "}
-            <code>{MICROFEED_MANAGE_COMMAND}</code> and ask it to connect to the
-            existing Worker.
+            {t("themes.installNoteBefore")}{" "}
+            <code>{MICROFEED_MANAGE_COMMAND}</code>{" "}
+            {t("themes.installNoteAfter")}
           </p>
           <section className="grid gap-3">
             <div>
-              <h3 className="font-semibold">Install a community theme</h3>
+              <h3 className="font-semibold">{t("themes.installCommunityTitle")}</h3>
               <p className="mt-1 text-muted-foreground">
-                Install a public GitHub repository through the management CLI.
-                The new version is inactive, so you can preview it before it
-                changes the public site.
+                {t("themes.installCommunityDesc")}
               </p>
             </div>
             <Command>
@@ -70,11 +68,9 @@ export default function ThemeInstallHelpDialog({
 
           <section className="grid gap-3">
             <div>
-              <h3 className="font-semibold">Install a Built-in theme</h3>
+              <h3 className="font-semibold">{t("themes.installBuiltInTitle")}</h3>
               <p className="mt-1 text-muted-foreground">
-                Deployment synchronizes the Built-in catalog automatically.
-                You can also install a specific release through the management
-                CLI; it remains inactive for preview.
+                {t("themes.installBuiltInDesc")}
               </p>
             </div>
             <Command>
@@ -83,26 +79,23 @@ export default function ThemeInstallHelpDialog({
           </section>
 
           <section>
-            <h3 className="font-semibold">Create a new version in Admin</h3>
+            <h3 className="font-semibold">{t("themes.newVersionAdminTitle")}</h3>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
-              <li>Choose <strong className="text-foreground">Create new version</strong> on an installed theme.</li>
-              <li>Edit, save, and preview the separate version draft.</li>
-              <li>Choose <strong className="text-foreground">Install</strong> to create an immutable inactive version.</li>
-              <li>Preview the installed version, then activate it separately.</li>
+              <li>{t("themes.newVersionStep1")}</li>
+              <li>{t("themes.newVersionStep2")}</li>
+              <li>{t("themes.newVersionStep3")}</li>
+              <li>{t("themes.newVersionStep4")}</li>
             </ol>
             <p className="mt-2 text-muted-foreground">
-              The source version and the currently active version are never
-              modified in place.
+              {t("themes.newVersionNote")}
             </p>
           </section>
 
           <section className="grid gap-3">
             <div>
-              <h3 className="font-semibold">Start your own theme repository</h3>
+              <h3 className="font-semibold">{t("themes.ownRepoTitle")}</h3>
               <p className="mt-1 text-muted-foreground">
-                Initialize a standalone repository from this instance&apos;s
-                effective active theme. Missing parent directories are created
-                automatically.
+                {t("themes.ownRepoDesc")}
               </p>
             </div>
             <Command>
@@ -116,14 +109,14 @@ export default function ThemeInstallHelpDialog({
               variant="outline"
             >
               <BookOpenIcon aria-hidden="true" />
-              Theme guide
+              {t("themes.themeGuide")}
             </Button>
             <Button
               render={<a href={THEME_COMMAND_REFERENCE_URL} rel="noopener noreferrer" target="_blank" />}
               variant="outline"
             >
               <ExternalLinkIcon aria-hidden="true" />
-              Command reference
+              {t("themes.commandReference")}
             </Button>
           </div>
         </div>

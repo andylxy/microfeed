@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {ExternalLinkIcon, RefreshCwIcon, RotateCcwIcon, SaveIcon, Trash2Icon} from "lucide-react";
 
+import i18n, {useTranslation} from "@/client/i18n";
 import {preventCloseWhenChanged} from "@/client/BrowserUtils";
 import {showToast} from "@/client/ToastUtils";
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
@@ -46,11 +47,12 @@ export function siteFileEditorLanguage(
 
 async function responseJson(response: Response): Promise<any> {
   const data = await response.json().catch(() => ({})) as Record<string, any>;
-  if (!response.ok) throw new Error(data.error ?? "Site File operation failed.");
+  if (!response.ok) throw new Error(data.error ?? i18n.t("siteFiles.operationFailed"));
   return data;
 }
 
 export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
+  const {t} = useTranslation();
   const [record, setRecord] = useState(file);
   const [draft, setDraft] = useState<Draft>({
     content_type: file?.content_type ?? "text/plain",
@@ -100,7 +102,7 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
       showToast(success, "success");
       return next;
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Site File operation failed.", "error");
+      showToast(error instanceof Error ? error.message : t("siteFiles.operationFailed"), "error");
       return undefined;
     } finally {
       setBusy(false);
@@ -108,7 +110,7 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
   };
   const save = async () => {
     if (!draft.filename.trim()) {
-      showToast("Enter a root filename, such as security.txt.", "error");
+      showToast(t("siteFiles.filenameRequired"), "error");
       return;
     }
     const next = await run(async () => {
@@ -133,7 +135,7 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
         )) as SiteFileRecord;
       }
       return saved;
-    }, record ? "File saved." : "File created.");
+    }, record ? t("siteFiles.fileSaved") : t("siteFiles.fileCreated"));
     if (!record && next) window.location.assign(ADMIN_URLS.editSiteFile(next.id));
     return next;
   };
@@ -152,7 +154,7 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
     } catch (error) {
       setPreview(undefined);
       setPreviewError(
-        error instanceof Error ? error.message : "Could not render preview.",
+        error instanceof Error ? error.message : t("siteFiles.previewFailed"),
       );
     } finally {
       setPreviewBusy(false);
@@ -166,20 +168,20 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
     if (
       !record ||
       !window.confirm(
-        `Restore the default /${record.filename}? This removes your custom template and published version.`,
+        t("siteFiles.resetConfirm", {filename: record.filename}),
       )
     ) return;
-    await run(async () => responseJson(await fetch(ADMIN_URLS.ajaxResetSiteFile(record.id), {method: "POST"})), "Default file restored.");
+    await run(async () => responseJson(await fetch(ADMIN_URLS.ajaxResetSiteFile(record.id), {method: "POST"})), t("siteFiles.defaultRestored"));
   };
   const remove = async () => {
-    if (!record || !window.confirm(`Delete /${record.filename}?`)) return;
+    if (!record || !window.confirm(t("siteFiles.deleteConfirm", {filename: record.filename}))) return;
     setBusy(true);
     try {
       await responseJson(await fetch(ADMIN_URLS.ajaxSiteFile(record.id), {method: "DELETE"}));
       markChanged(false);
       window.location.assign(ADMIN_URLS.siteFiles());
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not delete Site File.", "error");
+      showToast(error instanceof Error ? error.message : t("siteFiles.deleteFailed"), "error");
       setBusy(false);
     }
   };
@@ -189,12 +191,12 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
         <section className="rounded-[14px] border bg-card p-5 shadow-xs">
           <div className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div aria-label="Site File editor view" className="flex gap-1" role="tablist">
-                <Button aria-selected={activeTab === "source"} onClick={() => setActiveTab("source")} role="tab" size="sm" type="button" variant={activeTab === "source" ? "default" : "outline"}>Source</Button>
-                <Button aria-selected={activeTab === "preview"} onClick={selectPreview} role="tab" size="sm" type="button" variant={activeTab === "preview" ? "default" : "outline"}>Preview</Button>
+              <div aria-label={t("siteFiles.editorViewAria")} className="flex gap-1" role="tablist">
+                <Button aria-selected={activeTab === "source"} onClick={() => setActiveTab("source")} role="tab" size="sm" type="button" variant={activeTab === "source" ? "default" : "outline"}>{t("siteFiles.source")}</Button>
+                <Button aria-selected={activeTab === "preview"} onClick={selectPreview} role="tab" size="sm" type="button" variant={activeTab === "preview" ? "default" : "outline"}>{t("siteFiles.preview")}</Button>
               </div>
               {activeTab === "preview" && (
-                <Button disabled={previewBusy} onClick={() => void refreshPreview()} size="sm" type="button" variant="outline"><RefreshCwIcon aria-hidden="true" /> Refresh</Button>
+                <Button disabled={previewBusy} onClick={() => void refreshPreview()} size="sm" type="button" variant="outline"><RefreshCwIcon aria-hidden="true" /> {t("siteFiles.refresh")}</Button>
               )}
             </div>
             {activeTab === "source" ? (
@@ -208,17 +210,17 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
                   >
                     Mustache
                   </a>{" "}
-                  template
+                  {t("siteFiles.template")}
                 </Label>
                 <div className="mt-2">
                   {siteFileEditorLanguage(draft.content_type) ? (
                     <AdminCodeEditor
-                      ariaLabel="Site File Mustache template"
+                      ariaLabel={t("siteFiles.editorAria")}
                       code={draft.draft_content}
                       language={siteFileEditorLanguage(draft.content_type)!}
                       minHeight="28rem"
                       onChange={(event) => update({draft_content: event.target.value})}
-                      placeholder="Enter a Mustache template"
+                      placeholder={t("siteFiles.editorPlaceholder")}
                     />
                   ) : (
                     <Textarea className="min-h-[28rem] font-mono text-sm" id="site-file-content" spellCheck={false} value={draft.draft_content} onChange={(event) => update({draft_content: event.target.value})} />
@@ -227,25 +229,25 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
               </div>
             ) : (
               <div aria-live="polite" role="tabpanel">
-                <Label>Rendered output</Label>
+                <Label>{t("siteFiles.renderedOutput")}</Label>
                 <div className="mt-2">
                   {previewBusy ? (
-                    <div className="flex min-h-[28rem] items-center justify-center rounded-[10px] border bg-muted/30 text-sm text-muted-foreground">Rendering preview…</div>
+                    <div className="flex min-h-[28rem] items-center justify-center rounded-[10px] border bg-muted/30 text-sm text-muted-foreground">{t("siteFiles.renderingPreview")}</div>
                   ) : previewError ? (
                     <div className="min-h-[10rem] rounded-[10px] border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{previewError}</div>
                   ) : preview && siteFileEditorLanguage(preview.content_type) ? (
-                    <AdminCodeEditor ariaLabel="Rendered Site File preview" code={preview.rendered_content} language={siteFileEditorLanguage(preview.content_type)!} minHeight="28rem" readOnly />
+                    <AdminCodeEditor ariaLabel={t("siteFiles.previewAria")} code={preview.rendered_content} language={siteFileEditorLanguage(preview.content_type)!} minHeight="28rem" readOnly />
                   ) : preview ? (
-                    <Textarea aria-label="Rendered Site File preview" className="min-h-[28rem] bg-muted/60 font-mono text-sm" readOnly spellCheck={false} value={preview.rendered_content} />
+                    <Textarea aria-label={t("siteFiles.previewAria")} className="min-h-[28rem] bg-muted/60 font-mono text-sm" readOnly spellCheck={false} value={preview.rendered_content} />
                   ) : null}
                 </div>
               </div>
             )}
             <details className="rounded-[10px] border bg-muted/20 p-3 text-sm">
-              <summary className="cursor-pointer font-medium">Template variables</summary>
+              <summary className="cursor-pointer font-medium">{t("siteFiles.templateVariables")}</summary>
               <div className="mt-2 grid gap-2 text-muted-foreground">
                 <p>
-                  Use top-level fields from this site&apos;s{" "}
+                  {t("siteFiles.templateVars1Before")}
                   <a
                     className="font-medium text-primary underline-offset-4 hover:underline"
                     href={PUBLIC_URLS.jsonFeed()}
@@ -253,17 +255,12 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
                     target="_blank"
                   >
                     JSON Feed
-                  </a>, such as <code>{"{{title}}"}</code>,{" "}
-                  <code>{"{{description}}"}</code>, and{" "}
-                  <code>{"{{home_page_url}}"}</code>.
+                  </a>
+                  {t("siteFiles.templateVars1After")}
                 </p>
-                <p>
-                  <code>items</code> contains up to 100 newest Published items.
-                  {" "}<code>pages</code> contains up to 100 most recently
-                  updated Published Pages; the special 404 Page is excluded.
-                </p>
-                <p>Loop through <code>{"{{#items}}…{{/items}}"}</code> or <code>{"{{#pages}}…{{/pages}}"}</code>. Each entry includes <code>_loop.index</code>, <code>_loop.first</code>, and <code>_loop.last</code>.</p>
-                <p>Helpers include <code>_site.origin</code>, <code>_site.json_feed_url</code>, <code>_site.rss_feed_url</code>, <code>_site.sitemap_url</code>, and <code>_site.generated_at</code>. When public API docs are available, <code>_site.api_llms_full_url</code> contains their agent-friendly URL. Inside an item, use <code>_site.web_url</code>, <code>_site.images</code>, and <code>_site.videos</code>.</p>
+                <p>{t("siteFiles.templateVars2")}</p>
+                <p>{t("siteFiles.templateVars3")}</p>
+                <p>{t("siteFiles.templateVars4")}</p>
                 <p>
                   <a
                     className="font-medium text-primary underline-offset-4 hover:underline"
@@ -272,9 +269,8 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
                     target="_blank"
                   >
                     Mustache
-                  </a>{" "}
-                  escapes values by default. Use triple braces only when you
-                  intentionally need unescaped output.
+                  </a>
+                  {t("siteFiles.templateVars5After")}
                 </p>
               </div>
             </details>
@@ -284,7 +280,7 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
           <section className="rounded-[14px] border bg-card p-5 shadow-xs">
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="site-file-name">Root filename</Label>
+                <Label htmlFor="site-file-name">{t("siteFiles.nameLabel")}</Label>
                 <Input
                   aria-describedby={draft.filename
                     ? "site-file-name-help site-file-name-preview"
@@ -295,57 +291,55 @@ export default function SiteFileEditorApp({file}: {file?: SiteFileRecord}) {
                   onChange={(event) => update({
                     filename: normalizeSiteFilenameInput(event.target.value),
                   })}
-                  placeholder="e.g., security.txt"
+                  placeholder={`${t("common.examplePrefix")}security.txt`}
                   required
                   value={draft.filename}
                 />
                 <p className="text-xs text-muted-foreground" id="site-file-name-help">
-                  One top-level path only. Slashes are removed automatically.
+                  {t("siteFiles.nameHelp")}
                 </p>
                 {draft.filename && (
                   <p className="text-xs font-medium" id="site-file-name-preview">/{draft.filename}</p>
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="site-file-type">Content type</Label>
+                <Label htmlFor="site-file-type">{t("siteFiles.typeLabel")}</Label>
                 <select className="h-10 cursor-pointer rounded-md border bg-background px-3 text-sm" id="site-file-type" value={draft.content_type} onChange={(event) => update({content_type: event.target.value as SiteFileMediaType})}>
                   {SITE_FILE_MEDIA_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="site-file-visibility">Visibility</Label>
+                <Label htmlFor="site-file-visibility">{t("siteFiles.visibilityLabel")}</Label>
                 <select
                   className="h-10 cursor-pointer rounded-md border bg-background px-3 text-sm"
                   id="site-file-visibility"
                   onChange={(event) => update({enabled: event.target.value === "published"})}
                   value={draft.enabled ? "published" : "draft"}
                 >
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
+                  <option value="draft">{t("siteFiles.draftOption")}</option>
+                  <option value="published">{t("siteFiles.publishedOption")}</option>
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  Draft saves privately. Published saves and serves the rendered file.
+                  {t("siteFiles.visibilityHelp")}
                 </p>
               </div>
             </div>
           </section>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy || !changed && Boolean(record)} onClick={() => void save()}><SaveIcon aria-hidden="true" /> {record ? "Save File" : "Create File"}</Button>
-            {record?.enabled && (record.mode === "generated" || record.date_published) && <Button render={<a href={record.url} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon aria-hidden="true" /> View</Button>}
-            {record && !record.system && <Button disabled={busy} onClick={() => void remove()} variant="destructive"><Trash2Icon aria-hidden="true" /> Delete</Button>}
+            <Button disabled={busy || !changed && Boolean(record)} onClick={() => void save()}><SaveIcon aria-hidden="true" /> {record ? t("siteFiles.saveFile") : t("siteFiles.createFile")}</Button>
+            {record?.enabled && (record.mode === "generated" || record.date_published) && <Button render={<a href={record.url} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon aria-hidden="true" /> {t("siteFiles.view")}</Button>}
+            {record && !record.system && <Button disabled={busy} onClick={() => void remove()} variant="destructive"><Trash2Icon aria-hidden="true" /> {t("siteFiles.delete")}</Button>}
           </div>
           {record?.mode === "override" && record.generator && (
             <section className="mt-2 rounded-[14px] border bg-card p-5 shadow-xs">
               <div className="grid gap-3">
-                <h2 className="font-semibold">Default file</h2>
+                <h2 className="font-semibold">{t("siteFiles.defaultFileTitle")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Replace this customized template with microfeed&apos;s built-in
-                  default. Your custom draft and published version will be
-                  removed; its current visibility stays the same.
+                  {t("siteFiles.defaultFileDesc")}
                 </p>
                 <div>
                   <Button disabled={busy} onClick={() => void reset()} variant="outline">
-                    <RotateCcwIcon aria-hidden="true" /> Restore default file
+                    <RotateCcwIcon aria-hidden="true" /> {t("siteFiles.restoreDefault")}
                   </Button>
                 </div>
               </div>

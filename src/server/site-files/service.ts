@@ -15,6 +15,7 @@ import {
   validateSiteFileTemplateSource,
 } from "@/shared/SiteFileTemplates";
 import {randomShortUUID} from "@/shared/StringUtils";
+import {AppError} from "@/shared/errors";
 import type FeedDb from "@/server/feed/FeedDb";
 import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 import {renderSiteFileForRequest} from "./templates";
@@ -40,8 +41,9 @@ export interface SiteFilePreview {
   valid: true;
 }
 
-export class SiteFileConflictError extends Error {}
-export class SiteFileRequestError extends Error {}
+// Extends AppError so the localized 409 in the AJAX handlers can translate it.
+export class SiteFileConflictError extends AppError {}
+export class SiteFileRequestError extends AppError {}
 
 interface SiteFileRow extends Record<string, unknown> {
   content_type: SiteFileMediaType;
@@ -84,7 +86,7 @@ function recordFromRow(row: SiteFileRow, baseUrl: string): SiteFileRecord {
 
 function validatedMediaType(value: unknown): SiteFileMediaType {
   if (!SITE_FILE_MEDIA_TYPES.includes(value as SiteFileMediaType)) {
-    throw new SiteFileRequestError("Choose a supported text content type.");
+    throw new SiteFileRequestError("errors.siteFile.unsupportedContentType", 400);
   }
   return value as SiteFileMediaType;
 }
@@ -190,7 +192,9 @@ export async function createSiteFile(
 ): Promise<SiteFileRecord> {
   const filename = normalizeSiteFilename(input.filename ?? "");
   const filenameError = validateSiteFilename(filename);
-  if (filenameError) throw new SiteFileRequestError(filenameError);
+  if (filenameError) {
+    throw new SiteFileRequestError(filenameError.key, 400, filenameError.params);
+  }
   const contentType = validatedMediaType(
     input.content_type ?? siteFileMediaTypeForName(filename),
   );
@@ -235,7 +239,7 @@ export async function createSiteFile(
     );
   } catch (error) {
     if (String(error).toLocaleLowerCase().includes("unique")) {
-      throw new SiteFileConflictError(`/${filename} already exists.`);
+      throw new SiteFileConflictError("errors.siteFile.exists", 409, {filename});
     }
     throw error;
   }
@@ -257,7 +261,8 @@ export async function updateSiteFile(
   if (input.filename !== undefined &&
       normalizeSiteFilename(input.filename) !== row.filename) {
     throw new SiteFileRequestError(
-      "Published Site File names are immutable. Create a new file instead.",
+      "errors.siteFile.nameImmutable",
+      400,
     );
   }
   const contentType = input.content_type === undefined
@@ -352,7 +357,7 @@ export async function resetSiteFile(
   ).bind(id).first() as SiteFileRow | null;
   if (!row) return null;
   if (!row.generator || !SITE_FILE_GENERATORS.includes(row.generator)) {
-    throw new SiteFileRequestError("Only generated Site Files can be reset.");
+    throw new SiteFileRequestError("errors.siteFile.onlyGeneratedCanReset", 400);
   }
   const now = new Date().toISOString();
   const siteFile = recordFromRow({
@@ -388,7 +393,9 @@ export async function previewSiteFile(
   if (input.site_file_id && !row) return null;
   const filename = normalizeSiteFilename(input.filename ?? row?.filename ?? "");
   const filenameError = validateSiteFilename(filename);
-  if (filenameError) throw new SiteFileRequestError(filenameError);
+  if (filenameError) {
+    throw new SiteFileRequestError(filenameError.key, 400, filenameError.params);
+  }
   const contentType = validatedMediaType(
     input.content_type ?? row?.content_type ?? siteFileMediaTypeForName(filename),
   );
@@ -429,7 +436,7 @@ export async function deleteSiteFile(
   ).bind(id).first() as {generator: string | null} | null;
   if (!row) return false;
   if (row.generator) {
-    throw new SiteFileRequestError("Generated Site Files cannot be deleted.");
+    throw new SiteFileRequestError("errors.siteFile.generatedCannotDelete", 400);
   }
   const statement = database.FEED_DB.prepare(
     "DELETE FROM site_files WHERE id = ?",

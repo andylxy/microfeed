@@ -6,14 +6,12 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {normalizeAdminPath} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {loadPublicPageRoute} from "@/server/pages/public";
 
 const routeAdminPath = Astro.params.adminPath ?? "";
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const adminRequest = routeAdminPath === normalizeAdminPath(
   env.MICROFEED_ADMIN_PATH,
 );
@@ -23,7 +21,7 @@ const AdminShell = adminRequest
 const {feedContent, onboardingResult} = Astro.locals;
 let publicPage;
 if (adminRequest && (!feedContent || !onboardingResult)) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 if (!adminRequest) {
   publicPage = await loadPublicPageRoute(env, Astro.request, routeAdminPath);

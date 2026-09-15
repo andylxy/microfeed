@@ -5,14 +5,12 @@ import WebhookEndpointsApp from "@/components/admin/webhooks/WebhookEndpointsApp
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listWebhookEndpoints, webhookOverview} from "@/server/webhooks/store";
 import {NAV_ITEMS} from "@/shared/Constants";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
-if (!feedContent || !onboardingResult) throw new Error("Admin feed context was not initialized.");
+if (!feedContent || !onboardingResult) throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 const [initialEndpoints, overview] = await Promise.all([
   listWebhookEndpoints(env.FEED_DB),
   webhookOverview(env),

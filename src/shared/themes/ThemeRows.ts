@@ -5,6 +5,7 @@ import type {
   ThemeState,
   ThemeVersionSummary,
 } from "@/shared/themes/ThemeContract";
+import {AppError} from "../errors";
 import {
   storedThemeVersionSchema,
   storedThemeManifestV1Schema,
@@ -20,7 +21,7 @@ function nullableString(value: unknown): string | null {
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string") {
-    throw new Error(`Theme row is missing ${field}.`);
+    throw new AppError("errors.theme.rowMissingField", 400, {field});
   }
   return value;
 }
@@ -29,7 +30,9 @@ function parseJson(value: unknown, field: string): unknown {
   try {
     return JSON.parse(requiredString(value, field));
   } catch (error) {
-    throw new Error(`Theme row has invalid ${field}.`, {cause: error});
+    const parseError = new AppError("errors.theme.rowInvalidField", 400, {field});
+    parseError.cause = error;
+    throw parseError;
   }
 }
 

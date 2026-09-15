@@ -154,35 +154,56 @@ export const apiPageCreateInputSchema = apiPageInputSchema.extend({
   ) {
     context.addIssue({
       code: "custom",
-      message: "Enter a navigation label, or turn off Show in navigation.",
+      message: "errors.page.navigationLabelRequired",
       path: ["navigation_label"],
     });
   }
 }).meta({id: "PageCreateInput"});
 
+/**
+ * Map a Page input Zod error to an i18n key (with `{{max}}`-style placeholders
+ * for numeric limits). Callers render it through `localizedError` so the
+ * message is translated for the request's language. Custom schema issues may
+ * already carry an i18n key, which is returned unchanged.
+ */
 export function pageInputErrorMessage(error: z.ZodError): string {
   const issue = error.issues[0];
   const field = String(issue?.path[0] ?? "");
   if (issue?.code === "custom") return issue.message;
   if (field === "title") {
     return issue?.code === "too_big"
-      ? "Page title must be 200 characters or fewer."
-      : "Give the Page a title.";
+      ? "errors.page.titleTooLong"
+      : "errors.page.titleRequiredShort";
   }
   if (field === "slug") {
     return issue?.code === "too_big"
-      ? `URL path must be ${PAGE_SLUG_MAX_LENGTH} characters or fewer.`
-      : "Enter a URL path, such as about.";
+      ? "errors.page.slugTooLong"
+      : "errors.page.slugRequired";
   }
   if (field === "navigation_label") {
     return issue?.code === "too_big"
-      ? "Navigation label must be 100 characters or fewer."
-      : "Enter a navigation label, or turn off Show in navigation.";
+      ? "errors.page.navigationLabelTooLong"
+      : "errors.page.navigationLabelRequired";
   }
   if (field === "meta_description") {
-    return `Search and social description must be ${PAGE_META_DESCRIPTION_MAX_LENGTH} characters or fewer.`;
+    return "errors.page.metaDescriptionTooLong";
   }
-  return "Check the Page fields and try again.";
+  return "errors.page.invalidFields";
+}
+
+/**
+ * Interpolation parameters for the key returned by {@link pageInputErrorMessage},
+ * filling the `{{max}}` placeholder used by the numeric-limit messages.
+ */
+export function pageInputErrorParams(error: z.ZodError): Record<string, string> | undefined {
+  const issue = error.issues[0];
+  const field = String(issue?.path[0] ?? "");
+  if (issue?.code !== "too_big") return undefined;
+  if (field === "slug") return {max: String(PAGE_SLUG_MAX_LENGTH)};
+  if (field === "meta_description") {
+    return {max: String(PAGE_META_DESCRIPTION_MAX_LENGTH)};
+  }
+  return undefined;
 }
 
 export const apiPageOutputSchema = apiPageInputSchema.extend({

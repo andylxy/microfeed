@@ -2,6 +2,7 @@
 import {env} from "cloudflare:workers";
 
 import PublicLayout from "@/layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublicPageRoute} from "@/server/pages/public";
 
 const publicPage = await loadPublicPageRoute(env, Astro.request, "404");
@@ -14,5 +15,5 @@ Astro.response.status = 404;
 {publicPage.kind === "page" ? (
   <PublicLayout {...publicPage.layout} />
 ) : (
-  <h1>Not Found</h1>
+  <PublicNotFoundHeading />
 )}

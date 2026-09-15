@@ -1,4 +1,6 @@
 import {useState} from "react";
+import {useTranslation} from "@/client/i18n";
+import i18n from "@/client/i18n";
 
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
 import {Button} from "@/components/ui/button";
@@ -8,14 +10,14 @@ import {
 } from "@/shared/themes/ThemeContract";
 
 const FILE_LABELS: Record<ThemeFileKey, string> = {
-  rssStylesheet: "RSS stylesheet",
-  webBodyEnd: "Body end",
-  webBodyStart: "Body start",
-  webFeed: "Feed",
-  webHeader: "Header",
-  webItem: "Item",
-  webPage: "Page",
-  webSearch: "Search",
+  rssStylesheet: i18n.t("codeEditor.files.rssStylesheet"),
+  webBodyEnd: i18n.t("codeEditor.files.webBodyEnd"),
+  webBodyStart: i18n.t("codeEditor.files.webBodyStart"),
+  webFeed: i18n.t("codeEditor.files.webFeed"),
+  webHeader: i18n.t("codeEditor.files.webHeader"),
+  webItem: i18n.t("codeEditor.files.webItem"),
+  webPage: i18n.t("codeEditor.files.webPage"),
+  webSearch: i18n.t("codeEditor.files.webSearch"),
 };
 
 export const THEME_EDITOR_FILE_KEYS: readonly ThemeFileKey[] = [
@@ -46,43 +48,43 @@ interface ThemeFileHelp {
 
 export const THEME_FILE_HELP: Record<ThemeFileKey, ThemeFileHelp> = {
   rssStylesheet: {
-    description: "Edits the XSL stylesheet browsers use to display the public RSS feed. It does not change the RSS data itself.",
-    exampleLabel: "Open RSS feed",
+    description: i18n.t("codeEditor.help.rssStylesheetDesc"),
+    exampleLabel: i18n.t("codeEditor.help.rssStylesheetLabel"),
     exampleUrlKey: "rssFeedUrl",
   },
   webBodyEnd: {
-    description: "Edits markup inserted just before the closing body tag on every public HTML page rendered by this theme. Use it for shared markup or scripts.",
-    exampleLabel: "Open a public page",
+    description: i18n.t("codeEditor.help.webBodyEndDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webBodyEndLabel"),
     exampleUrlKey: "webFeedUrl",
   },
   webBodyStart: {
-    description: "Edits markup inserted just after the opening body tag on every public HTML page rendered by this theme. Use it for shared banners or page structure.",
-    exampleLabel: "Open a public page",
+    description: i18n.t("codeEditor.help.webBodyStartDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webBodyStartLabel"),
     exampleUrlKey: "webFeedUrl",
   },
   webFeed: {
-    description: "Edits the public home and feed pages, including channel information and the list of published items.",
-    exampleLabel: "Open home page",
+    description: i18n.t("codeEditor.help.webFeedDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webFeedLabel"),
     exampleUrlKey: "webFeedUrl",
   },
   webHeader: {
-    description: "Edits markup inside the head of every public HTML page rendered by this theme. Use it for shared styles, metadata, and other head markup.",
-    exampleLabel: "Open a public page",
+    description: i18n.t("codeEditor.help.webHeaderDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webHeaderLabel"),
     exampleUrlKey: "webFeedUrl",
   },
   webItem: {
-    description: "Edits individual public item pages for published articles, episodes, videos, documents, and other items.",
-    exampleLabel: "Open an example item",
+    description: i18n.t("codeEditor.help.webItemDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webItemLabel"),
     exampleUrlKey: "webItemUrl",
   },
   webPage: {
-    description: "Edits standalone Pages such as About and Contact, as well as the editable not-found Page. This template also receives page and navigation_pages variables.",
-    exampleLabel: "Open an example Page",
+    description: i18n.t("codeEditor.help.webPageDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webPageLabel"),
     exampleUrlKey: "webPageUrl",
   },
   webSearch: {
-    description: "Edits the dedicated public search-results page. This template receives search.query and search.results; microfeed supplies the search modal and typeahead behavior.",
-    exampleLabel: "Open search page",
+    description: i18n.t("codeEditor.help.webSearchDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webSearchLabel"),
     exampleUrlKey: "webSearchUrl",
   },
 };
@@ -94,6 +96,7 @@ interface Props {
 }
 
 export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
+  const {t} = useTranslation();
   const fileKeys = THEME_EDITOR_FILE_KEYS.filter((key) =>
     typeof bundle[key] === "string"
   );
@@ -107,7 +110,7 @@ export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
   return (
     <div className="grid min-w-0 gap-4 md:grid-cols-[12rem_minmax(0,1fr)] md:items-start">
       <nav
-        aria-label="Theme files"
+        aria-label={t("codeEditor.themeFiles")}
         className="flex max-w-full flex-nowrap gap-1 overflow-x-auto rounded-[14px] border bg-card p-2 shadow-xs md:flex-col md:overflow-visible"
       >
         {fileKeys.map((key) => (
@@ -132,7 +135,7 @@ export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
           <p>{help.description}</p>
           <p className="flex flex-wrap gap-x-2">
             <span>
-              This template can use{" "}
+              {t("codeEditor.mustacheNoteStart")}
               <a
                 className="font-medium text-primary underline-offset-4 hover:underline"
                 href="https://mustache.github.io/"
@@ -140,16 +143,17 @@ export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
                 target="_blank"
               >
                 Mustache
-              </a>{" "}
-              variables with data from this site&apos;s{" "}
+              </a>
+              {t("codeEditor.mustacheNoteMid")}
               <a
                 className="font-medium text-primary underline-offset-4 hover:underline"
                 href={links.jsonFeedUrl}
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                public JSON Feed
-              </a>.
+                {t("codeEditor.mustacheJsonFeed")}
+              </a>
+              {t("codeEditor.mustacheNoteEnd")}
             </span>
             {exampleUrl && (
               <a
@@ -165,18 +169,18 @@ export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
         </div>
         {file === "webHeader" && bundle.webHeader.includes("microfeed-design-tokens") && (
           <p className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-            Quick color changes are at the top of <strong className="text-foreground">Web header</strong>. Edit only the values in the clearly labeled design-token block.
+            {t("codeEditor.designTokensNote")}
           </p>
         )}
         <AdminCodeEditor
-          ariaLabel={`${FILE_LABELS[file]} editor`}
+          ariaLabel={`${FILE_LABELS[file]} ${t("codeEditor.editorSuffix")}`}
           code={bundle[file] ?? ""}
           language={file === "rssStylesheet" ? "xml" : "html"}
           minHeight="54vh"
           onChange={(event) => onChange({...bundle, [file]: event.target.value})}
           placeholder={file === "rssStylesheet"
-            ? "Please enter code here, including xsl and css"
-            : "Please enter code here, including html, javascript, and css"}
+            ? t("codeEditor.placeholderXml")
+            : t("codeEditor.placeholderHtml")}
         />
       </div>
     </div>

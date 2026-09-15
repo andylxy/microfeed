@@ -5,6 +5,11 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import {useMemo, useState, type MouseEvent} from "react";
+import i18n, {useTranslation} from "@/client/i18n";
+import {
+  formatAdminShortDate,
+  formatAdminTimestamp,
+} from "@/client/admin-date-format";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -30,7 +35,6 @@ import {cn} from "@/lib/utils";
 import {
   ENCLOSURE_CATEGORIES,
   ENCLOSURE_CATEGORIES_DICT,
-  ITEM_STATUSES_DICT,
   STATUSES,
 } from "@/shared/Constants";
 import {
@@ -86,11 +90,11 @@ type ListNavigationHandler = (
   href: string,
 ) => void;
 
-const FILTER_LABELS: Record<ItemStatusFilter, string> = {
-  all: "All items",
-  published: "Published",
-  unlisted: "Unlisted",
-  unpublished: "Unpublished",
+const FILTER_KEYS: Record<ItemStatusFilter, string> = {
+  all: "items.filterAll",
+  published: "items.filterPublished",
+  unlisted: "items.filterUnlisted",
+  unpublished: "items.filterUnpublished",
 };
 
 const STATUS_CLASSES: Record<number, string> = {
@@ -102,13 +106,17 @@ const STATUS_CLASSES: Record<number, string> = {
     "bg-rose-500/12 text-rose-700 dark:text-rose-300",
 };
 
+const STATUS_LABEL_KEYS: Record<number, string> = {
+  [STATUSES.PUBLISHED]: "items.statusPublished",
+  [STATUSES.UNLISTED]: "items.statusUnlisted",
+  [STATUSES.UNPUBLISHED]: "items.statusUnpublished",
+};
+
 const columnHelper = createColumnHelper<ItemTableRow>();
 
-function statusName(status: number): string {
-  const name = ITEM_STATUSES_DICT[
-    status as keyof typeof ITEM_STATUSES_DICT
-  ]?.name ?? "unknown";
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+function statusName(status: number, t: (key: string) => string): string {
+  const key = STATUS_LABEL_KEYS[status];
+  return key ? t(key) : t("items.statusUnknown");
 }
 
 function validDate(value: number | undefined): Date | undefined {
@@ -120,24 +128,17 @@ function validDate(value: number | undefined): Date | undefined {
 }
 
 function formatShortDate(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return formatAdminShortDate(date);
 }
 
 function formatFullTimestamp(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "long",
-  }).format(date);
+  return formatAdminTimestamp(date, "long");
 }
 
 function ItemDate({value}: {value?: number}) {
   const date = validDate(value);
   if (!date) {
-    return <span aria-label="Date unavailable">—</span>;
+    return <span aria-label={i18n.t("items.dateUnavailable")}>—</span>;
   }
 
   const fullTimestamp = formatFullTimestamp(date);
@@ -193,7 +194,7 @@ function ItemThumbnail({imageUrl}: {imageUrl?: string}) {
 function MediaCell({row}: {row: ItemTableRow}) {
   const {mediaFile, publicBucketUrl} = row;
   if (!isValidMediaFile(mediaFile)) {
-    return <span aria-label="No media">—</span>;
+    return <span aria-label={i18n.t("items.noMedia")}>—</span>;
   }
 
   const category = mediaFile?.category ?? "";
@@ -265,9 +266,10 @@ function ItemStatusFilters({
   order: ItemOrder;
   sort: ItemSort;
 }) {
+  const {t} = useTranslation();
   return (
     <nav
-      aria-label="Filter items by status"
+      aria-label={t("items.filterByStatus")}
       className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-4"
     >
       {ITEM_STATUS_FILTERS.map((statusFilter) => {
@@ -288,7 +290,7 @@ function ItemStatusFilters({
             key={statusFilter}
             onClick={(event) => navigate(event, href)}
           >
-            {FILTER_LABELS[statusFilter]}
+            {t(FILTER_KEYS[statusFilter])}
           </a>
         );
       })}
@@ -307,6 +309,7 @@ export function ItemListTable({
   loading?: boolean;
   navigate?: ListNavigationHandler;
 }) {
+  const {t} = useTranslation();
   const activeFilter = normalizeItemStatusFilter(listing.statusFilter);
   const sort = itemSortDefinition(listing.sort);
   const order = listing.order;
@@ -344,8 +347,10 @@ export function ItemListTable({
     return (
       <a
         aria-label={active
-          ? `${label}, sorted ${descending ? "descending" : "ascending"}. Sort ${descending ? "ascending" : "descending"}.`
-          : `${label}. Sort descending.`}
+          ? descending
+            ? t("items.sortActiveDescending", {label})
+            : t("items.sortActiveAscending", {label})
+          : t("items.sortInactive", {label})}
         className={cn(
           "inline-flex min-w-0 flex-wrap items-center gap-1.5",
           loading && "cursor-not-allowed",
@@ -364,7 +369,7 @@ export function ItemListTable({
 
   const columns = [
     columnHelper.accessor("title", {
-      header: "Title",
+      header: t("items.columnTitle"),
       cell: ({row}) => {
         const item = row.original;
         return (
@@ -385,7 +390,7 @@ export function ItemListTable({
                     STATUS_CLASSES[item.status] ?? "bg-muted text-muted-foreground",
                   )}
                 >
-                  {statusName(item.status)}
+                  {statusName(item.status, t)}
                 </span>
                 <a
                   className="inline-flex min-w-0 items-center gap-1 !text-muted-foreground hover:!text-brand-light"
@@ -393,7 +398,7 @@ export function ItemListTable({
                   rel="noopener noreferrer"
                   target="_blank"
                 >
-                  <span className="truncate">Public page</span>
+                  <span className="truncate">{t("items.publicPage")}</span>
                   <ExternalLinkIcon aria-hidden="true" className="size-3" />
                 </a>
               </div>
@@ -403,24 +408,24 @@ export function ItemListTable({
       },
     }),
     columnHelper.accessor("pubDateMs", {
-      header: () => sortableHeader(ITEM_SORTS.PUBLISHED_AT, "Published at"),
+      header: () => sortableHeader(ITEM_SORTS.PUBLISHED_AT, t("items.columnPublishedAt")),
       cell: (info) => <ItemDate value={info.getValue()} />,
     }),
     columnHelper.accessor("createdAtMs", {
-      header: () => sortableHeader(ITEM_SORTS.CREATED_AT, "Created at"),
+      header: () => sortableHeader(ITEM_SORTS.CREATED_AT, t("items.columnCreatedAt")),
       cell: (info) => <ItemDate value={info.getValue()} />,
     }),
     columnHelper.accessor("updatedAtMs", {
-      header: () => sortableHeader(ITEM_SORTS.UPDATED_AT, "Updated at"),
+      header: () => sortableHeader(ITEM_SORTS.UPDATED_AT, t("items.columnUpdatedAt")),
       cell: (info) => <ItemDate value={info.getValue()} />,
     }),
     columnHelper.accessor("mediaFile", {
-      header: "Media",
+      header: t("items.columnMedia"),
       cell: ({row}) => <MediaCell row={row.original} />,
     }),
     columnHelper.display({
       id: "actions",
-      header: "Actions",
+      header: t("items.columnActions"),
       cell: ({row}) => {
         const item = row.original;
         return (
@@ -433,7 +438,7 @@ export function ItemListTable({
               href={ADMIN_URLS.editItem(item.id)}
             >
               <PencilIcon aria-hidden="true" />
-              Edit this item
+              {t("items.editThisItem")}
             </a>
           </div>
         );
@@ -497,7 +502,9 @@ export function ItemListTable({
               <tr>
                 <td className="px-5 py-12 text-center" colSpan={6}>
                   <div className="font-medium text-foreground">
-                    No {activeFilter === "all" ? "" : `${activeFilter} `}items yet.
+                    {activeFilter === "all"
+                      ? t("items.noItemsYetAll")
+                      : t("items.noItemsYetFiltered", {filter: activeFilter})}
                   </div>
                   <a
                     className={cn(
@@ -506,7 +513,7 @@ export function ItemListTable({
                     )}
                     href={ADMIN_URLS.newItem()}
                   >
-                    Add a new item
+                    {t("items.addNewItem")}
                   </a>
                 </td>
               </tr>
@@ -531,7 +538,7 @@ export function ItemListTable({
       </div>
       {(prevUrl || nextUrl) && (
         <nav
-          aria-label="Items pagination"
+          aria-label={t("items.paginationAria")}
           className="mt-6 flex items-center justify-center gap-2"
         >
           {prevUrl && (
@@ -545,7 +552,7 @@ export function ItemListTable({
               onClick={(event) => navigate(event, prevUrl)}
             >
               <ChevronLeftIcon aria-hidden="true" />
-              Previous
+              {t("items.previous")}
             </a>
           )}
           {nextUrl && (
@@ -558,7 +565,7 @@ export function ItemListTable({
               href={nextUrl}
               onClick={(event) => navigate(event, nextUrl)}
             >
-              Next
+              {t("items.next")}
               <ChevronRightIcon aria-hidden="true" />
             </a>
           )}
@@ -575,6 +582,7 @@ function collectionUrl(search: string, itemsPerPage: number): string {
 }
 
 export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
+  const {t} = useTranslation();
   const [search, setSearch] = useState(() =>
     typeof window === "undefined" ? "" : window.location.search
   );
@@ -582,7 +590,7 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
   const {data: listing, error, loading, retry} =
     useAdminCollection<AdminItemListResponse>(
       endpoint,
-      "Could not load items.",
+      t("items.loadFailed"),
     );
   const data = useMemo(
     () => tableRows(listing?.items ?? [], publicBucketUrl),
@@ -612,7 +620,7 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
 
   return (
     <AdminPageApp>
-      {!listing && !error && <AdminCollectionLoading label="Loading items" />}
+      {!listing && !error && <AdminCollectionLoading label={t("items.loading")} />}
       {!listing && error && (
         <AdminCollectionError message={error} retry={retry} />
       )}

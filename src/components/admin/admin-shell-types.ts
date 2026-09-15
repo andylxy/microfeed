@@ -74,13 +74,20 @@ export interface AdminWebhookSidebarData {
   pageUrls: Record<AdminWebhookPageId, string>;
 }
 
+/**
+ * English placeholder returned when a channel has no title yet. This module is
+ * also imported by the server-rendered admin shell, so it stays free of client
+ * i18n imports; renderers translate this value via `channel.untitled`.
+ */
+export const UNTITLED_CHANNEL_TITLE = "Untitled channel";
+
 export function adminChannelSummary(
   title: unknown,
   imageUrl?: string | null,
 ): AdminChannelSummary {
   const normalizedTitle = typeof title === "string" && title.trim()
     ? title.trim()
-    : "Untitled channel";
+    : UNTITLED_CHANNEL_TITLE;
   return {
     imageUrl: typeof imageUrl === "string" && imageUrl.trim()
       ? imageUrl.trim()

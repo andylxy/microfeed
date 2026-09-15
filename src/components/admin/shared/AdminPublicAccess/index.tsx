@@ -1,3 +1,5 @@
+import {useTranslation} from "@/client/i18n";
+import i18n from "@/client/i18n";
 import {useId} from "react";
 import {BracesIcon, GlobeIcon, RssIcon} from "lucide-react";
 
@@ -15,45 +17,43 @@ export function publicAccessItems(links: AdminPublicLinks) {
   return [
     {
       icon: GlobeIcon,
-      label: "web feed",
+      label: i18n.t("shared.feedWeb"),
       url: links.website,
-      summary: "Share this web link to your audience via social media / email.",
+      summary: i18n.t("shared.webFeedSummary"),
       details: (<div className="grid grid-cols-1 gap-4 py-2">
         <div>
-          You can customize the styling and add shared website code in <a href={ADMIN_URLS.settings()}>Settings / Website appearance &amp; code</a>.
+          {i18n.t("shared.webDetailStylingPrefix")}<a href={ADMIN_URLS.settings()}>{i18n.t("shared.linkWebsiteAppearance")}</a>.
         </div>
         <div>
-          You can disable the entire website in <a href={ADMIN_URLS.settings()}>Settings / Access control</a>.
+          {i18n.t("shared.webDetailAccessPrefix")}<a href={ADMIN_URLS.settings()}>{i18n.t("shared.linkAccessControl")}</a>.
         </div>
       </div>),
     },
     {
       icon: RssIcon,
-      label: "rss feed",
+      label: i18n.t("shared.feedRss"),
       url: links.rss,
-      summary: "Submit this rss link to podcast apps / websites.",
+      summary: i18n.t("shared.rssFeedSummary"),
       details: (<div className="grid grid-cols-1 gap-4 py-2">
         <div>
-          The schema of this rss feed is following the <a href="https://help.apple.com/itc/podcasts_connect/#/itcb54353390">Apple Podcasts rss spec</a>.
+          {i18n.t("shared.rssDetailSpecPrefix")}<a href="https://help.apple.com/itc/podcasts_connect/#/itcb54353390">{i18n.t("shared.applePodcastsSpec")}</a>.
         </div>
         <div>
-          You can disable the rss feed in <a href={ADMIN_URLS.settings()}>Settings / Subscribe Methods</a>.
+          {i18n.t("shared.rssDetailDisablePrefix")}<a href={ADMIN_URLS.settings()}>{i18n.t("shared.linkSubscribeMethods")}</a>.
         </div>
       </div>),
     },
     {
       icon: BracesIcon,
-      label: "json feed",
+      label: i18n.t("shared.feedJson"),
       url: links.json,
-      summary: "Write code to fetch structured data and set up automation.",
+      summary: i18n.t("shared.jsonFeedSummary"),
       details: (<div className="grid grid-cols-1 gap-4 py-2">
         <div>
-          The schema of this json feed is following the <a href="https://www.jsonfeed.org/">
-          jsonfeed.org</a> spec. See the generated schema and examples in <a href={ADMIN_URLS.apiExplorer()}>
-          API Explorer</a>.
+          {i18n.t("shared.jsonDetailSpecPrefix")}<a href="https://www.jsonfeed.org/">{i18n.t("shared.jsonfeedOrg")}</a>{i18n.t("shared.jsonDetailSpecMid")}<a href={ADMIN_URLS.apiExplorer()}>{i18n.t("shared.apiExplorer")}</a>.
         </div>
         <div>
-          You can disable the json feed in <a href={ADMIN_URLS.settings()}>Settings / Subscribe methods</a>.
+          {i18n.t("shared.jsonDetailDisablePrefix")}<a href={ADMIN_URLS.settings()}>{i18n.t("shared.linkSubscribeMethods")}</a>.
         </div>
       </div>),
     },
@@ -61,6 +61,7 @@ export function publicAccessItems(links: AdminPublicLinks) {
 }
 
 export default function AdminPublicAccess({className, links}: Props) {
+  const {t} = useTranslation();
   const titleId = useId();
   const items = publicAccessItems(links);
 
@@ -73,7 +74,7 @@ export default function AdminPublicAccess({className, links}: Props) {
       )}
     >
       <h2 className="mb-4 text-lg font-semibold tracking-tight" id={titleId}>
-        Public access
+        {t("shared.publicAccess")}
       </h2>
       <div className="mt-8 grid grid-cols-1 gap-8">
         {items.map(({details, icon: Icon, label, summary, url}) => (

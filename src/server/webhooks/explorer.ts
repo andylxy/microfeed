@@ -39,7 +39,7 @@ export interface WebhookExplorerSelection {
 
 function eventType(value: unknown): WebhookEventType {
   if (typeof value !== "string" || !WEBHOOK_EVENT_TYPE_SET.has(value)) {
-    throw new WebhookRequestError("Choose a supported webhook event.");
+    throw new WebhookRequestError("errors.webhook.chooseEvent");
   }
   return value as WebhookEventType;
 }
@@ -49,7 +49,7 @@ export function parseWebhookExplorerSelection(
 ): WebhookExplorerSelection {
   const sourceMode = input.source_mode;
   if (sourceMode !== "generated" && sourceMode !== "current") {
-    throw new WebhookRequestError("Choose generated example or current content.");
+    throw new WebhookRequestError("errors.webhook.chooseExampleOrCurrent");
   }
   const subjectId = typeof input.subject_id === "string"
     ? input.subject_id.trim()
@@ -155,7 +155,7 @@ async function currentSnapshot(
   const subjectId = selection.subjectId;
   if (definition.sourceKind === "webhook") {
     throw new WebhookRequestError(
-      "webhook.test uses its generated connection-test snapshot.",
+      "errors.webhook.testUsesSnapshot",
     );
   }
   if (definition.sourceKind === "channel") {
@@ -165,13 +165,13 @@ async function currentSnapshot(
       LIMIT 1
     `).bind(STATUSES.PUBLISHED).first<{data: string; id: string}>();
     if (!row) {
-      throw new WebhookRequestError("The primary channel was not found.");
+      throw new WebhookRequestError("errors.webhook.channelNotFound");
     }
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(row.data) as Record<string, unknown>;
     } catch {
-      throw new WebhookRequestError("The primary channel snapshot is invalid.");
+      throw new WebhookRequestError("errors.webhook.channelSnapshotInvalid");
     }
     return webhookChannelSnapshot({id: row.id, ...data});
   }
@@ -187,32 +187,32 @@ async function currentSnapshot(
     };
   }
   if (!subjectId) {
-    throw new WebhookRequestError("Choose current content for this event.");
+    throw new WebhookRequestError("errors.webhook.chooseCurrentContent");
   }
   if (definition.sourceKind === "item") {
     const item = await new FeedDb(runtimeEnv, request).getItemById(subjectId);
     if (!item || Number(item.status) === STATUSES.DELETED) {
-      throw new WebhookRequestError("The selected item was not found.");
+      throw new WebhookRequestError("errors.webhook.selectedItemNotFound");
     }
     return webhookItemSnapshot(item as Record<string, unknown>);
   }
   if (definition.sourceKind === "page") {
     const page = await getPageById(runtimeEnv.FEED_DB, request, subjectId);
-    if (!page) throw new WebhookRequestError("The selected Page was not found.");
+    if (!page) throw new WebhookRequestError("errors.page.selectedNotFound");
     return webhookPageSnapshot(page as unknown as Record<string, unknown>);
   }
   if (definition.sourceKind === "site_file") {
     const file = await getSiteFileById(runtimeEnv.FEED_DB, request, subjectId);
     if (!file) {
-      throw new WebhookRequestError("The selected Site File was not found.");
+      throw new WebhookRequestError("errors.siteFile.selectedNotFound");
     }
     if (selection.eventType === "site_file.reset" && !file.generator) {
-      throw new WebhookRequestError("Only a built-in Site File can be reset.");
+      throw new WebhookRequestError("errors.siteFile.resetBuiltInOnly");
     }
     return webhookSiteFileSnapshot(file as unknown as Record<string, unknown>);
   }
   const theme = await new ThemeStore(runtimeEnv.FEED_DB).getVersion(subjectId);
-  if (!theme) throw new WebhookRequestError("The selected theme was not found.");
+  if (!theme) throw new WebhookRequestError("errors.theme.selectedNotFound");
   return webhookThemeSnapshot(theme as unknown as Record<string, unknown>);
 }
 
@@ -372,7 +372,7 @@ export async function printWebhookExplorerEvent(
 ): Promise<WebhookExplorerPreview> {
   if (!isLocalDevelopmentHostname(new URL(request.url).hostname)) {
     throw new WebhookRequestError(
-      "Printing webhook previews is available only from a loopback-hosted Admin session.",
+      "errors.webhook.printLoopbackOnly",
     );
   }
   const preview = await previewWebhookExplorerEvent(runtimeEnv, request, selection);
@@ -389,7 +389,7 @@ export async function sendWebhookExplorerEvent(
   selection: WebhookExplorerSelection,
   endpointId: string,
 ) {
-  if (!endpointId) throw new WebhookRequestError("Choose a webhook endpoint.");
+  if (!endpointId) throw new WebhookRequestError("errors.webhook.chooseEndpoint");
   const eventInput = await webhookExplorerEventInput(
     runtimeEnv,
     request,

@@ -7,15 +7,13 @@ import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {activeThemeSupportsPages} from "@/server/pages/service";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
 ---

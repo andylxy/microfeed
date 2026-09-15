@@ -6,7 +6,7 @@ import ThemeDraftEditorApp from "@/components/admin/themes/ThemeDraftEditorApp";
 import type {ThemeEditorLinks} from "@/components/admin/code-editor/ThemeBundleEditor";
 import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {getFetchItemsParams} from "@/server/feed/FeedDb";
 import {activeThemeSupportsPages, listPages} from "@/server/pages/service";
@@ -15,11 +15,9 @@ import type {PublicFeed} from "@/types";
 import AdminShell from "../../../../../../layouts/AdminShell.astro";
 
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 if (!feedContent || !feedDb || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 const draft = await new ThemeStore(env.FEED_DB).getDraft(
   Astro.params.draftId ?? "",

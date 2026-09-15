@@ -4,7 +4,7 @@ import type {APIRoute} from "astro";
 import FeedDb from "@/server/feed/FeedDb";
 import {scheduleBestEffortMediaDeletion} from "@/server/media/deletions";
 import {mediaBucket} from "@/server/media/storage";
-import {jsonResponse} from "../../../server/http";
+import {jsonResponse, localizedError} from "../../../server/http";
 import type {FeedContent} from "../../../types";
 import type {PublicCachePurger} from "@/server/cache/public-cache";
 import {STATUSES} from "@/shared/Constants";
@@ -30,7 +30,7 @@ export async function updateAdminFeed(
     | FeedContent
     | null;
   if (!updatedFeed || typeof updatedFeed !== "object") {
-    return jsonResponse({error: "Send a valid feed update."}, {status: 400});
+    return localizedError(request, "errors.feed.validUpdate", 400);
   }
   const webMcpInteraction = isWebMcpInteraction(request);
   const updatedItemId = updatedFeed.item?.id;
@@ -38,15 +38,13 @@ export async function updateAdminFeed(
     webMcpInteraction &&
     (typeof updatedItemId !== "string" || !updatedItemId.trim())
   ) {
-    return jsonResponse({error: "Choose an Item draft to save."}, {status: 400});
+    return localizedError(request, "errors.feed.chooseDraft", 400);
   }
   if (webMcpInteraction && (
     !updatedFeed.item || updatedFeed.channel || updatedFeed.settings ||
     !isUnpublishedStatus(updatedFeed.item.status)
   )) {
-    return jsonResponse({
-      error: "WebMCP can save only an unpublished Item draft.",
-    }, {status: 409});
+    return localizedError(request, "errors.feed.webmcpUnpublishedOnly", 409);
   }
   const deleteImageUrls = Array.isArray(updatedFeed.deleteImageUrls)
     ? updatedFeed.deleteImageUrls
@@ -60,9 +58,7 @@ export async function updateAdminFeed(
     webMcpInteraction && beforeItem &&
     !isUnpublishedStatus(beforeItem.status)
   ) {
-    return jsonResponse({
-      error: "WebMCP cannot change an Item that is no longer unpublished.",
-    }, {status: 409});
+    return localizedError(request, "errors.feed.webmcpNoLongerUnpublished", 409);
   }
   await database.putContent(updatedFeed, async (statements) => {
     const events = [];

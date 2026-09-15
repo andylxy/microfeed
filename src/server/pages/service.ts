@@ -3,6 +3,7 @@ import {
   ITEM_STATUSES_STRINGS_DICT,
   STATUSES,
 } from "@/shared/Constants";
+import {AppError} from "@/shared/errors";
 import {
   DEFAULT_NOT_FOUND_PAGE_SLUG,
   isNotFoundPageSlug,
@@ -51,8 +52,10 @@ export interface ResolvedPagePath {
   redirect: boolean;
 }
 
-export class PageConflictError extends Error {}
-export class PageRequestError extends Error {}
+// Extends AppError so the localized 409 in the AJAX handlers can translate it;
+// a plain Error would surface the raw i18n key.
+export class PageConflictError extends AppError {}
+export class PageRequestError extends AppError {}
 export class PageThemeUnsupportedError extends Error {}
 
 interface PageRow extends Record<string, unknown> {
@@ -124,7 +127,7 @@ function decodeCursor(value: string): {id: string; updatedAt: string} {
     }
     return {id: cursor.id, updatedAt: cursor.updatedAt};
   } catch {
-    throw new PageRequestError("Invalid next_cursor.");
+    throw new PageRequestError("errors.page.invalidNextCursor");
   }
 }
 
@@ -190,7 +193,7 @@ async function assertSlugAvailable(
     "SELECT page_id FROM page_paths WHERE slug = ? COLLATE NOCASE LIMIT 1",
   ).bind(slug).first<{page_id: string}>();
   if (row && row.page_id !== pageId) {
-    throw new PageConflictError(`The path /${slug}/ is already reserved.`);
+    throw new PageConflictError("errors.page.pathReserved", 409, {slug});
   }
 }
 
@@ -341,13 +344,13 @@ export async function createPage(
   } = {},
 ): Promise<PageRecord> {
   const title = String(input.title ?? "").trim();
-  if (!title) throw new PageRequestError("A Page title is required.");
+  if (!title) throw new PageRequestError("errors.page.titleRequired");
   const slug = validatedSlug(input.slug ?? "", options.adminPath);
   await assertSlugAvailable(database.FEED_DB, slug);
   const status = statusValue(input.status, STATUSES.UNPUBLISHED);
   if (isPublicStatus(status) && !await activeThemeSupportsPages(database.FEED_DB)) {
     throw new PageThemeUnsupportedError(
-      "Activate a format v2 theme before publishing a Page.",
+      "errors.page.formatV2Required",
     );
   }
   const id = options.id ?? randomShortUUID();
@@ -360,7 +363,7 @@ export async function createPage(
   const navigationLabel = String(input.navigation_label ?? "").trim();
   if (showInNavigation && !navigationLabel) {
     throw new PageRequestError(
-      "Enter a navigation label, or turn off Show in navigation.",
+      "errors.page.navigationLabelRequired",
     );
   }
   const nextOrder = showInNavigation
@@ -412,7 +415,7 @@ export async function createPage(
     ], page, options.commit);
   } catch (error) {
     if (String(error).toLocaleLowerCase().includes("unique")) {
-      throw new PageConflictError(`The path /${slug}/ is already reserved.`);
+      throw new PageConflictError("errors.page.pathReserved", 409, {slug});
     }
     throw error;
   }
@@ -438,28 +441,22 @@ export async function updatePage(
   const title = input.title === undefined
     ? existingRow.title
     : String(input.title).trim();
-  if (!title) throw new PageRequestError("A Page title is required.");
+  if (!title) throw new PageRequestError("errors.page.titleRequired");
   const notFoundPage = isNotFoundPageSlug(existingRow.slug);
   if (
     notFoundPage && input.slug !== undefined &&
     !isNotFoundPageSlug(input.slug)
   ) {
-    throw new PageRequestError(
-      "The default 404 Page always uses the /404/ path.",
-    );
+    throw new PageRequestError("errors.page.default404Path");
   }
   if (
     notFoundPage && input.status !== undefined &&
     statusValue(input.status, existingRow.status) !== STATUSES.PUBLISHED
   ) {
-    throw new PageRequestError(
-      "The default 404 Page is always published.",
-    );
+    throw new PageRequestError("errors.page.default404Published");
   }
   if (notFoundPage && input.show_in_navigation === true) {
-    throw new PageRequestError(
-      "The default 404 Page cannot be shown in navigation.",
-    );
+    throw new PageRequestError("errors.page.default404Navigation");
   }
   const slug = notFoundPage
     ? DEFAULT_NOT_FOUND_PAGE_SLUG
@@ -474,7 +471,7 @@ export async function updatePage(
   const becomingPublic = isPublicStatus(status) && !isPublicStatus(existingRow.status);
   if (becomingPublic && !await activeThemeSupportsPages(database.FEED_DB)) {
     throw new PageThemeUnsupportedError(
-      "Activate a format v2 theme before publishing a Page.",
+      "errors.page.formatV2Required",
     );
   }
   const now = new Date().toISOString();
@@ -499,7 +496,7 @@ export async function updatePage(
     : input.navigation_label.trim();
   if (showInNavigation && !navigationLabel) {
     throw new PageRequestError(
-      "Enter a navigation label, or turn off Show in navigation.",
+      "errors.page.navigationLabelRequired",
     );
   }
   const navigationOrder = notFoundPage
@@ -568,7 +565,7 @@ export async function updatePage(
     );
   } catch (error) {
     if (String(error).toLocaleLowerCase().includes("unique")) {
-      throw new PageConflictError(`The path /${slug}/ is already reserved.`);
+      throw new PageConflictError("errors.page.pathReserved", 409, {slug});
     }
     throw error;
   }
@@ -582,7 +579,7 @@ export async function reorderPageNavigation(
   commit?: DatabaseMutationCommit<string[]>,
 ): Promise<void> {
   if (new Set(pageIds).size !== pageIds.length) {
-    throw new PageRequestError("Each navigation Page can appear only once.");
+    throw new PageRequestError("errors.page.navigationDuplicate");
   }
   const result = await database.FEED_DB.prepare(`
     SELECT id FROM pages
@@ -598,7 +595,7 @@ export async function reorderPageNavigation(
     currentIds.some((id) => !requestedIds.has(id))
   ) {
     throw new PageConflictError(
-      "Page navigation changed. Refresh the Pages screen and try again.",
+      "errors.page.navigationChanged",
     );
   }
   if (pageIds.length === 0) return;
@@ -627,7 +624,7 @@ export async function deletePage(
     "SELECT slug FROM pages WHERE id = ? AND status != ? LIMIT 1",
   ).bind(id, STATUSES.DELETED).first() as {slug: string} | null;
   if (existing && isNotFoundPageSlug(existing.slug)) {
-    throw new PageRequestError("The default 404 Page cannot be deleted.");
+    throw new PageRequestError("errors.page.default404CannotDelete");
   }
   if (!existing) return false;
   const statement = database.FEED_DB.prepare(

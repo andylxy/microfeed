@@ -1,6 +1,7 @@
 import React from 'react';
+import i18n from '@/client/i18n';
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
-import {ADMIN_URLS, PUBLIC_URLS, escapeHtml} from '@/shared/StringUtils';
+import {ADMIN_URLS, PUBLIC_URLS} from '@/shared/StringUtils';
 import {showToast} from '@/client/ToastUtils';
 import Requests from '@/client/requests';
 import ExternalLink from '@/components/admin/shared/ExternalLink';
@@ -25,31 +26,22 @@ interface SharedCodeFileDetails {
 
 const CODE_FILES_DICT: Record<SharedCodeFile, SharedCodeFileDetails> = {
   webHeader: {
-    name: 'Web Header',
+    name: i18n.t('codeEditor.sharedWebHeader'),
     language: 'html',
     viewUrl: () => PUBLIC_URLS.webFeed(),
-    description: (<div>
-      The code is inserted right before the <span
-        dangerouslySetInnerHTML={{__html: escapeHtml('</head>')}} /> tag. You can put custom CSS or JavaScript code here.
-    </div>),
+    description: (<div>{i18n.t('codeEditor.sharedHeaderDesc')}</div>),
   },
   webBodyStart: {
-    name: 'Web Body Start',
+    name: i18n.t('codeEditor.sharedWebBodyStart'),
     language: 'html',
     viewUrl: () => PUBLIC_URLS.webFeed(),
-    description: (<div>
-      The code is inserted right after the <span
-        dangerouslySetInnerHTML={{__html: escapeHtml('<body>')}} /> tag. You can put navigation menus or branding here.
-    </div>),
+    description: (<div>{i18n.t('codeEditor.sharedBodyStartDesc')}</div>),
   },
   webBodyEnd: {
-    name: 'Web Body End',
+    name: i18n.t('codeEditor.sharedWebBodyEnd'),
     language: 'html',
     viewUrl: () => PUBLIC_URLS.webFeed(),
-    description: (<div>
-      The code is inserted right before the <span
-        dangerouslySetInnerHTML={{__html: escapeHtml('</body>')}} /> tag. You can put links, a footer, or copyright here.
-    </div>),
+    description: (<div>{i18n.t('codeEditor.sharedBodyEndDesc')}</div>),
   },
 };
 
@@ -208,14 +200,14 @@ export default class CustomCodeEditorApp extends React.Component<Props, State> {
         [SETTINGS_CATEGORIES.CUSTOM_CODE]: settings[SETTINGS_CATEGORIES.CUSTOM_CODE],
       }}).then(() => {
         this.setState({submitStatus: null, changed: false}, () => {
-          showToast('Updated!', 'success');
+          showToast(i18n.t('codeEditor.updated'), 'success');
         });
       }).catch((error: any) => {
         this.setState({submitStatus: null}, () => {
           if (!error.response) {
-            showToast('Network error. Please refresh the page and try again.', 'error');
+            showToast(i18n.t('codeEditor.networkError'), 'error');
           } else {
-            showToast('Failed. Please try again.', 'error');
+            showToast(i18n.t('codeEditor.failed'), 'error');
           }
         });
       });
@@ -223,6 +215,7 @@ export default class CustomCodeEditorApp extends React.Component<Props, State> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {codeFile, submitStatus, changed} = this.state;
     const code = this.codeValue(codeFile);
     const codeBundle = CODE_FILES_DICT[codeFile];
@@ -258,19 +251,19 @@ export default class CustomCodeEditorApp extends React.Component<Props, State> {
                 size="lg"
                 disabled={submitting || !changed}
               >
-                {submitting ? 'Updating...' : 'Update'}
+                {submitting ? t('codeEditor.updating') : t('codeEditor.update')}
               </Button>
             </div>
             <div className="flex flex-col items-center rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-              <ExternalLink url={viewUrl} text="View live page" />
+              <ExternalLink url={viewUrl} text={t('codeEditor.viewLivePage')} />
               <div className="break-all text-center text-xs text-muted-foreground">{viewUrl}</div>
             </div>
             <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-              <div className="mb-2 text-sm font-semibold">Pro-tips:</div>
+              <div className="mb-2 text-sm font-semibold">{t('codeEditor.proTips')}</div>
               <ul className="text-xs text-muted-foreground">
-                <li className="mb-2">Shared code wraps every installed theme.</li>
-                <li className="mb-2">Save here only changes the three shared HTML slots.</li>
-                <li>Manage page templates and RSS styling in Settings → Themes.</li>
+                <li className="mb-2">{t('codeEditor.tipWraps')}</li>
+                <li className="mb-2">{t('codeEditor.tipThreeSlots')}</li>
+                <li>{t('codeEditor.tipThemes')}</li>
               </ul>
             </div>
           </div>

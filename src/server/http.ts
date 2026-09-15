@@ -1,3 +1,7 @@
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {AppError} from "@/shared/errors";
+
 export function jsonResponse(
   data: unknown,
   init: ResponseInit = {},
@@ -7,4 +11,92 @@ export function jsonResponse(
     headers.set("content-type", "application/json;charset=UTF-8");
   }
   return new Response(JSON.stringify(data), {...init, headers});
+}
+
+/**
+ * Localized JSON error response for admin AJAX endpoints. Resolves the admin
+ * language from the request (explicit preference cookie first, then
+ * Accept-Language — same mechanism the Astro admin pages use) and translates
+ * the given key.
+ */
+export function localizedError(
+  request: Request,
+  key: string,
+  status = 400,
+  params?: Record<string, string>,
+  init: ResponseInit = {},
+): Response {
+  const language = adminLanguageFromRequest(request);
+  return jsonResponse(
+    {error: translate(key, language, params)},
+    {...init, status},
+  );
+}
+
+/**
+ * Renders an {@link AppError} as a localized JSON error response. Use this in
+ * AJAX/API catch blocks before falling back to a generic 500 so domain errors
+ * keep their translated message instead of leaking the i18n key.
+ */
+export function appErrorResponse(request: Request, error: AppError): Response {
+  return localizedError(request, error.i18nKey, error.status, error.params);
+}
+
+/**
+ * Render a service-layer error at a caller-decided status. Domain errors
+ * ({@link AppError}) contribute their own message; anything else falls back to
+ * its message so no i18n key ever reaches the client.
+ */
+export function localizedServiceError(
+  error: unknown,
+  status: number,
+  request?: Request,
+): Response {
+  if (error instanceof AppError && request) {
+    return localizedError(request, error.i18nKey, status, error.params);
+  }
+  return jsonResponse({
+    error: error instanceof Error ? error.message : String(error),
+  }, {status});
+}
+
+/**
+ * Plain-text counterpart of {@link localizedError}: same language lookup, but
+ * the body is the translated string rather than a JSON object.
+ * Use it wherever the original response was a plain-text `new Response(...)`
+ * so localizing the message does not change the response format.
+ */
+export function localizedTextError(
+  request: Request,
+  key: string,
+  status = 400,
+  params?: Record<string, string>,
+  init: ResponseInit = {},
+): Response {
+  return new Response(
+    translate(
+      key,
+      adminLanguageFromRequest(request),
+      params,
+    ),
+    {...init, status},
+  );
+}
+
+/**
+ * Localized plain-text 404 response for public routes. The body is translated
+ * with the request's language; the status and reason phrase stay the
+ * conventional `404` / `Not Found` so clients are unaffected.
+ */
+export function notFoundResponse(
+  request?: Request,
+  init: ResponseInit = {},
+): Response {
+  return new Response(
+    translate(
+      "errors.general.notFound",
+      adminLanguageFromRequest(request),
+    ),
+    {...init, status: 404},
+  );
 }

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {useState} from "react";
 
+import {formatAdminDate} from "@/client/admin-date-format";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {Button} from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import {
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {showToast} from "@/client/ToastUtils";
+import i18n, {useTranslation} from "@/client/i18n";
 import {
   API_KEY_SCOPES,
   type ApiAccessSettings,
@@ -48,7 +50,7 @@ interface Props {
 async function responseJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({})) as T & {error?: string};
   if (!response.ok) {
-    throw new Error(body.error ?? "The request failed.");
+    throw new Error(body.error ?? i18n.t("api.requestFailed"));
   }
   return body;
 }
@@ -67,6 +69,7 @@ export default function ApiAuthenticationApp({
   initialApiKeys,
   initialSettings,
 }: Props) {
+  const {t} = useTranslation();
   const [apiKeys, setApiKeys] = useState(initialApiKeys);
   const [settings, setSettings] = useState(initialSettings);
   const [createOpen, setCreateOpen] = useState(false);
@@ -99,9 +102,9 @@ export default function ApiAuthenticationApp({
       setSettings(result.settings);
       setRevealed((current) => new Set(current).add(result.apiKey.id));
       setCreateOpen(false);
-      showToast("API key created.", "success");
+      showToast(t("api.keyCreated"), "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to create API key.", "error");
+      showToast(error instanceof Error ? error.message : t("api.keyCreateFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -114,7 +117,7 @@ export default function ApiAuthenticationApp({
   };
 
   const rename = async (apiKey: ApiKeyRecord) => {
-    const nextName = window.prompt("Name this API key", apiKey.name)?.trim();
+    const nextName = window.prompt(t("api.nameThisApiKey"), apiKey.name)?.trim();
     if (!nextName || nextName === apiKey.name) return;
     try {
       const result = await responseJson<{apiKey: ApiKeyRecord}>(
@@ -125,46 +128,42 @@ export default function ApiAuthenticationApp({
         }),
       );
       replaceApiKey(result.apiKey);
-      showToast("API key renamed.", "success");
+      showToast(t("api.keyRenamed"), "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to rename API key.", "error");
+      showToast(error instanceof Error ? error.message : t("api.keyRenameFailed"), "error");
     }
   };
 
   const rotate = async (apiKey: ApiKeyRecord) => {
-    if (!window.confirm(
-      `Rotate “${apiKey.name}”? Existing integrations using this API key will stop working immediately.`,
-    )) return;
+    if (!window.confirm(t("api.rotateConfirm", {name: apiKey.name}))) return;
     try {
       const result = await responseJson<{apiKey: ApiKeyRecord}>(
         await fetch(ADMIN_URLS.ajaxRotateApiKey(apiKey.id), {method: "POST"}),
       );
       replaceApiKey(result.apiKey);
       setRevealed((current) => new Set(current).add(apiKey.id));
-      showToast("API key rotated.", "success");
+      showToast(t("api.keyRotated"), "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to rotate API key.", "error");
+      showToast(error instanceof Error ? error.message : t("api.keyRotateFailed"), "error");
     }
   };
 
   const revoke = async (apiKey: ApiKeyRecord) => {
-    if (!window.confirm(
-      `Revoke “${apiKey.name}”? This cannot be undone and integrations using it will stop working immediately.`,
-    )) return;
+    if (!window.confirm(t("api.revokeConfirm", {name: apiKey.name}))) return;
     try {
       await responseJson<Record<string, never>>(
         await fetch(ADMIN_URLS.ajaxApiKey(apiKey.id), {method: "DELETE"}),
       );
       setApiKeys((current) => current.filter(({id}) => id !== apiKey.id));
-      showToast("API key revoked.", "success");
+      showToast(t("api.keyRevoked"), "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to revoke API key.", "error");
+      showToast(error instanceof Error ? error.message : t("api.keyRevokeFailed"), "error");
     }
   };
 
   const copy = async (apiKey: string) => {
     await navigator.clipboard.writeText(apiKey);
-    showToast("API key copied.", "success");
+    showToast(t("api.keyCopied"), "success");
   };
 
   return (
@@ -173,15 +172,14 @@ export default function ApiAuthenticationApp({
         <CardHeader className="border-b">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <CardTitle>API keys</CardTitle>
+              <CardTitle>{t("api.apiKeys")}</CardTitle>
               <CardDescription className="mt-1">
-                Use a separate named API key for each integration so it can be
-                rotated or revoked independently.
+                {t("api.apiKeysDescription")}
               </CardDescription>
             </div>
             <Button onClick={openCreate} type="button">
               <PlusIcon aria-hidden="true" />
-              Create API key
+              {t("api.createApiKey")}
             </Button>
           </div>
         </CardHeader>
@@ -202,7 +200,7 @@ export default function ApiAuthenticationApp({
                           {visible ? apiKey.apiKey : maskedApiKey(apiKey.apiKey)}
                         </code>
                         <Button
-                          aria-label={visible ? "Hide API key" : "Reveal API key"}
+                          aria-label={visible ? t("api.hideApiKey") : t("api.revealApiKey")}
                           onClick={() => setRevealed((current) => {
                             const next = new Set(current);
                             if (next.has(apiKey.id)) next.delete(apiKey.id);
@@ -215,19 +213,19 @@ export default function ApiAuthenticationApp({
                         >
                           {visible ? <EyeOffIcon /> : <EyeIcon />}
                         </Button>
-                        <Button aria-label="Copy API key" onClick={() => copy(apiKey.apiKey)} size="icon-sm" type="button" variant="ghost">
+                        <Button aria-label={t("api.copyApiKey")} onClick={() => copy(apiKey.apiKey)} size="icon-sm" type="button" variant="ghost">
                           <CopyIcon />
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {apiKey.scopes.includes("content:write") ? "Read and write" : "Read only"}
-                        {" · "}Created {new Date(apiKey.createdAtMs).toLocaleString()}
+                        {apiKey.scopes.includes("content:write") ? t("api.readAndWrite") : t("api.readOnly")}
+                        {" · "}{t("api.created")} {formatAdminDate(apiKey.createdAtMs)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button onClick={() => rename(apiKey)} size="sm" type="button" variant="outline"><PencilIcon />Rename</Button>
-                      <Button onClick={() => rotate(apiKey)} size="sm" type="button" variant="outline"><RefreshCwIcon />Rotate</Button>
-                      <Button className="text-destructive hover:text-destructive" onClick={() => revoke(apiKey)} size="sm" type="button" variant="outline"><Trash2Icon />Revoke</Button>
+                      <Button onClick={() => rename(apiKey)} size="sm" type="button" variant="outline"><PencilIcon />{t("api.rename")}</Button>
+                      <Button onClick={() => rotate(apiKey)} size="sm" type="button" variant="outline"><RefreshCwIcon />{t("api.rotate")}</Button>
+                      <Button className="text-destructive hover:text-destructive" onClick={() => revoke(apiKey)} size="sm" type="button" variant="outline"><Trash2Icon />{t("api.revoke")}</Button>
                     </div>
                   </li>
                 );
@@ -236,8 +234,8 @@ export default function ApiAuthenticationApp({
           ) : (
             <div className="p-10 text-center">
               <KeyRoundIcon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-              <p className="mt-3 font-medium">No API keys yet.</p>
-              <p className="mt-1 text-sm text-muted-foreground">Create one to connect an integration or use API Explorer.</p>
+              <p className="mt-3 font-medium">{t("api.noApiKeysYet")}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("api.noApiKeysYetDescription")}</p>
             </div>
           )}
         </CardContent>
@@ -246,20 +244,20 @@ export default function ApiAuthenticationApp({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create API key</DialogTitle>
+            <DialogTitle>{t("api.createApiKey")}</DialogTitle>
             <DialogDescription>
-              Give this API key a name that identifies the integration using it.
+              {t("api.createApiKeyDescription")}
             </DialogDescription>
           </DialogHeader>
           <div>
-            <Label htmlFor="api-key-name">Name</Label>
+            <Label htmlFor="api-key-name">{t("api.name")}</Label>
             <Input
               aria-describedby="api-key-name-examples"
               autoFocus
               className="mt-2"
               id="api-key-name"
               maxLength={80}
-              placeholder="e.g. Publishing automation"
+              placeholder={t("api.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
@@ -267,12 +265,11 @@ export default function ApiAuthenticationApp({
               className="mt-2 text-xs text-muted-foreground"
               id="api-key-name-examples"
             >
-              Examples: publishing automation, an AI coding agent, a mobile
-              app, or content backup.
+              {t("api.examples")}
             </p>
           </div>
           <fieldset>
-            <legend className="text-sm font-medium">Permissions</legend>
+            <legend className="text-sm font-medium">{t("api.permissions")}</legend>
             <div className="mt-2 grid gap-2 rounded-lg border p-3">
               {API_KEY_SCOPES.map((scope) => (
                 <label className="flex items-start gap-3" key={scope}>
@@ -288,12 +285,12 @@ export default function ApiAuthenticationApp({
                   />
                   <span>
                     <span className="block text-sm font-medium">
-                      {scope === "content:read" ? "Read content" : "Write content"}
+                      {scope === "content:read" ? t("api.readContent") : t("api.writeContent")}
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       {scope === "content:read"
-                        ? "Read feeds, items, Pages, Site Files, and search."
-                        : "Create, update, publish, and delete content and prepare uploads."}
+                        ? t("api.readContentDescription")
+                        : t("api.writeContentDescription")}
                     </span>
                   </span>
                 </label>
@@ -301,7 +298,7 @@ export default function ApiAuthenticationApp({
             </div>
             {!scopes.length && (
               <p className="mt-2 text-xs text-destructive">
-                Choose at least one permission.
+                {t("api.chooseAtLeastOnePermission")}
               </p>
             )}
           </fieldset>
@@ -311,14 +308,14 @@ export default function ApiAuthenticationApp({
                 <AdminSwitch
                   checked={createSettings.enabled}
                   disabled={saving}
-                  label="Enable API access"
+                  label={t("api.enableApiAccess")}
                   onCheckedChange={(enabled) => setCreateSettings((current) =>
                     updateApiAccessEnabled(current, enabled)
                   )}
                 />
                 {!createSettings.enabled && (
                   <p className="mt-2 text-xs text-destructive">
-                    API access must be enabled before an API key can be created.
+                    {t("api.apiAccessMustBeEnabled")}
                   </p>
                 )}
               </div>
@@ -326,23 +323,24 @@ export default function ApiAuthenticationApp({
                 <AdminSwitch
                   checked={createSettings.publicDocsEnabled}
                   disabled={saving}
-                  label="Publish API docs"
+                  label={t("api.publishApiDocs")}
                   onCheckedChange={(publicDocsEnabled) =>
                     setCreateSettings((current) =>
                       ({...current, publicDocsEnabled})
                     )}
                 />
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Optional, but recommended for AI-agent workflows using
-                  {" "}<code>{API_BASE_PATH}llms-full.txt</code>.
+                  {t("api.publishApiDocsNote")}{" "}
+                  <code>{API_BASE_PATH}llms-full.txt</code>
+                  {"."}
                 </p>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button disabled={saving} onClick={() => setCreateOpen(false)} type="button" variant="outline">Cancel</Button>
+            <Button disabled={saving} onClick={() => setCreateOpen(false)} type="button" variant="outline">{t("api.cancel")}</Button>
             <Button disabled={saving || !createSettings.enabled || !name.trim() || !scopes.length} onClick={create} type="button">
-              Create API key
+              {t("api.createApiKey")}
             </Button>
           </DialogFooter>
         </DialogContent>

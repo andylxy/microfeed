@@ -4,16 +4,14 @@ import {env} from "cloudflare:workers";
 import SiteFileEditorApp from "@/components/admin/site-files/SiteFileEditorApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {getSiteFileById} from "@/server/site-files/service";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
-if (!feedContent || !onboardingResult) throw new Error("Admin feed context was not initialized.");
+if (!feedContent || !onboardingResult) throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 const file = Astro.params.siteFileId
   ? await getSiteFileById(env.FEED_DB, Astro.request, Astro.params.siteFileId)
   : null;
@@ -21,5 +19,5 @@ if (!file) Astro.response.status = 404;
 ---
 
 <AdminShell activeNavItem={NAV_ITEMS.SITE_FILES} documentTitle={file ? `${translate("pageMessage.editSiteFileTitle", adminLanguage, {filename: file.filename})} | microfeed.org` : translate("pageDocumentTitle.siteFileNotFound", adminLanguage)} {feedContent} {onboardingResult} pageTitle={file ? translate("pageMessage.editSiteFileTitle", adminLanguage, {filename: file.filename}) : translate("pageTitle.siteFileNotFound", adminLanguage)} breadcrumb={{kind: "back", name: translate("nav.item.site_files", adminLanguage), url: adminUrl("site-files", Astro.params.adminPath)}}>
-  {file ? <SiteFileEditorApp client:load file={file} /> : <section class="rounded-[14px] border bg-card p-5 shadow-xs"><h1 class="font-semibold">{translate("pageTitle.siteFileNotFound", adminLanguage)}</h1></section>}
+  {file ? <SiteFileEditorApp client:only="react" file={file} /> : <section class="rounded-[14px] border bg-card p-5 shadow-xs"><h1 class="font-semibold">{translate("pageTitle.siteFileNotFound", adminLanguage)}</h1></section>}
 </AdminShell>

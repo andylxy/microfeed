@@ -1,4 +1,5 @@
 import {CircleArrowRightIcon, CircleCheckIcon} from "lucide-react";
+import {useTranslation} from "@/client/i18n";
 import React, {useEffect, useState} from "react";
 
 import {showToast} from "@/client/ToastUtils";
@@ -57,7 +58,8 @@ interface AdminProtectionDescriptionProps extends AdminProtectionStatus {
 }
 
 function CloudflareAccessLink({dashboardUrl}: {dashboardUrl?: string}) {
-  const label = "Cloudflare Zero Trust Access";
+  const {t} = useTranslation();
+  const label = t('home.cloudflareZeroTrustAccess');
   return dashboardUrl
     ? (
       <a
@@ -77,12 +79,12 @@ export function AdminProtectionDescription({
   cloudflareAccess,
   dashboardUrl,
 }: AdminProtectionDescriptionProps) {
+  const {t} = useTranslation();
   if (builtInLogin && cloudflareAccess) {
     return (
       <>
-        Your dashboard is protected by the built-in email and password login.{" "}
-        <CloudflareAccessLink dashboardUrl={dashboardUrl} /> authentication was
-        also detected on this request, providing a second gate.
+        {t('home.protectionBuiltInBothBefore')}
+        <CloudflareAccessLink dashboardUrl={dashboardUrl} />{t('home.protectionBuiltInBothAfter')}
       </>
     );
   }
@@ -90,10 +92,9 @@ export function AdminProtectionDescription({
   if (builtInLogin) {
     return (
       <>
-        Your dashboard is protected by the built-in email and password login.{" "}
-        <CloudflareAccessLink dashboardUrl={dashboardUrl} /> was not detected
-        on this request. To add it as an optional second gate, run{" "}
-        <CloudflareValue>{managementCommand("access")}</CloudflareValue>.
+        {t('home.protectionBuiltInBothBefore')}
+        <CloudflareAccessLink dashboardUrl={dashboardUrl} />{t('home.protectionBuiltInOnlyAfter')}
+        <CloudflareValue>{managementCommand("access")}</CloudflareValue>{t('home.protectionBuiltInOnlyEnd')}
       </>
     );
   }
@@ -101,24 +102,17 @@ export function AdminProtectionDescription({
   if (cloudflareAccess) {
     return (
       <>
-        <CloudflareAccessLink dashboardUrl={dashboardUrl} /> authentication was
-        detected on this request. The built-in email and password login is
-        disabled.
+        <CloudflareAccessLink dashboardUrl={dashboardUrl} />{t('home.protectionCloudflareOnlyAfter')}
       </>
     );
   }
 
   return (
     <>
-      No dashboard protection was detected. The built-in email and password login
-      is disabled, and{" "}
-      <CloudflareAccessLink dashboardUrl={dashboardUrl} /> authentication was
-      not detected on this request. Anyone who can reach the admin dashboard
-      may be able to change your content. Run{" "}
-      <CloudflareValue>{managementCommand("auth setup")}</CloudflareValue> to
-      add a login or{" "}
-      <CloudflareValue>{managementCommand("access")}</CloudflareValue> to configure
-      Cloudflare Access.
+      {t('home.protectionNoneBefore')}
+      <CloudflareAccessLink dashboardUrl={dashboardUrl} />{t('home.protectionNoneAfter')}
+      <CloudflareValue>{managementCommand("auth setup")}</CloudflareValue>{t('home.protectionNoneMiddle')}
+      <CloudflareValue>{managementCommand("access")}</CloudflareValue>{t('home.protectionNoneEnd')}
     </>
   );
 }
@@ -135,6 +129,7 @@ export function SiteCustomDomainDescription({
   dashboardUrl,
   workerName,
 }: SiteCustomDomainDescriptionProps) {
+  const {t} = useTranslation();
   return (
     <>
       {dashboardUrl
@@ -146,23 +141,21 @@ export function SiteCustomDomainDescription({
               rel="noopener noreferrer"
               target="_blank"
             >
-              Open the{" "}
+              {t('home.customDomainWithDashboardBefore')}
               {workerName
                 ? <CloudflareValue>{workerName}</CloudflareValue>
-                : "Worker"}{" "}
-              domain settings
+                : t('home.workerFallback')}{" "}
+              {t('home.customDomainWithDashboardMid')}
             </a>{" "}
-            in Cloudflare to add a custom hostname.{" "}
+            {t('home.customDomainWithDashboardAfter')}
           </>
         )
         : (
           <>
-            Open this installation&apos;s Worker in Cloudflare and go to its
-            domain settings to add a custom hostname.{" "}
+            {t('home.customDomainWithoutDashboard')}
           </>
         )}
-      We recommend starting in the Cloudflare dashboard. You can also update
-      the custom domain with{" "}
+      {t('home.customDomainRecommend')}
       <CloudflareValue>{managementCommand("domain")}</CloudflareValue>.{" "}
       <a
         className="font-medium underline"
@@ -170,7 +163,7 @@ export function SiteCustomDomainDescription({
         rel="noopener noreferrer"
         target="_blank"
       >
-        Learn more about custom domains.
+        {t('home.customDomainLearnMore')}
       </a>
     </>
   );
@@ -199,6 +192,7 @@ export function MediaDeliveryDescription({
   saving,
   suggestedUrl,
 }: MediaDeliveryDescriptionProps) {
+  const {t} = useTranslation();
   const suggestion = suggestedUrl ?? "https://media.example.com/";
   const normalizedSuggestion = normalizeR2CustomDomainUrl(suggestion);
   const suggestedHostname = normalizedSuggestion
@@ -210,21 +204,16 @@ export function MediaDeliveryDescription({
       {configured
         ? (
           <p>
-            Uploaded images, audio, video, and documents are configured to use
-            this R2 custom domain.
+            {t('home.mediaDeliveryConfigured')}
           </p>
         )
         : (
           <p>
-            Uploaded images, audio, video, and documents are currently served
-            through the Cloudflare Worker. This works, but uncached requests can
-            be slower and can count toward both Worker and R2 billable usage.
+            {t('home.mediaDeliveryUnconfigured')}
           </p>
         )}
       <p>
-        Connecting a custom domain directly to this R2 bucket allows
-        Cloudflare to cache media closer to visitors. Media can load faster,
-        and fewer requests need to reach R2, which can lower future bills.
+        {t('home.mediaDeliveryBenefits')}
       </p>
       <ol className="list-decimal space-y-2 pl-5">
         <li>
@@ -236,35 +225,32 @@ export function MediaDeliveryDescription({
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open the{" "}
+                {t('home.mediaDeliveryStep1Before')}
                 {bucketName
                   ? <CloudflareValue>{bucketName}</CloudflareValue>
-                  : "R2"}{" "}
-                bucket domain settings
+                  : t('home.r2Fallback')}{" "}
+                {t('home.mediaDeliveryStep1Mid')}
               </a>
             )
             : (
               <span>
-                Open this installation&apos;s R2 bucket in the Cloudflare
-                dashboard, then open <strong>Settings</strong>.
+                {t('home.mediaDeliveryStep1Alt')}<strong>Settings</strong>.
               </span>
             )}
         </li>
         <li>
-          Under <strong>Custom Domains</strong>, connect a separate hostname
-          such as <CloudflareValue>{suggestedHostname}</CloudflareValue>, then
-          wait for its status to become Active.
+          {t('home.mediaDeliveryStep2Before')}<strong>Custom Domains</strong>{t('home.mediaDeliveryStep2After')}
+          <CloudflareValue>{suggestedHostname}</CloudflareValue>{t('home.mediaDeliveryStep2End')}
         </li>
-        <li>Copy that hostname into the field below and save it.</li>
+        <li>{t('home.mediaDeliveryStep3')}</li>
       </ol>
       <p>
-        Do not use the Public Development URL ending in{" "}
-        <CloudflareValue>r2.dev</CloudflareValue>. Cloudflare rate-limits that
-        URL and does not provide production edge caching on it.
+        {t('home.mediaDeliveryR2devBefore')}
+        <CloudflareValue>r2.dev</CloudflareValue>{t('home.mediaDeliveryR2devAfter')}
       </p>
       <form className="space-y-3" onSubmit={onSubmit}>
         <Field data-invalid={Boolean(error)}>
-          <FieldLabel htmlFor="r2-custom-domain">R2 custom domain</FieldLabel>
+          <FieldLabel htmlFor="r2-custom-domain">{t('home.mediaDeliveryFieldLabel')}</FieldLabel>
           <Input
             aria-describedby="r2-custom-domain-help"
             aria-invalid={Boolean(error)}
@@ -280,13 +266,12 @@ export function MediaDeliveryDescription({
             value={mediaDomainUrl}
           />
           <FieldDescription id="r2-custom-domain-help">
-            Use the complete HTTPS address. You can also paste just the
-            hostname; microfeed will add <code>https://</code>.
+            {t('home.mediaDeliveryFieldHelp')}<code>https://</code>.
           </FieldDescription>
           <FieldError>{error}</FieldError>
         </Field>
         <Button disabled={saving} type="submit">
-          {saving ? "Saving..." : "Save media domain"}
+          {saving ? t('home.saving') : t('home.saveMediaDomain')}
         </Button>
       </form>
     </div>
@@ -302,29 +287,28 @@ export function MediaStorageDescription({
   dashboardUrl?: string;
   state: "disabled" | "pending" | "ready";
 }) {
+  const {t} = useTranslation();
   if (state === "ready") {
     return (
       <>
-        R2 media uploads are enabled with bucket{" "}
+        {t('home.mediaStorageReadyBefore')}
         {bucketName
           ? <CloudflareValue>{bucketName}</CloudflareValue>
-          : "configured for this instance"}.
+          : t('home.instanceFallback')}{t('home.mediaStorageReadyAfter')}
       </>
     );
   }
   if (state === "disabled") {
     return (
       <>
-        Media uploads are disabled for this instance. Text publishing and
-        external URLs continue to work. To opt in later, run{" "}
+        {t('home.mediaStorageDisabled')}
         <CloudflareValue>{managementCommand("deploy --enable-r2")}</CloudflareValue>.
       </>
     );
   }
   return (
     <>
-      This installation is running without media uploads while its Cloudflare
-      R2 subscription is pending.{" "}
+      {t('home.mediaStoragePendingBefore')}
       {dashboardUrl
         ? (
           <a
@@ -333,11 +317,11 @@ export function MediaStorageDescription({
             rel="noopener noreferrer"
             target="_blank"
           >
-            Activate R2 in Cloudflare
+            {t('home.mediaStorageActivate')}
           </a>
         )
-        : "Activate R2 in the Cloudflare dashboard"}
-      , complete billing setup if Cloudflare requests it, then run{" "}
+        : t('home.mediaStorageActivate')}
+      {t('home.mediaStoragePendingAfter')}
       <CloudflareValue>{managementCommand("deploy --enable-r2")}</CloudflareValue>.
     </>
   );
@@ -354,6 +338,7 @@ export default function SetupChecklistApp({
   onboardingResult,
   onCompletionChange,
 }: SetupChecklistProps) {
+  const {t} = useTranslation();
   const access: OnboardingCheck = onboardingResult.result[
     ONBOARDING_TYPES.PROTECTED_ADMIN_DASHBOARD
   ] ?? {ready: false, required: false};
@@ -399,15 +384,13 @@ export default function SetupChecklistApp({
     const normalizedUrl = normalizeR2CustomDomainUrl(mediaDomainUrl);
     if (!normalizedUrl) {
       setError(
-        "Enter a custom HTTPS hostname such as https://media.example.com/. " +
-          "Public r2.dev URLs are not supported.",
+        t('home.mediaDomainErrorHttps'),
       );
       return;
     }
     if (new URL(normalizedUrl).hostname === window.location.hostname) {
       setError(
-        "Use a separate hostname for R2, such as media.example.com, rather " +
-          "than the domain serving microfeed itself.",
+        t('home.mediaDomainErrorSameHost'),
       );
       return;
     }
@@ -426,12 +409,12 @@ export default function SetupChecklistApp({
       });
       setMediaDomainUrl(normalizedUrl);
       setMediaDomainSaved(true);
-      showToast("Media domain updated!", "success");
+      showToast(t('home.mediaDomainUpdated'), "success");
     } catch (requestError: any) {
       setError(
         requestError.response
-          ? "The media domain could not be saved. Please try again."
-          : "Network error. Please refresh the page and try again.",
+          ? t('home.mediaDomainSaveFailed')
+          : t('common.networkError'),
       );
     } finally {
       setSaving(false);
@@ -440,14 +423,14 @@ export default function SetupChecklistApp({
 
   return (
     <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-      <div className="mb-4 text-lg font-semibold tracking-tight">Setup checklist</div>
+      <div className="mb-4 text-lg font-semibold tracking-tight">{t('home.setupChecklist')}</div>
       {effectiveAllOk && (
         <div className="rounded-[10px] border border-green-700/40 bg-green-500/10 p-3 text-green-700 dark:text-green-300">
-          <i>You are all set!</i>
+          <i>{t('home.allSet')}</i>
           <div className="mt-2">
-            Start publishing at{" "}
+            {t('home.startPublishingAt')}{" "}
             <a href={ADMIN_URLS.newItem()}>
-              Add new item <span className="lh-icon-arrow-right" />
+              {t('home.addNewItem')} <span className="lh-icon-arrow-right" />
             </a>
           </div>
         </div>
@@ -455,7 +438,7 @@ export default function SetupChecklistApp({
       <div className="mt-8">
         <CheckListItem
           onboardState={access}
-          title="Dashboard protection"
+          title={t('home.dashboardProtection')}
         >
           <AdminProtectionDescription
             {...adminProtection}
@@ -464,7 +447,7 @@ export default function SetupChecklistApp({
         </CheckListItem>
         <CheckListItem
           onboardState={customDomain}
-          title="Use a custom domain for this site"
+          title={t('home.customDomainForSite')}
         >
           <SiteCustomDomainDescription
             dashboardUrl={customDomain.dashboardUrl}
@@ -473,7 +456,7 @@ export default function SetupChecklistApp({
         </CheckListItem>
         <CheckListItem
           onboardState={mediaStorage}
-          title="Enable media storage"
+          title={t('home.enableMediaStorage')}
         >
           <MediaStorageDescription
             bucketName={mediaStorage.bucketName}
@@ -483,7 +466,7 @@ export default function SetupChecklistApp({
         </CheckListItem>
         {mediaStorage.ready && <CheckListItem
           onboardState={effectiveMediaDomain}
-          title="Use a custom domain for media files"
+          title={t('home.customDomainForMedia')}
         >
           <MediaDeliveryDescription
             bucketName={mediaDomain.bucketName}

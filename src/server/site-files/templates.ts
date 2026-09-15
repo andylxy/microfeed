@@ -2,6 +2,7 @@ import {SyntaxValidator} from "fast-xml-validator";
 
 import {resolveApiAccessSettings} from "@/shared/Api";
 import {STATUSES} from "@/shared/Constants";
+import {AppError} from "@/shared/errors";
 import {getFetchItemsParams} from "@/server/feed/FeedDb";
 import type FeedDb from "@/server/feed/FeedDb";
 import {listPages} from "@/server/pages/service";
@@ -10,6 +11,7 @@ import {
   SITE_FILE_TEMPLATE_COLLECTION_LIMIT,
   type SiteFileGenerator,
   type SiteFileMediaType,
+  type SiteFileValidationIssue,
   validateSiteFileContent,
 } from "@/shared/SiteFiles";
 import {
@@ -105,7 +107,7 @@ export function validateRenderedSiteFile(
   content: string,
   contentType: SiteFileMediaType,
   options: {allowLargeGeneratedSitemap?: boolean} = {},
-): string | undefined {
+): SiteFileValidationIssue | undefined {
   const error = validateSiteFileContent(content, contentType, options);
   if (error) return error;
   if (
@@ -115,7 +117,7 @@ export function validateRenderedSiteFile(
     try {
       SyntaxValidator.validate(content);
     } catch {
-      return "Publish valid XML content.";
+      return {key: "errors.siteFile.invalidXml"};
     }
   }
   return undefined;
@@ -184,6 +186,10 @@ export async function renderSiteFileForRequest(
     input.contentType,
     {allowLargeGeneratedSitemap: input.allowLargeGeneratedSitemap},
   );
-  if (renderedError) throw new Error(renderedError);
+  // Stays a 500: this used to be a plain Error, and AppError carries the
+  // translated message to whichever catch site localizes it.
+  if (renderedError) {
+    throw new AppError(renderedError.key, 500, renderedError.params);
+  }
   return {content, context, feedContent};
 }

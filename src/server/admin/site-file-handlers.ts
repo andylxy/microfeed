@@ -6,7 +6,7 @@ import {
   apiSiteFilePreviewInputSchema,
 } from "@/shared/ApiSchemas";
 import FeedDb from "@/server/feed/FeedDb";
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, localizedError} from "@/server/http";
 import {
   createSiteFile,
   deleteSiteFile,
@@ -49,7 +49,7 @@ export const createAdminSiteFile: APIRoute = async ({request}) => {
     () => null,
   ));
   if (!parsed.success || !parsed.data.filename) {
-    return jsonResponse({error: "Invalid Site File."}, {status: 400});
+    return localizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const siteFile = await createSiteFile(
@@ -77,7 +77,7 @@ export const getAdminSiteFile: APIRoute = async ({params, request}) => {
     : null;
   return siteFile
     ? jsonResponse(siteFile)
-    : jsonResponse({error: "Site File not found."}, {status: 404});
+    : localizedError(request, "errors.siteFile.notFound", 404);
 };
 
 export const updateAdminSiteFile: APIRoute = async ({params, request}) => {
@@ -85,7 +85,7 @@ export const updateAdminSiteFile: APIRoute = async ({params, request}) => {
     () => null,
   ));
   if (!parsed.success || !params.siteFileId) {
-    return jsonResponse({error: "Invalid Site File."}, {status: 400});
+    return localizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const before = await getSiteFileById(
@@ -107,7 +107,7 @@ export const updateAdminSiteFile: APIRoute = async ({params, request}) => {
       }),
     );
     if (!siteFile) {
-      return jsonResponse({error: "Site File not found."}, {status: 404});
+      return localizedError(request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse(siteFile);
   } catch (error) {
@@ -122,7 +122,7 @@ export const previewAdminSiteFile: APIRoute = async ({request}) => {
     await request.json().catch(() => null),
   );
   if (!parsed.success || (!parsed.data.filename && !parsed.data.site_file_id)) {
-    return jsonResponse({error: "Invalid Site File."}, {status: 400});
+    return localizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const preview = await previewSiteFile(
@@ -134,7 +134,7 @@ export const previewAdminSiteFile: APIRoute = async ({request}) => {
       ? jsonResponse(preview, {
           headers: {"cache-control": "private, no-store"},
         })
-      : jsonResponse({error: "Site File not found."}, {status: 404});
+      : localizedError(request, "errors.siteFile.notFound", 404);
   } catch (error) {
     const response = serviceError(error);
     if (response) return response;
@@ -144,7 +144,7 @@ export const previewAdminSiteFile: APIRoute = async ({request}) => {
 
 export const deleteAdminSiteFile: APIRoute = async ({params, request}) => {
   if (!params.siteFileId) {
-    return jsonResponse({error: "Invalid Site File ID."}, {status: 400});
+    return localizedError(request, "errors.siteFile.invalidId", 400);
   }
   try {
     const before = await getSiteFileById(
@@ -163,7 +163,7 @@ export const deleteAdminSiteFile: APIRoute = async ({params, request}) => {
         mutation: "deleted",
       }),
     )) {
-      return jsonResponse({error: "Site File not found."}, {status: 404});
+      return localizedError(request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse({});
   } catch (error) {
@@ -178,7 +178,7 @@ async function mutate(
   action: typeof publishSiteFile | typeof resetSiteFile,
 ): Promise<Response> {
   if (!context.params.siteFileId) {
-    return jsonResponse({error: "Invalid Site File ID."}, {status: 400});
+    return localizedError(context.request, "errors.siteFile.invalidId", 400);
   }
   try {
     const siteFile = await action(
@@ -195,7 +195,7 @@ async function mutate(
       }), {origin: "dashboard"}),
     );
     if (!siteFile) {
-      return jsonResponse({error: "Site File not found."}, {status: 404});
+      return localizedError(context.request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse(siteFile);
   } catch (error) {

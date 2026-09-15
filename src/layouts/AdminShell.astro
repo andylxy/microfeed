@@ -26,7 +26,7 @@ import type {
 import {cloudflareAccessIdentity} from "@/server/auth/admin-protection";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
 import {
-  languageFromAcceptLanguage,
+  adminLanguageFromRequest,
   type AdminLanguage,
 } from "@/shared/AdminLanguage";
 import {
@@ -90,9 +90,7 @@ const {
   webhookNavigation = false,
 } = Astro.props;
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
-const adminLanguage: AdminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage: AdminLanguage = adminLanguageFromRequest(Astro.request);
 const accessIdentity = cloudflareAccessIdentity(Astro.request);
 const identity: AdminIdentitySummary = {
   builtInEmail: Astro.locals.authUser?.email,
@@ -226,15 +224,15 @@ const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
       >
         {
           accountSidebar ? (
-            <AdminAccountSidebar client:load data={accountSidebar} />
+            <AdminAccountSidebar client:only="react" data={accountSidebar} />
           ) : apiSidebar ? (
-            <AdminApiSidebar client:load data={apiSidebar} />
+            <AdminApiSidebar client:only="react" data={apiSidebar} />
           ) : webhookSidebar ? (
-            <AdminWebhookSidebar client:load data={webhookSidebar} />
+            <AdminWebhookSidebar client:only="react" data={webhookSidebar} />
           ) : settingsSidebar ? (
-            <AdminSettingsSidebar client:load data={settingsSidebar} />
+            <AdminSettingsSidebar client:only="react" data={settingsSidebar} />
           ) : (
-            <AdminSidebar client:load data={sidebar} />
+            <AdminSidebar client:only="react" data={sidebar} />
           )
         }
       </aside>

@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from "@/client/i18n";
 import Requests from '@/client/requests';
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
 import AdminImageUploaderApp from '@/components/admin/shared/AdminImageUploaderApp';
@@ -152,18 +153,19 @@ export default class EditChannelApp extends React.Component<Props, any> {
         ),
       }), resolve);
     });
-    showToast('Channel saved.', 'success');
+    showToast(i18n.t('channel.channelSaved'), 'success');
   }
 
   showSaveError(error: any) {
     if (!error?.response) {
-      showToast('Network error. Your changes are still on this page.', 'error');
+      showToast(i18n.t('items.networkErrorChangesRemain'), 'error');
     } else {
-      showToast('Couldn’t save. Your changes are still on this page.', 'error');
+      showToast(i18n.t('saveAction.error'), 'error');
     }
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {autosaveState, channel, feed} = this.state;
     const {onboardingResult} = this.props;
     const categories = channel.categories || [];
@@ -234,7 +236,7 @@ export default class EditChannelApp extends React.Component<Props, any> {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <AdminSelect
                     value={categories.map((c: any) => ((CATEGORIES_DICT as any)[c]))}
-                    ariaLabel="Categories"
+                    ariaLabel={t('channel.categoriesAria')}
                     labelComponent={<AdminHelpLabel help={CONTROLS_TEXTS_DICT[CHANNEL_CONTROLS.CATEGORIES]}/>}
                     options={CATEGORIES_SELECT_OPTIONS}
                     onChange={(selectedOptions: any) => {
@@ -248,7 +250,7 @@ export default class EditChannelApp extends React.Component<Props, any> {
                   />
                   <AdminSelect
                     value={(LANGUAGE_CODES_DICT as any)[channel.language]}
-                    ariaLabel="Language"
+                    ariaLabel={t('channel.languageAria')}
                     labelComponent={<AdminHelpLabel help={CONTROLS_TEXTS_DICT[CHANNEL_CONTROLS.LANGUAGE]}/>}
                     options={LANGUAGE_CODES_SELECT_OPTIONS}
                     onChange={(selected: any) => {
@@ -275,7 +277,7 @@ export default class EditChannelApp extends React.Component<Props, any> {
           </div>
           <details className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <summary className="m-page-summary">
-              Podcast-specific fields
+              {t('channel.podcastFields')}
             </summary>
             <div className="mt-8 grid grid-cols-1 gap-8">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -365,8 +367,8 @@ export default class EditChannelApp extends React.Component<Props, any> {
           <div className="grid gap-4 xl:sticky xl:top-4">
             <AdminSaveAction
               {...autosaveState}
-              buttonLabel="Save changes"
-              idleMessage="Make changes, then select Save changes."
+              buttonLabel={t('channel.saveChanges')}
+              idleMessage={t('channel.saveChangesIdle')}
             />
             <AdminSideQuickLinks />
           </div>

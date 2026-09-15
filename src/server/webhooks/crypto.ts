@@ -1,3 +1,4 @@
+import {AppError} from "@/shared/errors";
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -66,7 +67,7 @@ export async function decryptWebhookSecret(
     parsed.version !== 1 || typeof parsed.iv !== "string" ||
     typeof parsed.ciphertext !== "string"
   ) {
-    throw new Error("Unsupported webhook secret encryption format.");
+    throw new AppError("errors.webhook.unsupportedSecretFormat");
   }
   const plaintext = await crypto.subtle.decrypt(
     {name: "AES-GCM", iv: arrayBuffer(base64UrlDecode(parsed.iv))},
@@ -82,7 +83,7 @@ export function generateWebhookSecret(): string {
 
 function signingSecretBytes(secret: string): Uint8Array {
   if (!secret.startsWith("whsec_")) {
-    throw new Error("Webhook signing secrets must start with whsec_.");
+    throw new AppError("errors.webhook.secretMustStartWithWhsec");
   }
   return base64Decode(secret.slice("whsec_".length));
 }

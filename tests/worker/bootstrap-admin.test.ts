@@ -57,7 +57,7 @@ describe("Deploy to Cloudflare admin bootstrap", () => {
       bootstrapRequest(),
     );
     expect(unavailable.status).toBe(404);
-    expect(await unavailable.text()).toBe("404");
+    expect(await unavailable.text()).toBe("Not found");
   });
 
   it("returns one generic error for invalid setup values", async () => {

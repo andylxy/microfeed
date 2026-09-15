@@ -1,6 +1,7 @@
 import {useEffect, useState} from "react";
 import {ExternalLinkIcon, LoaderCircleIcon, XIcon} from "lucide-react";
 
+import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {
   Dialog,
@@ -14,17 +15,17 @@ type PreviewView = "feed" | "item" | "page" | "search" | "rss";
 type PreviewViewport = "mobile" | "desktop";
 type PreviewDataSource = "fixture" | "site";
 
-const VIEW_LABELS: Record<PreviewView, string> = {
-  feed: "Feed",
-  item: "Item",
-  page: "Page",
-  search: "Search",
-  rss: "RSS",
+const VIEW_KEYS: Record<PreviewView, string> = {
+  feed: "themes.viewFeed",
+  item: "themes.viewItem",
+  page: "themes.viewPage",
+  search: "themes.viewSearch",
+  rss: "themes.viewRss",
 };
 
-const VIEWPORT_LABELS: Record<PreviewViewport, string> = {
-  desktop: "Desktop",
-  mobile: "Mobile",
+const VIEWPORT_KEYS: Record<PreviewViewport, string> = {
+  desktop: "themes.viewportDesktop",
+  mobile: "themes.viewportMobile",
 };
 
 interface Props {
@@ -48,6 +49,7 @@ export default function ThemePreviewDialog({
   revision = 0,
   supportsPagesAndSearch = false,
 }: Props) {
+  const {t} = useTranslation();
   const [view, setView] = useState<PreviewView>("feed");
   const [viewport, setViewport] = useState<PreviewViewport>("desktop");
   const [dataSource, setDataSource] = useState<PreviewDataSource>(
@@ -78,21 +80,21 @@ export default function ThemePreviewDialog({
         className="inset-0 top-0 left-0 flex h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-background p-0 ring-0 sm:max-w-none"
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">Isolated preview</DialogTitle>
+        <DialogTitle className="sr-only">{t("themes.previewTitle")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Preview {label} without changing the active public theme.
+          {t("themes.previewDesc", {label})}
         </DialogDescription>
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3">
           <div className="min-w-0">
             <h2 className="font-heading text-lg font-semibold">
-              Isolated preview
+              {t("themes.previewTitle")}
             </h2>
             <p className="truncate text-xs text-muted-foreground">
               {label}{description ? ` · ${description}` : ""}
             </p>
             {view === "search" && supportsPagesAndSearch && (
               <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                Live search is unavailable in preview. Showing preview results instead.
+                {t("themes.liveSearchUnavailable")}
               </p>
             )}
           </div>
@@ -104,21 +106,21 @@ export default function ThemePreviewDialog({
                 size="sm"
                 variant={view === candidate ? "default" : "outline"}
               >
-                {VIEW_LABELS[candidate]}
+                {t(VIEW_KEYS[candidate])}
               </Button>
             ))}
             <span aria-hidden="true" className="mx-1 h-6 border-l" />
             {hasPreviewFixture && ([
-              ["fixture", "Demo content"],
-              ["site", "Current site"],
-            ] as const).map(([candidate, candidateLabel]) => (
+              ["fixture", "themes.dataSourceDemo"],
+              ["site", "themes.dataSourceSite"],
+            ] as const).map(([candidate, candidateKey]) => (
               <Button
                 key={candidate}
                 onClick={() => setDataSource(candidate)}
                 size="sm"
                 variant={dataSource === candidate ? "secondary" : "ghost"}
               >
-                {candidateLabel}
+                {t(candidateKey)}
               </Button>
             ))}
             {hasPreviewFixture && (
@@ -131,7 +133,7 @@ export default function ThemePreviewDialog({
                 size="sm"
                 variant={viewport === candidate ? "secondary" : "ghost"}
               >
-                {VIEWPORT_LABELS[candidate]}
+                {t(VIEWPORT_KEYS[candidate])}
               </Button>
             ))}
             <Button
@@ -146,11 +148,11 @@ export default function ThemePreviewDialog({
               variant="outline"
             >
               <ExternalLinkIcon aria-hidden="true" />
-              Open
+              {t("themes.open")}
             </Button>
             <DialogClose render={<Button size="sm" variant="outline" />}>
               <XIcon aria-hidden="true" />
-              Close
+              {t("themes.close")}
             </DialogClose>
           </div>
         </header>
@@ -170,7 +172,7 @@ export default function ThemePreviewDialog({
                   aria-hidden="true"
                   className="size-5 animate-spin text-primary"
                 />
-                <span>Theme is loading…</span>
+                <span>{t("themes.loadingLabel")}</span>
               </div>
             )}
             <iframe
@@ -179,7 +181,7 @@ export default function ThemePreviewDialog({
               onLoad={() => setLoadedFrameKey(frameKey)}
               sandbox="allow-scripts"
               src={renderedUrl}
-              title={`${view} theme preview`}
+              title={t("themes.previewFrameTitle", {view: t(VIEW_KEYS[view])})}
             />
           </div>
         </div>

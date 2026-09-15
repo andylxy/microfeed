@@ -4,17 +4,15 @@ import {env} from "cloudflare:workers";
 import PageEditorApp from "@/components/admin/pages/PageEditorApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {activeThemeSupportsPages, getPageById} from "@/server/pages/service";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 const page = Astro.params.pageId
   ? await getPageById(env.FEED_DB, Astro.request, Astro.params.pageId)

@@ -5,6 +5,7 @@ import AdminInput from "@/components/admin/shared/AdminInput";
 import {randomShortUUID} from "@/shared/StringUtils";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
 import {Button} from "@/components/ui/button";
+import i18n from "@/client/i18n";
 
 const METHODS_OPTIONS = Object.keys(PREDEFINED_SUBSCRIBE_METHODS).map((key: any) => {
   const m = (PREDEFINED_SUBSCRIBE_METHODS as any)[key];
@@ -35,6 +36,7 @@ export default class NewSubscribeDialog extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {
       isOpen,
       setIsOpen,
@@ -43,14 +45,14 @@ export default class NewSubscribeDialog extends React.Component<any, any> {
     const {selectedMethod, name, url} = this.state;
     const method = (PREDEFINED_SUBSCRIBE_METHODS as any)[selectedMethod];
     return (<AdminDialog
-      title="Add new subscribe method"
+      title={t("settings.addNewSubscribeMethodTitle")}
       open={isOpen}
       onOpenChange={setIsOpen}
     >
       <form>
         <div>
           <AdminSelect
-            label="Please choose a subscribe method:"
+            label={t("settings.chooseSubscribeMethod")}
             value={METHODS_OPTIONS.find((option) => option.value === selectedMethod) ?? null}
             options={METHODS_OPTIONS}
             onChange={({value}: any) => {
@@ -65,14 +67,14 @@ export default class NewSubscribeDialog extends React.Component<any, any> {
           </div>
           <div className="w-full grid grid-cols-1 gap-4">
             <AdminInput
-              label="Name"
+              label={t("settings.name")}
               value={name}
               customLabelClass="m-input-label-small"
               customClass="text-xs"
               onChange={(e: any) => this.setState({name: e.target.value})}
             />
             <AdminInput
-              label="URL"
+              label={t("settings.url")}
               value={url}
               type="url"
               customLabelClass="m-input-label-small"
@@ -96,7 +98,7 @@ export default class NewSubscribeDialog extends React.Component<any, any> {
               this.setState({...this.initState});
             }}
           >
-            Add new subscribe method
+            {t("settings.addNewSubscribeMethod")}
           </Button>
         </div>
       </form>

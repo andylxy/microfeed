@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import {cn} from "@/lib/utils";
 import {managementCommand} from "@/shared/ManagementCli";
+import {useTranslation} from "@/client/i18n";
 
 type MediaStorageState = "disabled" | "pending" | "ready";
 
@@ -29,6 +30,7 @@ export function MediaStorageSetupInstructions({
   dashboardUrl?: string;
   state?: MediaStorageState;
 }) {
+  const {t} = useTranslation();
   const local = !dashboardUrl;
   const command = local
     ? managementCommand("deploy --local --enable-r2")
@@ -36,23 +38,23 @@ export function MediaStorageSetupInstructions({
 
   return (
     <div className="rounded-lg border bg-muted/40 p-3">
-      <div className="font-medium">Enable file uploads</div>
+      <div className="font-medium">{t("shared.enableFileUploads")}</div>
       <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
         {dashboardUrl && (
           <li>
             {state === "pending"
-              ? "Activate R2 in Cloudflare and complete billing setup if Cloudflare requests it."
-              : "Make sure R2 is active for the Cloudflare account."}
+              ? t("shared.activateR2")
+              : t("shared.ensureR2Active")}
           </li>
         )}
         <li>
-          From any folder, run{" "}
+          {t("shared.runFromFolder")}
           <code className="rounded bg-background px-1.5 py-0.5 text-xs text-foreground ring-1 ring-foreground/10">
             {command}
           </code>
           .
         </li>
-        <li>Reload this page after deployment finishes.</li>
+        <li>{t("shared.reloadAfterDeploy")}</li>
       </ol>
     </div>
   );
@@ -64,6 +66,7 @@ export default function MediaStorageUnavailableDialog({
   open,
   state,
 }: MediaStorageUnavailableDialogProps) {
+  const {t} = useTranslation();
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-md">
@@ -71,10 +74,9 @@ export default function MediaStorageUnavailableDialog({
           <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <CloudUploadIcon aria-hidden="true" className="size-5" />
           </div>
-          <DialogTitle>File uploads require R2</DialogTitle>
+          <DialogTitle>{t("shared.fileUploadsRequireR2")}</DialogTitle>
           <DialogDescription>
-            This microfeed is running without R2 media storage, so direct file
-            uploads are disabled. You can keep publishing with external URLs.
+            {t("shared.r2DisabledDesc")}
           </DialogDescription>
         </DialogHeader>
         <MediaStorageSetupInstructions
@@ -83,7 +85,7 @@ export default function MediaStorageUnavailableDialog({
         />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            Close
+            {t("common.close")}
           </DialogClose>
           {dashboardUrl && (
             <a
@@ -92,7 +94,7 @@ export default function MediaStorageUnavailableDialog({
               rel="noopener noreferrer"
               target="_blank"
             >
-              Open Cloudflare R2
+              {t("shared.openCloudflareR2")}
             </a>
           )}
         </DialogFooter>

@@ -1,5 +1,7 @@
 import {escapeHtml} from "@/shared/StringUtils";
 import {managementCommand} from "@/shared/ManagementCli";
+import {type AdminLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
 export interface AdminOwner {
   email: string;
@@ -8,9 +10,6 @@ export interface AdminOwner {
 
 export const ADMIN_DASHBOARD_LOGIN_HELP_URL =
   "https://github.com/microfeed/microfeed#manage-the-dashboard-login";
-
-const ADMIN_DASHBOARD_LOCKED_MESSAGE =
-  "The admin dashboard is locked until its owner creates a password.";
 
 interface AdminDashboardLockedOptions {
   instanceName?: string;
@@ -47,42 +46,49 @@ export async function hasAdminOwner(
 export function adminDashboardLockedResponse(
   html = true,
   options: AdminDashboardLockedOptions = {},
+  language: AdminLanguage = "en",
 ): Response {
   const setupCommand = dashboardAuthCommand("setup", options.instanceName);
   const disableCommand = options.local
     ? dashboardAuthCommand("disable", options.instanceName)
     : undefined;
+  const text = (key: string) => translate(`errors.dashboard.${key}`, language);
+  const title = text("lockedTitle");
+  const message = text("lockedMessage");
+  const setupIntro = text(
+    html ? "lockedSetupIntro" : "lockedSetupIntroPlain",
+  );
+  const helpIntro = text("lockedHelpIntro");
   const body = html
     ? `<!doctype html>
-<html lang="en">
+<html lang="${language}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin dashboard locked</title>
+    <title>${escapeHtml(title)}</title>
   </head>
   <body>
     <main>
-      <h1>Admin dashboard locked</h1>
-      <p>${ADMIN_DASHBOARD_LOCKED_MESSAGE}</p>
-      <p>Set up the administrator email and password by running this command from any folder:</p>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(message)}</p>
+      <p>${escapeHtml(setupIntro)}</p>
       <pre><code>${escapeHtml(setupCommand)}</code></pre>
       ${disableCommand
-        ? `<p>For this local instance, you can instead disable dashboard authentication:</p>
+        ? `<p>${escapeHtml(text("lockedDisableIntro"))}</p>
       <pre><code>${escapeHtml(disableCommand)}</code></pre>
       `
-        : ""}<p>To learn more about dashboard login: <a href="${ADMIN_DASHBOARD_LOGIN_HELP_URL}">Manage the dashboard login</a></p>
+        : ""}<p>${escapeHtml(helpIntro)} <a href="${ADMIN_DASHBOARD_LOGIN_HELP_URL}">${escapeHtml(text("lockedHelpLink"))}</a></p>
     </main>
   </body>
 </html>
 `
-    : `${ADMIN_DASHBOARD_LOCKED_MESSAGE}\n\n` +
-      "Set up the administrator email and password:\n" +
+    : `${message}\n\n` +
+      `${setupIntro}\n` +
       `${setupCommand}\n` +
       (disableCommand
-        ? "\nFor this local instance, you can instead disable dashboard " +
-          `authentication:\n${disableCommand}\n`
+        ? `\n${text("lockedDisableIntro")}\n${disableCommand}\n`
         : "") +
-      `\nTo learn more about dashboard login: ${ADMIN_DASHBOARD_LOGIN_HELP_URL}\n`;
+      `\n${helpIntro} ${ADMIN_DASHBOARD_LOGIN_HELP_URL}\n`;
   return new Response(body, {
     headers: {
       "content-type": html

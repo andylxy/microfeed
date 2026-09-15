@@ -1,4 +1,5 @@
 import * as z from "zod";
+import {AppError} from "../errors";
 
 export const THEME_FORMAT_VERSION_V1 = 1 as const;
 export const THEME_FORMAT_VERSION_V2 = 2 as const;
@@ -30,11 +31,9 @@ export function isReservedThemePackageId(packageId: string): boolean {
 
 export function assertUserThemePackageId(packageId: string): void {
   if (!isReservedThemePackageId(packageId)) return;
-  throw new Error(
-    `Theme package IDs beginning with "${RESERVED_THEME_PACKAGE_ID_PREFIX}" ` +
-      "are reserved for bundled microfeed themes. Use a local.* identity for " +
-      "a site-specific theme or a package ID you control for a distributable theme.",
-  );
+  throw new AppError("errors.theme.reservedPackageId", 400, {
+    prefix: RESERVED_THEME_PACKAGE_ID_PREFIX,
+  });
 }
 
 export const THEME_LIST_SORTS = [

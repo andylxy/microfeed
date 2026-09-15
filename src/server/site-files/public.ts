@@ -1,4 +1,5 @@
 import {escapeHtml} from "@/shared/StringUtils";
+import {notFoundResponse} from "@/server/http";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {listPages} from "@/server/pages/service";
 import {defaultSiteFileTemplate} from "@/shared/SiteFileTemplates";
@@ -10,8 +11,8 @@ import {
   siteFileApiLlmsFullUrl,
 } from "./templates";
 
-function notFound(): Response {
-  return new Response("Not Found", {status: 404, statusText: "Not Found"});
+function notFound(request: Request): Response {
+  return notFoundResponse(request, {statusText: "Not Found"});
 }
 
 function robotsContent(request: Request, hidden: boolean): string {
@@ -132,7 +133,7 @@ export async function publicSiteFileResponse(
     filename,
   );
   const siteFile = runtimeFile?.siteFile;
-  if (!siteFile?.enabled) return notFound();
+  if (!siteFile?.enabled) return notFound(request);
   const loaded = await loadPublishedFeed(runtimeEnv, request, {
     includeActiveTheme: true,
     itemsOrder: ITEM_ORDERS.DESC,
@@ -144,7 +145,7 @@ export async function publicSiteFileResponse(
   if (filename === "robots.txt" && hidden) {
     content = robotsContent(request, true);
   } else if (hidden) {
-    return notFound();
+    return notFound(request);
   } else {
     const template = siteFile.mode === "override"
       ? siteFile.published_content
@@ -184,7 +185,7 @@ export async function publicSiteFileResponse(
       }
     }
   }
-  if (content === undefined) return notFound();
+  if (content === undefined) return notFound(request);
   return new Response(content, {
     headers: {
       "content-type": `${siteFile.content_type}; charset=utf-8`,

@@ -18,19 +18,17 @@ describe("Admin versioned themes", () => {
     expect(preview).toContain('sandbox="allow-scripts"');
     expect(preview).not.toContain("allow-same-origin");
     expect(preview).toContain("h-dvh w-dvw");
-    expect(preview).toContain("Theme is loading…");
+    expect(preview).toContain('t("themes.loadingLabel")');
     expect(preview).toContain('aria-live="polite"');
     expect(preview).toContain('role="status"');
     expect(preview).toContain("LoaderCircleIcon");
     expect(preview).toContain("onLoad={() => setLoadedFrameKey(frameKey)}");
     expect(preview).toContain("const loading = loadedFrameKey !== frameKey");
     expect(preview).toContain('data: dataSource');
-    expect(preview).toContain('"Demo content"');
-    expect(preview).toContain('"Current site"');
+    expect(preview).toContain('"themes.dataSourceDemo"');
+    expect(preview).toContain('"themes.dataSourceSite"');
     expect(preview).toContain('hasPreviewFixture ? "fixture" : "site"');
-    expect(preview).toContain(
-      "Live search is unavailable in preview. Showing preview results instead.",
-    );
+    expect(preview).toContain('t("themes.liveSearchUnavailable")');
   });
 
   it("keeps installation separate from activation", async () => {
@@ -40,11 +38,15 @@ describe("Admin versioned themes", () => {
     ]);
     expect(draftEditor).toContain('action: "publish"');
     expect(draftEditor).not.toContain('action: "activate"');
-    expect(draftEditor).toContain('"Install"');
-    expect(draftEditor).not.toContain("Publish inactive version");
-    const saveIndex = draftEditor.indexOf('{busy ? "Saving…" : "Save draft"}');
+    expect(draftEditor).toContain('t("themes.installLabel")');
+    expect(draftEditor).not.toContain('t("themes.activate")');
+    const saveIndex = draftEditor.indexOf(
+      '{busy ? t("themes.saving") : t("themes.saveDraft")}',
+    );
     const previewIndex = draftEditor.indexOf("onClick={preview}");
-    const installIndex = draftEditor.indexOf('{busy ? "Installing…" : "Install"}');
+    const installIndex = draftEditor.indexOf(
+      '{busy ? t("themes.installing") : t("themes.installLabel")}',
+    );
     expect(saveIndex).toBeGreaterThan(draftEditor.indexOf("onClick={discard}"));
     expect(previewIndex).toBeGreaterThan(saveIndex);
     expect(previewIndex).toBeLessThan(installIndex);
@@ -54,9 +56,9 @@ describe("Admin versioned themes", () => {
       "hasPreviewFixture={Boolean(draft.manifest.previewFixture)}",
     );
     expect(draftEditor).toContain(
-      'Discard draft "${draft.name}" (${draft.version})?',
+      't("themes.discardConfirm", {name: draft.name, version: draft.version})',
     );
-    expect(draftEditor).not.toContain("Discard draft ${draft.id}");
+    expect(draftEditor).not.toMatch(/themes\.discardConfirm["'],\s*\{id/u);
     expect(draftEditor).toContain(
       'className="sticky bottom-4 mx-4 flex',
     );
@@ -77,13 +79,13 @@ describe("Admin versioned themes", () => {
     expect(draftEditor).toContain('value: "web"');
     expect(draftEditor).toContain('value: "url"');
     expect(draftEditor).toContain('value: "attachment"');
-    expect(draftEditor).toContain('label: "Media attachment"');
-    expect(draftEditor).not.toContain('label: "Main attachment"');
+    expect(draftEditor).toContain('label: t("themes.searchDestAttachmentLabel")');
+    expect(draftEditor).not.toMatch(/searchDest\w*Main/u);
     expect(draftEditor).toContain("AdminRadioGroup");
     expect(draftEditor).not.toContain("JSON.stringify(draft.manifest");
     const detailsStart = draftEditor.indexOf('<details className="mt-5');
     const detailsEnd = draftEditor.indexOf("</details>", detailsStart);
-    const searchLinks = draftEditor.indexOf("Search result links");
+    const searchLinks = draftEditor.indexOf("themes.searchResultLinksTitle");
     expect(searchLinks).toBeGreaterThan(detailsStart);
     expect(searchLinks).toBeLessThan(detailsEnd);
   });
@@ -95,8 +97,8 @@ describe("Admin versioned themes", () => {
       source("pages/[adminPath]/settings/themes/index.astro"),
       source("shared/ManagementCli.ts"),
     ]);
-    expect(themes).toContain("Built-in themes (");
-    expect(themes).toContain("Custom themes (");
+    expect(themes).toContain('t("themes.builtInTab", {');
+    expect(themes).toContain('t("themes.customTab", {');
     expect(themes).toContain('role="tablist"');
     expect(themes).toContain('role="tabpanel"');
     expect(themes).toContain("new URLSearchParams({tab})");
@@ -105,14 +107,13 @@ describe("Admin versioned themes", () => {
     expect(themes).toContain('event.key === "ArrowLeft"');
     expect(themes).toContain("tabIndex={tab ===");
     expect(themes).toContain("builtInGroups.map");
-    expect(themes).toContain("Version history");
-    expect(themes).toContain("Current release");
-    expect(themes).toContain("Demo content");
-    expect(themes).toContain("Built-in themes are synchronized");
-    expect(themes).toContain("Custom theme versions used");
-    expect(themes).toContain("Built-in themes do not use this quota");
-    expect(themes).toContain("Version drafts");
-    expect(themes).toContain("Create new version");
+    expect(themes).toContain('t("themes.versionHistory", {');
+    expect(themes).toContain('t("themes.badgeCurrentRelease")');
+    expect(themes).toContain('t("themes.badgeDemoContent")');
+    expect(themes).toContain('t("themes.builtInIntro")');
+    expect(themes).toContain('t("themes.customQuota", {');
+    expect(themes).toContain('t("themes.versionDrafts")');
+    expect(themes).toContain('t("themes.createNewVersion")');
     expect(themes).not.toContain("Customize");
     expect(themes).toContain('action: "customize"');
     expect(themes).not.toContain('originKind: "built-in"');
@@ -122,28 +123,28 @@ describe("Admin versioned themes", () => {
     expect(themes).toContain(
       "hasPreviewFixture: Boolean(theme.manifest.previewFixture)",
     );
-    expect(themes).toContain("Installed at");
+    expect(themes).toContain('i18n.t("themes.installedAt")');
     expect(themes).toContain("<time");
     expect(themes).toContain("<details");
     expect(themes).not.toContain("Deleted versions");
     expect(themes).not.toContain("Theme state");
-    expect(themes).toContain("Built-in");
+    expect(themes).toContain('t("themes.badgeBuiltIn")');
     expect(route).toContain("store.listSummaries(options, requestedTab)");
     expect(route).toContain("parseThemeAdminTab(searchParams)");
     expect(route).toContain("initialTab = listing.scope");
-    expect(themes).toContain("Search name, package, version, author, or source");
-    expect(themes).toContain("Newest installed");
+    expect(themes).toContain('t("themes.searchPlaceholder")');
+    expect(themes).toContain('t("themes.sortNewest")');
     expect(themes).toContain("window.history.replaceState");
-    expect(themes).toContain("How to install a theme");
+    expect(themes).toContain('t("themes.howToInstall")');
     expect(themes).not.toContain(
       "yarn manage theme install &lt;github-url-or-directory&gt;",
     );
-    expect(installHelp).toContain("Install a community theme");
-    expect(installHelp).toContain("Install a Built-in theme");
+    expect(installHelp).toContain('t("themes.installCommunityTitle")');
+    expect(installHelp).toContain('t("themes.installBuiltInTitle")');
     expect(installHelp).toContain("bundled:default");
     expect(installHelp).toContain("MICROFEED_MANAGE_COMMAND");
     expect(managementCli).toContain("npx @microfeed/cli manage");
-    expect(installHelp).toContain("Create a new version in Admin");
+    expect(installHelp).toContain('t("themes.newVersionAdminTitle")');
     expect(installHelp).toContain("https://docs.microfeed.org/dashboard/themes/");
     expect(installHelp).toContain(
       "https://docs.microfeed.org/manage-cli/#yarn-manage-theme",
@@ -151,17 +152,17 @@ describe("Admin versioned themes", () => {
     expect(themes).toContain("originThemeLabel(theme)");
     expect(themes).not.toContain("Origin theme: ${theme.originThemeId}");
     expect(themes).toContain("!builtIn && (");
-    expect(themes).toContain("Update with an AI coding agent");
+    expect(themes).toContain('t("themes.updateWithAgent")');
     expect(themes).toContain("MICROFEED_MANAGE_COMMAND");
     expect(themes).toContain("theme install ${builtInSource}");
-    expect(themes).toContain("Copy update prompt");
-    expect(themes).toContain("Copy update command");
-    expect(themes).toContain("Export with an AI coding agent");
-    expect(themes).toContain("Copy export prompt");
-    expect(themes).toContain("Copy export command");
-    expect(themes).toContain("Manual CLI command");
-    expect(themes).toContain("Codex or Claude Code");
-    expect(themes).toContain("for backup or continued development");
+    expect(themes).toContain('t("themes.copyUpdatePromptAria")');
+    expect(themes).toContain('t("themes.copyUpdateCommandAria")');
+    expect(themes).toContain('t("themes.exportWithAgent")');
+    expect(themes).toContain('t("themes.copyExportPromptAria")');
+    expect(themes).toContain('t("themes.copyExportCommandAria")');
+    expect(themes).toContain('t("themes.manualCliCommand")');
+    expect(themes).toContain('t("themes.intro")');
+    expect(themes).toContain('t("themes.exportWithAgentDesc")');
     expect(themes).toContain(
       "~/microfeed-themes/${theme.packageId}-${theme.version} --git",
     );
@@ -175,15 +176,15 @@ describe("Admin versioned themes", () => {
     );
     expect(draftEditor).toContain('<ThemeFieldLabel field="name"');
     expect(draftEditor).toContain('<ThemeFieldLabel field="version"');
-    expect(draftEditor).toContain("Theme name is required.");
-    expect(draftEditor).toContain("Theme version is required.");
+    expect(draftEditor).toContain('t("themes.nameRequired")');
+    expect(draftEditor).toContain('t("themes.versionRequired")');
     expect(draftEditor).toContain('<details className="mt-5');
-    expect(draftEditor).toContain("Theme details");
-    expect(draftEditor).toContain("THEME_FIELD_HELP");
+    expect(draftEditor).toContain('t("themes.themeDetailsSummary")');
+    expect(draftEditor).toContain("THEME_FIELD_KEYS");
     expect(draftEditor).toContain('<ThemeFieldLabel field="description"');
     expect(draftEditor).toContain("THEME_DESCRIPTION_MAX_LENGTH");
     expect(draftEditor).toContain('id="theme-description-count"');
-    expect(draftEditor).toContain("Read the theme guide");
+    expect(draftEditor).toContain('t("themes.themeGuideLink")');
   });
 
   it("describes the code accepted by HTML and RSS theme editors", async () => {
@@ -191,12 +192,8 @@ describe("Admin versioned themes", () => {
       source("components/admin/shared/AdminCodeEditor/index.tsx"),
       source("components/admin/code-editor/ThemeBundleEditor.tsx"),
     ]);
-    expect(codeEditor).toContain(
-      "Please enter code here, including html, javascript, and css",
-    );
-    expect(themeEditor).toContain(
-      "Please enter code here, including xsl and css",
-    );
+    expect(codeEditor).toContain('t("shared.codeEditorPlaceholder")');
+    expect(themeEditor).toContain('t("codeEditor.placeholderXml")');
   });
 
   it("explains every theme file and links its live template context", async () => {
@@ -223,18 +220,20 @@ describe("Admin versioned themes", () => {
     ]) {
       expect(themeEditor).toContain(`${key}: {`);
     }
-    expect(themeEditor).toContain("individual public item pages");
-    expect(themeEditor).toContain("standalone Pages");
-    expect(themeEditor).toContain("dedicated public search-results page");
-    expect(themeEditor).toContain("every public HTML page");
-    expect(themeEditor).toContain("public RSS feed");
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webItemDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webPageDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webSearchDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webHeaderDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webBodyStartDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.webBodyEndDesc")');
+    expect(themeEditor).toContain('i18n.t("codeEditor.help.rssStylesheetDesc")');
     expect(themeEditor).toContain(
       "md:grid-cols-[12rem_minmax(0,1fr)]",
     );
     expect(themeEditor).toContain("flex-nowrap");
     expect(themeEditor).toContain("md:flex-col");
     expect(themeEditor).toContain("md:w-full md:justify-start");
-    expect(themeEditor).toContain('aria-label="Theme files"');
+    expect(themeEditor).toContain('aria-label={t("codeEditor.themeFiles")}');
     const menuOrder = [
       '"webFeed",',
       '"webItem",',

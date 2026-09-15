@@ -1,20 +1,21 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "@/server/http";
+import {appErrorResponse, jsonResponse, localizedError, localizedTextError} from "@/server/http";
+import {AppError} from "@/shared/errors";
 import {mediaBucket} from "@/server/media/storage";
 import ThemeStore from "@/server/themes/ThemeStore";
 
-export const GET: APIRoute = async ({params}) => {
+export const GET: APIRoute = async ({params, request}) => {
   const draft = await new ThemeStore(env.FEED_DB).getDraft(params.draftId ?? "");
   return draft
     ? jsonResponse({draft})
-    : jsonResponse({error: "Draft not found."}, {status: 404});
+    : localizedTextError(request, "errors.theme.draftNotFound", 404);
 };
 
 export const PUT: APIRoute = async ({params, request}) => {
   const input = await request.json().catch(() => null) as Record<string, unknown> | null;
-  if (!input) return jsonResponse({error: "A draft is required."}, {status: 400});
+  if (!input) return localizedError(request, "errors.theme.draftRequired", 400);
   try {
     const draft = await new ThemeStore(env.FEED_DB).saveDraft(
       params.draftId ?? "",
@@ -22,6 +23,7 @@ export const PUT: APIRoute = async ({params, request}) => {
     );
     return jsonResponse({draft});
   } catch (error) {
+    if (error instanceof AppError) return appErrorResponse(request, error);
     return jsonResponse({
       error: error instanceof Error ? error.message : String(error),
     }, {status: 400});
@@ -31,7 +33,7 @@ export const PUT: APIRoute = async ({params, request}) => {
 export const POST: APIRoute = async ({params, request}) => {
   const input = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (input?.action !== "publish") {
-    return jsonResponse({error: "Unknown draft action."}, {status: 400});
+    return localizedError(request, "errors.theme.unknownDraftAction", 400);
   }
   try {
     const theme = await new ThemeStore(env.FEED_DB).publishDraft(
@@ -39,6 +41,7 @@ export const POST: APIRoute = async ({params, request}) => {
     );
     return jsonResponse({theme}, {status: 201});
   } catch (error) {
+    if (error instanceof AppError) return appErrorResponse(request, error);
     return jsonResponse({
       error: error instanceof Error ? error.message : String(error),
     }, {status: 400});

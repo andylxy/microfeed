@@ -2,20 +2,20 @@ import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, localizedError, localizedTextError} from "@/server/http";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 export const POST: APIRoute = async ({locals, request}) => {
   const userId = locals.authUser?.id;
-  if (!userId) return new Response("Not found", {status: 404});
+  if (!userId) return localizedTextError(request, "errors.account.notFound", 404);
   const body = await request.json().catch(() => null) as {
     currentPassword?: unknown;
     email?: unknown;
   } | null;
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!EMAIL.test(email) || typeof body?.currentPassword !== "string") {
-    return jsonResponse({error: "Enter a valid email and current password."}, {status: 400});
+    return localizedError(request, "errors.account.emailRequired", 400);
   }
   try {
     await createMicrofeedAuth(env, request).api.verifyPassword({
@@ -33,6 +33,6 @@ export const POST: APIRoute = async ({locals, request}) => {
     ]);
     return jsonResponse({email});
   } catch {
-    return jsonResponse({error: "The email is unavailable or the password is incorrect."}, {status: 400});
+    return localizedError(request, "errors.account.emailUnavailable", 400);
   }
 };

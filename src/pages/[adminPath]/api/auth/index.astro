@@ -6,15 +6,13 @@ import ApiAuthenticationApp from "@/components/admin/api/ApiAuthenticationApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listApiKeys, readApiAccessSettings} from "@/server/api/api-keys";
 import {NAV_ITEMS} from "@/shared/Constants";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 const [initialApiKeys, initialSettings] = await Promise.all([
   listApiKeys(env.FEED_DB),

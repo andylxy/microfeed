@@ -11,6 +11,7 @@ import {
   resolvePublicBucketUrl,
 } from "@/shared/StringUtils";
 import SettingsBase from "../SettingsBase";
+import i18n from "@/client/i18n";
 
 export const MEDIA_FILE_STORAGE_SUBMIT_KEY = "media-file-storage";
 
@@ -36,6 +37,7 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {
       isLocalDevelopment,
       publicBucketUrl,
@@ -50,7 +52,7 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
         currentType={MEDIA_FILE_STORAGE_SUBMIT_KEY}
         submitForType={submitForType}
         submitting={submitting}
-        title="Media file storage"
+        title={t("settings.mediaFileStorage")}
       >
         <AdminInput
           customClass="text-xs"
@@ -60,7 +62,7 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
             inputMode: "url",
             spellCheck: false,
           }}
-          label="R2 public bucket URL"
+          label={t("settings.r2PublicBucketUrl")}
           type="text"
           value={publicBucketUrl}
           onChange={(event: any) => this.setState(
@@ -70,21 +72,16 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
         />
         <p className="mt-2 text-xs text-helper-color">
           {isLocalDevelopment
-            ? "Local development always serves uploaded files through /media/, backed by the local R2 binding."
+            ? t("settings.mediaLocalDev")
             : <>
-              Keep <code>/media/</code> to serve uploaded files through this
-              Worker. Optionally,{
-              " "
-              }<a
+              {t("settings.mediaKeepMedia")}<a
                 className="underline"
                 href="https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains"
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                connect a custom domain to your R2 bucket
-              </a>{" "}and enter its complete URL here, such as{
-              " "
-              }<code>https://media.example.com/</code>.
+                {t("settings.mediaCustomDomain")}
+              </a>{t("settings.mediaEnterUrl")}
             </>}
         </p>
         {changed && (
@@ -101,8 +98,7 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
                   !isValidPublicBucketUrl(normalizedPublicBucketUrl)
                 ) {
                   showToast(
-                    "Invalid URL. Use /media/ or a complete URL starting with http:// or https://, " +
-                      "for example, https://media.example.com/",
+                    t("settings.mediaInvalidUrl"),
                     "error",
                     5000,
                   );
@@ -123,7 +119,7 @@ export default class MediaFileStorageSettingsApp extends React.Component<any, an
                 }
               }}
             >
-              {submittingForThis ? "Updating..." : "Update"}
+              {submittingForThis ? t("settings.updating") : t("settings.update")}
             </Button>
           </div>
         )}

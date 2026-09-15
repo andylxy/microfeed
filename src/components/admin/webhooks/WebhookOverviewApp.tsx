@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
+import {formatAdminDate} from "@/client/admin-date-format";
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
 import AdminSectionCard from "@/components/admin/shared/AdminSectionCard";
 import {Button} from "@/components/ui/button";
@@ -31,7 +32,7 @@ import {
   WEBHOOK_QUICKSTART_ENDPOINT_URL,
   type WebhookQuickstartLanguage,
 } from "@/shared/WebhookQuickstarts";
-import i18n, {useTranslation} from "@/client/i18n";
+import i18n from "@/client/i18n";
 import type {WebhookOverview} from "@/shared/Webhooks";
 import {WEBHOOK_EVENT_TYPES, WEBHOOK_LIMITS} from "@/shared/Webhooks";
 
@@ -67,7 +68,7 @@ export default function WebhookOverviewApp({
   overview: initialOverview,
 }: Props) {
   const [overview, setOverview] = useState(initialOverview);
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   const remaining = Math.max(
     overview.dailyLimit - overview.deliveriesToday,
     0,
@@ -91,13 +92,13 @@ export default function WebhookOverviewApp({
     (overview.enabled ? "enabled" : "unprovisioned");
   const localSimulationEnabled = localDevelopment && overview.enabled &&
     infrastructureState === "enabled";
-  const agentDeploymentPrompt =
-    `Run \`${MICROFEED_MANAGE_COMMAND}\` and follow every instruction it ` +
-    `prints to enable ${deploymentLabel.toLowerCase()} webhooks for my ` +
-    `existing microfeed site "${instanceName}". When instructed, run ` +
-    `\`${deploymentCommand}\`. Do not change another site or environment. ` +
-    `Continue until \`${managementCommand(`status --instance ${instanceName}`)}\` ` +
-    "verifies that the webhook Queue and binding are ready.";
+  const agentDeploymentPrompt = t("webhookOverview.agentDeploymentPrompt", {
+    command: MICROFEED_MANAGE_COMMAND,
+    deployCommand: deploymentCommand,
+    environment: deploymentLabel.toLowerCase(),
+    instance: instanceName,
+    statusCommand: managementCommand(`status --instance ${instanceName}`),
+  });
 
   const copy = async (value: string, label: string) => {
     await navigator.clipboard.writeText(value);
@@ -202,7 +203,7 @@ export default function WebhookOverviewApp({
             {overview.alerts.map((alert) => (
               <li className="rounded-lg border border-amber-500/35 bg-amber-500/8 p-3" key={alert.id}>
                 <p className="font-medium">{alert.message}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{new Date(alert.createdAt).toLocaleString()}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatAdminDate(alert.createdAt)}</p>
               </li>
             ))}
           </ul>
@@ -292,7 +293,7 @@ function FirstEndpointQuickstart({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   const [mode, setMode] = useState<FirstEndpointMode>(initialMode);
   const [language, setLanguage] =
     useState<WebhookQuickstartLanguage>("javascript");
@@ -466,7 +467,7 @@ function NoCodeQuickstart({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   const listenCommand = localDevelopment
     ? "yarn microfeed webhook listen"
     : "yarn microfeed webhook listen --tunnel";
@@ -537,7 +538,7 @@ function NoCodeQuickstart({
 }
 
 function TestEventStep({explorerUrl}: {explorerUrl: string}) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   return (
     <QuickstartStep
       description={t("webhookOverview.sendTestDescription")}
@@ -601,7 +602,7 @@ function QuickstartCommand({
   onCopy: (value: string, label: string) => Promise<void>;
   value: string;
 }) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   const label = copyLabel === "command" ? t("webhookOverview.commandNoun") : copyLabel;
   return (
     <div className="flex items-start gap-2 rounded-lg bg-muted p-3 text-foreground">
@@ -647,7 +648,7 @@ function BudgetMetric({
   overview: WebhookOverview;
   remaining: number;
 }) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(overview.dailyLimit));
   const [acknowledged, setAcknowledged] = useState(false);
@@ -796,7 +797,7 @@ function WebhookEnablementDialog({
   localDevelopment: boolean;
   onCopy: (value: string, label: string) => Promise<void>;
 }) {
-  const {t} = useTranslation();
+  const t = i18n.t.bind(i18n);
   return (
     <Dialog>
       <DialogTrigger render={<Button size="sm" type="button" variant="outline" />}>

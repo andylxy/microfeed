@@ -1,4 +1,5 @@
 import React from "react";
+import i18n from "@/client/i18n";
 import Quill from "quill";
 import FileUploader from "../../../AdminFileUploader";
 import AdminDialog from "../../../AdminDialog";
@@ -31,13 +32,13 @@ function FromUrl({url, onChange, onInsert}: any) {
       <AdminInput
         value={url}
         type="url"
-        placeholder="e.g., https://example.com/something.jpg"
+        placeholder={`${i18n.t("common.examplePrefix")}https://example.com/something.jpg`}
         onChange={onChange}
       />
     </div>
     <div className="py-4 flex justify-center">
       <Button type="submit" disabled={disabled} onClick={onInsert}>
-        Insert
+        {i18n.t("shared.insert")}
       </Button>
     </div>
   </form>);
@@ -50,8 +51,7 @@ function UploadNewFile(
     ENCLOSURE_CATEGORIES_DICT[ENCLOSURE_CATEGORIES.VIDEO] as any);
   return (<div className="lh-upload-wrapper w-full">
     {!mediaStorageReady && <div className="mb-3 rounded-sm border p-3 text-sm text-helper-color">
-      File uploads are unavailable until R2 media storage is enabled. Use
-      <strong> From URL</strong> instead.
+      {i18n.t("shared.r2UnavailableUseUrl")}
     </div>}
     <FileUploader
       handleChange={onFileUpload}
@@ -62,12 +62,12 @@ function UploadNewFile(
     >
       <div className="w-full h-24 lh-upload-box p-4 flex items-center justify-center">
         {uploading ? <div className="text-helper-color">
-          <div className="font-semibold">Uploading...</div>
+          <div className="font-semibold">{i18n.t("shared.uploading")}</div>
           <div className="text-sm">{progressText}</div>
         </div> : <div className="text-brand-light">
           <div className="flex items-center">
             <div className="mr-1"><CloudUploadIcon className="w-8"/></div>
-            <div className="font-semibold">Click or drag here to upload {mediaType}</div>
+            <div className="font-semibold">{i18n.t("shared.clickOrDragUploadType", {type: mediaType})}</div>
           </div>
           <div className="text-sm">{fileTypes.join(', ')}</div>
         </div>}
@@ -93,7 +93,7 @@ export default class RichEditorMediaDialog extends React.Component<any, any> {
 
   onFileUpload(file: any) {
     if (this.props.extra?.mediaStorageReady === false) {
-      showToast("Enable R2 media storage before uploading files.", "error");
+      showToast(i18n.t("shared.enableR2BeforeUpload"), "error");
       return;
     }
     const {mediaType, setIsOpen} = this.props;
@@ -128,15 +128,15 @@ export default class RichEditorMediaDialog extends React.Component<any, any> {
     }, () => {
       this.setState({uploadStatus: null, progressText: null}, () => {
         setIsOpen(false);
-        showToast('Failed. Please try again.', 'error');
+        showToast(i18n.t("common.failed"), "error");
       });
     }, (error: any) => {
       this.setState({uploadStatus: null, progressText: null}, () => {
         setIsOpen(false);
         if (!error.response) {
-          showToast('Network error. Please refresh the page and try again.', 'error');
+          showToast(i18n.t("common.networkError"), "error");
         } else {
-          showToast('Failed. Please try again.', 'error');
+          showToast(i18n.t("common.failed"), "error");
         }
       });
     });
@@ -179,24 +179,24 @@ export default class RichEditorMediaDialog extends React.Component<any, any> {
     const uploading = uploadStatus === UPLOAD_STATUS__START;
     return (
       <AdminDialog
-        title={`Insert ${mediaType}`}
+        title={i18n.t("shared.insertMediaTitle", {type: mediaType})}
         open={isOpen}
         onOpenChange={setIsOpen}
       >
         <div className="pt-4 pb-8">
           <AdminRadioGroup
-            ariaLabel="Media source"
+            ariaLabel={i18n.t("shared.mediaSource")}
             name="media-insert"
             className="text-sm font-semibold"
             value={mode}
             options={[
               {
-                label: 'Upload a new file',
+                label: i18n.t("shared.uploadNewFile"),
                 value: 'upload',
                 disabled: !mediaStorageReady,
               },
               {
-                label: 'From URL',
+                label: i18n.t("shared.fromUrl"),
                 value: 'url',
               },
             ]}

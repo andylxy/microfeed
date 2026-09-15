@@ -6,25 +6,23 @@ import AdminLoginShell from "@/layouts/AdminLoginShell.astro";
 import {getOAuthClientSummary} from "@/server/auth/oauth-admin";
 import {oauthConnectionHandoff} from "@/server/auth/account-security";
 import {normalizeAdminPath} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const clientId = Astro.url.searchParams.get("client_id")?.trim() ?? "";
 const requestedScopes = Astro.url.searchParams.get("scope")?.split(" ").filter(Boolean) ?? [];
 const client = clientId
   ? await getOAuthClientSummary(env.FEED_DB, clientId)
   : null;
 if (!client || requestedScopes.some((scope) => !client.scopes.includes(scope))) {
-  return new Response("Invalid application authorization request.", {
+  return new Response(translate("errors.oauth.invalidRequest", adminLanguage), {
     headers: {"content-type": "text/plain; charset=utf-8"},
     status: 400,
   });
 }
-const instanceName = env.MICROFEED_INSTANCE_NAME?.trim() || "This microfeed";
+const instanceName = env.MICROFEED_INSTANCE_NAME?.trim() || translate("errors.general.thisMicrofeed", adminLanguage);
 const instanceOrigin = Astro.url.origin;
 const connection = await oauthConnectionHandoff(
   Astro.request,
@@ -34,7 +32,7 @@ const connection = await oauthConnectionHandoff(
 
 <AdminLoginShell title={translate("pageDocumentTitle.authorize", adminLanguage, {name: client.name})} {adminPath}>
   <OAuthConsentApp
-    client:load
+    client:only="react"
     {client}
     connectionName={connection?.connectionName}
     {instanceName}

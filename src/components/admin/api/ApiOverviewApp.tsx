@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {showToast} from "@/client/ToastUtils";
+import {useTranslation} from "@/client/i18n";
 import type {ApiAccessSettings, ApiKeyRecord} from "@/shared/Api";
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 
@@ -37,27 +38,28 @@ export default function ApiOverviewApp({
   settings,
   settingsUrl,
 }: Props) {
+  const {t} = useTranslation();
   const [copied, setCopied] = useState(false);
   const prompt = `Read ${llmsFullUrl} so I can ask you questions and build with this microfeed API.`;
   const promptAvailable = settings.enabled && settings.publicDocsEnabled;
   const copy = async () => {
     await navigator.clipboard.writeText(prompt);
     setCopied(true);
-    showToast("Prompt copied.", "success");
+    showToast(t("api.promptCopied"), "success");
     window.setTimeout(() => setCopied(false), 1500);
   };
 
   return (
     <div className="grid gap-5 pb-[50vh]">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatusCard label="API access" enabled={settings.enabled} />
+        <StatusCard label={t("api.statusApiAccess")} enabled={settings.enabled} />
         <StatusCard
-          label="Public API docs"
+          label={t("api.statusPublicDocs")}
           enabled={settings.enabled && settings.publicDocsEnabled}
         />
         <Card size="sm">
           <CardHeader>
-            <CardDescription>Active API keys</CardDescription>
+            <CardDescription>{t("api.activeApiKeys")}</CardDescription>
             <CardTitle className="text-2xl">{apiKeys.length}</CardTitle>
           </CardHeader>
         </Card>
@@ -67,70 +69,68 @@ export default function ApiOverviewApp({
         <AdminSectionCard
           description={
             <>
-              Create an API key, then explore requests and generated examples in
-              your browser.
+              {t("api.startBuildingDescription")}
             </>
           }
-          title="Start building"
+          title={t("api.startBuilding")}
         >
-            <div className="flex flex-wrap gap-3">
-              <Button render={<a href={authenticationUrl} />}>
-                <KeyRoundIcon aria-hidden="true" />
-                Manage API keys
-              </Button>
-              <Button render={<a href={explorerUrl} />} variant="outline">
-                Open API Explorer
-                <ExternalLinkIcon aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="mt-5 border-t pt-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                API docs for people and AI agents
-              </p>
-              <ApiDocsLinks className="mt-2" />
-            </div>
+          <div className="flex flex-wrap gap-3">
+            <Button render={<a href={authenticationUrl} />}>
+              <KeyRoundIcon aria-hidden="true" />
+              {t("api.manageApiKeys")}
+            </Button>
+            <Button render={<a href={explorerUrl} />} variant="outline">
+              {t("api.openApiExplorer")}
+              <ExternalLinkIcon aria-hidden="true" />
+            </Button>
+          </div>
+          <div className="mt-5 border-t pt-4">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("api.docsForPeopleAndAgents")}
+            </p>
+            <ApiDocsLinks className="mt-2" />
+          </div>
         </AdminSectionCard>
 
         <AdminSectionCard
           description={
             <>
-              Copy this prompt into a coding agent to give it the complete API
-              contract for this instance.
+              {t("api.buildWithAgentDescription")}
             </>
           }
-          title="Build with an AI coding agent"
+          title={t("api.buildWithAgent")}
         >
-            <div className="relative rounded-xl border bg-muted/40 p-4 pr-14 pb-12 font-mono text-sm leading-6">
-              {prompt}
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      aria-label="Copy this prompt"
-                      className="absolute right-3 bottom-3"
-                      disabled={!promptAvailable}
-                      onClick={copy}
-                      size="icon-sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      {copied
-                        ? <CheckIcon aria-hidden="true" />
-                        : <CopyIcon aria-hidden="true" />}
-                    </Button>
-                  }
-                />
-                <TooltipContent>Copy this prompt</TooltipContent>
-              </Tooltip>
-            </div>
-            {!promptAvailable && (
-              <p className="mt-4 text-sm text-muted-foreground">
-                <a className="underline underline-offset-4" href={settingsUrl}>
-                  Enable API access and publish API docs
-                </a>{" "}
-                to use this prompt.
-              </p>
-            )}
+          <div className="relative rounded-xl border bg-muted/40 p-4 pr-14 pb-12 font-mono text-sm leading-6">
+            {prompt}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    aria-label={t("api.copyPrompt")}
+                    className="absolute right-3 bottom-3"
+                    disabled={!promptAvailable}
+                    onClick={copy}
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {copied
+                      ? <CheckIcon aria-hidden="true" />
+                      : <CopyIcon aria-hidden="true" />}
+                  </Button>
+                }
+              />
+              <TooltipContent>{t("api.copyPrompt")}</TooltipContent>
+            </Tooltip>
+          </div>
+          {!promptAvailable && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              <a className="underline underline-offset-4" href={settingsUrl}>
+                {t("api.enableToUsePrompt")}
+              </a>{" "}
+              {t("api.toUsePromptSuffix")}
+            </p>
+          )}
         </AdminSectionCard>
       </div>
 
@@ -149,12 +149,13 @@ export default function ApiOverviewApp({
 }
 
 function StatusCard({enabled, label}: {enabled: boolean; label: string}) {
+  const {t} = useTranslation();
   return (
     <Card size="sm">
       <CardHeader>
         <CardDescription>{label}</CardDescription>
         <CardTitle className={enabled ? "text-emerald-600" : "text-muted-foreground"}>
-          {enabled ? "Enabled" : "Disabled"}
+          {enabled ? t("api.enabled") : t("api.disabled")}
         </CardTitle>
       </CardHeader>
     </Card>

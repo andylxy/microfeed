@@ -3,6 +3,7 @@ import {env} from "cloudflare:workers";
 
 import {CODE_TYPES} from "@/shared/Constants";
 import PublicLayout from "@/layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {navigationPages} from "@/server/pages/service";
 import Theme, {themeSupportsPagesAndSearch} from "@/server/themes/Theme";
@@ -48,7 +49,7 @@ const query = Astro.url.searchParams.get("q")?.trim() ?? "";
 ---
 
 {unavailable ? (
-  <h1>Not Found</h1>
+  <PublicNotFoundHeading />
 ) : (
   <PublicLayout
     title={`Search — ${loaded.publicFeed.title ?? "microfeed"}`}

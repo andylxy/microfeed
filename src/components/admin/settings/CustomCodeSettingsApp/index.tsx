@@ -5,6 +5,7 @@ import {Button} from "@/components/ui/button";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import SettingsBase from '../SettingsBase';
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
+import i18n from "@/client/i18n";
 
 function NavBlock({url, text}: {url: string; text: string}) {
   return (
@@ -29,10 +30,11 @@ export default class CustomCodeSettingsApp extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {submitting, submitForType} = this.props;
     const {currentType} = this.state;
     return (<SettingsBase
-      title="Website appearance & code"
+      title={t("settings.websiteAppearance")}
       submitting={submitting}
       submitForType={submitForType}
       currentType={currentType}
@@ -41,20 +43,20 @@ export default class CustomCodeSettingsApp extends React.Component<any, any> {
         <div>
           <NavBlock
             url={ADMIN_URLS.codeEditorSettings()}
-            text="Edit shared HTML code across web pages"
+            text={t("settings.editSharedHtml")}
           />
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Add code inside <code>&lt;head&gt;</code> and at the top or bottom of <code>&lt;body&gt;</code> across public web pages. Use it for tracking snippets such as Google Analytics and Meta Pixel, or for your own JavaScript and CSS.
+            {t("settings.editSharedHtmlDescription")}
           </p>
         </div>
 
         <div>
           <NavBlock
             url={ADMIN_URLS.themesSettings()}
-            text="Manage versioned themes"
+            text={t("settings.manageThemesLink")}
           />
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Install, edit, preview, activate, and roll back different versions of themes.
+            {t("settings.manageThemesDescription")}
           </p>
         </div>
       </div>

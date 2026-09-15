@@ -6,8 +6,13 @@ import {
   apiPageCreateInputSchema,
   apiPageInputSchema,
   pageInputErrorMessage,
+  pageInputErrorParams,
 } from "@/shared/ApiSchemas";
-import {jsonResponse} from "@/server/http";
+import {
+  jsonResponse,
+  localizedError,
+  localizedServiceError,
+} from "@/server/http";
 import FeedDb from "@/server/feed/FeedDb";
 import {
   activeThemeSupportsPages,
@@ -34,16 +39,22 @@ const pageNavigationOrderSchema = z.object({
   page_ids: z.array(z.string().min(1)).max(100),
 });
 
-function serviceError(error: unknown): Response | undefined {
+function serviceError(
+  request: Request | undefined,
+  error: unknown,
+): Response | undefined {
   if (error instanceof PageRequestError) {
-    return jsonResponse({error: error.message}, {status: 400});
+    return localizedServiceError(error, 400, request);
   }
   if (error instanceof PageConflictError) {
-    return jsonResponse({error: error.message}, {status: 409});
+    return localizedServiceError(error, 409, request);
   }
   if (error instanceof PageThemeUnsupportedError) {
-    return jsonResponse({error: error.message}, {status: 422});
+    return localizedServiceError(error, 422, request);
   }
+  // No catch-all AppError branch: unclassified errors must keep propagating to
+  // a 500 exactly as before. Guessing a status here would silently turn a 500
+  // into a 400.
   return undefined;
 }
 
@@ -51,7 +62,7 @@ function database(request: Request): FeedDb {
   return new FeedDb(env, request, cache);
 }
 
-export const listAdminPages: APIRoute = async () => {
+export const listAdminPages: APIRoute = async ({request}) => {
   try {
     const [items, themeSupportsPages] = await Promise.all([
       listAdminPageSummaries(env.FEED_DB),
@@ -62,7 +73,7 @@ export const listAdminPages: APIRoute = async () => {
       {headers: {"cache-control": "private, no-store"}},
     );
   } catch (error) {
-    const response = serviceError(error);
+    const response = serviceError(request, error);
     if (response) return response;
     throw error;
   }
@@ -73,18 +84,18 @@ export const createAdminPage: APIRoute = async ({request}) => {
     () => null,
   ));
   if (!parsed.success) {
-    return jsonResponse(
-      {error: pageInputErrorMessage(parsed.error)},
-      {status: 400},
+    return localizedError(
+      request,
+      pageInputErrorMessage(parsed.error),
+      400,
+      pageInputErrorParams(parsed.error),
     );
   }
   const webMcpInteraction = isWebMcpInteraction(request);
   if (
     webMcpInteraction && !isUnpublishedStatus(parsed.data.status)
   ) {
-    return jsonResponse({
-      error: "WebMCP can create only an unpublished Page draft.",
-    }, {status: 409});
+    return localizedError(request, "errors.page.webmcpCreateOnly", 409);
   }
   try {
     const page = await createPage(database(request), request, parsed.data, {
@@ -100,7 +111,7 @@ export const createAdminPage: APIRoute = async ({request}) => {
     });
     return jsonResponse(page, {status: 201});
   } catch (error) {
-    const response = serviceError(error);
+    const response = serviceError(request, error);
     if (response) return response;
     throw error;
   }
@@ -112,7 +123,7 @@ export const getAdminPage: APIRoute = async ({params, request}) => {
     : null;
   return page
     ? jsonResponse(page)
-    : jsonResponse({error: "Page not found."}, {status: 404});
+    : localizedError(request, "errors.page.notFound", 404);
 };
 
 export const reorderAdminPageNavigation: APIRoute = async ({request}) => {
@@ -139,7 +150,7 @@ export const reorderAdminPageNavigation: APIRoute = async ({request}) => {
     );
     return jsonResponse({});
   } catch (error) {
-    const response = serviceError(error);
+    const response = serviceError(request, error);
     if (response) return response;
     throw error;
   }
@@ -149,20 +160,22 @@ export const updateAdminPage: APIRoute = async ({params, request}) => {
   const parsed = apiPageInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
-  if (!parsed.success || !params.pageId) {
-    return jsonResponse({
-      error: !parsed.success
-        ? pageInputErrorMessage(parsed.error)
-        : "Choose a Page to update.",
-    }, {status: 400});
+  if (!parsed.success) {
+    return localizedError(
+      request,
+      pageInputErrorMessage(parsed.error),
+      400,
+      pageInputErrorParams(parsed.error),
+    );
+  }
+  if (!params.pageId) {
+    return localizedError(request, "errors.page.selectedNotFound", 400);
   }
   const webMcpInteraction = isWebMcpInteraction(request);
   if (
     webMcpInteraction && !isUnpublishedStatus(parsed.data.status)
   ) {
-    return jsonResponse({
-      error: "WebMCP can save only an unpublished Page draft.",
-    }, {status: 409});
+    return localizedError(request, "errors.page.webmcpSaveOnly", 409);
   }
   try {
     const before = await getPageById(
@@ -196,10 +209,10 @@ export const updateAdminPage: APIRoute = async ({params, request}) => {
         }),
       },
     );
-    if (!page) return jsonResponse({error: "Page not found."}, {status: 404});
+    if (!page) return localizedError(request, "errors.page.notFound", 404);
     return jsonResponse(page);
   } catch (error) {
-    const response = serviceError(error);
+    const response = serviceError(request, error);
     if (response) return response;
     throw error;
   }
@@ -207,7 +220,7 @@ export const updateAdminPage: APIRoute = async ({params, request}) => {
 
 export const deleteAdminPage: APIRoute = async ({params, request}) => {
   if (!params.pageId) {
-    return jsonResponse({error: "Invalid Page ID."}, {status: 400});
+    return localizedError(request, "errors.page.invalidId", 400);
   }
   try {
     const before = await getPageById(env.FEED_DB, request, params.pageId);
@@ -222,11 +235,11 @@ export const deleteAdminPage: APIRoute = async ({params, request}) => {
         mutation: "deleted",
       }),
     )) {
-      return jsonResponse({error: "Page not found."}, {status: 404});
+      return localizedError(request, "errors.page.notFound", 404);
     }
     return jsonResponse({});
   } catch (error) {
-    const response = serviceError(error);
+    const response = serviceError(request, error);
     if (response) return response;
     throw error;
   }

@@ -4,14 +4,19 @@ import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 
+import i18n from "@/client/i18n";
 import AdminWebhookSidebar from "@/components/admin/webhooks/AdminWebhookSidebar";
 import WebhookDeliveriesApp from "@/components/admin/webhooks/WebhookDeliveriesApp";
 import WebhookEndpointsApp from "@/components/admin/webhooks/WebhookEndpointsApp";
-import WebhookEventExplorerApp from "@/components/admin/webhooks/WebhookEventExplorerApp";
+import WebhookEventExplorerApp, {
+  eventDescriptionKeys,
+  eventGroupKeys,
+} from "@/components/admin/webhooks/WebhookEventExplorerApp";
 import WebhookOverviewApp from "@/components/admin/webhooks/WebhookOverviewApp";
 import {getAdminNavigationItems} from "@/shared/AdminNavigation";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {ADMIN_WEBHOOK_PAGES} from "@/shared/AdminWebhookNavigation";
+import {WEBHOOK_EVENT_DEFINITIONS} from "@/shared/WebhookExamples";
 import {WEBHOOK_QUICKSTARTS} from "@/shared/WebhookQuickstarts";
 
 const deployment = {
@@ -463,5 +468,25 @@ describe("Webhook Admin", () => {
     expect(successfulDetails).toContain("text-emerald-700");
     expect(successfulDetails).toContain(">succeeded</span>");
     expect(successfulDetails).toContain(">204</span>");
+  });
+});
+
+// These two maps are looked up by variable, so the key checker in
+// `microfeed-admin-i18n/scripts` cannot see them. This is their only guard: a
+// typo would otherwise render the raw key in the event picker.
+describe("Webhook event labels", () => {
+  it("resolves every event description key to real copy", () => {
+    for (const [type, key] of Object.entries(eventDescriptionKeys)) {
+      const label = i18n.t(key);
+      expect(label, type).not.toBe(key);
+    }
+  });
+
+  it("resolves every event group key and covers every group in the definitions", () => {
+    for (const [group, key] of Object.entries(eventGroupKeys)) {
+      expect(i18n.t(key), group).not.toBe(key);
+    }
+    const groups = new Set(WEBHOOK_EVENT_DEFINITIONS.map((event) => event.group));
+    expect([...groups].sort()).toEqual(Object.keys(eventGroupKeys).sort());
   });
 });

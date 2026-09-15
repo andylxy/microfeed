@@ -7,6 +7,8 @@ import {
   mediaStorageUnavailableResponse,
 } from "@/server/media/storage";
 import {normalizeObjectKey, verifySignedUpload} from "@/server/media/uploads";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 
 const corsHeaders = {
   "access-control-allow-headers": "content-type",
@@ -23,7 +25,13 @@ export const PUT: APIRoute = async ({params, request, url}) => {
   const contentType = url.searchParams.get("content-type") ?? "";
   const sizeValue = url.searchParams.get("size") ?? "";
   if (!objectKey) {
-    return new Response("Invalid media path", {status: 400});
+    return new Response(
+      translate(
+        "errors.media.invalidPath",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 400},
+    );
   }
   const valid = await verifySignedUpload(
     objectKey,
@@ -35,10 +43,22 @@ export const PUT: APIRoute = async ({params, request, url}) => {
     sizeValue,
   );
   if (!valid) {
-    return new Response("Invalid or expired upload URL", {status: 403});
+    return new Response(
+      translate(
+        "errors.media.invalidOrExpiredUploadUrl",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 403},
+    );
   }
   if (!request.body) {
-    return new Response("Upload body is required", {status: 400});
+    return new Response(
+      translate(
+        "errors.media.uploadBodyRequired",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 400},
+    );
   }
 
   let body: ReadableStream = request.body;
@@ -63,7 +83,10 @@ export const OPTIONS: APIRoute = () => new Response(null, {
   status: 204,
 });
 
-export const ALL: APIRoute = () => new Response("Method Not Allowed", {
-  headers: {allow: "PUT, OPTIONS"},
-  status: 405,
-});
+export const ALL: APIRoute = ({request}) => new Response(
+  translate(
+    "errors.media.methodNotAllowed",
+    adminLanguageFromRequest(request),
+  ),
+  {headers: {allow: "PUT, OPTIONS"}, status: 405},
+);

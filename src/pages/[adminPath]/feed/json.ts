@@ -1,10 +1,10 @@
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "../../../server/http";
+import {jsonResponse, localizedTextError} from "@/server/http";
 
-export const GET: APIRoute = ({locals}) => {
+export const GET: APIRoute = ({locals, request}) => {
   if (!locals.feedContent) {
-    return new Response("Feed context unavailable", {status: 500});
+    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   return jsonResponse(locals.feedContent);
 };

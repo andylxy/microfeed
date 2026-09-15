@@ -1,4 +1,5 @@
 import {normalizeObjectKey} from "./uploads";
+import {notFoundResponse} from "@/server/http";
 import {
   mediaBucket,
   mediaStorageUnavailableResponse,
@@ -111,7 +112,7 @@ export async function getMediaResponse(
   }
   const key = rawKey ? normalizeObjectKey(rawKey) : null;
   if (!key) {
-    return new Response("Not Found", {status: 404});
+    return notFoundResponse(request);
   }
 
   if (request.method === "HEAD") {
@@ -146,7 +147,7 @@ export async function getMediaResponse(
   if (requestedRange) {
     const metadata = await bucket.head(key);
     if (!metadata) {
-      return new Response("Not Found", {status: 404});
+      return notFoundResponse(request);
     }
     if (!headRange(requestedRange, metadata.size)) {
       const headers = objectHeaders(metadata);
@@ -161,7 +162,7 @@ export async function getMediaResponse(
       range: request.headers,
     });
     if (!object) {
-      return new Response("Not Found", {status: 404});
+      return notFoundResponse(request);
     }
 
     const headers = objectHeaders(object);

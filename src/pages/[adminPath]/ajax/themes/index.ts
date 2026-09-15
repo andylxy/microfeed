@@ -1,7 +1,8 @@
 import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "@/server/http";
+import {appErrorResponse, jsonResponse, localizedError} from "@/server/http";
+import {AppError} from "@/shared/errors";
 import ThemeStore from "@/server/themes/ThemeStore";
 import {
   singleWebhookEventCommit,
@@ -13,7 +14,8 @@ import {
 } from "@/shared/themes/ThemeListing";
 import {webhookThemeSnapshot} from "@/shared/WebhookExamples";
 
-function errorResponse(error: unknown): Response {
+function errorResponse(request: Request, error: unknown): Response {
+  if (error instanceof AppError) return appErrorResponse(request, error);
   return jsonResponse({
     error: error instanceof Error ? error.message : String(error),
   }, {status: 400});
@@ -28,14 +30,14 @@ export const GET: APIRoute = async ({request}) => {
       await new ThemeStore(env.FEED_DB, cache).listSummaries(options, tab),
     );
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(request, error);
   }
 };
 
 export const POST: APIRoute = async ({request}) => {
   const input = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!input || typeof input.action !== "string") {
-    return jsonResponse({error: "A theme action is required."}, {status: 400});
+    return localizedError(request, "errors.theme.actionRequired", 400);
   }
   const store = new ThemeStore(env.FEED_DB, cache);
   try {
@@ -43,7 +45,7 @@ export const POST: APIRoute = async ({request}) => {
       const originKind = input.originKind;
       if (originKind === "theme" && typeof input.themeId === "string") {
         const source = await store.getVersion(input.themeId);
-        if (!source) return jsonResponse({error: "Theme not found."}, {status: 404});
+        if (!source) return localizedError(request, "errors.theme.notFound", 404);
         const draft = await store.createDraft({
           assetOwnerThemeId: source.assetOwnerThemeId,
           bundle: source.bundle,
@@ -54,7 +56,7 @@ export const POST: APIRoute = async ({request}) => {
         });
         return jsonResponse({draft}, {status: 201});
       }
-      return jsonResponse({error: "Choose an installed theme version."}, {status: 400});
+      return localizedError(request, "errors.theme.chooseVersion", 400);
     }
     if (input.action === "activate" && typeof input.themeId === "string") {
       const before = await store.getState();
@@ -159,8 +161,8 @@ export const POST: APIRoute = async ({request}) => {
       );
       return jsonResponse({state});
     }
-    return jsonResponse({error: "Unknown theme action."}, {status: 400});
+    return localizedError(request, "errors.theme.unknownAction", 400);
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(request, error);
   }
 };

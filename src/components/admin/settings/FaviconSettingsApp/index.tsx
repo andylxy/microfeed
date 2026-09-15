@@ -5,6 +5,7 @@ import AdminImageUploaderApp from "@/components/admin/shared/AdminImageUploaderA
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
 import {hasUploadedFavicon} from "@/shared/Favicon";
 import SettingsBase from "../SettingsBase";
+import i18n from "@/client/i18n";
 
 export const FAVICON_SUBMIT_KEY = "favicon";
 
@@ -39,21 +40,22 @@ export default class FaviconSettingsApp extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {favicon} = this.state;
     const {submitForType} = this.props;
     const usingChannelImage = !hasUploadedFavicon(favicon);
     const saving = submitForType === FAVICON_SUBMIT_KEY;
 
     return (
-      <SettingsBase currentType={FAVICON_SUBMIT_KEY} title="Favicon">
+      <SettingsBase currentType={FAVICON_SUBMIT_KEY} title={t("settings.favicon")}>
         <p className="text-xs text-helper-color">
           {usingChannelImage
-            ? "Your channel image is used until you upload a separate favicon."
-            : "This uploaded favicon is used instead of your channel image."}
+            ? t("settings.faviconUsesChannelImage")
+            : t("settings.faviconUsesUploaded")}
         </p>
         {saving && (
           <p aria-live="polite" className="mt-3 text-xs text-muted-foreground">
-            Saving favicon...
+            {t("settings.savingFavicon")}
           </p>
         )}
         <div className="mt-4 flex">
@@ -65,12 +67,14 @@ export default class FaviconSettingsApp extends React.Component<any, any> {
               (width > 256 && height > 256) || (width < 48 && height < 48)}
             imageSizeNotOkayMsgFunc={(width: any, height: any) => {
               if (width > 256 && height > 256) {
-                return `Image too big: ${Number.parseInt(width)} x ${Number.parseInt(height)} pixels. ` +
-                  "You'd better upload a smaller image for favicon.";
+                return t("settings.faviconTooBig", {
+                  size: `${Number.parseInt(width)} x ${Number.parseInt(height)}`,
+                });
               }
               if (width < 48 && height < 48) {
-                return `Image too small: ${Number.parseInt(width)} x ${Number.parseInt(height)} pixels. ` +
-                  "You'd better upload a bigger image for favicon.";
+                return t("settings.faviconTooSmall", {
+                  size: `${Number.parseInt(width)} x ${Number.parseInt(height)}`,
+                });
               }
               return "";
             }}

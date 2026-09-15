@@ -5,10 +5,10 @@ import {
   createMicrofeedAuth,
   withAuthSessionCookies,
 } from "@/server/auth/better-auth";
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, localizedError, localizedTextError} from "@/server/http";
 
 export const POST: APIRoute = async ({locals, request}) => {
-  if (!locals.authUser?.id) return new Response("Not found", {status: 404});
+  if (!locals.authUser?.id) return localizedTextError(request, "errors.account.notFound", 404);
   const body = await request.json().catch(() => null) as {
     currentPassword?: unknown;
     newPassword?: unknown;
@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({locals, request}) => {
       typeof body.newPassword !== "string" ||
       body.newPassword.length < 12 || body.newPassword.length > 128 ||
       body.newPassword !== body.confirmation) {
-    return jsonResponse({error: "Enter matching passwords of 12–128 characters."}, {status: 400});
+    return localizedError(request, "errors.account.passwordMismatch", 400);
   }
   try {
     const changed = await createMicrofeedAuth(env, request).api.changePassword({
@@ -35,6 +35,6 @@ export const POST: APIRoute = async ({locals, request}) => {
       changed.headers,
     );
   } catch {
-    return jsonResponse({error: "The current password is incorrect."}, {status: 400});
+    return localizedError(request, "errors.account.currentPasswordIncorrect", 400);
   }
 };

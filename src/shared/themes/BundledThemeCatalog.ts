@@ -1,4 +1,5 @@
 import BLOG_MANIFEST from "../../../themes/blog/microfeed-theme.json";
+import {AppError} from "../errors";
 import CHANGELOG_MANIFEST from "../../../themes/changelog/microfeed-theme.json";
 import CURATION_MANIFEST from "../../../themes/curation/microfeed-theme.json";
 import DEFAULT_MANIFEST from "../../../themes/default/microfeed-theme.json";
@@ -57,7 +58,7 @@ function assertValidCatalog(
 ): void {
   const assertUnique = (values: string[], label: string) => {
     if (new Set(values).size !== values.length) {
-      throw new Error(`Built-in theme catalog ${label} must be unique.`);
+      throw new AppError("errors.theme.catalogNotUnique", 400, {label});
     }
   };
   assertUnique(catalog.map(({key}) => key), "keys");

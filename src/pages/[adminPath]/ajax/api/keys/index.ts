@@ -6,7 +6,7 @@ import {
   createApiKey,
   readApiAccessSettings,
 } from "@/server/api/api-keys";
-import {jsonResponse} from "@/server/http";
+import {jsonResponse, localizedError} from "@/server/http";
 import {createApiKeyCommandSchema} from "@/shared/ApiSchemas";
 
 export const POST: APIRoute = async ({request}) => {
@@ -14,16 +14,12 @@ export const POST: APIRoute = async ({request}) => {
     () => null,
   ));
   if (!parsed.success) {
-    return jsonResponse({error: "Enter a valid, unique API-key name."}, {
-      status: 400,
-    });
+    return localizedError(request, "errors.apiKey.nameUnique", 400);
   }
   const settings = parsed.data.settings ??
     await readApiAccessSettings(env.FEED_DB);
   if (!settings.enabled) {
-    return jsonResponse({
-      error: "Enable API access before creating an API key.",
-    }, {status: 409});
+    return localizedError(request, "errors.apiKey.enableFirst", 409);
   }
   try {
     const apiKey = await createApiKey(env.FEED_DB, {

@@ -18,6 +18,7 @@ import {
   CONTROLS_TEXTS_DICT
 } from "../AdminHelpContent";
 import {Button} from "@/components/ui/button";
+import i18n from "@/client/i18n";
 
 function initMethodsDict() {
   return {
@@ -80,6 +81,7 @@ function MethodRow({
   moveCard,
   updateMethodByAttr,
 }: any) {
+  const t = i18n.t.bind(i18n);
   const { id, name, type, editable, enabled, image, deleted } = method;
   let { url } = method;
   if (!url && !editable) {
@@ -109,11 +111,11 @@ function MethodRow({
   >
     <div className="mr-3 flex flex-none items-center justify-start">
       <Button
-        aria-label={`Drag to change the order of ${name}`}
+        aria-label={t("settings.dragToReorder", {name})}
         aria-roledescription="sortable item"
         className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
         size="icon-sm"
-        title="Drag to change the order. Use Arrow Up or Arrow Down with the keyboard."
+        title={t("pages.dragToChangeOrder")}
         type="button"
         variant="ghost"
         onKeyDown={(event: React.KeyboardEvent) => {
@@ -166,7 +168,7 @@ function MethodRow({
       <div className="mt-2 flex items-center">
         <div className="">
           <AdminSwitch
-            label="Visible"
+            label={t("settings.visible")}
             labelClassName={clsx('text-xs', enabled ? 'text-foreground' : 'text-muted-foreground')}
             checked={enabled}
             onCheckedChange={(checked) => updateMethodByAttr(id, 'enabled', checked)}
@@ -182,9 +184,9 @@ function MethodRow({
                 updateMethodByAttr(id, 'deleted', true);
               }}>
               <Trash2Icon className="w-4"/>
-              Delete
+              {t("settings.delete")}
             </Button></div> : <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span>Deleted.</span>
+              <span>{t("settings.deleted")}</span>
               <Button
                 className="h-auto px-0 text-xs text-brand-light"
                 size="xs"
@@ -192,7 +194,7 @@ function MethodRow({
                 variant="link"
                 onClick={() => updateMethodByAttr(id, 'deleted', false)}
               >
-                Undo
+                {t("settings.undo")}
               </Button>
             </div>}
           </div>}
@@ -242,6 +244,7 @@ function FloatingMethodPreview({method, position}: any) {
 }
 
 function AddNewMethod({isOpenNewMethod, setIsOpenNewMethod, addNewMethod}: any) {
+  const t = i18n.t.bind(i18n);
   return (<div>
     <div className="flex justify-center">
       <Button
@@ -252,10 +255,10 @@ function AddNewMethod({isOpenNewMethod, setIsOpenNewMethod, addNewMethod}: any) 
         }}
       >
         <CirclePlusIcon aria-hidden="true" className="size-4 shrink-0" />
-        <span>Add new subscribe method</span>
+        <span>{t("settings.addNewSubscribeMethod")}</span>
       </Button>
     </div>
-    <div className="mt-1 text-xs text-muted-color text-center">e.g., Apple Podcasts, Spotify, Listen Notes...</div>
+    <div className="mt-1 text-xs text-muted-color text-center">{t("settings.subscribeExamples")}</div>
     <NewSubscribeDialog
       isOpen={isOpenNewMethod}
       setIsOpen={setIsOpenNewMethod}

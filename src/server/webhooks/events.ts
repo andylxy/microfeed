@@ -572,7 +572,9 @@ export async function createWebhookTestDelivery(
 ): Promise<{deliveryId: string; eventId: string; suppressed?: string}> {
   if (!webhooksAvailable(runtimeEnv)) {
     throw new WebhookUnavailableError(
-      `Enable webhooks with ${managementCommand("deploy --enable-webhooks")} first.`,
+      "errors.webhook.enableFirst",
+      503,
+      {command: managementCommand("deploy --enable-webhooks")},
     );
   }
   const endpoint = await endpointForDirectDelivery(
@@ -582,7 +584,7 @@ export async function createWebhookTestDelivery(
   );
   if (!endpoint) {
     throw new WebhookRequestError(
-      "The endpoint does not exist or is disabled.",
+      "errors.webhook.endpointDisabled",
     );
   }
   return createDirectDelivery(
@@ -611,7 +613,9 @@ export async function createWebhookExplorerDelivery(
 ): Promise<{deliveryId: string; eventId: string; suppressed?: string}> {
   if (!webhooksAvailable(runtimeEnv)) {
     throw new WebhookUnavailableError(
-      `Enable webhooks with ${managementCommand("deploy --enable-webhooks")} first.`,
+      "errors.webhook.enableFirst",
+      503,
+      {command: managementCommand("deploy --enable-webhooks")},
     );
   }
   const endpoint = await endpointForDirectDelivery(
@@ -621,7 +625,7 @@ export async function createWebhookExplorerDelivery(
   );
   if (!endpoint) {
     throw new WebhookRequestError(
-      "The endpoint does not exist or is disabled.",
+      "errors.webhook.endpointDisabled",
     );
   }
   return createDirectDelivery(
@@ -640,7 +644,7 @@ export async function redeliverWebhookDelivery(
   deliveryId: string,
 ): Promise<{deliveryId: string; eventId: string; suppressed?: string}> {
   if (!webhooksAvailable(runtimeEnv)) {
-    throw new WebhookUnavailableError("Webhooks are not enabled.");
+    throw new WebhookUnavailableError("errors.webhook.notEnabled");
   }
   const source = await runtimeEnv.FEED_DB.prepare(`
     SELECT webhook_deliveries.endpoint_id, webhook_deliveries.is_test,
@@ -649,7 +653,7 @@ export async function redeliverWebhookDelivery(
     JOIN webhook_events ON webhook_events.id = webhook_deliveries.event_id
     WHERE webhook_deliveries.id = ? LIMIT 1
   `).bind(deliveryId).first<Record<string, unknown>>();
-  if (!source) throw new WebhookRequestError("Delivery not found.");
+  if (!source) throw new WebhookRequestError("errors.webhook.deliveryMissing");
   const endpoint = await endpointForDirectDelivery(
     runtimeEnv.FEED_DB,
     String(source.endpoint_id),
@@ -657,7 +661,7 @@ export async function redeliverWebhookDelivery(
   );
   if (!endpoint) {
     throw new WebhookRequestError(
-      "The endpoint must be active before redelivery.",
+      "errors.webhook.endpointMustBeActive",
     );
   }
   const newDeliveryId = `whd_${crypto.randomUUID()}`;

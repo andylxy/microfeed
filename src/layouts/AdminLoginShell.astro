@@ -5,7 +5,7 @@ import AdminLanguageMenu from "@/components/admin/AdminLanguageMenu";
 import AdminThemeScript from "@/components/admin/AdminThemeScript.astro";
 import AdminLanguageScript from "@/components/admin/AdminLanguageScript.astro";
 import adminStylesheetUrl from "@/styles/admin-stylesheet";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import "../styles/interactive.css";
 
 interface Props {
@@ -14,9 +14,7 @@ interface Props {
 }
 
 const {adminPath, title} = Astro.props;
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 ---
 
 <!doctype html>

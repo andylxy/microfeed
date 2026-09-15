@@ -4,6 +4,7 @@ import ApiDocsLinks from "@/components/admin/api/ApiDocsLinks";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import SettingsBase from "@/components/admin/settings/SettingsBase";
 import {showToast} from "@/client/ToastUtils";
+import {useTranslation} from "@/client/i18n";
 import {
   type ApiAccessSettings,
   updateApiAccessEnabled,
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ApiSettingsApp({initialSettings}: Props) {
+  const {t} = useTranslation();
   const [settings, setSettings] = useState(initialSettings);
   const [saving, setSaving] = useState(false);
 
@@ -30,10 +32,10 @@ export default function ApiSettingsApp({initialSettings}: Props) {
         method: "POST",
       });
       if (!response.ok) throw new Error("save failed");
-      showToast("API settings updated.", "success");
+      showToast(t("api.settingsUpdated"), "success");
     } catch {
       setSettings(previous);
-      showToast("Failed to update API settings. Please try again.", "error");
+      showToast(t("api.settingsUpdateFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -41,24 +43,24 @@ export default function ApiSettingsApp({initialSettings}: Props) {
 
   return (
     <SettingsBase
-      description="Control integration access and public API docs."
-      title="Availability"
+      description={t("api.settingsDescription")}
+      title={t("api.availability")}
     >
       <div>
         <SettingRow
           checked={settings.enabled}
-          description={`Allow external integrations to call ${API_BASE_PATH}* with an API key. Turning this off also unpublishes the API docs and returns 404 for these routes, without affecting the dashboard or admin login.`}
+          description={t("api.enableApiAccessDescription", {base: API_BASE_PATH})}
           disabled={saving}
-          label="Enable API access"
+          label={t("api.enableApiAccess")}
           onChange={(enabled) => save(updateApiAccessEnabled(settings, enabled))}
         />
         <div className="border-t pt-5">
           <div className="ml-4 divide-y border-l-2 border-border pl-5 sm:ml-6 sm:pl-6">
             <SettingRow
               checked={settings.publicDocsEnabled}
-              description="Publish interactive API docs, OpenAPI files, and llms.txt files. Recommended for AI-agent workflows. API access must be enabled to publish these docs."
+              description={t("api.publishApiDocsDescription")}
               disabled={saving || !settings.enabled}
-              label="Publish API docs"
+              label={t("api.publishApiDocs")}
               onChange={(publicDocsEnabled) =>
                 save({...settings, publicDocsEnabled})
               }
@@ -87,6 +89,7 @@ function SettingRow({
   label: string;
   onChange: (checked: boolean) => void;
 }) {
+  const {t} = useTranslation();
   return (
     <div className="flex flex-col justify-between gap-4 py-5 first:pt-0 last:pb-0 sm:flex-row sm:items-start">
       <div className="max-w-3xl">
@@ -97,7 +100,7 @@ function SettingRow({
       <AdminSwitch
         checked={checked}
         disabled={disabled}
-        label={checked ? "On" : "Off"}
+        label={checked ? t("api.on") : t("api.off")}
         onCheckedChange={onChange}
       />
     </div>

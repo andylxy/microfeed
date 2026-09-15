@@ -76,10 +76,25 @@ export function siteFileMediaTypeForName(
   return MEDIA_TYPE_BY_EXTENSION[extension];
 }
 
-export function validateSiteFilename(value: string): string | undefined {
+/**
+ * A validation failure expressed as an i18n key plus its parameters. Callers own
+ * the translation: this module is shared with server code and therefore must not
+ * import `@/client/*`.
+ */
+export interface SiteFileValidationIssue {
+  key: string;
+  params?: Record<string, string>;
+}
+
+export function validateSiteFilename(
+  value: string,
+): SiteFileValidationIssue | undefined {
   const filename = normalizeSiteFilename(value);
   if (!filename || filename.length > SITE_FILE_MAX_NAME_LENGTH) {
-    return `Use 1–${SITE_FILE_MAX_NAME_LENGTH} characters.`;
+    return {
+      key: "errors.siteFile.nameLength",
+      params: {max: String(SITE_FILE_MAX_NAME_LENGTH)},
+    };
   }
   if (
     filename.startsWith(".") ||
@@ -87,13 +102,13 @@ export function validateSiteFilename(value: string): string | undefined {
     filename.includes("/") ||
     !/^[a-z0-9][a-z0-9._-]*\.[a-z0-9]+$/u.test(filename)
   ) {
-    return "Use a lowercase root filename with a safe extension.";
+    return {key: "errors.siteFile.nameFormat"};
   }
   if (BLOCKED_SITE_FILE_NAMES.has(filename)) {
-    return `\`${filename}\` is reserved by microfeed.`;
+    return {key: "errors.siteFile.nameReserved", params: {filename}};
   }
   if (!siteFileMediaTypeForName(filename)) {
-    return "Use txt, xml, json, webmanifest, csv, css, yaml, yml, md, atom, or rss.";
+    return {key: "errors.siteFile.nameExtension"};
   }
   return undefined;
 }
@@ -102,13 +117,16 @@ export function validateSiteFileContent(
   content: string,
   contentType: SiteFileMediaType,
   options: {allowLargeGeneratedSitemap?: boolean} = {},
-): string | undefined {
-  if (content.includes("\0")) return "NUL bytes are not allowed.";
+): SiteFileValidationIssue | undefined {
+  if (content.includes("\0")) return {key: "errors.siteFile.nulBytes"};
   if (
     !options.allowLargeGeneratedSitemap &&
     new TextEncoder().encode(content).byteLength > SITE_FILE_MAX_BYTES
   ) {
-    return `Content must be ${SITE_FILE_MAX_BYTES} bytes or smaller.`;
+    return {
+      key: "errors.siteFile.contentSize",
+      params: {max: String(SITE_FILE_MAX_BYTES)},
+    };
   }
   if (
     contentType === "application/json" ||
@@ -117,7 +135,7 @@ export function validateSiteFileContent(
     try {
       JSON.parse(content);
     } catch {
-      return "Publish valid JSON content.";
+      return {key: "errors.siteFile.invalidJson"};
     }
   }
   return undefined;

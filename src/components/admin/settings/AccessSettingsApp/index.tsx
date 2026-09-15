@@ -7,6 +7,7 @@ import {
   SETTINGS_CATEGORIES,
 } from "@/shared/Constants";
 import type {AccessPolicy} from "@/types";
+import i18n from "@/client/i18n";
 
 export default class AccessSettingsApp extends React.Component<any, any> {
   constructor(props: any) {
@@ -39,15 +40,16 @@ export default class AccessSettingsApp extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {currentType, access} = this.state;
     const {submitting} = this.props;
     return (<SettingsBase
-      title="Access control"
+      title={t("settings.accessControl")}
       currentType={currentType}
     >
       <AdminRadioGroup
         alignment="start"
-        ariaLabel="Access policy"
+        ariaLabel={t("settings.accessPolicy")}
         disabled={submitting}
         name="access-policy"
         value={access.currentPolicy}

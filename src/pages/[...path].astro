@@ -2,10 +2,13 @@
 import {env} from "cloudflare:workers";
 
 import {isAdminPathname, normalizeAdminPath} from "@/shared/AdminPath";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import {loadPublicPageRoute} from "@/server/pages/public";
+import {translate} from "@/shared/i18n";
 
 const pathname = Astro.url.pathname;
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const adminRequest = isAdminPathname(
   pathname,
   normalizeAdminPath(env.MICROFEED_ADMIN_PATH),
@@ -19,7 +22,7 @@ let publicPage;
 
 if (adminRequest) {
   if (!Astro.locals.feedContent || !Astro.locals.onboardingResult) {
-    throw new Error("Admin feed context was not initialized.");
+    throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
   }
   Astro.response.status = 404;
 } else {

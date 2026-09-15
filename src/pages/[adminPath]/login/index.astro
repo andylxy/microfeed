@@ -2,17 +2,15 @@
 import {env} from "cloudflare:workers";
 
 import {normalizeAdminPath} from "@/shared/AdminPath";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import AdminLoginApp from "@/components/admin/AdminLoginApp";
 import AdminLoginShell from "../../../layouts/AdminLoginShell.astro";
 
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 ---
 
 <AdminLoginShell title={translate("pageDocumentTitle.dashboardLogin", adminLanguage)} {adminPath}>
-  <AdminLoginApp client:load />
+  <AdminLoginApp client:only="react" />
 </AdminLoginShell>

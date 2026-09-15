@@ -37,16 +37,6 @@ const sectionIcons: Record<AdminSettingsSection["icon"], typeof ActivityIcon> = 
   storage: HardDriveIcon,
 };
 
-const sectionNameKeys: Record<AdminSettingsSection["id"], string> = {
-  "custom-code": "settings.websiteAppearance",
-  "tracking-urls": "settings.trackingUrls",
-  "access-control": "settings.accessControl",
-  "subscribe-methods": "settings.subscribeMethods",
-  "media-file-storage": "settings.mediaFileStorage",
-  "items-settings": "settings.itemsSettings",
-  favicon: "settings.favicon",
-};
-
 function sectionFromLocation(): AdminSettingsSection["id"] {
   if (typeof window === "undefined") {
     return ADMIN_SETTINGS_SECTIONS[0].id;
@@ -64,8 +54,8 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
   );
   const [query, setQuery] = useState("");
   const visibleSections = useMemo(
-    () => filterAdminSettingsSections(query),
-    [query],
+    () => filterAdminSettingsSections(query, (section) => t(section.nameKey)),
+    [query, t],
   );
 
   useEffect(() => {
@@ -193,7 +183,7 @@ export default function AdminSettingsSidebar({data, onNavigate}: Props) {
                     }}
                   >
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {t(sectionNameKeys[section.id])}
+                    {t(section.nameKey)}
                   </a>
                 </li>
               );

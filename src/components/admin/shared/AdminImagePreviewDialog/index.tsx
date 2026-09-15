@@ -11,6 +11,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import i18n from "@/client/i18n";
 
 interface AdminImagePreviewDialogProps {
   alt?: string;
@@ -19,21 +20,28 @@ interface AdminImagePreviewDialogProps {
   open: boolean;
 }
 
+/**
+ * Reads translations from the i18n singleton instead of `useTranslation` so the
+ * component stays hook-free. The admin language is applied by reloading the page,
+ * so there is nothing to re-render on a language change, and hook-free renderers
+ * keep the lightweight `Component({...})` inspection used by the admin UI tests.
+ */
 export default function AdminImagePreviewDialog({
-  alt = "Uploaded image",
+  alt,
   imageUrl,
   onOpenChange,
   open,
 }: AdminImagePreviewDialogProps) {
+  const altText = alt ?? i18n.t("shared.uploadedImage");
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
         className="inset-0 top-0 left-0 flex h-dvh w-dvw max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none border-0 bg-black/80 p-6 text-white ring-0 sm:max-w-none"
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">Image preview</DialogTitle>
+        <DialogTitle className="sr-only">{i18n.t("shared.imagePreview")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Full-screen preview of the uploaded image.
+          {i18n.t("shared.imagePreviewDesc")}
         </DialogDescription>
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <a
@@ -43,7 +51,7 @@ export default function AdminImagePreviewDialog({
             target="_blank"
           >
             <ExternalLinkIcon aria-hidden="true" />
-            Open
+            {i18n.t("shared.open")}
           </a>
           <DialogClose
             render={(
@@ -55,11 +63,11 @@ export default function AdminImagePreviewDialog({
             )}
           >
             <XIcon aria-hidden="true" />
-            Close
+            {i18n.t("shared.close")}
           </DialogClose>
         </div>
         <img
-          alt={alt}
+          alt={altText}
           className="max-h-[calc(100dvh-3rem)] max-w-[calc(100dvw-3rem)] object-contain"
           src={imageUrl}
         />

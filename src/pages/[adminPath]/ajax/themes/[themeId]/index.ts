@@ -1,21 +1,22 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse} from "@/server/http";
+import {appErrorResponse, jsonResponse, localizedTextError} from "@/server/http";
+import {AppError} from "@/shared/errors";
 import {mediaBucket} from "@/server/media/storage";
 import ThemeStore from "@/server/themes/ThemeStore";
 
-export const GET: APIRoute = async ({params}) => {
+export const GET: APIRoute = async ({params, request}) => {
   const theme = await new ThemeStore(env.FEED_DB).getVersion(
     params.themeId ?? "",
     true,
   );
   return theme
     ? jsonResponse({theme})
-    : jsonResponse({error: "Theme not found."}, {status: 404});
+    : localizedTextError(request, "errors.theme.notFound", 404);
 };
 
-export const DELETE: APIRoute = async ({params}) => {
+export const DELETE: APIRoute = async ({params, request}) => {
   try {
     await new ThemeStore(env.FEED_DB).deleteVersion(
       params.themeId ?? "",
@@ -23,6 +24,7 @@ export const DELETE: APIRoute = async ({params}) => {
     );
     return jsonResponse({});
   } catch (error) {
+    if (error instanceof AppError) return appErrorResponse(request, error);
     return jsonResponse({
       error: error instanceof Error ? error.message : String(error),
     }, {status: 400});

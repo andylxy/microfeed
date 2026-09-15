@@ -24,6 +24,7 @@ import type {
   AdminPageListResponse,
   AdminPageSummary,
 } from "@/shared/AdminCollections";
+import i18n, {useTranslation} from "@/client/i18n";
 
 type DropPosition = "after" | "before";
 
@@ -57,12 +58,13 @@ export function reorderNavigationPageList(
 async function responseJson(response: Response): Promise<unknown> {
   const data = await response.json().catch(() => ({})) as Record<string, any>;
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not save the navigation order.");
+    throw new Error(data.error ?? i18n.t("pages.navigationOrderSaveFailed"));
   }
   return data;
 }
 
 function PageDetails({page}: {page: AdminPageSummary}) {
+  const {t} = useTranslation();
   return (
     <>
       <div className="min-w-0 flex-1">
@@ -70,15 +72,15 @@ function PageDetails({page}: {page: AdminPageSummary}) {
           <h3 className="truncate font-semibold">{page.title}</h3>
           {page.is_not_found_page && (
             <span className="rounded-full border px-2 py-0.5 text-xs">
-              Default 404
+              {t("pages.default404")}
             </span>
           )}
         </div>
         <p className="truncate text-sm text-muted-foreground">/{page.slug}/</p>
       </div>
-      <span className="shrink-0 rounded-full border px-2.5 py-1 text-xs capitalize">
-        {page.status}
-      </span>
+        <span className="shrink-0 rounded-full border px-2.5 py-1 text-xs capitalize">
+          {{published: t("pages.statusPublished"), unlisted: t("pages.statusUnlisted"), unpublished: t("pages.statusDraft")}[page.status]}
+        </span>
     </>
   );
 }
@@ -107,6 +109,7 @@ function NavigationPageRow({
   moveWithKeyboard: (pageId: string, direction: -1 | 1) => void;
   page: AdminPageSummary;
 }) {
+  const {t} = useTranslation();
   return (
     <div
       className={cn(
@@ -122,7 +125,7 @@ function NavigationPageRow({
       data-page-navigation-id={page.id}
     >
       <Button
-        aria-label={`Drag to change the navigation position of ${page.navigation_label}`}
+        aria-label={t("pages.dragToChangePosition", {label: page.navigation_label})}
         aria-roledescription="sortable item"
         className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
         disabled={disabled}
@@ -137,7 +140,7 @@ function NavigationPageRow({
         }}
         onPointerDown={(event) => beginDragging(page.id, event)}
         size="icon-sm"
-        title="Drag to change the order. Use Arrow Up or Arrow Down with the keyboard."
+        title={t("pages.dragToChangeOrder")}
         type="button"
         variant="ghost"
       >
@@ -174,6 +177,7 @@ export function PagesList({
   pages: AdminPageSummary[];
   themeSupportsPages: boolean;
 }) {
+  const {t} = useTranslation();
   const initialNavigationPages = pages
     .filter((page) => page.show_in_navigation && !page.is_not_found_page)
     .sort((left, right) =>
@@ -215,13 +219,13 @@ export function PagesList({
         method: "PUT",
       }));
       savedNavigationPagesRef.current = orderedPages;
-      showToast("Navigation order saved.", "success");
+      showToast(t("pages.navigationOrderSaved"), "success");
     } catch (error) {
       setOrderedPages(savedNavigationPagesRef.current);
       showToast(
         error instanceof Error
           ? error.message
-          : "Could not save the navigation order.",
+          : t("pages.navigationOrderSaveFailed"),
         "error",
       );
     } finally {
@@ -317,16 +321,15 @@ export function PagesList({
     <div className="grid gap-5">
       {!themeSupportsPages && (
         <section className="rounded-[14px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-          Your current theme predates Pages. You can draft Pages now, then install
-          and activate a format v2 theme before publishing them. <a className="underline" href={ADMIN_URLS.themesSettings()}>Manage themes</a>
+          {t("pages.themePredatesBefore")} <a className="underline" href={ADMIN_URLS.themesSettings()}>{t("pages.manageThemes")}</a>
         </section>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Pages are standalone website content such as About, Contact, or Resources.
+          {t("pages.intro")}
         </p>
         <a className={cn(buttonVariants(), "!text-white hover:!text-white")} href={ADMIN_URLS.newPage()}>
-          <PlusIcon aria-hidden="true" /> Add Page
+          <PlusIcon aria-hidden="true" /> {t("pages.addPage")}
         </a>
       </div>
 
@@ -334,19 +337,18 @@ export function PagesList({
         <>
           <section className="overflow-hidden rounded-[14px] border bg-card shadow-xs">
             <div className="border-b p-5">
-              <h2 className="font-semibold">Website navigation</h2>
+              <h2 className="font-semibold">{t("pages.websiteNavigation")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Drag Pages into the order their links should appear. Use the
-                arrow keys on a drag handle for keyboard ordering.
+                {t("pages.navigationInstructions")}
               </p>
               <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">
-                {savingOrder ? "Saving navigation order…" : "Only Pages with Show in navigation enabled appear here."}
+                {savingOrder ? t("pages.savingNavigationOrder") : t("pages.onlyNavigationEnabledAppear")}
               </p>
             </div>
             {navigationPages.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground">
-                No Pages are enabled for website navigation.
-              </p>
+                <p className="p-5 text-sm text-muted-foreground">
+                  {t("pages.noneEnabledForNavigation")}
+                </p>
             ) : (
               <div>
                 {navigationPages.map((page, index) => (
@@ -372,9 +374,9 @@ export function PagesList({
           {otherPages.length > 0 && (
             <section className="grid gap-3">
               <div>
-                <h2 className="font-semibold">Other Pages</h2>
+                <h2 className="font-semibold">{t("pages.otherPages")}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Pages hidden from navigation and the protected default 404 Page.
+                  {t("pages.otherPagesDescription")}
                 </p>
               </div>
               {otherPages.map((page) => <PageCard key={page.id} page={page} />)}
@@ -386,9 +388,9 @@ export function PagesList({
       {pages.length === 0 && (
         <section className="rounded-[14px] border bg-card p-8 text-center shadow-xs">
           <FileTextIcon aria-hidden="true" className="mx-auto mb-3 size-8 text-muted-foreground" />
-          <h2 className="font-semibold">No Pages yet</h2>
+          <h2 className="font-semibold">{t("pages.noPagesYet")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Create a Page without adding it to your feed.
+            {t("pages.noPagesYetDescription")}
           </p>
         </section>
       )}
@@ -397,15 +399,16 @@ export function PagesList({
 }
 
 export default function PagesApp() {
+  const {t} = useTranslation();
   const {data, error, loading, retry} =
     useAdminCollection<AdminPageListResponse>(
       ADMIN_URLS.ajaxPages(),
-      "Could not load Pages.",
+      t("pages.loadFailed"),
     );
   if (!data) {
     return error
       ? <AdminCollectionError message={error} retry={retry} />
-      : <AdminCollectionLoading label="Loading Pages" />;
+      : <AdminCollectionLoading label={t("pages.loading")} />;
   }
   return (
     <div>

@@ -19,6 +19,7 @@ import {
 } from "@/shared/ItemPagination";
 import {CONTROLS_TEXTS_DICT, SETTINGS_CONTROLS} from "../AdminHelpContent";
 import SettingsBase from "../SettingsBase";
+import i18n from "@/client/i18n";
 
 export const ITEMS_ORDERING_SUBMIT_KEY = "items-ordering";
 export const ITEMS_PER_PAGE_SUBMIT_KEY = "items-per-page";
@@ -63,6 +64,7 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {
       itemsOrder,
       itemsPerPage,
@@ -79,7 +81,7 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
         currentType={ITEMS_PER_PAGE_SUBMIT_KEY}
         submitForType={submitForType}
         submitting={submitting}
-        title="Items settings"
+        title={t("settings.itemsSettings")}
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <AdminRadioGroup
@@ -90,9 +92,9 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
             />}
             name="items-sort"
             options={[
-              {label: "Published at", value: ITEM_SORTS.PUBLISHED_AT},
-              {label: "Created at", value: ITEM_SORTS.CREATED_AT},
-              {label: "Updated at", value: ITEM_SORTS.UPDATED_AT},
+              {label: t("settings.sortPublishedAt"), value: ITEM_SORTS.PUBLISHED_AT},
+              {label: t("settings.sortCreatedAt"), value: ITEM_SORTS.CREATED_AT},
+              {label: t("settings.sortUpdatedAt"), value: ITEM_SORTS.UPDATED_AT},
             ]}
             value={itemsSort}
             onValueChange={(value) => void this.updateOrdering({
@@ -101,12 +103,12 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
           />
           <AdminRadioGroup
             disabled={submitting}
-            label="Order"
+            label={t("settings.order")}
             labelClassName="m-input-label-small"
             name="items-order"
             options={[
-              {label: "Newest first", value: ITEM_ORDERS.DESC},
-              {label: "Oldest first", value: ITEM_ORDERS.ASC},
+              {label: t("settings.sortNewestFirst"), value: ITEM_ORDERS.DESC},
+              {label: t("settings.sortOldestFirst"), value: ITEM_ORDERS.ASC},
             ]}
             value={itemsOrder}
             onValueChange={(value) => void this.updateOrdering({
@@ -121,7 +123,7 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
               customClass="h-10 text-xs"
               customLabelClass="m-input-label-small"
               extraParams={{min: 0, max: MAX_ITEMS_PER_PAGE}}
-              label="Items per page"
+              label={t("settings.itemsPerPage")}
               type="number"
               value={itemsPerPage}
               onChange={(event: any) => {
@@ -129,13 +131,13 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
                 if (nextItemsPerPage > MAX_ITEMS_PER_PAGE) {
                   nextItemsPerPage = MAX_ITEMS_PER_PAGE;
                   showToast(
-                    `Items per page should be less than ${MAX_ITEMS_PER_PAGE}`,
+                    t("settings.itemsPerPageMax", {max: MAX_ITEMS_PER_PAGE}),
                     "error",
                     5000,
                   );
                 } else if (nextItemsPerPage < 0) {
                   showToast(
-                    "Items per page should not be a negative number",
+                    t("settings.itemsPerPageNegative"),
                     "error",
                     5000,
                   );
@@ -165,13 +167,13 @@ export default class ItemsSettingsApp extends React.Component<any, any> {
                 }
               }}
             >
-              {submittingItemsPerPage ? "Updating..." : "Update"}
+              {submittingItemsPerPage ? t("settings.updating") : t("settings.update")}
             </Button>
           )}
         </div>
         {submittingOrdering && (
           <p aria-live="polite" className="mt-4 text-right text-xs text-muted-foreground">
-            Saving item order...
+            {t("settings.savingItemOrder")}
           </p>
         )}
       </SettingsBase>

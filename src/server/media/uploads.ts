@@ -1,4 +1,5 @@
 import {mediaPrefix} from "@/server/media/R2Utils";
+import {AppError} from "@/shared/errors";
 import type {SignedUpload, UploadRequest} from "@/types";
 
 export const UPLOAD_TTL_SECONDS = 15 * 60;
@@ -76,7 +77,7 @@ export async function createSignedUpload(
 ): Promise<SignedUpload> {
   const key = normalizeObjectKey(input.key);
   if (!key) {
-    throw new Error("Invalid media object key.");
+    throw new AppError("errors.media.invalidObjectKey");
   }
 
   const mediaBaseUrl = mediaPrefix(runtimeEnv, request.url);
@@ -91,7 +92,7 @@ export async function createSignedUpload(
       (input.size ?? -1) < 0
     )
   ) {
-    throw new Error("Invalid media object size.");
+    throw new AppError("errors.media.invalidObjectSize");
   }
   const signingKey = await importSigningKey(runtimeEnv.UPLOAD_SIGNING_KEY);
   const signature = new Uint8Array(

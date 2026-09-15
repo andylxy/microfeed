@@ -26,6 +26,7 @@ import type {AdminNavItemId} from "@/shared/AdminNavigation";
 import AdminAboutDialog from "./AdminAboutDialog";
 import AdminPublicAccess from "./shared/AdminPublicAccess";
 import type {AdminSidebarData} from "./admin-shell-types";
+import {UNTITLED_CHANNEL_TITLE} from "./admin-shell-types";
 
 interface Props {
   data: AdminSidebarData;
@@ -45,6 +46,9 @@ const navigationIcons: Record<AdminNavItemId, typeof HomeIcon> = {
 
 export default function AdminSidebar({data, onNavigate}: Props) {
   const {t} = useTranslation();
+  const channelTitle = data.channel.title === UNTITLED_CHANNEL_TITLE
+    ? t("channel.untitled")
+    : data.channel.title;
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="p-3">
@@ -52,7 +56,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
           <DialogTrigger
             render={
               <button
-                aria-label={t("nav.openPublicAccess", {title: data.channel.title})}
+                aria-label={t("nav.openPublicAccess", {title: channelTitle})}
                 className="group flex min-h-16 w-full items-center gap-3 rounded-[var(--radius-card)] border border-sidebar-border bg-sidebar px-3 py-2.5 text-left shadow-xs outline-none transition hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40"
                 type="button"
               />
@@ -67,17 +71,17 @@ export default function AdminSidebar({data, onNavigate}: Props) {
               />
             ) : (
               <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-brand-light/15 font-bold text-brand-dark ring-1 ring-brand-light/25 dark:text-brand-light">
-                {data.channel.title.slice(0, 1).toUpperCase()}
+                {channelTitle.slice(0, 1).toUpperCase()}
               </span>
             )}
             <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-5 font-semibold">
-              {data.channel.title}
+              {channelTitle}
             </span>
             <Globe2Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           </DialogTrigger>
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-0 sm:max-w-3xl">
             <DialogTitle className="sr-only">
-              {t("nav.publicAccess", {title: data.channel.title})}
+              {t("nav.publicAccess", {title: channelTitle})}
             </DialogTitle>
             <DialogDescription className="sr-only">
               {t("nav.publicAccessDescription")}

@@ -1,4 +1,5 @@
 import {randomShortUUID} from "@/shared/StringUtils";
+import {AppError} from "@/shared/errors";
 
 const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -70,7 +71,7 @@ export async function claimItemCreateIdempotency(
     ).bind(keyHash),
   ]);
   const row = results[2]?.results[0];
-  if (!row) throw new Error("Unable to reserve the idempotent item creation.");
+  if (!row) throw new AppError("errors.item.idempotencyReserveFailed");
   if (row.request_hash !== requestHash) {
     throw new ItemCreateIdempotencyConflictError(
       "This Idempotency-Key was already used with a different item payload.",

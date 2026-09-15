@@ -11,19 +11,17 @@ import {
 } from "@/server/auth/account-admin";
 import {cloudflareAccessIdentity} from "@/server/auth/admin-protection";
 import {listOAuthApplicationAccess} from "@/server/auth/oauth-admin";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
-const adminLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
+const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {authSession, authUser, feedContent, onboardingResult} = Astro.locals;
 const accessIdentity = cloudflareAccessIdentity(Astro.request);
 if (!authUser && !accessIdentity.detected) {
-  return new Response("Not found", {status: 404});
+  return new Response(translate("errors.general.notFound", adminLanguage), {status: 404});
 }
 if (!feedContent || !onboardingResult) {
-  throw new Error("Admin feed context was not initialized.");
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 const [passkeys, sessions, applications, apiSettings] = authUser
   ? await Promise.all([

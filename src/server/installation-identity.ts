@@ -1,3 +1,4 @@
+import {AppError} from "@/shared/errors";
 const INSTALLATION_RECORD_ID = "installation";
 
 interface InstallationIdentityRow {
@@ -42,7 +43,7 @@ export async function installationInstanceId(
   ).bind(INSTALLATION_RECORD_ID, candidate).run();
   const persisted = await savedInstallationIdentity(database);
   if (!persisted) {
-    throw new Error("microfeed could not create its installation identity.");
+    throw new AppError("errors.general.installationIdentity");
   }
   return persisted;
 }

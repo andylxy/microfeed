@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from "@/client/i18n";
 import clsx from 'clsx';
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.min.css';
@@ -48,7 +49,7 @@ function EmptyImage({fileTypes}: any) {
       <CloudUploadIcon className="w-8" />
     </div>
     <div className="font-semibold">
-      Click or drag here to upload image
+      {i18n.t("shared.clickOrDragUpload")}
     </div>
     <div className="mt-2">
       {fileTypes.join(',')}
@@ -59,7 +60,7 @@ function EmptyImage({fileTypes}: any) {
 function PreviewImage({url}: {url: string}) {
   return (<div className="relative flex h-full w-full justify-center overflow-hidden rounded-md">
     <img
-      alt="Uploaded image"
+      alt={i18n.t("shared.uploadedImage")}
       src={url}
       className="h-full w-full object-cover"
     />
@@ -189,13 +190,13 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
         deleting: false,
         showDeleteConfirm: false,
         showPreview: false,
-      }, () => showToast('Image deleted.', 'success'));
+      }, () => showToast(i18n.t('shared.imageDeleted'), 'success'));
     } catch (error: any) {
       this.setState({deleting: false}, () => {
         if (!error.response) {
-          showToast('Network error. Please refresh the page and try again.', 'error');
+          showToast(i18n.t('common.networkError'), 'error');
         } else {
-          showToast('Failed to delete this image. Please try again.', 'error');
+          showToast(i18n.t('shared.failedDeleteImage'), 'error');
         }
       });
     }
@@ -247,7 +248,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
     this.setState({ uploadStatus: UPLOAD_STATUS__START });
     cropper.getCroppedCanvas().toBlob((blob: Blob | null) => {
       if (!blob) {
-        showToast('Failed to prepare this image. Please try another file.', 'error');
+        showToast(i18n.t('shared.failedPrepareImage'), 'error');
         this.setState({...this.initState});
         return;
       }
@@ -277,14 +278,14 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
           ),
         });
       }, () => {
-        showToast('Failed to upload. Please refresh this page and try again.', 'error', 2000);
+        showToast(i18n.t('shared.failedUpload'), 'error', 2000);
         this.setState({...this.initState});
       }, (error: any) => {
         this.setState({...this.initState}, () => {
           if (!error.response) {
-            showToast('Network error. Please refresh the page and try again.', 'error');
+            showToast(i18n.t('common.networkError'), 'error');
           } else {
-            showToast('Failed. Please try again.', 'error');
+            showToast(i18n.t('common.failed'), 'error');
           }
         });
       });
@@ -309,8 +310,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
     const imageSizeNotOkay = imageSizeNotOkayFunc ? imageSizeNotOkayFunc(imageWidth, imageHeight) :
       imageWidth < 1400 || imageHeight < 1400;
     const imageSizeNotOkayMsg = imageSizeNotOkayMsgFunc ? imageSizeNotOkayMsgFunc(imageWidth, imageHeight) :
-      `Image too small: ${parseInt(imageWidth)} x ${parseInt(imageHeight)} pixels. ` +
-      "If it's for a podcast image, Apple Podcasts requires the image to have 1400 x 1400 to 3000 x 3000 pixels.";
+      i18n.t("shared.imageTooSmall", {width: parseInt(imageWidth), height: parseInt(imageHeight)});
     return (<div className="lh-upload-wrapper">
       {absoluteImageUrl ? <>
         <input
@@ -333,7 +333,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
           <DropdownMenuTrigger
             render={(
               <button
-                aria-label="Manage uploaded image"
+                aria-label={i18n.t("shared.manageUploadedImage")}
                 className="lh-upload-image-size relative overflow-hidden rounded-md border-2 border-dashed border-brand-light outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-brand-light focus-visible:ring-offset-2"
                 disabled={uploading || deleting}
                 type="button"
@@ -345,11 +345,11 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={this.onFileUploadClick}>
               <RefreshCwIcon aria-hidden="true" />
-              Replace
+              {i18n.t("shared.replace")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => this.setState({showPreview: true})}>
               <ExternalLinkIcon aria-hidden="true" />
-              Preview
+              {i18n.t("shared.preview")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -358,7 +358,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
               variant="destructive"
             >
               <Trash2Icon aria-hidden="true" />
-              {deleting ? 'Deleting...' : 'Delete'}
+              {deleting ? i18n.t("shared.deleting") : i18n.t("shared.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -377,21 +377,20 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete this image?</AlertDialogTitle>
+              <AlertDialogTitle>{i18n.t("shared.deleteThisImage")}</AlertDialogTitle>
               <AlertDialogDescription>
-                This removes the image from this page and requests permanent
-                deletion of its uploaded file. This action cannot be undone.
+                {i18n.t("shared.deleteImageConfirmDesc")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={deleting}>{i18n.t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 disabled={deleting}
                 onClick={this.onDeleteImage}
                 type="button"
                 variant="destructive"
               >
-                {deleting ? 'Deleting...' : 'Delete image'}
+                {deleting ? i18n.t("shared.deleting") : i18n.t("shared.deleteImage")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -419,7 +418,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
         state={this.props.mediaStorage?.mediaStorageState}
       />
       <AdminDialog
-        title="Crop image"
+        title={i18n.t("shared.cropImage")}
         open={showModal}
         onOpenChange={(open) => this.setState({showModal: open})}
         closeDisabled={uploading}
@@ -458,12 +457,12 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
             onClick={this.onFileUploadToR2}
             disabled={uploading || !mediaStorageReady}
           >
-            {uploading ? `Uploading... ${progressText}` : 'Upload'}
+            {uploading ? `${i18n.t("shared.uploading")} ${progressText}` : i18n.t("shared.upload")}
           </Button>
         </div>
         {imageWidth > 0 && imageHeight > 0 && <div className={clsx("mt-2 text-xs text-center", imageSizeNotOkay ? 'text-red-500' : 'text-green-500')}>
           {imageSizeNotOkay ? <div>{imageSizeNotOkayMsg}</div> :
-            <div>Image ok: {parseInt(imageWidth)} x {parseInt(imageHeight)} pixels.</div>}
+            <div>{i18n.t("shared.imageOk", {width: parseInt(imageWidth), height: parseInt(imageHeight)})}</div>}
         </div>}
       </AdminDialog>
     </div>);

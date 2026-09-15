@@ -1,0 +1,15 @@
+---
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+
+// Degraded-mode heading for the public routes (hidden public web, missing item,
+// no theme support). The site's own feed language is not reachable on every
+// path — `loadPublicPageRoute` does not return it, so 404.astro cannot use it —
+// so all of them resolve from the visitor's Accept-Language, the same rule the
+// public API 401/404 bodies follow.
+const language = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
+---
+
+<h1>{translate("pageTitle.notFound", language)}</h1>

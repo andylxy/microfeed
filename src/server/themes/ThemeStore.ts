@@ -6,6 +6,7 @@ import {
   type PublicCachePurger,
 } from "@/server/cache/public-cache";
 import {MICROFEED_VERSION} from "@/shared/Version";
+import {AppError} from "@/shared/errors";
 import type {
   BuiltInThemeGroup,
   StoredThemeVersion,
@@ -106,16 +107,14 @@ function validatedPreviewFixture(
 ): ThemePreviewFixture | null {
   if (!manifest.previewFixture) {
     if (fixture !== null && fixture !== undefined) {
-      throw new Error(
-        "A preview fixture must be declared by manifest.previewFixture.",
-      );
+      throw new AppError("errors.theme.previewFixtureRequiresManifest");
     }
     return null;
   }
   if (fixture === null || fixture === undefined) {
-    throw new Error(
-      `The declared preview fixture is missing: ${manifest.previewFixture}`,
-    );
+    throw new AppError("errors.theme.previewFixtureMissing", 400, {
+      fixture: manifest.previewFixture,
+    });
   }
   return themePreviewFixtureSchema.parse(fixture);
 }
@@ -372,7 +371,7 @@ export default class ThemeStore {
       `SELECT active_theme_id, legacy_migrated_at
        FROM theme_state WHERE id = 'current' LIMIT 1`,
     ).first<{active_theme_id: string | null; legacy_migrated_at: string | null}>();
-    if (!state) throw new Error("Theme state is unavailable.");
+    if (!state) throw new AppError("errors.theme.stateUnavailable");
     if (state.legacy_migrated_at) {
       return state.active_theme_id
         ? await this.getVersion(state.active_theme_id)
@@ -464,7 +463,7 @@ export default class ThemeStore {
       active_theme_id: string | null;
       appearance_preserved_at: string | null;
     }>();
-    if (!state) throw new Error("Theme state is unavailable.");
+    if (!state) throw new AppError("errors.theme.stateUnavailable");
     if (state.appearance_preserved_at || state.active_theme_id) {
       if (!state.appearance_preserved_at) {
         await this.database.prepare(
@@ -498,9 +497,10 @@ export default class ThemeStore {
       .first<Record<string, unknown>>();
     const existing = existingRow ? storedThemeFromRow(existingRow) : null;
     if (existing && (existing.deletedAt || existing.checksumSha256 !== checksum)) {
-      throw new Error(
-        `${validated.manifest.packageId}@${validated.manifest.version} is reserved by different bundled-default content.`,
-      );
+      throw new AppError("errors.theme.bundledDefaultReserved", 400, {
+        packageId: validated.manifest.packageId,
+        version: validated.manifest.version,
+      });
     }
     const defaultThemeId = existing?.id ?? BUNDLED_DEFAULT_THEME_ID;
     await this.database.batch([
@@ -569,14 +569,16 @@ export default class ThemeStore {
     if (existing) {
       const theme = storedThemeFromRow(existing);
       if (theme.checksumSha256 !== checksum) {
-        throw new Error(
-          `${manifest.packageId}@${manifest.version} is already installed with different content.`,
-        );
+        throw new AppError("errors.theme.alreadyInstalledDifferentContent", 400, {
+          packageId: manifest.packageId,
+          version: manifest.version,
+        });
       }
       if (theme.deletedAt) {
-        throw new Error(
-          `${manifest.packageId}@${manifest.version} was deleted. Publish a new semantic version instead of reusing it.`,
-        );
+        throw new AppError("errors.theme.versionReusedAfterDeletion", 400, {
+          packageId: manifest.packageId,
+          version: manifest.version,
+        });
       }
       return theme;
     }
@@ -613,12 +615,12 @@ export default class ThemeStore {
       THEME_MAX_CUSTOM_INSTALLED_VERSIONS,
     ).first<{id: string}>();
     if (!inserted) {
-      throw new Error(
-        `This environment already has ${THEME_MAX_CUSTOM_INSTALLED_VERSIONS} Custom theme versions. Delete an inactive Custom version before installing another.`,
-      );
+      throw new AppError("errors.theme.customVersionLimit", 400, {
+        max: String(THEME_MAX_CUSTOM_INSTALLED_VERSIONS),
+      });
     }
     const installed = await this.getVersion(id);
-    if (!installed) throw new Error("The installed theme could not be loaded.");
+    if (!installed) throw new AppError("errors.theme.installedCouldNotLoad");
     return installed;
   }
 
@@ -668,25 +670,25 @@ export default class ThemeStore {
       THEME_MAX_DRAFTS,
     ).first<{id: string}>();
     if (!inserted) {
-      throw new Error(
-        `This environment already has ${THEME_MAX_DRAFTS} theme drafts. Discard a draft before creating another.`,
-      );
+      throw new AppError("errors.theme.draftLimit", 400, {
+        max: String(THEME_MAX_DRAFTS),
+      });
     }
     const draft = await this.getDraft(id);
-    if (!draft) throw new Error("The theme draft could not be loaded.");
+    if (!draft) throw new AppError("errors.theme.draftCouldNotLoad");
     return draft;
   }
 
   async saveDraft(id: string, input: SaveDraftInput): Promise<ThemeDraft> {
     const existing = await this.getDraft(id);
-    if (!existing) throw new Error("Theme draft not found.");
+    if (!existing) throw new AppError("errors.theme.draftNotFound");
     const validated = validateThemePackage(
       input.manifest,
       input.bundle,
       MICROFEED_VERSION,
     );
     if (validated.manifest.packageId !== existing.packageId) {
-      throw new Error("A draft's package ID cannot be changed.");
+      throw new AppError("errors.theme.draftPackageIdImmutable");
     }
     if (
       JSON.stringify(validated.manifest.files) !==
@@ -698,9 +700,7 @@ export default class ThemeStore {
       JSON.stringify(validated.bundle.assets) !==
         JSON.stringify(existing.bundle.assets)
     ) {
-      throw new Error(
-        "Admin drafts may edit only theme metadata, supported behavior settings, and text slots; packaged files, assets, and the preview fixture are inherited unchanged.",
-      );
+      throw new AppError("errors.theme.draftMetadataOnly");
     }
     await this.database.prepare(
       `UPDATE theme_drafts SET version = ?, name = ?, manifest_json = ?,
@@ -713,7 +713,7 @@ export default class ThemeStore {
       id,
     ).run();
     const draft = await this.getDraft(id);
-    if (!draft) throw new Error("The saved draft could not be loaded.");
+    if (!draft) throw new AppError("errors.theme.savedDraftCouldNotLoad");
     return draft;
   }
 
@@ -728,7 +728,7 @@ export default class ThemeStore {
 
   async publishDraft(id: string): Promise<StoredThemeVersion> {
     const draft = await this.getDraft(id);
-    if (!draft) throw new Error("Theme draft not found.");
+    if (!draft) throw new AppError("errors.theme.draftNotFound");
     const validated = validateThemePackage(
       draft.manifest,
       draft.bundle,
@@ -745,9 +745,10 @@ export default class ThemeStore {
       "SELECT * FROM themes WHERE package_id = ? AND version = ? LIMIT 1",
     ).bind(draft.packageId, draft.version).first<Record<string, unknown>>();
     if (existing) {
-      throw new Error(
-        `${draft.packageId}@${draft.version} already exists. Choose a new version before publishing.`,
-      );
+      throw new AppError("errors.theme.draftVersionExists", 400, {
+        packageId: draft.packageId,
+        version: draft.version,
+      });
     }
 
     const themeId = crypto.randomUUID();
@@ -774,14 +775,14 @@ export default class ThemeStore {
         THEME_MAX_CUSTOM_INSTALLED_VERSIONS,
       ).first<{id: string}>();
     if (!inserted) {
-      throw new Error(
-        `This environment already has ${THEME_MAX_CUSTOM_INSTALLED_VERSIONS} Custom theme versions. Delete an inactive Custom version, then install this draft again. The draft has been retained.`,
-      );
+      throw new AppError("errors.theme.customVersionLimitPublish", 400, {
+        max: String(THEME_MAX_CUSTOM_INSTALLED_VERSIONS),
+      });
     }
     await this.database.prepare("DELETE FROM theme_drafts WHERE id = ?")
       .bind(id).run();
     const published = await this.getVersion(themeId);
-    if (!published) throw new Error("The published theme could not be loaded.");
+    if (!published) throw new AppError("errors.theme.publishedCouldNotLoad");
     return published;
   }
 
@@ -790,7 +791,7 @@ export default class ThemeStore {
     commit?: DatabaseMutationCommit<ThemeState>,
   ): Promise<ThemeState> {
     const theme = await this.getVersion(id);
-    if (!theme) throw new Error("Theme version not found.");
+    if (!theme) throw new AppError("errors.theme.notFound");
     validateStoredThemePackage(theme.manifest, theme.bundle, MICROFEED_VERSION);
     const before = await this.getState();
     if (before.activeThemeId === id) return before;
@@ -839,7 +840,7 @@ export default class ThemeStore {
     const before = await this.getState();
     if (before.previousThemeId) {
       const previous = await this.getVersion(before.previousThemeId);
-      if (!previous) throw new Error("The previous theme is unavailable.");
+      if (!previous) throw new AppError("errors.theme.previousUnavailable");
       validateStoredThemePackage(
         previous.manifest,
         previous.bundle,
@@ -869,15 +870,13 @@ export default class ThemeStore {
 
   async deleteVersion(id: string, bucket?: R2Bucket | null): Promise<void> {
     const theme = await this.getVersion(id, true);
-    if (!theme) throw new Error("Theme version not found.");
+    if (!theme) throw new AppError("errors.theme.notFound");
     if (theme.sourceKind === "bundled") {
-      throw new Error(
-        "Built-in themes are managed by microfeed deployment and cannot be deleted manually.",
-      );
+      throw new AppError("errors.theme.bundledCannotDelete");
     }
     const state = await this.getState();
     if (state.activeThemeId === id) {
-      throw new Error("Deactivate or replace the active theme before deleting it.");
+      throw new AppError("errors.theme.activeCannotDelete");
     }
     if (!theme.deletedAt) {
       const deleted = await this.database.prepare(
@@ -889,9 +888,7 @@ export default class ThemeStore {
          RETURNING id`,
       ).bind(id, id).first<{id: string}>();
       if (!deleted) {
-        throw new Error(
-          "The theme became active before it could be deleted. Deactivate or replace it first.",
-        );
+        throw new AppError("errors.theme.becameActiveDuringDelete");
       }
     }
     await this.database.prepare(
@@ -923,7 +920,7 @@ export default class ThemeStore {
     if (!owner || owner.bundle.assets.length === 0) return;
 
     try {
-      if (!bucket) throw new Error("R2 media storage is unavailable.");
+      if (!bucket) throw new AppError("errors.theme.r2Unavailable");
       await bucket.delete(owner.bundle.assets.map((asset) => asset.key));
       await this.database.prepare(
         `UPDATE themes SET assets_deleted_at = CURRENT_TIMESTAMP,

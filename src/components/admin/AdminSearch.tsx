@@ -6,6 +6,7 @@ import {
 } from "react";
 import {FileTextIcon, SearchIcon} from "lucide-react";
 
+import {formatAdminShortDate} from "@/client/admin-date-format";
 import {Button} from "@/components/ui/button";
 import {
   Dialog,
@@ -39,15 +40,8 @@ interface Props {
   adminPath: string;
 }
 
-const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
-
 function formatShortDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : shortDateFormatter.format(date);
+  return formatAdminShortDate(value);
 }
 
 function ResultTitle({result}: {result: AdminSearchResult}) {

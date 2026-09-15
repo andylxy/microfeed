@@ -1,4 +1,5 @@
 import React from 'react';
+import i18n from "@/client/i18n";
 import {Trash2Icon} from "lucide-react";
 import {navigate} from 'astro:transitions/client';
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
@@ -20,7 +21,6 @@ import MediaManager from "./components/MediaManager";
 import {
   ONBOARDING_TYPES,
   STATUSES,
-  ITEM_STATUSES_DICT,
 } from "@/shared/Constants";
 import {AdminSideQuickLinks, SideQuickLink} from "@/components/admin/shared/AdminSideQuickLinks";
 import AdminRichEditor from "@/components/admin/shared/AdminRichEditor";
@@ -56,6 +56,26 @@ import {WEBMCP_INTERACTION_HEADERS} from "@/shared/WebMcp";
 import type {SaveItemDraftInput} from "@/client/webmcp/schemas";
 
 const SUBMIT_STATUS__START = 1;
+
+const STATUS_LABEL_KEYS: Record<number, string> = {
+  [STATUSES.PUBLISHED]: "items.statusPublished",
+  [STATUSES.UNLISTED]: "items.statusUnlisted",
+  [STATUSES.UNPUBLISHED]: "items.statusUnpublished",
+};
+
+const STATUS_DESC_KEYS: Record<number, string> = {
+  [STATUSES.PUBLISHED]: "items.statusPublishedDesc",
+  [STATUSES.UNLISTED]: "items.statusUnlistedDesc",
+  [STATUSES.UNPUBLISHED]: "items.statusUnpublishedDesc",
+};
+
+function statusLabelKey(status: number): string {
+  return STATUS_LABEL_KEYS[status] ?? "items.statusUnknown";
+}
+
+function statusDescKey(status: number): string {
+  return STATUS_DESC_KEYS[status] ?? "items.statusUnknown";
+}
 
 function initItem(itemId: string) {
   return ({
@@ -216,7 +236,7 @@ export default class EditItemApp extends React.Component<Props, any> {
       item: {id: itemId, ...item, status: STATUSES.DELETED},
     })
       .then(() => {
-        showToast('Deleted!', 'success');
+        showToast(i18n.t('items.deleted'), 'success');
         this.setState({submitStatus: null}, () => {
           setTimeout(() => {
             void navigate(ADMIN_URLS.allItems());
@@ -226,9 +246,9 @@ export default class EditItemApp extends React.Component<Props, any> {
       .catch((error: any) => {
         this.setState({submitStatus: null}, () => {
           if (!error.response) {
-            showToast('Network error. Please refresh the page and try again.', 'error');
+            showToast(i18n.t('common.networkError'), 'error');
           } else {
-            showToast('Failed. Please try again.', 'error');
+            showToast(i18n.t('common.failed'), 'error');
           }
         });
       });
@@ -283,17 +303,17 @@ export default class EditItemApp extends React.Component<Props, any> {
     });
     showToast(
       publishRequested && snapshot.item.status === STATUSES.PUBLISHED
-        ? 'Item published'
-        : created ? 'Item added.' : 'Item saved.',
+        ? i18n.t('items.itemPublished')
+        : created ? i18n.t('items.itemAdded') : i18n.t('items.itemSaved'),
       'success',
     );
   }
 
   showSaveError(error: any) {
     if (!error?.response) {
-      showToast('Network error. Your changes are still on this page.', 'error');
+      showToast(i18n.t('items.networkErrorChangesRemain'), 'error');
     } else {
-      showToast('Couldn’t save. Your changes are still on this page.', 'error');
+      showToast(i18n.t('saveAction.error'), 'error');
     }
   }
 
@@ -332,7 +352,7 @@ export default class EditItemApp extends React.Component<Props, any> {
   ) {
     if (signal.aborted) throw signal.reason;
     if (this.state.item.status !== STATUSES.UNPUBLISHED) {
-      throw new Error("WebMCP can save only the visible unpublished Item.");
+      throw new Error(i18n.t('items.webmcpOnlyUnpublished'));
     }
     this.webMcpSaveSignal = signal;
     await new Promise<void>((resolve) => {
@@ -351,7 +371,7 @@ export default class EditItemApp extends React.Component<Props, any> {
       });
     });
     if (!await this.autosave.flush()) {
-      throw new Error("The Item draft could not be saved.");
+      throw new Error(i18n.t('items.draftCouldNotSave'));
     }
     return {
       content_html: String(this.state.item.description ?? ""),
@@ -366,6 +386,7 @@ export default class EditItemApp extends React.Component<Props, any> {
   }
 
   render() {
+    const t = i18n.t.bind(i18n);
     const {autosaveState, submitStatus, itemId, item, action, feed} = this.state;
     const {onboardingResult} = this.props;
     const deleting = submitStatus === SUBMIT_STATUS__START;
@@ -482,21 +503,21 @@ export default class EditItemApp extends React.Component<Props, any> {
                     value={String(status)}
                     options={[
                       {
-                        label: (ITEM_STATUSES_DICT[STATUSES.PUBLISHED] as any).name,
+                        label: i18n.t(statusLabelKey(STATUSES.PUBLISHED)),
                         value: String(STATUSES.PUBLISHED),
                       },
                       {
-                        label: (ITEM_STATUSES_DICT[STATUSES.UNLISTED] as any).name,
+                        label: i18n.t(statusLabelKey(STATUSES.UNLISTED)),
                         value: String(STATUSES.UNLISTED),
                       },
                       {
-                        label: (ITEM_STATUSES_DICT[STATUSES.UNPUBLISHED] as any).name,
+                        label: i18n.t(statusLabelKey(STATUSES.UNPUBLISHED)),
                         value: String(STATUSES.UNPUBLISHED),
                       }]}
                     onValueChange={(value) =>
                       this.onUpdateItemStatus(parseInt(value, 10))}
                   />
-                  <div className="text-muted-color text-xs" dangerouslySetInnerHTML={{__html: (ITEM_STATUSES_DICT[status] as any).description}} />
+                  <div className="text-muted-color text-xs" dangerouslySetInnerHTML={{__html: i18n.t(statusDescKey(status), {url: ADMIN_URLS.allItems()})}} />
                 </div>
               </div>
             </div>
@@ -515,7 +536,7 @@ export default class EditItemApp extends React.Component<Props, any> {
           </div>
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <details>
-              <summary className="m-page-summary">Podcast-specific fields</summary>
+              <summary className="m-page-summary">{t('items.podcastFields')}</summary>
               <div className="grid grid-cols-1 gap-8">
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                   <AdminRadioGroup
@@ -599,7 +620,7 @@ export default class EditItemApp extends React.Component<Props, any> {
             <AdminSaveAction
               {...autosaveState}
               idleMessage={action === 'create'
-                ? 'Start editing to create an unpublished draft.'
+                ? t('items.saveActionIdleCreate')
                 : undefined}
             >
               {status !== STATUSES.PUBLISHED && (
@@ -612,13 +633,13 @@ export default class EditItemApp extends React.Component<Props, any> {
                     type="button"
                     variant="outline"
                   >
-                    Publish
+                    {t('items.publish')}
                   </Button>
                   <p
                     className="mt-2 text-xs text-muted-foreground"
                     id="publish-item-description"
                   >
-                    Save and change status to published
+                    {t('items.publishDescription')}
                   </p>
                 </>
               )}
@@ -626,27 +647,27 @@ export default class EditItemApp extends React.Component<Props, any> {
             {action === 'edit' && <div>
               <AdminSideQuickLinks
                 AdditionalLinksDiv={<div className="flex flex-wrap">
-                  <SideQuickLink url={PUBLIC_URLS.webItem(itemId, item.title)} text="web item"/>
-                  <SideQuickLink url={PUBLIC_URLS.jsonItem(itemId)} text="json item"/>
+                  <SideQuickLink url={PUBLIC_URLS.webItem(itemId, item.title)} text={t('items.webItem')}/>
+                  <SideQuickLink url={PUBLIC_URLS.jsonItem(itemId)} text={t('items.jsonItem')}/>
                 </div>}
               />
               <div className="mt-4 flex justify-center rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
                 <AlertDialog>
                   <AlertDialogTrigger render={<Button disabled={deleting} type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" />}>
                     <Trash2Icon aria-hidden="true" className="size-4" />
-                    Delete this item
+                    {t('items.deleteThisItem')}
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+                      <AlertDialogTitle>{t('items.deleteThisItemConfirm')}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This permanently removes the item from your dashboard and public feeds. This action cannot be undone.
+                        {t('items.deletePermanently')}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
                       <AlertDialogAction disabled={deleting} type="button" variant="destructive" onClick={this.onDelete}>
-                        {deleting ? 'Deleting...' : 'Delete item'}
+                        {deleting ? t('items.deleting') : t('items.deleteItem')}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>

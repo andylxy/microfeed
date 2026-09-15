@@ -1,4 +1,5 @@
 import type {AdminHelpContent} from "@/components/admin/shared/AdminHelpLabel";
+import i18n from "@/client/i18n";
 
 export const SETTINGS_CONTROLS = {
   SUBSCRIBE_METHODS: 'subscribe_methods',
@@ -7,16 +8,16 @@ export const SETTINGS_CONTROLS = {
 
 export const CONTROLS_TEXTS_DICT = {
   [SETTINGS_CONTROLS.SUBSCRIBE_METHODS]: {
-    linkName: 'Subscribe methods',
-    modalTitle: 'Subscribe methods',
-    text: "How can your audience subscribe to your feed? For example: JSON, RSS, Apple Podcasts, Spotify...",
+    linkName: i18n.t("settings.controlSubscribeMethodsLinkName"),
+    modalTitle: i18n.t("settings.controlSubscribeMethodsModalTitle"),
+    text: i18n.t("settings.controlSubscribeMethodsText"),
     rss: null,
     json: '{ "_microfeed": { "subscribe_methods": [{"name": "RSS", "type": "rss", "url": "https://www.microfeed.org/rss/"}] } }',
   },
   [SETTINGS_CONTROLS.ITEMS_SORT_ORDER]: {
-    linkName: 'Sort by',
-    modalTitle: 'Items sorting',
-    text: "Choose which item timestamp controls the feed order.",
+    linkName: i18n.t("settings.controlSortByLinkName"),
+    modalTitle: i18n.t("settings.controlItemsSortingModalTitle"),
+    text: i18n.t("settings.controlItemsSortOrderText"),
     rss: null,
     json: '{ "_microfeed": { "items_sort": "published_at", "items_order": "desc" } }',
   },
