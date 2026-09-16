@@ -1,0 +1,37 @@
+<footer class="text-sm border-t text-center mb-4">
+  <div class="mt-4">
+    {{#_microfeed.copyright}}
+    {{_microfeed.copyright}}
+    {{/_microfeed.copyright}}
+    {{^_microfeed.copyright}}
+    © {{_microfeed.publisher}}
+    {{/_microfeed.copyright}}
+  </div>
+  <div>
+    由 <a href="https://www.microfeed.org/" class="mf-footer-link">microfeed</a> 提供支持
+    （<a class="mf-footer-link" href="https://www.listennotes.com/">Listen Notes</a> 旗下项目）
+  </div>
+</footer>
+
+<script>(function(){var e=`microfeed-public-theme`,t=[`system`,`light`,`dark`];function n(e){return t.includes(e)?e:`light`}function r(e){let t=e===`dark`||e===`system`&&window.matchMedia(`(prefers-color-scheme: dark)`).matches;document.documentElement.classList.toggle(`dark`,t),document.documentElement.dataset.themePreference=e,document.documentElement.dataset.colorMode=t?`dark`:`light`,document.documentElement.style.colorScheme=t?`dark`:`light`}function i(){let t=document.querySelector(`[data-microfeed-theme-menu]`),i=t?.querySelector(`[data-microfeed-theme-trigger]`),a=t?.querySelector(`[role=menu]`),o=Array.from(t?.querySelectorAll(`[data-microfeed-theme-option]`)??[]);if(!t||!i||!a||o.length===0)return;let s=n(document.documentElement.dataset.themePreference??null),c=e=>{s=e,r(s),i.setAttribute(`aria-label`,`颜色主题：`+(s===`light`?`浅色`:s===`dark`?`深色`:`跟随系统`));for(let e of o)e.setAttribute(`aria-checked`,String(e.dataset.microfeedThemeOption===s))},l=e=>{a.hidden=!e,i.setAttribute(`aria-expanded`,String(e))};i.addEventListener(`click`,()=>{l(a.hidden)});for(let t of o)t.addEventListener(`click`,()=>{let r=n(t.dataset.microfeedThemeOption??null);try{window.localStorage.setItem(e,r)}catch{}c(r),l(!1),i.focus()});window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{s===`system`&&r(`system`)}),window.addEventListener(`storage`,t=>{t.key===e&&c(n(t.newValue))}),document.addEventListener(`pointerdown`,e=>{e.target instanceof Node&&!t.contains(e.target)&&l(!1)}),document.addEventListener(`keydown`,e=>{e.key!==`Escape`||a.hidden||(l(!1),i.focus())}),c(s)}function a(){if(!(`IntersectionObserver`in window))return;let e=new IntersectionObserver(t=>{for(let n of t){if(!n.isIntersecting||!(n.target instanceof HTMLImageElement))continue;let t=n.target,r=t.dataset.src;if(!r)continue;let i=document.createElement(`img`);i.src=r,i.alt=t.alt,i.onload=()=>{let e=document.createElement(`a`);e.href=r,e.target=`_blank`,e.rel=`noopener`,e.append(i),t.replaceWith(e)},e.unobserve(t)}});document.querySelectorAll(`img:not([loading="lazy"])`).forEach(t=>{t.dataset.src=t.src,t.classList.add(`loader`),t.src=`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP88eNnPQAJQwNqJHSUZQAAAABJRU5ErkJggg==`,e.observe(t)})}function o(){for(let e of document.querySelectorAll(`[data-microfeed-site-nav]`)){let t=e.querySelector(`.mf-nav-links`),n=Array.from(e.querySelectorAll(`[data-microfeed-nav-item]`)),r=e.querySelector(`[data-microfeed-nav-overflow]`),i=r?.querySelector(`[data-microfeed-nav-overflow-menu]`),a=r?.querySelector(`summary`);if(!t||!r||!i||!a)continue;let o=window.matchMedia(`(max-width: 600px)`),s=()=>{if(r.open=!1,o.matches){for(let e of n)i.append(e);r.hidden=n.length===0,a.setAttribute(`aria-label`,`页面菜单`);return}for(let e of n.slice(0,2))t.insertBefore(e,r);for(let e of n.slice(2))i.append(e);r.hidden=n.length<=2,a.setAttribute(`aria-label`,`更多页面`)},c=()=>{a.setAttribute(`aria-expanded`,String(r.open))};r.addEventListener(`toggle`,c),i.addEventListener(`click`,()=>{r.open=!1}),document.addEventListener(`pointerdown`,e=>{e.target instanceof Node&&!r.contains(e.target)&&(r.open=!1)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&(r.open=!1)}),o.addEventListener(`change`,s),s(),c()}}function s(){i(),a(),o()}document.readyState===`loading`?document.addEventListener(`DOMContentLoaded`,s,{once:!0}):s()})();</script>
+
+<script>
+(function () {
+  "use strict";
+  var elements = document.querySelectorAll("[data-microfeed-date-ms]");
+  if (!elements.length || typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return;
+  var formatter;
+  try {
+    formatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+  } catch (error) {
+    return;
+  }
+  for (var index = 0; index < elements.length; index++) {
+    var element = elements[index];
+    var milliseconds = Number(element.getAttribute("data-microfeed-date-ms"));
+    if (Number.isFinite(milliseconds) && milliseconds > 0) {
+      element.textContent = formatter.format(new Date(milliseconds));
+    }
+  }
+})();
+</script>

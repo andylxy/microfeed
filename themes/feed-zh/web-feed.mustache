@@ -1,0 +1,92 @@
+<main>
+  <section>
+    <h1>{{title}}</h1>
+    <div class="flex">
+      {{#icon}}
+      <div class="mr-4">
+        <a href="{{icon}}" target="_blank">
+          <img alt="{{title}}" src="{{icon}}" class="img-lg" loading="lazy"/>
+        </a>
+      </div>
+      {{/icon}}
+      <div>
+        {{#authors}}
+        <div class="one-line">
+          <span title="{{name}}">{{name}}</span>
+        </div>
+        {{/authors}}
+        <div>
+          {{#_microfeed.subscribe_methods.length}}
+          <div class="text-sm mt-4 mb-2">
+            订阅：
+          </div>
+          {{/_microfeed.subscribe_methods.length}}
+          <div class="flex flex-wrap">
+            {{#_microfeed.subscribe_methods}}
+            <a href="{{url}}" class="mr-4 mb-2" aria-label="{{name}}">
+              <div class="flex items-center">
+                {{#image}}
+                <img src="{{image}}" class="img-sm flex-none" alt="" loading="lazy"/>
+                {{/image}}
+                <div class="flex-none text-sm{{#image}} ml-1 hide-mobile{{/image}}">{{name}}</div>
+              </div>
+            </a>
+            {{/_microfeed.subscribe_methods}}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {{#description}}
+  <section>
+    <h2 class="border-b">关于</h2>
+    <div class="mf-rich-content">{{{description}}}</div>
+  </section>
+  {{/description}}
+
+  <section>
+    <h2 class="border-b">
+      最新内容
+    </h2>
+
+    <div>
+      {{^items.length}}
+      暂无内容。
+      {{/items.length}}
+
+      {{#items}}
+      <div class="mb-4">
+        <a href="{{_microfeed.web_url}}" class="mb-1">
+          {{title}}
+          <span class="icon-arrow-right"></span>
+        </a>
+        <div class="text-sm">
+          <span data-microfeed-date-ms="{{_microfeed.date_published_ms}}">{{_microfeed.date_published_short}}</span>
+
+          {{#_microfeed.duration_hhmmss}}
+          &middot;
+          <i>{{_microfeed.duration_hhmmss}}</i>
+          {{/_microfeed.duration_hhmmss}}
+        </div>
+      </div>
+      {{/items}}
+    </div>
+
+    <div class="flex justify-center mt-4">
+      {{#_microfeed.prev_url}}
+      <div class="px-2">
+        <a href="{{_microfeed.prev_url}}"><span
+          class="icon-arrow-left"> 上一页</span></a>
+      </div>
+      {{/_microfeed.prev_url}}
+
+      {{#_microfeed.next_url}}
+      <div class="px-2">
+        <a href="{{_microfeed.next_url}}">下一页 <span
+          class="icon-arrow-right"></span></a>
+      </div>
+      {{/_microfeed.next_url}}
+    </div>
+  </section>
+</main>

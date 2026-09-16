@@ -1,0 +1,23 @@
+{
+  "$schema": ".microfeed/schemas/manifest.schema.json",
+  "assets": [],
+  "author": "Site owner",
+  "description": "简体中文界面的默认主题样式，基于 microfeed.default@1.1.15，支持文本、音频、视频、图片、文档、独立页面与搜索。",
+  "license": "AGPL-3.0",
+  "microfeed": "*",
+  "name": "feed 中文主题",
+  "packageId": "local.feed-zh",
+  "previewFixture": "fixtures/editorial.json",
+  "version": "0.1.0",
+  "files": {
+    "rssStylesheet": "rss-stylesheet.xsl",
+    "webBodyEnd": "web-body-end.mustache",
+    "webBodyStart": "web-body-start.mustache",
+    "webFeed": "web-feed.mustache",
+    "webHeader": "web-header.mustache",
+    "webItem": "web-item.mustache",
+    "webPage": "web-page.mustache",
+    "webSearch": "web-search.mustache"
+  },
+  "formatVersion": 2
+}

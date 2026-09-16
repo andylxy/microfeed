@@ -1,0 +1,14 @@
+{
+  "name": "@microfeed/feed-zh-theme-source",
+  "version": "0.0.0-use.local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "theme-kit validate . --json",
+    "test": "theme-kit test . --json",
+    "preview": "theme-kit preview ."
+  },
+  "devDependencies": {
+    "@microfeed/theme-kit": "workspace:^"
+  }
+}

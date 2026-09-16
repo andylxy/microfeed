@@ -2955,6 +2955,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@microfeed/feed-zh-theme-source@workspace:themes/feed-zh":
+  version: 0.0.0-use.local
+  resolution: "@microfeed/feed-zh-theme-source@workspace:themes/feed-zh"
+  dependencies:
+    "@microfeed/theme-kit": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
 "@microfeed/photo-theme-source@workspace:themes/photo":
   version: 0.0.0-use.local
   resolution: "@microfeed/photo-theme-source@workspace:themes/photo"

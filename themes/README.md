@@ -94,3 +94,28 @@ not check media binaries into a bundled theme.
 
 For repository authoring, Admin drafts, packaged assets, and storage details,
 read the [versioned themes guide](../docs/dashboard/themes.md).
+
+## `feed-zh` — maintained here, **not** in the Built-in catalog
+
+`themes/feed-zh` is the Simplified-Chinese package `local.feed-zh@0.1.0`. It is
+kept in this repository so its source lives alongside the theme it derives from
+(`microfeed.default`), but it is **deliberately not registered** in
+`BUNDLED_THEME_CATALOG`. Initialization and deployment therefore never install,
+synchronize, or activate it, and the catalog identity constraints (contiguous
+`order`, exactly one `fallback`) are unaffected.
+
+Unlike the bundled packages it has no `src/` build step: the seven
+`web-*.mustache` templates and `rss-stylesheet.xsl` are authored directly. It is
+a workspace member because `workspaces` covers `themes/*`, so its
+`@microfeed/theme-kit` dependency resolves to the in-repo package.
+
+```console
+node --import tsx packages/theme-kit/src/cli.ts validate themes/feed-zh --json
+node --import tsx packages/theme-kit/src/cli.ts test themes/feed-zh --json
+```
+
+Everything driven by `BUNDLED_THEME_CATALOG` — the bundled-theme build and test
+checks, the release ledger, and the bundled-theme unit tests — skips this
+directory, because those scripts resolve paths from catalog entries rather than
+scanning `themes/`. A new directory here is therefore inert until it is
+registered.
