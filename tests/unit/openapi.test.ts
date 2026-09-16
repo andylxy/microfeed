@@ -10,7 +10,15 @@ import {
   apiItemInputSchema,
   apiUploadInputSchema,
 } from "@/shared/ApiSchemas";
-import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
+import {
+  localizedOpenApiDocument,
+  localizedOpenApiSchemas,
+  OPENAPI_DOCUMENT,
+} from "@/shared/OpenApiDocument";
+import {
+  OPENAPI_TEXT_FIELDS,
+  OPENAPI_TEXT_ZH_CN,
+} from "@/shared/OpenApiTranslations";
 import {MICROFEED_VERSION} from "@/shared/Version";
 import {API_BASE_PATH, API_MAJOR_VERSION} from "@/shared/ApiVersion";
 import {WEBHOOK_EVENT_TYPES} from "@/shared/Webhooks";
@@ -25,6 +33,24 @@ import {
 } from "@/server/openapi/document";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+/** Every user-facing string in the published document, mirroring the localizer. */
+function collectOpenApiTexts(node: unknown, trail: string[] = []): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((entry, index) => collectOpenApiTexts(entry, [...trail, String(index)]));
+  }
+  if (!node || typeof node !== "object") return [];
+  return Object.entries(node as Record<string, unknown>).flatMap(([key, value]) => {
+    if (key === "x-codeSamples" || key === "examples") return [];
+    if (
+      (OPENAPI_TEXT_FIELDS as readonly string[]).includes(key) &&
+      typeof value === "string"
+    ) {
+      return [value];
+    }
+    return collectOpenApiTexts(value, [...trail, key]);
+  });
+}
 
 describe("generated API reference", () => {
   it("generates JSON, YAML, Scalar, and LLM input from one document", async () => {
@@ -315,5 +341,53 @@ describe("generated API reference", () => {
       },
       required: ["type", "highlights"],
     });
+  });
+
+  it("translates the explorer copy without touching the published spec", () => {
+    const english = localizedOpenApiDocument("en");
+    expect(english.info.description).toBe(OPENAPI_DOCUMENT.info.description);
+    expect(JSON.stringify(english)).toBe(JSON.stringify(OPENAPI_DOCUMENT));
+
+    const chinese = localizedOpenApiDocument("zh-CN");
+    expect(chinese.info.description).not.toBe(OPENAPI_DOCUMENT.info.description);
+    expect(JSON.stringify(chinese)).not.toBe(JSON.stringify(OPENAPI_DOCUMENT));
+
+    // Structure and non-copy fields survive the walk.
+    expect(Object.keys(chinese.paths ?? {})).toEqual(
+      Object.keys(OPENAPI_DOCUMENT.paths ?? {}),
+    );
+    expect(Object.keys(chinese.components?.schemas ?? {})).toEqual(
+      Object.keys(OPENAPI_DOCUMENT.components?.schemas ?? {}),
+    );
+    expect(chinese.info.version).toBe(OPENAPI_DOCUMENT.info.version);
+    expect(chinese.info.license).toEqual(OPENAPI_DOCUMENT.info.license);
+
+    // The published document and its serialized forms stay English.
+    expect(OPENAPI_DOCUMENT.info.description).toContain("Create, read, update");
+    expect(OPENAPI_JSON).toContain("Create, read, update");
+  });
+
+  it("covers every translatable field in the generated document", () => {
+    // Every distinct string in the document must have a Chinese entry, otherwise
+    // the admin explorer silently shows English for that field.
+    const texts = collectOpenApiTexts(OPENAPI_DOCUMENT);
+    const missing = [...new Set(texts)].filter((text) => !(text in OPENAPI_TEXT_ZH_CN));
+    expect(missing).toEqual([]);
+  });
+
+  it("translates the dereferenced webhook event schema shown in the explorer", () => {
+    // `eventSchema()` dereferences these components for the webhook explorer's
+    // "Schema" tab, so they are translated through the same table.
+    const english = localizedOpenApiSchemas("en");
+    const chinese = localizedOpenApiSchemas("zh-CN");
+    expect(Object.keys(chinese)).toEqual(Object.keys(english));
+    expect(JSON.stringify(chinese)).not.toBe(JSON.stringify(english));
+  });
+
+  it("has no dead entries in the OpenAPI translation table", () => {
+    // An entry whose English source no longer appears in the document is either
+    // stale copy or a typo; both should fail rather than silently accumulate.
+    const present = new Set(collectOpenApiTexts(OPENAPI_DOCUMENT));
+    expect(Object.keys(OPENAPI_TEXT_ZH_CN).filter((text) => !present.has(text))).toEqual([]);
   });
 });

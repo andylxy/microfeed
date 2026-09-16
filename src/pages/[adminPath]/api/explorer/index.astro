@@ -7,7 +7,7 @@ import AdminShell from "@/layouts/AdminShell.astro";
 import {listApiKeys, readApiAccessSettings} from "@/server/api/api-keys";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
 import {NAV_ITEMS} from "@/shared/Constants";
-import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
+import {localizedOpenApiDocument} from "@/shared/OpenApiDocument";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 
@@ -21,6 +21,12 @@ const [initialApiKeys, settings] = await Promise.all([
   readApiAccessSettings(env.FEED_DB),
 ]);
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
+
+// The published spec (`/openapi.json`, `/openapi.yaml`) stays English: it is a
+// machine-readable contract consumed by clients and agents. Only the admin
+// explorer renders a localized copy, so the UI language never changes what an
+// API client downloads.
+const explorerDocument = localizedOpenApiDocument(adminLanguage);
 ---
 
 <AdminShell
@@ -35,7 +41,7 @@ const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
   <ApiExplorerApp
     client:only="react"
     authenticationUrl={adminUrl("api/auth", adminPath)}
-    document={OPENAPI_DOCUMENT as unknown as Record<string, unknown>}
+    document={explorerDocument as unknown as Record<string, unknown>}
     {initialApiKeys}
     origin={Astro.url.origin}
     {settings}

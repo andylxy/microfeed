@@ -2,7 +2,11 @@ import FeedDb from "@/server/feed/FeedDb";
 import {getPageById, listPages} from "@/server/pages/service";
 import {getSiteFileById, listSiteFiles} from "@/server/site-files/service";
 import ThemeStore from "@/server/themes/ThemeStore";
-import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
+import {localizedOpenApiSchemas} from "@/shared/OpenApiDocument";
+import {
+  type AdminLanguage,
+  adminLanguageFromRequest,
+} from "@/shared/AdminLanguage";
 import {ITEM_STATUSES_DICT, STATUSES} from "@/shared/Constants";
 import {isLocalDevelopmentHostname} from "@/shared/StringUtils";
 import {
@@ -306,10 +310,11 @@ function dereferenceSchema(
   ]));
 }
 
-function eventSchema(type: WebhookEventType): Record<string, unknown> {
-  const schemas = OPENAPI_DOCUMENT.components?.schemas as
-    | Record<string, Record<string, unknown>>
-    | undefined;
+function eventSchema(
+  type: WebhookEventType,
+  language: AdminLanguage,
+): Record<string, unknown> {
+  const schemas = localizedOpenApiSchemas(language);
   const envelope = schemas?.MicrofeedWebhookEvent as
     | {oneOf?: Array<Record<string, any>>}
     | undefined;
@@ -361,7 +366,7 @@ export async function previewWebhookExplorerEvent(
     headers: previewHeaders(selection.eventType),
     payload,
     rawBody: JSON.stringify(payload),
-    schema: eventSchema(selection.eventType),
+    schema: eventSchema(selection.eventType, adminLanguageFromRequest(request)),
   };
 }
 

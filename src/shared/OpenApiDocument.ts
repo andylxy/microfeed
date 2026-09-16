@@ -33,6 +33,11 @@ import {
   WEBHOOK_EVENT_DEFINITIONS,
   WEBHOOK_EVENT_EXAMPLES,
 } from "./WebhookExamples";
+import {type AdminLanguage} from "./AdminLanguage";
+import {
+  OPENAPI_TEXT_FIELDS,
+  translateOpenApiText,
+} from "./OpenApiTranslations";
 import {MICROFEED_VERSION} from "./Version";
 import {API_BASE_PATH} from "./ApiVersion";
 import {WEBHOOK_OPENAPI_CODE_SAMPLES} from "./WebhookQuickstarts";
@@ -607,3 +612,45 @@ export const API_OPERATION_SUMMARY = Object.entries(
     ? [`${method.toUpperCase()} ${pathname} — ${operation.summary ?? operation.operationId}`]
     : [];
 })).join("\n");
+
+// Code samples and payload examples are data, not copy: leave them alone.
+const UNTRANSLATED_NODES = new Set(["x-codeSamples", "examples"]);
+
+function localizeText(node: unknown, language: AdminLanguage): unknown {
+  if (Array.isArray(node)) {
+    return node.map((entry) => localizeText(entry, language));
+  }
+  if (!node || typeof node !== "object") return node;
+  return Object.fromEntries(
+    Object.entries(node as Record<string, unknown>).map(([key, value]) => {
+      if (UNTRANSLATED_NODES.has(key)) return [key, value];
+      if (
+        (OPENAPI_TEXT_FIELDS as readonly string[]).includes(key) &&
+        typeof value === "string"
+      ) {
+        return [key, translateOpenApiText(value, language)];
+      }
+      return [key, localizeText(value, language)];
+    }),
+  );
+}
+
+/**
+ * A copy of {@link OPENAPI_DOCUMENT} with its user-facing copy translated, for
+ * the admin API explorer. The published document stays English on purpose:
+ * `/openapi.json`, `/openapi.yaml` and `llms.txt` are a machine-readable
+ * contract and must not vary with the UI language.
+ */
+export function localizedOpenApiDocument(language: AdminLanguage) {
+  return localizeText(OPENAPI_DOCUMENT, language) as typeof OPENAPI_DOCUMENT;
+}
+
+/**
+ * The schema components with their copy translated. The admin webhook explorer
+ * renders a dereferenced event schema, so this localizes just that branch rather
+ * than copying the whole document on every preview.
+ */
+export function localizedOpenApiSchemas(language: AdminLanguage) {
+  return localizeText(OPENAPI_DOCUMENT.components?.schemas ?? {}, language) as
+    Record<string, Record<string, unknown>>;
+}
