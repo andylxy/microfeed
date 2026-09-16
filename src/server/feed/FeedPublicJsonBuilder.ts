@@ -149,7 +149,11 @@ export default class FeedPublicJsonBuilder {
       (microfeedExtra as any)['subscribe_methods'] = '';
     } else {
       (microfeedExtra as any)['subscribe_methods'] = subscribeMethods.methods.filter((m: any) => m.enabled).map((m: any) => {
-        // TODO: supports custom icons that are hosted on R2
+        // R2-relative icon paths already resolve here: urlJoinWithRelative
+        // keeps absolute URLs as-is and joins everything else against the
+        // bucket URL. The missing piece is upstream, not in this builder -
+        // SubscribeSettingsApp only exposes name and url inputs, so there is
+        // no way to set a custom icon in the first place.
         m.image = urlJoinWithRelative(this.publicBucketUrl, m.image, this.baseUrl);
         if (!m.editable) {
           switch (m.type) {

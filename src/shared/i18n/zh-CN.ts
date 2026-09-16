@@ -178,6 +178,7 @@ export const zhCN: TranslationKey = {
     chooseSubscribeMethod: "请选择一种订阅方式：",
     name: "名称",
     url: "URL",
+    iconPlaceholder: "图标 URL，或相对路径（如 /media/icon.png）",
     addNewSubscribeMethod: "添加新订阅方式",
     // Subscribe methods
     dragToReorder: "拖动以更改 {{name}} 的顺序",
@@ -482,6 +483,7 @@ export const zhCN: TranslationKey = {
     uploading: "上传中……",
     upload: "上传",
     imageTooSmall: "图片过小：{{width}} x {{height}} 像素。如果是播客图片，Apple Podcasts 要求图片为 1400 x 1400 至 3000 x 3000 像素。",
+    imageNotAnImage: "该文件不是图片。请选择 PNG 或 JPEG 图片。",
     imageOk: "图片正常：{{width}} x {{height}} 像素。",
     // AdminPublicAccess / AdminSideQuickLinks
     publicAccess: "公开访问",

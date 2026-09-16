@@ -161,7 +161,7 @@ export default class MediaManager extends React.Component<any, any> {
       ...initMediaFile,
       ...mediaFileFromUrl,
     };
-    let {url, category, contentType, sizeByte, durationSecond} = mediaFile || {};
+    const {url, category, contentType, sizeByte, durationSecond} = mediaFile || {};
     const mediaStorageReady = props.mediaStorageReady !== false;
 
     const webGlobalSettings = props.feed.settings.webGlobalSettings || {};
@@ -320,7 +320,9 @@ export default class MediaManager extends React.Component<any, any> {
             this.setState((prevState: any) => ({
               ...prevState,
               url: newUrl,
-              contentType: 'text/html',  // TODO: dynamically fetch content type by sending HEAD request
+              // external_url is a linked web page; text/html is correct, and a
+              // HEAD probe would be CORS-blocked. See MediaFileUtils.
+              contentType: 'text/html',
             }), () => {
               this.props.onMediaFileUpdated({
                 url: this.state.url,
@@ -351,7 +353,7 @@ export default class MediaManager extends React.Component<any, any> {
                   }, {immediate: true});
                 });
               }
-            } catch (e) { // eslint-disable-line
+            } catch (e) {
             }
           }}
           setRef={(ref: any) => {

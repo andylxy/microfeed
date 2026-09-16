@@ -176,6 +176,7 @@ export const en = {
     chooseSubscribeMethod: "Please choose a subscribe method:",
     name: "Name",
     url: "URL",
+    iconPlaceholder: "Icon URL, or a relative path such as /media/icon.png",
     addNewSubscribeMethod: "Add new subscribe method",
     // Subscribe methods
     dragToReorder: "Drag to change the order of {{name}}",
@@ -480,6 +481,7 @@ export const en = {
     uploading: "Uploading...",
     upload: "Upload",
     imageTooSmall: "Image too small: {{width}} x {{height}} pixels. If it's for a podcast image, Apple Podcasts requires the image to have 1400 x 1400 to 3000 x 3000 pixels.",
+    imageNotAnImage: "That file is not an image. Choose a PNG or JPEG image.",
     imageOk: "Image ok: {{width}} x {{height}} pixels.",
     // AdminPublicAccess / AdminSideQuickLinks
     publicAccess: "Public access",

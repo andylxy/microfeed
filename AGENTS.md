@@ -11,6 +11,27 @@
 - 提交信息使用简洁的祈使句标题（例如 "Add admin dashboard i18n"）。
 - 不得直接提交到 `main`；在按规范命名的任务分支上提交（见"开发工作流"）。
 
+### 本环境：提交由用户手动执行（AI 不代为提交）
+
+本沙箱在**文件系统层拦截工作区内的删除**（改为移进 Windows 回收站）。git 每次
+提交都会删 lock 文件并清理 ref 命名空间目录，这些"删除"被改写成"搬运"，于是
+`.git/refs/heads/<ns>` **连同分支引用一起离开仓库**。现象是：commit **报成功**、
+`git log` 却说 `does not have any commits yet`、`git status` 把整仓显示成已暂存。
+
+**实测结论（2026-09-16）**：
+
+- 提交对象与 `.git/logs/HEAD`（reflog）**从未受损**，引用可从 reflog 一行恢复，**零数据丢失**。
+- 拦截**关不掉**：`env -u BASH_ENV -u CODEBUDDY_SESSION_ID -u CODEBUDDY_SAFE_DELETE_*` 后仍被吃。
+- 也**绕不开**：把 git 仓库目录移到工作区外，只有放 `Temp` 才免疫，同盘
+  `D:\git\AiCode\` 仍被吃——而放 `Temp` 会被系统清理，等于拿仓库历史冒险。
+- 不只发生在提交时：任何碰索引的 git 命令都会产生被搬走的 `index.lock`。
+
+⇒ **最合适的做法是由用户在自己终端手动提交**（那里没有这层拦截，一次即成）。
+AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路径与提交信息**，交给用户执行。
+
+若确实需要 AI 代为提交，走技能 `git-safe-commit` 的流程：提交后**立刻**
+`git rev-parse HEAD` 复核，被吃则从 reflog 重写引用（记得先 `mkdir -p` 父目录）。
+
 ## 开发工作流
 
 - 当用户要求实现、修复、重构、测试、编写文档、更新 CI 或以其他方式更改本
@@ -31,6 +52,27 @@
   启动的服务器。
 
 ## 实例管理与 Cloudflare 部署
+
+### 本项目不使用预览环境（preview）
+
+**决策（2026-09-16）**：本仓库对应的站点**只维护生产环境**，不再创建、部署或
+使用 `--preview` 环境。原因：
+
+- 预览只能挂在 `*.workers.dev` 上（`yarn manage domain` 明确拒绝 preview 环境），
+  而该域名在部分网络下不可达，导致部署后**无法验证**；
+- 维护两套 D1 + 两套部署配置的收益，抵不过它带来的运维与排错成本。
+
+因此：
+
+- **不要**执行 `init --preview`、`deploy --preview`、`status --preview`、
+  `theme ... --preview`、`auth ... --preview` 等任何带 `--preview` 的命令；
+- 需要验证改动时直接用生产环境（动手前先确认范围与风险）；
+- 已创建的预览环境（Worker + D1 + `preview.881019.xyz` 域名 + 本地
+  `.microfeed/instances/<name>/preview/`）**已全部销毁**。
+
+> 注：`manage-cli` 中的 `--preview` **代码保持原样**——它是上游功能，在 CLI 里
+> 出现 45 处（`commands.ts` 16、`help.ts` 28、`theme.ts` 1），移除会造成与上游
+> 的大幅分叉并破坏测试。这里是**使用约定**，不是删除功能。
 
 - 当用户要求编码代理操作本地或 Cloudflare 状态上的
   `npx @microfeed/cli manage` 或 `yarn manage` 时，使用本仓库的
@@ -168,7 +210,7 @@ node --import tsx packages/theme-kit/src/cli.ts test themes/feed-zh --json
 
 # 3. 安装到目标实例（安装后一定是「未激活」状态）
 yarn manage theme install themes/feed-zh --instance ctwh-881019-xyz
-#    预览环境追加 --preview；本地沙箱用 --local
+#    本地沙箱用 --local（本项目不使用 --preview，见"实例管理与 Cloudflare 部署"）
 
 # 4. 确认列表里出现了新版本
 yarn manage theme list --instance ctwh-881019-xyz

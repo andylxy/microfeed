@@ -17,7 +17,11 @@ export function getMediaFileFromUrl(urlParams: any) {
   if (category) {
     (mediaFile as any).category = SUPPORTED_ENCLOSURE_CATEGORIES.includes(category) ? category : null;
 
-    // TODO: dynamically fetch content type by sending HEAD request
+    // `external_url` points at a linked web page, so text/html is the correct
+    // type rather than a placeholder. Probing it with a HEAD request is not a
+    // viable improvement: the fetch would be cross-origin, so CORS hides
+    // Content-Type, and proxying it through the Worker would add an SSRF
+    // surface for a value that is already right.
     if ((mediaFile as any).category === ENCLOSURE_CATEGORIES.EXTERNAL_URL) {
       (mediaFile as any).contentType = 'text/html';
     }

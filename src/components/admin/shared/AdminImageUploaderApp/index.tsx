@@ -70,13 +70,46 @@ function PreviewImage({url}: {url: string}) {
   </div>);
 }
 
-function isInvalidImage(): string | null {
-  // TODO: implement it -
-  // - check if it's image
-  // - square size
-  // - at least 1400x1400
-  // - ...
-  // return 'error message'
+const MINIMUM_IMAGE_EDGE = 1400;
+
+// Source dimensions have to be read from the decoded image, not from the file
+// header, so this is async. Square-ness is deliberately NOT checked: the
+// cropper runs with aspectRatio 1.0 and produces the square image itself, so
+// requiring a square source would reject perfectly usable photos.
+function readImageSize(
+  file: File,
+): Promise<{height: number; width: number} | null> {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    const finish = (size: {height: number; width: number} | null) => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(size);
+    };
+    image.onload = () => finish({
+      height: image.naturalHeight,
+      width: image.naturalWidth,
+    });
+    image.onerror = () => finish(null);
+    image.src = objectUrl;
+  });
+}
+
+// Returns a ready-to-display message, or null when the file is acceptable.
+async function isInvalidImage(file: File): Promise<string | null> {
+  if (!file.type.startsWith("image/")) {
+    return i18n.t("shared.imageNotAnImage");
+  }
+  const size = await readImageSize(file);
+  if (!size) {
+    return i18n.t("shared.imageNotAnImage");
+  }
+  if (size.width < MINIMUM_IMAGE_EDGE || size.height < MINIMUM_IMAGE_EDGE) {
+    return i18n.t("shared.imageTooSmall", {
+      width: size.width,
+      height: size.height,
+    });
+  }
   return null;
 }
 
@@ -202,7 +235,7 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
     }
   }
 
-  onFileUpload(file: any) {
+  async onFileUpload(file: any) {
     if (this.props.mediaStorageReady === false) {
       this.showMediaStorageUnavailable();
       return;
@@ -212,9 +245,9 @@ export default class AdminImageUploaderApp extends React.Component<any, any> {
       return;
     }
 
-    const errorMessage = isInvalidImage();
+    const errorMessage = await isInvalidImage(file);
     if (errorMessage) {
-      // TODO: show error message
+      showToast(errorMessage, "error");
       return;
     }
 

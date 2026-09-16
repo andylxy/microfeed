@@ -196,7 +196,7 @@ export default class FeedPublicRssBuilder {
     if (_microfeed['categories'] && _microfeed['categories'].length > 0) {
       const categories: any[] = [];
       _microfeed['categories'].forEach((c: any) => {
-        let cat = {
+        const cat = {
           '@_text': c.name,
         };
 

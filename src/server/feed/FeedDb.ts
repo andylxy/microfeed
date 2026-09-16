@@ -266,7 +266,7 @@ export default class FeedDb {
       if (thing.queryKwargs) {
         Object.keys(thing.queryKwargs).forEach((kwargKey: any) => {
           const kwargKeyComponents = kwargKey.split('__');
-          let key = kwargKeyComponents[0];
+          const key = kwargKeyComponents[0];
           let op = '==';
           if (kwargKeyComponents.length > 0 &&
             ['!=', '>', '<', '>=', '<=', '==', 'in'].includes(kwargKeyComponents[1])) {

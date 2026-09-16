@@ -164,6 +164,18 @@ function MethodRow({
             </div>
           </div>
         </div>
+        {/* A relative path (for example one written by a media upload) is
+            resolved against the bucket URL by the feed builder, so R2-hosted
+            icons work without an absolute URL. */}
+        <div className="md:col-span-12">
+          <AdminInput
+            value={image}
+            disabled={!editable || !enabled}
+            placeholder={t("settings.iconPlaceholder")}
+            onChange={(e: any) => updateMethodByAttr(id, 'image', e.target.value, false)}
+            customClass="text-xs p-1"
+          />
+        </div>
       </div>
       <div className="mt-2 flex items-center">
         <div className="">
