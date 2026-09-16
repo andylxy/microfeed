@@ -144,6 +144,45 @@
   提交、创建远程或推送，否则不要执行这些操作。验证用的预览服务器用完必须
   停止。
 
+### 中文主题 `local.feed-zh`（本项目维护的中文主题）
+
+- 源码在 **`themes/feed-zh/`**，包身份 `local.feed-zh`，版本号写在
+  `microfeed-theme.json` 的 `version`。
+- 它**不在** `BUNDLED_THEME_CATALOG` 里（说明见 `themes/README.md`），因此
+  `init` / `deploy` **不会**自动安装、同步或激活它——必须手工安装。
+- 它是 workspace 成员（根 `workspaces` 覆盖 `themes/*`），依赖用 `workspace:^`
+  指向仓库内的 `@microfeed/theme-kit`。**不要**在这个目录里执行 `git init`
+  （会被当成 gitlink 提交）。
+- **仓库外的 `../microfeed-themes/feed-zh` 已冻结，不再维护。** 今后中文主题的
+  一切修改都改 `themes/feed-zh/`；不要改仓库外那份，也不要再从它安装。
+  保留它仅为留一份历史参考。
+
+#### 改完中文主题后：安装与激活
+
+```console
+# 1. 先递增 microfeed-theme.json 里的 version
+#    （同一个 packageId + version 不能对应不同内容）
+# 2. 校验与测试
+node --import tsx packages/theme-kit/src/cli.ts validate themes/feed-zh --json
+node --import tsx packages/theme-kit/src/cli.ts test themes/feed-zh --json
+
+# 3. 安装到目标实例（安装后一定是「未激活」状态）
+yarn manage theme install themes/feed-zh --instance ctwh-881019-xyz
+#    预览环境追加 --preview；本地沙箱用 --local
+
+# 4. 确认列表里出现了新版本
+yarn manage theme list --instance ctwh-881019-xyz
+
+# 5. 在后台 Settings → Themes 预览确认后，再单独激活
+yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
+```
+
+- **安装与激活是两步**，安装后必然未激活——这是有意的安全设计，不要试图一步到位。
+- `theme delete` 会拒绝删除 **Built-in 版本**与**当前激活的 Custom 版本**，
+  且需要 `--confirm <精确 theme-id>`。
+- 每个环境上限：100 个未删除 Custom 版本、20 个草稿；Built-in 版本不占 Custom 配额。
+- 改主题**只影响显示**，不要顺手改功能逻辑。
+
 ## API 契约与文档
 
 - 不要添加断言 `docs/` 或任何 `README.md` 中的散文、标题、链接、命令片段、
