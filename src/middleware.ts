@@ -248,6 +248,9 @@ const handleRequest = defineMiddleware(async (context, next) => {
             {
               instanceName: env.MICROFEED_INSTANCE_NAME,
               local: !env.MICROFEED_CLOUDFLARE_ACCOUNT_ID?.trim(),
+              // `manage auth` targets production unless `--preview` is explicit,
+              // so the lock screen has to say which site it is talking about.
+              preview: env.DEPLOYMENT_ENVIRONMENT === "preview",
             },
             adminLanguageFromRequest(context.request),
           ),

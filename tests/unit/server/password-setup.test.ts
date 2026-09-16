@@ -52,6 +52,21 @@ describe("admin password setup routing", () => {
     );
   });
 
+  it("targets the preview login when the lock screen is served by preview", async () => {
+    // `manage auth` hits production unless `--preview` is explicit, so a preview
+    // lock screen that omitted the flag would send the reader to the wrong site.
+    const response = adminDashboardLockedResponse(true, {
+      instanceName: "production-feed",
+      preview: true,
+    });
+
+    const body = await response.text();
+    expect(body).toContain(
+      "<pre><code>npx @microfeed/cli manage auth setup --instance " +
+        "production-feed --preview</code></pre>",
+    );
+  });
+
   it("adds a copyable disable command for a local-only instance", async () => {
     const response = adminDashboardLockedResponse(true, {
       instanceName: "local",

@@ -14,18 +14,26 @@ export const ADMIN_DASHBOARD_LOGIN_HELP_URL =
 interface AdminDashboardLockedOptions {
   instanceName?: string;
   local?: boolean;
+  preview?: boolean;
 }
 
 function dashboardAuthCommand(
   action: "disable" | "setup",
   instanceName?: string,
+  preview = false,
 ): string {
   const normalizedInstanceName = instanceName?.trim();
   const instanceOption = normalizedInstanceName &&
       /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(normalizedInstanceName)
     ? ` --instance ${normalizedInstanceName}`
     : "";
-  return managementCommand(`auth ${action}${instanceOption}`);
+  // `manage auth` targets the production login unless `--preview` is explicit,
+  // so a preview deployment has to say so — otherwise the printed command sends
+  // the reader to the wrong site's credentials.
+  const previewOption = preview ? " --preview" : "";
+  return managementCommand(
+    `auth ${action}${instanceOption}${previewOption}`,
+  );
 }
 
 export async function adminOwner(
@@ -48,9 +56,13 @@ export function adminDashboardLockedResponse(
   options: AdminDashboardLockedOptions = {},
   language: AdminLanguage = "en",
 ): Response {
-  const setupCommand = dashboardAuthCommand("setup", options.instanceName);
+  const setupCommand = dashboardAuthCommand(
+    "setup",
+    options.instanceName,
+    options.preview,
+  );
   const disableCommand = options.local
-    ? dashboardAuthCommand("disable", options.instanceName)
+    ? dashboardAuthCommand("disable", options.instanceName, options.preview)
     : undefined;
   const text = (key: string) => translate(`errors.dashboard.${key}`, language);
   const title = text("lockedTitle");
