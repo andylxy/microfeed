@@ -181,6 +181,7 @@ export const NAV_ITEMS = {
   EDIT_CHANNEL: 'edit_channel',
   ALL_ITEMS: 'all_items',
   IMPORT_CHAPTERS: 'import_chapters',
+  REVIEW: 'review',
   PAGES: 'pages',
   CATEGORIES: 'categories',
   SITE_FILES: 'site_files',
@@ -201,6 +202,9 @@ export const NAV_ITEMS_DICT = {
   },
   [NAV_ITEMS.PAGES]: {
     name: 'Pages',
+  },
+  [NAV_ITEMS.REVIEW]: {
+    name: 'Review queue',
   },
   [NAV_ITEMS.IMPORT_CHAPTERS]: {
     name: 'Import chapters',

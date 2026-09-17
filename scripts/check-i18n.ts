@@ -18,6 +18,7 @@ import {readdirSync, readFileSync, statSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {NAV_ITEMS} from "../src/shared/Constants";
 import {en} from "../src/shared/i18n/en";
 import {flatten, translate} from "../src/shared/i18n/index";
 import {zhCN} from "../src/shared/i18n/zh-CN";
@@ -86,6 +87,14 @@ const selfReferential = Object.entries(flatEnglish)
   .filter(([, value]) => value.startsWith("errors."))
   .map(([key]) => key);
 
+// The sidebar renders its labels through a dynamic key (`nav.item.${id}`), so
+// the literal scan above cannot see them: a missing one would render the raw
+// key name in the dashboard. Enumerate the ids instead - this is the gap that
+// let three novel-cms navigation labels ship untranslated.
+const missingNavLabels = Object.values(NAV_ITEMS)
+  .map((id) => `nav.item.${id}`)
+  .filter((key) => translate(key) === key);
+
 const failures: string[] = [];
 if (unresolved.length > 0) {
   failures.push(
@@ -115,6 +124,13 @@ if (selfReferential.length > 0) {
   failures.push(
     `en values that are themselves keys (${selfReferential.length}):\n    ` +
       selfReferential.slice(0, 20).join("\n    "),
+  );
+}
+if (missingNavLabels.length > 0) {
+  failures.push(
+    `navigation labels with no translation (${missingNavLabels.length}) - the ` +
+      `sidebar would show the key itself:\n    ` +
+      missingNavLabels.join("\n    "),
   );
 }
 

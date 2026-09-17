@@ -171,6 +171,38 @@
     if (current) current.setAttribute("data-mf-current", "");
   }
 
+  // Reader report. Posts to /report, which is intentionally outside the public
+  // API contract, and reports the outcome inline instead of navigating away.
+  var report = document.querySelector("[data-mf-report]");
+  var reportForm = document.querySelector("[data-mf-report-form]");
+  if (report && reportForm) {
+    var reportStatus = report.querySelector("[data-mf-report-status]");
+    reportForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var itemId = report.getAttribute("data-mf-item-id") || "";
+      var data = new FormData(reportForm);
+      if (reportStatus) {
+        reportStatus.hidden = false;
+        reportStatus.textContent = "提交中……";
+      }
+      fetch("/report/", {
+        body: JSON.stringify({
+          category: data.get("category"),
+          detail: data.get("detail"),
+          itemId: itemId,
+        }),
+        headers: {"Content-Type": "application/json"},
+        method: "POST",
+      }).then(function (response) {
+        if (!response.ok) throw new Error(String(response.status));
+        reportForm.reset();
+        if (reportStatus) reportStatus.textContent = "举报已提交，感谢反馈。";
+      }).catch(function () {
+        if (reportStatus) reportStatus.textContent = "提交失败，请稍后再试。";
+      });
+    });
+  }
+
   var progress = document.querySelector("[data-mf-progress]");
   if (progress) {
     var update = function () {

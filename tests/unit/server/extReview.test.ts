@@ -1,0 +1,295 @@
+import {DatabaseSync} from "node:sqlite";
+import {describe, expect, it} from "vitest";
+
+import {STATUSES} from "@/shared/Constants";
+import {
+  recordAudit,
+  type AuditDb,
+  type AuditDbPreparedStatement,
+} from "@/server/feed/extContentAudit";
+import {
+  createReport,
+  countPendingReports,
+  getReport,
+  listReportsByStatus,
+  setReportStatus,
+  type ReportDb,
+  type ReportDbPreparedStatement,
+} from "@/server/feed/extContentReport";
+import {
+  applyReviewTransition,
+  listItemAuditRows,
+  listPendingReviewItems,
+  readItemReviewStatus,
+  rebuildItemVersion,
+  reviewTransition,
+} from "@/server/feed/extReview";
+
+/**
+ * In-memory SQLite doubles for the two D1-shaped ports, matching the schema the
+ * real migrations create so the production SQL is exercised for real.
+ */
+function makeStatement(
+  database: DatabaseSync,
+  sql: string,
+  boundValues: unknown[] = [],
+): AuditDbPreparedStatement & ReportDbPreparedStatement {
+  return {
+    bind(...values: unknown[]) {
+      return makeStatement(database, sql, values);
+    },
+    async run() {
+      database.prepare(sql).run(...(boundValues as any[]));
+      return {results: [] as Record<string, unknown>[], success: true};
+    },
+    async all() {
+      return {
+        results: database
+          .prepare(sql)
+          .all(...(boundValues as any[])) as Record<string, unknown>[],
+        success: true,
+      };
+    },
+    async first() {
+      const rows = database
+        .prepare(sql)
+        .all(...(boundValues as any[])) as Record<string, unknown>[];
+      return rows[0] ?? null;
+    },
+  };
+}
+
+function newDatabase(): DatabaseSync {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE items (
+    id TEXT PRIMARY KEY,
+    status INTEGER,
+    data TEXT,
+    review_status TEXT,
+    updated_at TEXT
+  )`);
+  database.exec(`CREATE TABLE ext_content_audit (
+    id TEXT PRIMARY KEY,
+    item_id TEXT,
+    channel_id TEXT,
+    action TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    actor_id TEXT,
+    diff_data TEXT,
+    checkpoint_data TEXT,
+    is_checkpoint BOOLEAN DEFAULT 0,
+    review_status TEXT,
+    reason TEXT,
+    created_at TEXT
+  )`);
+  database.exec(`CREATE TABLE ext_content_report (
+    id TEXT PRIMARY KEY,
+    item_id TEXT,
+    channel_id TEXT,
+    reporter_type TEXT,
+    category TEXT,
+    detail TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT
+  )`);
+  return database;
+}
+
+const dbOf = (database: DatabaseSync): AuditDb & ReportDb => ({
+  prepare: (sql: string) => makeStatement(database, sql),
+});
+
+function seedItem(
+  database: DatabaseSync,
+  id: string,
+  data: Record<string, unknown>,
+  reviewStatus: string,
+  updatedAt = "2026-08-01T00:00:00.000Z",
+): void {
+  database
+    .prepare("INSERT INTO items (id, status, data, review_status, updated_at) VALUES (?, ?, ?, ?, ?)")
+    .run(id, STATUSES.UNPUBLISHED, JSON.stringify(data), reviewStatus, updatedAt);
+}
+
+describe("review state machine", () => {
+  it("submits unpublished, approves published, and rejects with a reason", () => {
+    expect(reviewTransition("submit")).toMatchObject({
+      reviewStatus: "submitted",
+      status: STATUSES.UNPUBLISHED,
+      takedown: false,
+    });
+    expect(reviewTransition("approve")).toMatchObject({
+      reviewStatus: "approved",
+      status: STATUSES.PUBLISHED,
+    });
+    expect(reviewTransition("reject", "  内容不合规  ")).toMatchObject({
+      reason: "内容不合规",
+      reviewStatus: "rejected",
+      status: STATUSES.UNPUBLISHED,
+    });
+  });
+
+  it("refuses to reject without a reason", () => {
+    expect(() => reviewTransition("reject")).toThrow(/reason/);
+    expect(() => reviewTransition("reject", "   ")).toThrow(/reason/);
+  });
+
+  it("marks a takedown and clears it again when the chapter is restored", () => {
+    const takenDown = applyReviewTransition(
+      {_microfeed: {reviewStatus: "approved"}, title: "第一章"},
+      reviewTransition("takedown", "侵权"),
+    );
+    expect((takenDown._microfeed as any).takedown).toBe(true);
+    expect((takenDown._microfeed as any).takedownReason).toBe("侵权");
+
+    const restored = applyReviewTransition(
+      takenDown,
+      reviewTransition("approve"),
+    );
+    expect((restored._microfeed as any).takedown).toBeUndefined();
+    expect((restored._microfeed as any).reviewStatus).toBe("approved");
+  });
+
+  it("defaults an unknown or missing review status to draft", () => {
+    expect(readItemReviewStatus({_microfeed: {reviewStatus: "approved"}})).toBe("approved");
+    expect(readItemReviewStatus({_microfeed: {reviewStatus: "nonsense"}})).toBe("draft");
+    expect(readItemReviewStatus({})).toBe("draft");
+  });
+});
+
+describe("review queue and version rebuild", () => {
+  it("lists only submitted chapters, oldest first, with their titles", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    seedItem(database, "it-new", {title: "新提交"}, "submitted", "2026-08-02T00:00:00.000Z");
+    seedItem(database, "it-old", {title: "早提交"}, "submitted", "2026-08-01T00:00:00.000Z");
+    seedItem(database, "it-draft", {title: "草稿"}, "draft");
+
+    const queue = await listPendingReviewItems(db);
+    expect(queue.map((row) => row.id)).toEqual(["it-old", "it-new"]);
+    expect(queue[0]!.title).toBe("早提交");
+  });
+
+  it("survives a malformed data column instead of failing the queue", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    database
+      .prepare("INSERT INTO items (id, status, data, review_status, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run("it-bad", STATUSES.UNPUBLISHED, "{not json", "submitted", "2026-08-01T00:00:00.000Z");
+
+    const queue = await listPendingReviewItems(db);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.title).toBe("");
+  });
+
+  it("rebuilds a past version from the nearest checkpoint plus later diffs", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+
+    // Edit 1 is the checkpoint (full snapshot); edits 2 and 3 are diffs only.
+    await recordAudit(db, {
+      action: "edit",
+      actorType: "author",
+      checkpointData: {title: "v1", _microfeed: {volume: "第一卷"}},
+      diffData: [{op: "update", path: "title", before: "v0", after: "v1"}],
+      isCheckpoint: true,
+      itemId: "it1",
+    });
+    await recordAudit(db, {
+      action: "edit",
+      actorType: "author",
+      diffData: [{op: "update", path: "title", before: "v1", after: "v2"}],
+      isCheckpoint: false,
+      itemId: "it1",
+    });
+    await recordAudit(db, {
+      action: "edit",
+      actorType: "author",
+      diffData: [
+        {op: "update", path: "_microfeed.volume", before: "第一卷", after: "第二卷"},
+        {op: "add", path: "tags", after: ["热血"]},
+      ],
+      isCheckpoint: false,
+      itemId: "it1",
+    });
+
+    const rows = await listItemAuditRows(db, "it1");
+    expect(rows).toHaveLength(3);
+
+    const restored = await rebuildItemVersion(db, "it1", rows[2]!.id);
+    expect(restored).toEqual({
+      _microfeed: {volume: "第二卷"},
+      tags: ["热血"],
+      title: "v2",
+    });
+
+    // The checkpoint row itself rebuilds to exactly its snapshot.
+    expect(await rebuildItemVersion(db, "it1", rows[0]!.id)).toEqual({
+      _microfeed: {volume: "第一卷"},
+      title: "v1",
+    });
+  });
+
+  it("returns null when the audit row belongs to another item", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    await recordAudit(db, {
+      action: "edit",
+      actorType: "author",
+      checkpointData: {title: "v1"},
+      diffData: [],
+      isCheckpoint: true,
+      itemId: "it1",
+    });
+
+    expect(await rebuildItemVersion(db, "it2", "missing")).toBeNull();
+  });
+});
+
+describe("reader reports", () => {
+  it("stores an anonymous report as pending and queues it oldest first", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+
+    const first = await createReport(db, {category: "plagiarism", itemId: "it1"});
+    const second = await createReport(db, {
+      category: "not-a-category",
+      detail: "广告太多",
+      itemId: "it2",
+    });
+
+    const pending = await listReportsByStatus(db, "pending");
+    expect(pending).toHaveLength(2);
+    expect(pending.map((report) => report.id)).toEqual([first, second]);
+    expect(pending[0]!.reporterType).toBe("anonymous");
+    // An unrecognised category is normalised rather than rejected.
+    expect(pending[1]!.category).toBe("other");
+    expect(await countPendingReports(db)).toBe(2);
+  });
+
+  it("moves a report out of the pending queue and refuses unknown statuses", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    const id = await createReport(db, {category: "violence", itemId: "it1"});
+
+    await setReportStatus(db, id, "resolved");
+    expect(await countPendingReports(db)).toBe(0);
+    expect((await getReport(db, id))!.status).toBe("resolved");
+
+    await expect(
+      setReportStatus(db, id, "nonsense" as never),
+    ).rejects.toThrow(/unknown status/);
+  });
+
+  it("truncates an over-long detail instead of rejecting the report", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    const id = await createReport(db, {
+      category: "other",
+      detail: "x".repeat(5000),
+      itemId: "it1",
+    });
+
+    expect((await getReport(db, id))!.detail).toHaveLength(2000);
+  });
+});

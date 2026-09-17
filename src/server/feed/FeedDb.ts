@@ -576,10 +576,19 @@ export default class FeedDb {
     const timestamp = (new Date()).toISOString();
     const contentText = htmlToPlainText(data.description);
     item.contentText = contentText;
+    // Mirror the novel-cms review state into a real column so the review queue
+    // can select on it without parsing every item's JSON. The JSON stays the
+    // source of truth; this is a derived index. Items outside novel-cms leave
+    // it null.
+    const microfeed = (data as {_microfeed?: Record<string, unknown>})._microfeed;
+    const reviewStatus = typeof microfeed?.reviewStatus === "string"
+      ? microfeed.reviewStatus
+      : null;
     const keyValuePairs = {
       'content_text': contentText,
       'content_text_revision': ITEM_CONTENT_TEXT_REVISION,
       'content_text_updated_at': timestamp,
+      'review_status': reviewStatus,
       status,
       'pub_date': msToRFC3339(pubDateMs),
       data: JSON.stringify(data),

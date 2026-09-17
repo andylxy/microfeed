@@ -1,6 +1,10 @@
 import {ITEM_STATUSES_STRINGS_DICT, STATUSES} from "@/shared/Constants";
 import type FeedCrudManager from "@/server/feed/FeedCrudManager";
 import type FeedDb from "@/server/feed/FeedDb";
+import {
+  recordItemEdit,
+  type AuditDb,
+} from "@/server/feed/extContentAudit";
 import type {DatabaseMutationCommit} from "@/server/mutation";
 
 type ItemInput = Record<string, any>;
@@ -76,6 +80,14 @@ export async function updateItem(
     status: patch.status ?? existing.status,
   };
   await feedCrud.saveInternalItem(item, commit);
+  // novel-cms audit trail. This is the only call site in the core: the diff
+  // model and the checkpoint cadence live in extContentAudit, and an edit that
+  // changes nothing records nothing.
+  await recordItemEdit(
+    database.FEED_DB as unknown as AuditDb,
+    existing as Record<string, unknown>,
+    item as Record<string, unknown>,
+  );
   return item;
 }
 

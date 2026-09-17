@@ -241,3 +241,54 @@ export async function countAuditRecords(
   const c = (row as Record<string, unknown>).c;
   return typeof c === "number" ? c : Number(c);
 }
+
+/** Every Nth edit also stores a full snapshot (ADR-0003). */
+export const AUDIT_CHECKPOINT_INTERVAL = 3;
+
+/** The novel-cms review state carried in an item's `_microfeed` pocket. */
+export function readReviewStatus(item: Record<string, unknown>): string | null {
+  const microfeed = item._microfeed as Record<string, unknown> | undefined;
+  const value = microfeed?.reviewStatus;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export interface RecordItemEditOptions {
+  actorId?: string | null;
+  actorType?: ActorType;
+  channelId?: string | null;
+  reviewStatus?: string | null;
+}
+
+/**
+ * Record one edit of an item: diff it against the previous state, decide
+ * whether this edit is a checkpoint, and persist the row.
+ *
+ * This is the single entry point the write seam calls, so the diff model and
+ * the checkpoint cadence stay in one module instead of leaking into the item
+ * service. An edit that changes nothing produces no audit row.
+ */
+export async function recordItemEdit(
+  db: AuditDb,
+  existing: Record<string, unknown>,
+  next: Record<string, unknown>,
+  options: RecordItemEditOptions = {},
+): Promise<void> {
+  const itemId = String(next.id ?? existing.id ?? "");
+  if (!itemId) return;
+  const diffData = computeDiff(existing as ItemData, next as ItemData);
+  if (diffData.length === 0) return;
+
+  const existingCount = await countAuditRecords(db, itemId);
+  const isCheckpoint = shouldCheckpoint(existingCount, AUDIT_CHECKPOINT_INTERVAL);
+  await recordAudit(db, {
+    action: "edit",
+    actorId: options.actorId ?? null,
+    actorType: options.actorType ?? "author",
+    channelId: options.channelId ?? null,
+    checkpointData: isCheckpoint ? (next as ItemData) : null,
+    diffData,
+    isCheckpoint,
+    itemId,
+    reviewStatus: options.reviewStatus ?? readReviewStatus(next),
+  });
+}

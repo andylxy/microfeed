@@ -2,10 +2,13 @@ import {describe, expect, it} from "vitest";
 import {DatabaseSync} from "node:sqlite";
 
 import {
+  AUDIT_CHECKPOINT_INTERVAL,
   applyDiff,
   computeDiff,
   countAuditRecords,
+  readReviewStatus,
   recordAudit,
+  recordItemEdit,
   rebuildFromCheckpoint,
   shouldCheckpoint,
   type AuditDb,
@@ -373,5 +376,93 @@ describe("audit checkpoint cadence (end-to-end)", () => {
         // checkpointData intentionally omitted
       }),
     ).rejects.toThrow(/checkpointData/);
+  });
+});
+
+describe("recordItemEdit", () => {
+  function readRows(database: DatabaseSync) {
+    return database
+      .prepare(
+        "SELECT action, actor_type, diff_data, is_checkpoint, checkpoint_data, review_status " +
+          "FROM ext_content_audit WHERE item_id = 'it1' ORDER BY rowid ASC",
+      )
+      .all() as Array<{
+        action: string;
+        actor_type: string;
+        diff_data: string;
+        is_checkpoint: number;
+        checkpoint_data: string | null;
+        review_status: string | null;
+      }>;
+  }
+
+  it("records one row carrying the field-level diff of the edit", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    const before: ItemData = {title: "旧标题", _microfeed: {volume: "第一卷"}};
+    const after: ItemData = {title: "新标题", _microfeed: {volume: "第一卷"}};
+    await recordItemEdit(db, {...before, id: "it1"}, {...after, id: "it1"});
+
+    const rows = readRows(database);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.action).toBe("edit");
+    expect(rows[0]!.actor_type).toBe("author");
+    expect(JSON.parse(rows[0]!.diff_data)).toEqual([
+      {op: "update", path: "title", after: "新标题", before: "旧标题"},
+    ]);
+  });
+
+  it("records nothing when the edit changes no field", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    const same: ItemData = {title: "不变", _microfeed: {volume: "第一卷"}};
+    await recordItemEdit(db, {...same, id: "it1"}, {...same, id: "it1"});
+
+    expect(readRows(database)).toHaveLength(0);
+  });
+
+  it("turns every Nth edit into a checkpoint that carries the full snapshot", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    for (let index = 1; index <= AUDIT_CHECKPOINT_INTERVAL; index += 1) {
+      const next: ItemData = {title: `第${index}版`, id: "it1"};
+      await recordItemEdit(db, {title: `第${index - 1}版`, id: "it1"}, next);
+    }
+
+    const rows = readRows(database);
+    expect(rows).toHaveLength(AUDIT_CHECKPOINT_INTERVAL);
+    expect(rows.filter((row) => row.is_checkpoint === 1)).toHaveLength(1);
+    // The checkpoint is the last edit, and its snapshot is that version's data.
+    expect(rows[AUDIT_CHECKPOINT_INTERVAL - 1]!.is_checkpoint).toBe(1);
+    expect(JSON.parse(rows[AUDIT_CHECKPOINT_INTERVAL - 1]!.checkpoint_data!))
+      .toEqual({title: `第${AUDIT_CHECKPOINT_INTERVAL}版`, id: "it1"});
+    for (const row of rows.slice(0, -1)) expect(row.checkpoint_data).toBeNull();
+  });
+
+  it("mirrors the novel-cms review state onto the audit row", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    await recordItemEdit(
+      db,
+      {title: "草稿", id: "it1"},
+      {_microfeed: {reviewStatus: "submitted"}, title: "提交版", id: "it1"},
+    );
+
+    expect(readRows(database)[0]!.review_status).toBe("submitted");
+  });
+
+  it("reads the review state only from a non-empty _microfeed string", () => {
+    expect(readReviewStatus({_microfeed: {reviewStatus: "approved"}})).toBe("approved");
+    expect(readReviewStatus({_microfeed: {reviewStatus: ""}})).toBeNull();
+    expect(readReviewStatus({_microfeed: {reviewStatus: 7}})).toBeNull();
+    expect(readReviewStatus({})).toBeNull();
   });
 });

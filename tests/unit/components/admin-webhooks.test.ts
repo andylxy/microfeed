@@ -45,6 +45,7 @@ describe("Webhook Admin", () => {
       "Edit channel",
       "See all items",
       "Import chapters",
+      "Review queue",
       "Pages",
       "Categories",
       "Site files",
