@@ -181,6 +181,7 @@ export const NAV_ITEMS = {
   EDIT_CHANNEL: 'edit_channel',
   ALL_ITEMS: 'all_items',
   PAGES: 'pages',
+  CATEGORIES: 'categories',
   SITE_FILES: 'site_files',
   API: 'api',
   WEBHOOKS: 'webhooks',
@@ -199,6 +200,9 @@ export const NAV_ITEMS_DICT = {
   },
   [NAV_ITEMS.PAGES]: {
     name: 'Pages',
+  },
+  [NAV_ITEMS.CATEGORIES]: {
+    name: 'Categories',
   },
   [NAV_ITEMS.SITE_FILES]: {
     name: 'Site files',

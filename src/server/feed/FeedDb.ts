@@ -16,6 +16,7 @@ import {
   type ResolvedItemPagination,
 } from "@/shared/ItemPagination";
 import FeedPublicJsonBuilder from "./FeedPublicJsonBuilder";
+import {extractGenreFromChannelData} from "./extCategory";
 import {
   publicCacheTagsForFeedUpdate,
   publicCacheTagsForImageTarget,
@@ -522,16 +523,23 @@ export default class FeedDb {
 
   _putChannelToContentStatement(channel: any) {
     const {id, status, is_primary, ...data} = channel;
+    const keyValuePairs: any = {
+      status,
+      'is_primary': is_primary,
+      data: JSON.stringify(data),
+    };
+    // Denormalized mirror: keep channels.genre in sync with the primary
+    // category id stored in data._microfeed.genre (the SSOT). Only novel
+    // channels carry _microfeed, so non-novel channels leave genre untouched.
+    if (data && data._microfeed !== undefined) {
+      keyValuePairs.genre = extractGenreFromChannelData(data);
+    }
     return this.getUpdateSql(
       'channels',
       {
         id,
       },
-      {
-        status,
-        'is_primary': is_primary,
-        data: JSON.stringify(data),
-      },
+      keyValuePairs,
     );
   }
 

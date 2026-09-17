@@ -84,6 +84,7 @@ export default class EditChannelApp extends React.Component<Props, any> {
     super(props);
 
     this.onUpdateChannelMeta = this.onUpdateChannelMeta.bind(this);
+    this.onUpdateMicrofeedMeta = this.onUpdateMicrofeedMeta.bind(this);
     this.onSubmit = this.onSubmit.bind(this);
     this.saveSnapshot = this.saveSnapshot.bind(this);
 
@@ -95,6 +96,8 @@ export default class EditChannelApp extends React.Component<Props, any> {
       channel,
       autosaveState: {dirty: false, phase: "idle"} satisfies AutosaveState,
       replacedImageUrls: [],
+      genreOptions: [],
+      genreLoading: true,
     };
 
     this.autosave = new AutosaveCoordinator({
@@ -116,6 +119,25 @@ export default class EditChannelApp extends React.Component<Props, any> {
     this.cleanupNavigationGuard = preventCloseWhenChanged(
       () => this.autosave.hasUnsavedChanges(),
     );
+    void this.loadGenreOptions();
+  }
+
+  async loadGenreOptions() {
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxCategories(), {
+        cache: 'no-store',
+        headers: {accept: 'application/json'},
+      });
+      const data = await response.json().catch(() => ({})) as {items?: any[]};
+      if (!response.ok) return;
+      const options = (data.items || []).map((category: any) => ({
+        value: String(category.id),
+        label: String(category.name),
+      }));
+      if (this.mounted) this.setState({genreOptions: options, genreLoading: false});
+    } catch {
+      if (this.mounted) this.setState({genreLoading: false});
+    }
   }
 
   componentWillUnmount() {
@@ -131,6 +153,25 @@ export default class EditChannelApp extends React.Component<Props, any> {
         [keyName]: value,
       },
     }), () => this.autosave.markChanged());
+  }
+
+  /** Update a field inside `channel._microfeed` (the novel-cms pocket that
+   *  holds `genre` + `tags`). The primary genre is mirrored into the queryable
+   *  `channels.genre` column by FeedDb on save; `tags` lives only in `data`. */
+  onUpdateMicrofeedMeta(keyName: any, value: any) {
+    this.setState((prevState: any) => {
+      const prevChannel = prevState.channel;
+      const prevMicrofeed = (prevChannel._microfeed as Record<string, unknown>) || {};
+      return {
+        channel: {
+          ...prevChannel,
+          _microfeed: {
+            ...prevMicrofeed,
+            [keyName]: value,
+          },
+        },
+      };
+    }, () => this.autosave.markChanged());
   }
 
   onSubmit(e: any) {
@@ -169,6 +210,22 @@ export default class EditChannelApp extends React.Component<Props, any> {
     const {autosaveState, channel, feed} = this.state;
     const {onboardingResult} = this.props;
     const categories = channel.categories || [];
+    const microfeed = (channel._microfeed as Record<string, unknown>) || {};
+    const genreId = microfeed.genre == null
+      ? null
+      : typeof microfeed.genre === 'string'
+        ? microfeed.genre
+        : String(microfeed.genre);
+    const genreOptions = [
+      {value: '', label: t('categories.noParent')},
+      ...this.state.genreOptions,
+    ];
+    const genreOption = genreOptions.find(
+      (o: any) => o.value === (genreId || ''),
+    ) || null;
+    const tagsValue = Array.isArray(microfeed.tags)
+      ? (microfeed.tags as string[]).join(', ')
+      : '';
     const mediaStorage = onboardingResult.result[
       ONBOARDING_TYPES.MEDIA_STORAGE
     ];
@@ -362,6 +419,38 @@ export default class EditChannelApp extends React.Component<Props, any> {
               </div>
             </div>
           </details>
+          <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+            <h2 className="text-lg font-semibold">{t('categories.sectionTitle')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('categories.intro')}
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <AdminSelect
+                ariaLabel={t('categories.primaryGenre')}
+                label={t('categories.primaryGenre')}
+                placeholder={t('categories.primaryGenrePlaceholder')}
+                options={genreOptions}
+                value={genreOption}
+                disabled={this.state.genreLoading}
+                onChange={(option: any) => this.onUpdateMicrofeedMeta(
+                  'genre',
+                  option && option.value ? option.value : null,
+                )}
+              />
+              <AdminInput
+                label={t('categories.tags')}
+                placeholder={t('categories.tagsPlaceholder')}
+                value={tagsValue}
+                onChange={(e: any) => {
+                  const tags = e.target.value
+                    .split(',')
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s.length > 0);
+                  this.onUpdateMicrofeedMeta('tags', tags);
+                }}
+              />
+            </div>
+          </div>
         </div>
         <div className="xl:col-span-3">
           <div className="grid gap-4 xl:sticky xl:top-4">

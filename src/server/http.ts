@@ -61,6 +61,26 @@ export function localizedServiceError(
 }
 
 /**
+ * Catch an AppError-like error thrown by an admin handler and turn it into a
+ * localized service error response. Returns `undefined` for errors that are
+ * not `Error` instances carrying an `i18nKey`, so the caller may re-throw them
+ * to the framework's default error handling. Shared by the category ajax
+ * routes to avoid the same few lines being copied into each file.
+ */
+export function serviceError(
+  error: unknown,
+  fallbackStatus = 400,
+): Response | undefined {
+  if (error instanceof Error && "i18nKey" in error) {
+    return localizedServiceError(
+      error,
+      (error as {status?: number}).status ?? fallbackStatus,
+    );
+  }
+  return undefined;
+}
+
+/**
  * Plain-text counterpart of {@link localizedError}: same language lookup, but
  * the body is the translated string rather than a JSON object.
  * Use it wherever the original response was a plain-text `new Response(...)`

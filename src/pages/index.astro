@@ -8,6 +8,8 @@ import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.ast
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {navigationPages} from "@/server/pages/service";
+import {listCategoryNav} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
 
 const loaded = await loadPublishedFeed(env, Astro.request, {
   includeActiveTheme: true,
@@ -31,7 +33,10 @@ const assetBaseUrl = themeAssetBaseUrl(
   webSettings.publicBucketUrl,
 );
 const navigation = await navigationPages(loaded.database.FEED_DB, Astro.request);
-const extraContext = {navigation_pages: navigation};
+const categoryNav = await listCategoryNav(
+  loaded.database.FEED_DB as unknown as CategoryDb,
+);
+const extraContext = {navigation_pages: navigation, category_nav: categoryNav};
 const theme = new Theme(
   loaded.publicFeed,
   loaded.content.settings,

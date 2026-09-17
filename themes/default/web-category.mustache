@@ -1,0 +1,43 @@
+<main>
+  <section>
+    <h1>{{category.name}}</h1>
+    {{#category.bookCount}}
+    <div class="text-sm">{{category.bookCount}} books</div>
+    {{/category.bookCount}}
+  </section>
+
+  {{#category_nav.length}}
+  <section>
+    <h2 class="border-b">Categories</h2>
+    <div class="flex flex-wrap">
+      {{#category_nav}}
+      <a href="/category/{{slug}}/" class="mr-4 mb-2" rel="tag">
+        {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
+      </a>
+      {{/category_nav}}
+    </div>
+  </section>
+  {{/category_nav.length}}
+
+  <section>
+    <h2 class="border-b">Books</h2>
+    <div>
+      {{^category_books.length}}
+      <div class="text-sm text-muted">No books in this category yet.</div>
+      {{/category_books.length}}
+
+      {{#category_books}}
+      <div class="mb-4">
+        <a href="{{url}}" class="flex items-center">
+          {{#image}}
+          <img alt="{{title}}" src="{{image}}" class="img-lg flex-none mr-4" loading="lazy"/>
+          {{/image}}
+          <div>
+            <div class="font-semibold">{{title}}</div>
+          </div>
+        </a>
+      </div>
+      {{/category_books}}
+    </div>
+  </section>
+</main>

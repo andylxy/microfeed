@@ -45,6 +45,19 @@
   </section>
   {{/description}}
 
+  {{#category_nav.length}}
+  <section>
+    <h2 class="border-b">Categories</h2>
+    <div class="flex flex-wrap">
+      {{#category_nav}}
+      <a href="/category/{{slug}}/" class="mr-4 mb-2" rel="tag">
+        {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
+      </a>
+      {{/category_nav}}
+    </div>
+  </section>
+  {{/category_nav.length}}
+
   <section>
     <h2 class="border-b">
       Latest
