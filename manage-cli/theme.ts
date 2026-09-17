@@ -68,7 +68,7 @@ import {
   type LoadedThemePackage,
 } from "../packages/theme-kit/src/package";
 import type {CommandRunner, MicrofeedConfig} from "./types";
-import type {Flags} from "./commands";
+import type {Flags} from "./lib/deploySupport";
 import {CloudflareClient} from "./lib/cloudflare";
 import {pruneSupersededBundledThemeVersions} from "./lib/bundled-theme-pruning";
 import {

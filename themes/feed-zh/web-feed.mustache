@@ -1,73 +1,93 @@
 <main>
-  <section>
-    <h1>{{title}}</h1>
+  {{! Book header. microfeed serves one channel per site, so this page is both
+      the "shelf" and the book's own page: cover, title, author, tags, and the
+      serialization state stored in the novel-cms `_microfeed` pocket. }}
+  <section class="mf-book-head">
     <div class="flex">
       {{#icon}}
       <div class="mr-4">
-        <a href="{{icon}}" target="_blank">
-          <img alt="{{title}}" src="{{icon}}" class="img-lg" loading="lazy"/>
-        </a>
+        <img alt="{{title}}" src="{{icon}}" class="img-lg mf-book-cover" loading="lazy"/>
       </div>
       {{/icon}}
-      <div>
-        {{#authors}}
-        <div class="one-line">
-          <span title="{{name}}">{{name}}</span>
+      <div class="min-w-0">
+        <h1 class="mf-book-title">{{title}}</h1>
+
+        {{#authors.length}}
+        <div class="mf-book-authors">
+          {{#authors}}
+          <span class="one-line" title="{{name}}">{{name}}</span>
+          {{/authors}}
         </div>
-        {{/authors}}
-        <div>
-          {{#_microfeed.subscribe_methods.length}}
-          <div class="text-sm mt-4 mb-2">
-            订阅：
-          </div>
-          {{/_microfeed.subscribe_methods.length}}
-          <div class="flex flex-wrap">
-            {{#_microfeed.subscribe_methods}}
-            <a href="{{url}}" class="mr-4 mb-2" aria-label="{{name}}">
-              <div class="flex items-center">
-                {{#image}}
-                <img src="{{image}}" class="img-sm flex-none" alt="" loading="lazy"/>
-                {{/image}}
-                <div class="flex-none text-sm{{#image}} ml-1 hide-mobile{{/image}}">{{name}}</div>
-              </div>
-            </a>
-            {{/_microfeed.subscribe_methods}}
-          </div>
+        {{/authors.length}}
+
+        <div class="mf-book-badges">
+          {{#_microfeed.serialStatus}}
+          <span class="badge" data-mf-serial="{{_microfeed.serialStatus}}">
+            {{#_microfeed.serialStatusFinished}}已完结{{/_microfeed.serialStatusFinished}}
+            {{^_microfeed.serialStatusFinished}}连载中{{/_microfeed.serialStatusFinished}}
+          </span>
+          {{/_microfeed.serialStatus}}
+          {{#_microfeed.tags}}
+          <a href="/search/?q={{.}}" class="badge" rel="tag">{{.}}</a>
+          {{/_microfeed.tags}}
+        </div>
+
+        {{#_microfeed.subscribe_methods.length}}
+        <div class="text-sm mt-4 mb-2">订阅：</div>
+        {{/_microfeed.subscribe_methods.length}}
+        <div class="flex flex-wrap">
+          {{#_microfeed.subscribe_methods}}
+          <a href="{{url}}" class="mr-4 mb-2" aria-label="{{name}}">
+            <div class="flex items-center">
+              {{#image}}
+              <img src="{{image}}" class="img-sm flex-none" alt="" loading="lazy"/>
+              {{/image}}
+              <div class="flex-none text-sm{{#image}} ml-1 hide-mobile{{/image}}">{{name}}</div>
+            </div>
+          </a>
+          {{/_microfeed.subscribe_methods}}
         </div>
       </div>
     </div>
   </section>
 
+  {{#category_nav.length}}
+  <nav class="mf-category-nav" aria-label="题材分类">
+    {{#category_nav}}
+    <a href="/category/{{slug}}/" rel="tag">
+      {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
+    </a>
+    {{/category_nav}}
+  </nav>
+  {{/category_nav.length}}
+
   {{#description}}
   <section>
-    <h2 class="border-b">关于</h2>
+    <h2 class="border-b">简介</h2>
     <div class="mf-rich-content">{{{description}}}</div>
   </section>
   {{/description}}
 
   <section>
-    <h2 class="border-b">
-      最新内容
-    </h2>
+    <h2 class="border-b">目录</h2>
 
-    <div>
+    {{! Chapters are emitted flat, tagged with their volume, and grouped under
+        volume headings by the script in web-body-end.mustache - Mustache has no
+        grouping or sorting, so that structure is built client-side. Without JS
+        the list still reads correctly as a plain chapter list. }}
+    <div class="mf-toc" data-mf-toc>
       {{^items.length}}
-      暂无内容。
+      <div>暂无章节。</div>
       {{/items.length}}
 
       {{#items}}
-      <div class="mb-4">
-        <a href="{{_microfeed.web_url}}" class="mb-1">
+      <div class="mf-toc-item" data-mf-volume="{{_microfeed.volume}}" data-mf-chapter-no="{{_microfeed.chapterNo}}">
+        <a href="{{_microfeed.web_url}}">
           {{title}}
           <span class="icon-arrow-right"></span>
         </a>
         <div class="text-sm">
           <span data-microfeed-date-ms="{{_microfeed.date_published_ms}}">{{_microfeed.date_published_short}}</span>
-
-          {{#_microfeed.duration_hhmmss}}
-          &middot;
-          <i>{{_microfeed.duration_hhmmss}}</i>
-          {{/_microfeed.duration_hhmmss}}
         </div>
       </div>
       {{/items}}
@@ -76,15 +96,13 @@
     <div class="flex justify-center mt-4">
       {{#_microfeed.prev_url}}
       <div class="px-2">
-        <a href="{{_microfeed.prev_url}}"><span
-          class="icon-arrow-left"> 上一页</span></a>
+        <a href="{{_microfeed.prev_url}}"><span class="icon-arrow-left"> 上一页</span></a>
       </div>
       {{/_microfeed.prev_url}}
 
       {{#_microfeed.next_url}}
       <div class="px-2">
-        <a href="{{_microfeed.next_url}}">下一页 <span
-          class="icon-arrow-right"></span></a>
+        <a href="{{_microfeed.next_url}}">下一页 <span class="icon-arrow-right"></span></a>
       </div>
       {{/_microfeed.next_url}}
     </div>

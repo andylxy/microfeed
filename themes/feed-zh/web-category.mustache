@@ -1,0 +1,36 @@
+<main>
+  <section class="mf-category-head">
+    <h1>{{category.name}}</h1>
+    {{#category.bookCount}}
+    <div class="text-sm">{{category.bookCount}} 本</div>
+    {{/category.bookCount}}
+  </section>
+
+  {{#category_nav.length}}
+  <nav class="mf-category-nav" aria-label="题材分类">
+    {{#category_nav}}
+    <a href="/category/{{slug}}/" rel="tag">
+      {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
+    </a>
+    {{/category_nav}}
+  </nav>
+  {{/category_nav.length}}
+
+  <section>
+    <h2 class="border-b">本书单</h2>
+    {{^category_books.length}}
+    <div class="text-sm text-muted">该分类下暂时没有书。</div>
+    {{/category_books.length}}
+
+    <div class="mf-book-grid">
+      {{#category_books}}
+      <a href="{{url}}" class="mf-book-card">
+        {{#image}}
+        <img alt="{{title}}" src="{{image}}" loading="lazy"/>
+        {{/image}}
+        <div class="mf-book-card-title">{{title}}</div>
+      </a>
+      {{/category_books}}
+    </div>
+  </section>
+</main>

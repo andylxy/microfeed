@@ -26,7 +26,7 @@ import {
 import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {ADMIN_URLS} from "@/shared/StringUtils";
-import type {Category} from "@/server/feed/extCategory";
+import type {Category} from "@/shared/ExtCategory";
 import i18n, {useTranslation} from "@/client/i18n";
 
 type DropPosition = "after" | "before";

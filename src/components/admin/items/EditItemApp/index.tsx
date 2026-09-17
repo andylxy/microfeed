@@ -208,6 +208,19 @@ export default class EditItemApp extends React.Component<Props, any> {
     }), () => this.autosave.markChanged({immediate}));
   }
 
+  /** Update a field inside `item._microfeed` (the novel-cms pocket that holds
+   *  chapter metadata such as `volume` + `chapterNo`). Mirrors the channel-side
+   *  helper in EditChannelApp. The `_microfeed` schema is `.loose()`, so these
+   *  writes are never validated and never break the public API contract. */
+  onUpdateItemMicrofeedMeta(keyName: any, value: any) {
+    this.onUpdateItemMeta({
+      '_microfeed': {
+        ...(this.state.item._microfeed as Record<string, unknown> || {}),
+        [keyName]: value,
+      },
+    });
+  }
+
   onUpdateItemStatus(nextStatus: number) {
     const publicationFields = nextStatus === STATUSES.PUBLISHED &&
         this.state.item.pubDateIsDraftDefault === true
@@ -388,6 +401,7 @@ export default class EditItemApp extends React.Component<Props, any> {
   render() {
     const t = i18n.t.bind(i18n);
     const {autosaveState, submitStatus, itemId, item, action, feed} = this.state;
+    const microfeed = (item._microfeed as Record<string, unknown>) || {};
     const {onboardingResult} = this.props;
     const deleting = submitStatus === SUBMIT_STATUS__START;
     const {mediaFile} = item;
@@ -613,6 +627,32 @@ export default class EditItemApp extends React.Component<Props, any> {
                 </div>
               </div>
             </details>
+          </div>
+          <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+            <h2 className="text-lg font-semibold">{t('items.novelFields')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('items.novelFieldsIntro')}
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <AdminInput
+                label={t('items.volume')}
+                placeholder={t('items.volumePlaceholder')}
+                value={microfeed.volume ? String(microfeed.volume) : ''}
+                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('volume', e.target.value)}
+              />
+              <AdminInput
+                label={t('items.chapterNo')}
+                placeholder={t('items.chapterNoPlaceholder')}
+                value={microfeed.chapterNo != null ? String(microfeed.chapterNo) : ''}
+                onChange={(e: any) => {
+                  const raw = e.target.value.trim();
+                  this.onUpdateItemMicrofeedMeta(
+                    'chapterNo',
+                    raw === '' ? null : raw,
+                  );
+                }}
+              />
+            </div>
           </div>
         </div>
         <div className="xl:col-span-3">

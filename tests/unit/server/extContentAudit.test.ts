@@ -343,8 +343,8 @@ describe("audit checkpoint cadence (end-to-end)", () => {
       )
       .all() as Array<{is_checkpoint: number; checkpoint_data: unknown; diff_data: string}>;
 
-    // 4 edits -> 4 rows
-    expect(rows.length).toBe(4);
+    // versions[0] is the seed, so the 4 versions above are 3 edits -> 3 rows.
+    expect(rows.length).toBe(3);
     // only the 3rd edit (the Kth) is a checkpoint
     const checkpoints = rows.filter((r) => r.is_checkpoint === 1);
     expect(checkpoints.length).toBe(1);

@@ -13,6 +13,7 @@ const FILE_LABELS: Record<ThemeFileKey, string> = {
   rssStylesheet: i18n.t("codeEditor.files.rssStylesheet"),
   webBodyEnd: i18n.t("codeEditor.files.webBodyEnd"),
   webBodyStart: i18n.t("codeEditor.files.webBodyStart"),
+  webCategory: i18n.t("codeEditor.files.webCategory"),
   webFeed: i18n.t("codeEditor.files.webFeed"),
   webHeader: i18n.t("codeEditor.files.webHeader"),
   webItem: i18n.t("codeEditor.files.webItem"),
@@ -60,6 +61,11 @@ export const THEME_FILE_HELP: Record<ThemeFileKey, ThemeFileHelp> = {
   webBodyStart: {
     description: i18n.t("codeEditor.help.webBodyStartDesc"),
     exampleLabel: i18n.t("codeEditor.help.webBodyStartLabel"),
+    exampleUrlKey: "webFeedUrl",
+  },
+  webCategory: {
+    description: i18n.t("codeEditor.help.webCategoryDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webCategoryLabel"),
     exampleUrlKey: "webFeedUrl",
   },
   webFeed: {

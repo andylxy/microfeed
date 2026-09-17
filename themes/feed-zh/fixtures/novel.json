@@ -1,0 +1,78 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "长夜行舟",
+  "description": "<p>一个关于渡口、旧船与漫长夜晚的故事。</p>",
+  "home_page_url": "https://example.test/",
+  "language": "zh-CN",
+  "icon": "https://example.test/assets/cover.jpg",
+  "authors": [
+    {
+      "name": "青梧"
+    }
+  ],
+  "_microfeed": {
+    "serialStatus": "serializing",
+    "signStatus": "signed",
+    "tags": [
+      "热血",
+      "升级",
+      "剑道"
+    ]
+  },
+  "category_nav": [
+    {
+      "name": "武侠",
+      "slug": "wuxia",
+      "bookCount": 12
+    },
+    {
+      "name": "玄幻",
+      "slug": "xuanhuan",
+      "bookCount": 7
+    }
+  ],
+  "items": [
+    {
+      "id": "chapter-1",
+      "title": "第一章 渡口",
+      "content_html": "<p>雾还没散，渡口的灯就熄了。</p><p>他把包袱放在石阶上，听见水声里有木头摩擦的动静。</p>",
+      "content_text": "雾还没散，渡口的灯就熄了。他把包袱放在石阶上，听见水声里有木头摩擦的动静。",
+      "date_published": "2026-08-10T10:00:00.000Z",
+      "_microfeed": {
+        "volume": "第一卷 渡口",
+        "chapterNo": 1,
+        "web_url": "https://example.test/i/chapter-1/",
+        "date_published_short": "Aug 10, 2026",
+        "date_published_ms": 1786356000000
+      }
+    },
+    {
+      "id": "chapter-2",
+      "title": "第二章 旧船",
+      "content_html": "<p>船比他想的老。船板上有一道很深的痕，像是被什么东西从中间劈开过。</p>",
+      "content_text": "船比他想的老。船板上有一道很深的痕，像是被什么东西从中间劈开过。",
+      "date_published": "2026-08-12T10:00:00.000Z",
+      "_microfeed": {
+        "volume": "第一卷 渡口",
+        "chapterNo": 2,
+        "web_url": "https://example.test/i/chapter-2/",
+        "date_published_short": "Aug 12, 2026",
+        "date_published_ms": 1786528800000
+      }
+    },
+    {
+      "id": "chapter-3",
+      "title": "第三章 长夜",
+      "content_html": "<p>第二卷从这里开始。夜比渡口的水还长。</p>",
+      "content_text": "第二卷从这里开始。夜比渡口的水还长。",
+      "date_published": "2026-08-15T10:00:00.000Z",
+      "_microfeed": {
+        "volume": "第二卷 长夜",
+        "chapterNo": 3,
+        "web_url": "https://example.test/i/chapter-3/",
+        "date_published_short": "Aug 15, 2026",
+        "date_published_ms": 1786788000000
+      }
+    }
+  ]
+}

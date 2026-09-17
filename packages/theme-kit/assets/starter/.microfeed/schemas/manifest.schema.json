@@ -228,6 +228,11 @@
               "minLength": 1,
               "maxLength": 240
             },
+            "webCategory": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
             "webPage": {
               "type": "string",
               "minLength": 1,

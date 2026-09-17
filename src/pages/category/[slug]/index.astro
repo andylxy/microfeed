@@ -35,7 +35,10 @@ if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
   );
 }
 
-const db = loaded.database.FEED_DB as unknown as CategoryDb;
+// `feedDb` stays D1Database-typed for the helpers that want the full binding;
+// `db` narrows to the ext_category slice that the novel-cms queries use.
+const feedDb = loaded.database.FEED_DB;
+const db = feedDb as unknown as CategoryDb;
 const category = await getCategoryBySlug(db, slug);
 const unavailable = !category || !category.visible;
 if (unavailable) {
@@ -50,7 +53,7 @@ const assetBaseUrl = themeAssetBaseUrl(
   loaded.content.activeTheme?.bundle.assets,
   webSettings.publicBucketUrl,
 );
-const navigation = await navigationPages(db, Astro.request);
+const navigation = await navigationPages(feedDb, Astro.request);
 
 const theme = new Theme(
   loaded.publicFeed,
@@ -73,8 +76,8 @@ let bodyHtml = "";
 if (!unavailable && category) {
   const books = await listChannelsByGenre(db, category.id);
   const metadata = {
-    asset_base_url: assetBaseUrl,
-    package_id: BUNDLED_DEFAULT_THEME_MANIFEST.packageId,
+    assetBaseUrl,
+    packageId: BUNDLED_DEFAULT_THEME_MANIFEST.packageId,
     version: BUNDLED_DEFAULT_THEME_MANIFEST.version,
   };
   const baseContext = themeContext(loaded.publicFeed, metadata);
@@ -93,7 +96,12 @@ if (!unavailable && category) {
       url: book.link || "#",
     })),
   };
-  bodyHtml = renderThemeTemplate(DEFAULT_WEB_CATEGORY, categoryContext);
+  // Prefer the active theme's own genre page so the page keeps the site's look;
+  // fall back to the bundled default for themes that ship without one.
+  bodyHtml = renderThemeTemplate(
+    theme.hasWebCategory() ? theme.getWebCategoryTmpl() : DEFAULT_WEB_CATEGORY,
+    categoryContext,
+  );
 }
 ---
 

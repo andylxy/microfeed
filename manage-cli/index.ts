@@ -11,13 +11,13 @@ import {
   domainCommand,
   destroyCommand,
   instancesCommand,
-  type Flags,
   migratePagesCommand,
   initCommand,
   statusCommand,
-  snapshotCommand,
   useInstanceCommand,
 } from "./commands";
+import {snapshotCommand} from "./snapshot";
+import {type Flags} from "./lib/deploySupport";
 import {renderCliHelp} from "./help";
 import {themeCommand} from "./theme";
 

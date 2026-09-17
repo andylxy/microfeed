@@ -114,7 +114,11 @@ function validateThemePackageWithSchema(
   for (const key of fileKeys) {
     const template = bundle[key];
     if (typeof template !== "string") {
-      diagnostics.push(`bundle.${key}: A format v2 theme must provide this template.`);
+      // webCategory is optional: themes published before the novel-cms work do
+      // not ship a genre page, and they must keep validating unchanged.
+      if (key !== "webCategory") {
+        diagnostics.push(`bundle.${key}: A format v2 theme must provide this template.`);
+      }
       continue;
     }
     const size = byteLength(template);

@@ -1,0 +1,26 @@
+---
+import ImportChaptersApp from "@/components/admin/items/ImportChaptersApp";
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "../../../../layouts/AdminShell.astro";
+import {NAV_ITEMS} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+---
+
+<AdminShell
+  activeNavItem={NAV_ITEMS.ALL_ITEMS}
+  documentTitle={translate("pageDocumentTitle.importChapters", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.importChapters", adminLanguage)}
+>
+  <ImportChaptersApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="form" />
+  </ImportChaptersApp>
+</AdminShell>

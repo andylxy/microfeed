@@ -35,3 +35,152 @@
   }
 })();
 </script>
+
+<script>
+(function () {
+  "use strict";
+  // Group the chapter list into volumes. Mustache cannot group or sort, so
+  // web-feed.mustache emits a flat list where every row carries its volume in
+  // data-mf-volume; this rebuilds the "volume heading + its chapters" shape.
+  // Chapters without a volume keep their feed order and stay heading-less, so
+  // a site that never uses volumes is unaffected.
+  var lists = document.querySelectorAll("[data-mf-toc]");
+  for (var listIndex = 0; listIndex < lists.length; listIndex++) {
+    var list = lists[listIndex];
+    var rows = Array.prototype.slice.call(list.querySelectorAll(".mf-toc-item"));
+    if (rows.length === 0) continue;
+
+    var groups = [];
+    var byVolume = {};
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      var row = rows[rowIndex];
+      var volume = (row.getAttribute("data-mf-volume") || "").trim();
+      var group = byVolume[volume];
+      if (!group) {
+        group = {volume: volume, rows: []};
+        byVolume[volume] = group;
+        groups.push(group);
+      }
+      group.rows.push(row);
+    }
+
+    // A single unnamed group means there is nothing to group: leave the list
+    // exactly as rendered.
+    if (groups.length === 1 && groups[0].volume === "") continue;
+
+    var fragment = document.createDocumentFragment();
+    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      var current = groups[groupIndex];
+      if (current.volume !== "") {
+        var heading = document.createElement("h3");
+        heading.className = "mf-volume-heading";
+        heading.textContent = current.volume;
+        fragment.appendChild(heading);
+      }
+      for (var itemIndex = 0; itemIndex < current.rows.length; itemIndex++) {
+        fragment.appendChild(current.rows[itemIndex]);
+      }
+    }
+    while (list.firstChild) list.removeChild(list.firstChild);
+    list.appendChild(fragment);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  // Reading page: font size, paper colour, scroll progress, and the TOC drawer.
+  // Everything degrades gracefully - the controls stay hidden without JS, and
+  // the TOC is a plain <details> that works on its own.
+  var FONT_KEY = "microfeed-reading-font";
+  var PAPER_KEY = "microfeed-reading-paper";
+  var root = document.documentElement;
+
+  function read(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function write(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (error) {
+      // Storage can be unavailable (private mode, blocked cookies); the
+      // setting then simply does not persist across visits.
+    }
+  }
+
+  var controls = document.querySelector("[data-mf-reading-controls]");
+  if (controls) {
+    controls.hidden = false;
+
+    // `attribute` doubles as the button marker and the <html> setting, so the
+    // two can never drift apart. A value outside `allowed` (including the
+    // "default" paper button) clears the attribute.
+    function select(attribute, key, allowed) {
+      var buttons = controls.querySelectorAll("[" + attribute + "]");
+
+      function apply(value) {
+        var active = value && allowed.indexOf(value) !== -1 ? value : "";
+        if (active) {
+          root.setAttribute(attribute, active);
+        } else {
+          root.removeAttribute(attribute);
+        }
+        for (var index = 0; index < buttons.length; index++) {
+          buttons[index].setAttribute(
+            "aria-pressed",
+            String(buttons[index].getAttribute(attribute) === active),
+          );
+        }
+        return active;
+      }
+
+      for (var index = 0; index < buttons.length; index++) {
+        (function (button) {
+          button.addEventListener("click", function () {
+            write(key, apply(button.getAttribute(attribute)));
+          });
+        })(buttons[index]);
+      }
+
+      apply(read(key));
+    }
+
+    select("data-mf-font", FONT_KEY, ["small", "medium", "large"]);
+    select("data-mf-paper", PAPER_KEY, ["sepia"]);
+  }
+
+  var drawer = document.querySelector("[data-mf-toc-drawer]");
+  var drawerToggle = document.querySelector("[data-mf-toc-toggle]");
+  if (drawer && drawerToggle) {
+    drawerToggle.addEventListener("click", function () {
+      drawer.open = !drawer.open;
+      drawerToggle.setAttribute("aria-expanded", String(drawer.open));
+      if (drawer.open) drawer.scrollIntoView({block: "nearest"});
+    });
+  }
+
+  var currentId = document.querySelector("[data-mf-toc]")?.getAttribute("data-mf-current") || "";
+  if (currentId) {
+    var current = document.querySelector('[data-mf-chapter-id="' + currentId + '"]');
+    if (current) current.setAttribute("data-mf-current", "");
+  }
+
+  var progress = document.querySelector("[data-mf-progress]");
+  if (progress) {
+    var update = function () {
+      var scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      var ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
+      progress.style.transform = "scaleX(" + Math.min(1, Math.max(0, ratio)) + ")";
+    };
+    update();
+    window.addEventListener("scroll", update, {passive: true});
+    window.addEventListener("resize", update);
+  }
+})();
+</script>

@@ -73,6 +73,7 @@ const files = new Map([
   ["web-item.mustache", await readText(path.join(sourceDirectory, "web-item.mustache"))],
   ["web-page.mustache", await readText(path.join(sourceDirectory, "web-page.mustache"))],
   ["web-search.mustache", await readText(path.join(sourceDirectory, "web-search.mustache"))],
+  ["web-category.mustache", await readText(path.join(sourceDirectory, "web-category.mustache"))],
   ["web-body-start.mustache", await readText(path.join(sourceDirectory, "web-body-start.mustache"))],
   ["rss-stylesheet.xsl", rssTemplate.replace(rssStylesMarker, rssStyles)],
   ["web-header.mustache", `${tokenBlock}\n<style id="microfeed-compiled-styles">${css.source}</style>\n${await readText(path.join(sourceDirectory, "web-header.mustache"))}`],

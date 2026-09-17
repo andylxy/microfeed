@@ -1,4 +1,5 @@
-import {createHash} from "node:crypto";
+import {
+  createHash} from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -6,12 +7,16 @@ import {
   rm,
   truncate,
   writeFile,
-} from "node:fs/promises";
+  } from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
 
-import {afterEach, describe, expect, it, vi} from "vitest";
+import {afterEach,
+  describe,
+  expect,
+  it,
+  vi} from "vitest";
 
 import {
   applicationTablesFromSqlite,
@@ -31,11 +36,12 @@ import {
   validateAppliedMigrationPrefix,
   validateSnapshotMigrations,
   writeSnapshotManifest,
-} from "../../../manage-cli/lib/snapshot";
+  } from "../../../manage-cli/lib/snapshot";
 import {repositoryRoot} from "../../../manage-cli/lib/process";
 import {ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES} from "../../../src/shared/ItemSearchSql";
 import {
-  canRepairRemoteRestoreBaseline,
+} from "../../../manage-cli/commands";
+import {
   formatSnapshotBytes,
   localSnapshotNextSteps,
   maintenanceWorkerSource,
@@ -54,7 +60,8 @@ import {
   validateRestoreJournal,
   verifyRestoredRemoteMediaWithRetries,
   uploadRemoteObject,
-} from "../../../manage-cli/commands";
+  canRepairRemoteRestoreBaseline,
+} from "../../../manage-cli/snapshot";
 import type {MicrofeedConfig} from "../../../manage-cli/types";
 import {Miniflare} from "miniflare";
 

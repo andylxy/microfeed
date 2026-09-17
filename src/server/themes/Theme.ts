@@ -243,4 +243,23 @@ export default class Theme {
   getWebSearchTmpl(): string {
     return this.template("webSearch");
   }
+
+  /** Whether the active theme ships a genre/category page template. */
+  hasWebCategory(): boolean {
+    const bundle = this.themeBundle ?? BUNDLED_DEFAULT_THEME_BUNDLE;
+    return typeof bundle.webCategory === "string";
+  }
+
+  getWebCategory(extra: Record<string, unknown> = {}): {html: string} {
+    return {
+      html: renderThemeTemplate(this.getWebCategoryTmpl(), {
+        ...this.context,
+        ...extra,
+      }),
+    };
+  }
+
+  getWebCategoryTmpl(): string {
+    return this.template("webCategory");
+  }
 }

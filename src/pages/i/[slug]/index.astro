@@ -44,7 +44,40 @@ const assetBaseUrl = themeAssetBaseUrl(
   webSettings.publicBucketUrl,
 );
 const navigation = await navigationPages(loaded.database.FEED_DB, Astro.request);
-const extraContext = {navigation_pages: navigation};
+
+// The reading page needs its neighbours and a table of contents, but the item
+// query above is deliberately `limit: 1`. So one extra load fetches the chapter
+// list. Only lean metadata is kept: `publicFeed.items` carries every chapter's
+// full `content_html`, and handing that to the theme would embed the whole
+// novel into every chapter page.
+const chapterFeed = await loadPublishedFeed(env, Astro.request, {
+  queryKwargs: {"status__in": [STATUSES.PUBLISHED, STATUSES.UNLISTED]},
+});
+const chapters = chapterFeed.publicFeed.items.map((chapter) => {
+  const extra = (chapter._microfeed ?? {}) as Record<string, unknown>;
+  return {
+    chapterNo: extra.chapterNo ?? null,
+    id: String(chapter.id ?? ""),
+    title: String(chapter.title ?? ""),
+    url: String(extra.web_url ?? ""),
+    volume: extra.volume ?? "",
+  };
+});
+const currentChapterIndex = chapters.findIndex((chapter) => chapter.id === itemId);
+const previousChapter = currentChapterIndex > 0
+  ? chapters[currentChapterIndex - 1]
+  : undefined;
+const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1
+  ? chapters[currentChapterIndex + 1]
+  : undefined;
+
+const extraContext = {
+  navigation_pages: navigation,
+  chapters,
+  current_chapter_id: itemId ?? "",
+  next_chapter: nextChapter,
+  previous_chapter: previousChapter,
+};
 const theme = new Theme(
   loaded.publicFeed,
   loaded.content.settings,

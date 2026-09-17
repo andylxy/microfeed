@@ -1,21 +1,14 @@
 import {randomShortUUID} from "@/shared/StringUtils";
+// The plain data shapes live in src/shared so the admin React app can use them
+// without importing from src/server (a hard boundary in this repo). Re-exported
+// here so existing server-side imports keep working unchanged.
+import type {
+  Category,
+  CategoryInput,
+  ChannelBookSummary,
+} from "@/shared/ExtCategory";
 
-/**
- * Read model for a novel-cms category (题材分类).
- *
- * Mirrors the `ext_category` table from migration 0023. `bookCount` is only
- * populated by {@link listCategoryNav} (books joined via channels.genre).
- */
-export interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  parentId: string | null;
-  sort: number;
-  visible: boolean;
-  createdAt: string;
-  bookCount?: number;
-}
+export type {Category, CategoryInput, ChannelBookSummary};
 
 /** Minimal D1-shaped database port. Real D1 satisfies this structurally, and a
  *  fake implements it for unit tests — same pattern as extContentAudit. */
@@ -38,21 +31,6 @@ export interface CategoryDb {
   prepare(query: string): CategoryDbPreparedStatement;
 }
 
-export interface CategoryInput {
-  name: string;
-  slug?: string;
-  parentId?: string | null;
-  sort?: number;
-  visible?: boolean;
-}
-
-/** A book (channel) summary used by the public category page. */
-export interface ChannelBookSummary {
-  id: string;
-  title: string;
-  image: string;
-  link: string;
-}
 
 function slugify(value: string): string {
   return value

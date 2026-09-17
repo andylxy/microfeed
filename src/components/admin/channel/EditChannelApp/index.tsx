@@ -451,6 +451,34 @@ export default class EditChannelApp extends React.Component<Props, any> {
               />
             </div>
           </div>
+          <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+            <h2 className="text-lg font-semibold">{t('channel.bookStatus')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('channel.bookStatusIntro')}
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <AdminRadioGroup
+                label={t('channel.serialStatus')}
+                name="serial-status"
+                value={microfeed.serialStatus === 'finished' ? 'finished' : 'serializing'}
+                options={[
+                  {label: t('channel.serialStatusSerializing'), value: 'serializing'},
+                  {label: t('channel.serialStatusFinished'), value: 'finished'},
+                ]}
+                onValueChange={(value) => this.onUpdateMicrofeedMeta('serialStatus', value)}
+              />
+              <AdminRadioGroup
+                label={t('channel.signStatus')}
+                name="sign-status"
+                value={microfeed.signStatus === 'signed' ? 'signed' : 'unsigned'}
+                options={[
+                  {label: t('channel.signStatusUnsigned'), value: 'unsigned'},
+                  {label: t('channel.signStatusSigned'), value: 'signed'},
+                ]}
+                onValueChange={(value) => this.onUpdateMicrofeedMeta('signStatus', value)}
+              />
+            </div>
+          </div>
         </div>
         <div className="xl:col-span-3">
           <div className="grid gap-4 xl:sticky xl:top-4">

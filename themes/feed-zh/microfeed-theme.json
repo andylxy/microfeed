@@ -13,6 +13,7 @@
     "rssStylesheet": "rss-stylesheet.xsl",
     "webBodyEnd": "web-body-end.mustache",
     "webBodyStart": "web-body-start.mustache",
+    "webCategory": "web-category.mustache",
     "webFeed": "web-feed.mustache",
     "webHeader": "web-header.mustache",
     "webItem": "web-item.mustache",

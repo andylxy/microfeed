@@ -411,6 +411,7 @@ export const ADMIN_URLS = {
   newItem: (baseUrl: any = '/') =>
     urlJoin(baseUrl, adminUrl("items/new", browserAdminPath())),
   allItems: () => adminUrl("items/list", browserAdminPath()),
+  importChapters: () => adminUrl("items/import", browserAdminPath()),
   pages: () => adminUrl("pages", browserAdminPath()),
   newPage: () => adminUrl("pages/new", browserAdminPath()),
   editPage: (id: string) => adminUrl(`pages/${id}`, browserAdminPath()),

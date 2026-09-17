@@ -68,6 +68,7 @@ export const THEME_FILE_KEYS = [
   ...THEME_FILE_KEYS_V1,
   "webPage",
   "webSearch",
+  "webCategory",
 ] as const;
 
 export type ThemeFileKey = typeof THEME_FILE_KEYS[number];
@@ -130,6 +131,9 @@ export const themeManifestFormatV1Schema = themeManifestBaseSchema.extend({
 
 export const themeManifestV2Schema = themeManifestBaseSchema.extend({
   files: themeManifestFilesV1Schema.extend({
+    // Optional so every theme published before the novel-cms work keeps
+    // validating unchanged.
+    webCategory: themePathSchema.optional(),
     webPage: themePathSchema,
     webSearch: themePathSchema,
   }),
@@ -146,6 +150,7 @@ const storedThemeManifestFormatV1Schema = storedThemeManifestBaseSchema.extend({
 
 const storedThemeManifestV2Schema = storedThemeManifestBaseSchema.extend({
   files: themeManifestFilesV1Schema.extend({
+    webCategory: themePathSchema.optional(),
     webPage: themePathSchema,
     webSearch: themePathSchema,
   }),
@@ -185,6 +190,7 @@ export const themeBundleV1Schema = z.object({
   webItem: z.string(),
   webPage: z.string().optional(),
   webSearch: z.string().optional(),
+  webCategory: z.string().optional(),
 });
 
 export const themeRuntimeMetadataSchema = z.object({

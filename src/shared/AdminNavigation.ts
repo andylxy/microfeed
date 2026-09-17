@@ -16,6 +16,7 @@ const NAVIGATION_PATHS: Array<[AdminNavItemId, string]> = [
   [NAV_ITEMS.ADMIN_HOME, ""],
   [NAV_ITEMS.EDIT_CHANNEL, "channels/primary"],
   [NAV_ITEMS.ALL_ITEMS, "items/list"],
+  [NAV_ITEMS.IMPORT_CHAPTERS, "items/import"],
   [NAV_ITEMS.PAGES, "pages"],
   [NAV_ITEMS.CATEGORIES, "categories"],
   [NAV_ITEMS.SITE_FILES, "site-files"],

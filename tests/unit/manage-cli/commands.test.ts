@@ -8,9 +8,9 @@ import {
   adminProtectionNotice,
   anonymousAdminProtection,
   connectCommand,
-  DEPLOYMENT_VERIFICATION_RETRY_DELAYS_MS,
+
   deploymentOutcomeMessage,
-  deploymentVerificationUrl,
+
   initCommand,
   initializationResourceReuse,
   localAdminAuthDisableNotice,
@@ -18,10 +18,15 @@ import {
   redeployWithAdminAuthMode,
   siteNameGuidance,
   validateWorkerName,
-  verifyDeployment,
+
   workersDevInitializationError,
   workersAndPagesDashboardUrl,
 } from "../../../manage-cli/commands";
+import {
+  DEPLOYMENT_VERIFICATION_RETRY_DELAYS_MS,
+  deploymentVerificationUrl,
+  verifyDeployment,
+} from "../../../manage-cli/lib/deploySupport";
 import {prompts} from "../../../manage-cli/lib/prompts";
 import type {
   CommandRunner,
