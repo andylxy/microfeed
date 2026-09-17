@@ -1633,6 +1633,7 @@ export const zhCN: TranslationKey = {
       itemMissing: "该章节已不存在。",
       restoreUnavailable: "无法恢复到该版本：没有覆盖它的检查点。",
       invalidAction: "无法识别的审核操作。",
+      invalidTransition: "该章节当前状态不允许执行此审核操作。",
       invalidReportStatus: "无法识别的举报状态。",
     },
     report: {

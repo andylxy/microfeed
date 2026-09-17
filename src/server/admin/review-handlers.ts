@@ -15,8 +15,10 @@ import {
 } from "@/server/feed/extContentReport";
 import {
   applyReviewTransition,
+  isAllowedReviewTransition,
   listItemAuditRows,
   listPendingReviewItems,
+  mergeRestoredVersion,
   readItemReviewStatus,
   rebuildItemVersion,
   reviewTransition,
@@ -33,7 +35,14 @@ import {STATUSES} from "@/shared/Constants";
  */
 
 /** A review action may be recorded as itself rather than as a plain edit. */
-export class ReviewActionError extends Error {}
+export class ReviewActionError extends Error {
+  /** HTTP status to answer with; 404 by default, 409 for an illegal transition. */
+  status = 404;
+  constructor(message: string, status = 404) {
+    super(message);
+    this.status = status;
+  }
+}
 
 export interface ReviewQueuePayload {
   items: Awaited<ReturnType<typeof listPendingReviewItems>>;
@@ -95,6 +104,11 @@ export async function applyReviewActionHandler(
   const existing = await database.getItemById(itemId);
   if (!existing) throw new ReviewActionError("errors.review.itemMissing");
 
+  const currentStatus = readItemReviewStatus(existing);
+  if (!isAllowedReviewTransition(currentStatus, action)) {
+    throw new ReviewActionError("errors.review.invalidTransition", 409);
+  }
+
   const transition = reviewTransition(action, reason);
   const data = applyReviewTransition(
     existing as unknown as ItemData,
@@ -144,8 +158,10 @@ export async function restoreItemVersionHandler(
   if (!restored) throw new ReviewActionError("errors.review.restoreUnavailable");
 
   const item = {
-    ...(existing as unknown as Record<string, unknown>),
-    ...restored,
+    ...mergeRestoredVersion(
+      existing as unknown as ItemData,
+      restored,
+    ),
     id: itemId,
     // Restoring an old body must not silently republish a taken-down chapter.
     status: existing.status ?? STATUSES.UNPUBLISHED,

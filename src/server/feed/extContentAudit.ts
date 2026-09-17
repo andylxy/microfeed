@@ -257,6 +257,14 @@ export interface RecordItemEditOptions {
   actorType?: ActorType;
   channelId?: string | null;
   reviewStatus?: string | null;
+  /**
+   * Force a full snapshot on this edit even when it falls between checkpoints.
+   * The write seam uses it for the very first write of an item: without a
+   * preceding checkpoint `rebuildItemVersion` cannot replay, so versions 1..K-1
+   * would be unrecoverable. A creation checkpoint guarantees version 1 is always
+   * restorable.
+   */
+  forceCheckpoint?: boolean;
 }
 
 /**
@@ -279,7 +287,9 @@ export async function recordItemEdit(
   if (diffData.length === 0) return;
 
   const existingCount = await countAuditRecords(db, itemId);
-  const isCheckpoint = shouldCheckpoint(existingCount, AUDIT_CHECKPOINT_INTERVAL);
+  const isCheckpoint = options.forceCheckpoint
+    ? true
+    : shouldCheckpoint(existingCount, AUDIT_CHECKPOINT_INTERVAL);
   await recordAudit(db, {
     action: "edit",
     actorId: options.actorId ?? null,

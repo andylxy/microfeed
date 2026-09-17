@@ -43,11 +43,28 @@ export async function createItem(
   commit?: DatabaseMutationCommit<Record<string, unknown>>,
 ): Promise<string> {
   const {id: _ignored, ...fields} = input;
-  return feedCrud.upsertItem(normalizedInput(
+  const id = await feedCrud.upsertItem(normalizedInput(
     {...fields, ...(reservedId ? {id: reservedId} : {})},
     STATUSES.PUBLISHED,
     Date.now(),
   ), commit);
+  // novel-cms audit trail: the creation is recorded as a checkpoint so the very
+  // first version is always recoverable. rebuildItemVersion needs a preceding
+  // checkpoint, so without this, versions 1..K-1 were unrecoverable. The audit
+  // insert runs after the upsert, mirroring how updateItem records its edit.
+  const auditDb = feedCrud.feedDb?.FEED_DB as unknown as AuditDb | undefined;
+  if (auditDb) {
+    const created = await feedCrud.feedDb.getItemById(id);
+    if (created) {
+      await recordItemEdit(
+        auditDb,
+        {},
+        created as Record<string, unknown>,
+        {actorType: "author", forceCheckpoint: true},
+      );
+    }
+  }
+  return id;
 }
 
 export async function updateItem(

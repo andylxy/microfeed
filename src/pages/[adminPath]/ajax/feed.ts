@@ -2,6 +2,10 @@ import {cache, env, waitUntil} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import FeedDb from "@/server/feed/FeedDb";
+import {
+  recordItemEdit,
+  type AuditDb,
+} from "@/server/feed/extContentAudit";
 import {scheduleBestEffortMediaDeletion} from "@/server/media/deletions";
 import {mediaBucket} from "@/server/media/storage";
 import {jsonResponse, localizedError} from "../../../server/http";
@@ -109,6 +113,21 @@ export async function updateAdminFeed(
       {origin: webMcpInteraction ? "webmcp" : "dashboard"},
     );
   });
+  // novel-cms audit trail: the dashboard editor persists through putContent
+  // directly (it does not call updateItem), so the seam must record here too.
+  // A brand-new item (no beforeItem) is recorded as a checkpoint so version 1
+  // stays recoverable; an existing item follows the normal checkpoint cadence.
+  if (updatedItemId && updatedFeed.item) {
+    const afterItem = await database.getItemById(updatedItemId);
+    if (afterItem) {
+      await recordItemEdit(
+        database.FEED_DB as unknown as AuditDb,
+        (beforeItem ?? {}) as Record<string, unknown>,
+        afterItem as Record<string, unknown>,
+        {actorType: "author", forceCheckpoint: !beforeItem},
+      );
+    }
+  }
   scheduleBestEffortMediaDeletion(
     mediaBucket(runtimeEnv),
     deleteImageUrls,

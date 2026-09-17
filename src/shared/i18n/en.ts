@@ -1631,6 +1631,7 @@ export const en = {
       itemMissing: "That chapter no longer exists.",
       restoreUnavailable: "That version cannot be restored: no checkpoint covers it.",
       invalidAction: "Unrecognised review action.",
+      invalidTransition: "That review action is not allowed from the chapter's current state.",
       invalidReportStatus: "Unrecognised report status.",
     },
     report: {

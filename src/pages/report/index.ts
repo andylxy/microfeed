@@ -1,7 +1,7 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse, localizedError} from "@/server/http";
+import {jsonResponse, publicLocalizedError} from "@/server/http";
 import {createReport, type ReportDb} from "@/server/feed/extContentReport";
 import type {AuditDb} from "@/server/feed/extContentAudit";
 
@@ -33,13 +33,13 @@ function sameOrigin(request: Request): boolean {
 
 export const POST: APIRoute = async ({request}) => {
   if (!sameOrigin(request)) {
-    return localizedError(request, "errors.report.crossOrigin", 403);
+    return publicLocalizedError(request, "errors.report.crossOrigin", 403);
   }
 
   const body = await request.json().catch(() => null) as ReportBody | null;
   const itemId = typeof body?.itemId === "string" ? body.itemId.trim() : "";
   if (!body || !itemId) {
-    return localizedError(request, "errors.report.itemRequired", 400);
+    return publicLocalizedError(request, "errors.report.itemRequired", 400);
   }
 
   const db = env.FEED_DB as unknown as ReportDb & AuditDb;
@@ -48,7 +48,7 @@ export const POST: APIRoute = async ({request}) => {
     .bind(itemId)
     .first();
   if (row == null) {
-    return localizedError(request, "errors.report.itemMissing", 404);
+    return publicLocalizedError(request, "errors.report.itemMissing", 404);
   }
 
   const id = await createReport(db, {

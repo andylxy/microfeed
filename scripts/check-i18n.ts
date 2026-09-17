@@ -95,6 +95,25 @@ const missingNavLabels = Object.values(NAV_ITEMS)
   .map((id) => `nav.item.${id}`)
   .filter((key) => translate(key) === key);
 
+// The review pages render labels through dynamic keys that the literal scan
+// above cannot see, so a missing one would silently render the raw key name:
+//   - `review.done.${action}`   (REVIEW_ACTIONS)
+//   - `review.action.${row.action}` (the audit-row actions)
+//   - `review.category.${category}` (REPORT_CATEGORIES)
+// Enumerate each value set and flag any key that does not resolve.
+const REVIEW_ACTIONS = ["submit", "approve", "reject", "takedown"] as const;
+const REVIEW_AUDIT_ACTIONS = [
+  "edit", "submit", "approve", "reject", "takedown", "restore", "auto_flag",
+] as const;
+const REPORT_CATEGORIES = [
+  "plagiarism", "pornography", "violence", "advertising", "other",
+] as const;
+const missingReviewLabels = [
+  ...REVIEW_ACTIONS.map((action) => `review.done.${action}`),
+  ...REVIEW_AUDIT_ACTIONS.map((action) => `review.action.${action}`),
+  ...REPORT_CATEGORIES.map((category) => `review.category.${category}`),
+].filter((key) => translate(key) === key);
+
 const failures: string[] = [];
 if (unresolved.length > 0) {
   failures.push(
@@ -131,6 +150,13 @@ if (missingNavLabels.length > 0) {
     `navigation labels with no translation (${missingNavLabels.length}) - the ` +
       `sidebar would show the key itself:\n    ` +
       missingNavLabels.join("\n    "),
+  );
+}
+if (missingReviewLabels.length > 0) {
+  failures.push(
+    `review labels with no translation (${missingReviewLabels.length}) - the ` +
+      `review pages would show the key itself:\n    ` +
+      missingReviewLabels.join("\n    "),
   );
 }
 

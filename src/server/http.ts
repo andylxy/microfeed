@@ -1,4 +1,7 @@
-import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {
+  adminLanguageFromRequest,
+  languageFromAcceptLanguage,
+} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {AppError} from "@/shared/errors";
 
@@ -27,6 +30,29 @@ export function localizedError(
   init: ResponseInit = {},
 ): Response {
   const language = adminLanguageFromRequest(request);
+  return jsonResponse(
+    {error: translate(key, language, params)},
+    {...init, status},
+  );
+}
+
+/**
+ * Localized JSON error response for PUBLIC, unauthenticated endpoints (e.g.
+ * `/report`). Readers are anonymous and have no admin language cookie, so the
+ * language follows `Accept-Language` only - the explicit-preference cookie that
+ * `localizedError` consults would be wrong (or absent) here and would silently
+ * fall back to English for a Chinese reader.
+ */
+export function publicLocalizedError(
+  request: Request,
+  key: string,
+  status = 400,
+  params?: Record<string, string>,
+  init: ResponseInit = {},
+): Response {
+  const language = languageFromAcceptLanguage(
+    request.headers.get("accept-language"),
+  );
   return jsonResponse(
     {error: translate(key, language, params)},
     {...init, status},

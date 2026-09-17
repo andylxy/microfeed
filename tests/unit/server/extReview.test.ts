@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {STATUSES} from "@/shared/Constants";
 import {
   recordAudit,
+  recordItemEdit,
   type AuditDb,
   type AuditDbPreparedStatement,
 } from "@/server/feed/extContentAudit";
@@ -18,8 +19,10 @@ import {
 } from "@/server/feed/extContentReport";
 import {
   applyReviewTransition,
+  isAllowedReviewTransition,
   listItemAuditRows,
   listPendingReviewItems,
+  mergeRestoredVersion,
   readItemReviewStatus,
   rebuildItemVersion,
   reviewTransition,
@@ -243,6 +246,75 @@ describe("review queue and version rebuild", () => {
     });
 
     expect(await rebuildItemVersion(db, "it2", "missing")).toBeNull();
+  });
+});
+
+describe("review transition guards", () => {
+  it("allows every transition the queue needs", () => {
+    expect(isAllowedReviewTransition("draft", "submit")).toBe(true);
+    expect(isAllowedReviewTransition("submitted", "approve")).toBe(true);
+    expect(isAllowedReviewTransition("submitted", "reject")).toBe(true);
+    expect(isAllowedReviewTransition("submitted", "takedown")).toBe(true);
+    expect(isAllowedReviewTransition("approved", "takedown")).toBe(true);
+    expect(isAllowedReviewTransition("rejected", "submit")).toBe(true);
+    expect(isAllowedReviewTransition("rejected", "takedown")).toBe(true);
+  });
+
+  it("rejects illegal moves that would corrupt the workflow", () => {
+    // A raw draft must not be approved (only submitted chapters are reviewable).
+    expect(isAllowedReviewTransition("draft", "approve")).toBe(false);
+    expect(isAllowedReviewTransition("draft", "reject")).toBe(false);
+    expect(isAllowedReviewTransition("draft", "takedown")).toBe(false);
+    // Re-submitting an already-approved chapter would silently unpublish it.
+    expect(isAllowedReviewTransition("approved", "submit")).toBe(false);
+    expect(isAllowedReviewTransition("approved", "reject")).toBe(false);
+    // A submitted chapter cannot be re-submitted.
+    expect(isAllowedReviewTransition("submitted", "submit")).toBe(false);
+  });
+});
+
+describe("mergeRestoredVersion", () => {
+  it("keeps the live review lifecycle, restoring only the historical body", () => {
+    const existing = {
+      title: "当前正文",
+      _microfeed: {reviewStatus: "rejected", takedown: false},
+    };
+    const restored = {
+      title: "旧正文",
+      _microfeed: {reviewStatus: "submitted", takedown: false},
+    };
+    const merged = mergeRestoredVersion(existing, restored);
+    // The body comes from the restored historical version...
+    expect((merged as {title: string}).title).toBe("旧正文");
+    // ...but the review lifecycle stays where the live chapter currently sits,
+    // so a restore can never move a chapter back into the queue or clear a takedown.
+    expect((merged._microfeed as Record<string, unknown>).reviewStatus).toBe("rejected");
+    expect((merged._microfeed as Record<string, unknown>).takedown).toBe(false);
+  });
+
+  it("falls back to the restored review status only when the live one is absent", () => {
+    const existing = {title: "x", _microfeed: {}};
+    const restored = {title: "y", _microfeed: {reviewStatus: "submitted"}};
+    const merged = mergeRestoredVersion(existing, restored);
+    expect((merged._microfeed as Record<string, unknown>).reviewStatus).toBe("submitted");
+  });
+});
+
+describe("creation checkpoint recoverability", () => {
+  it("a forced creation checkpoint makes the first version restorable", async () => {
+    const database = newDatabase();
+    const db = dbOf(database);
+    // The write seam records a creation with forceCheckpoint so version 1 is never
+    // orphaned: without it, rebuildItemVersion returned null for the oldest row.
+    const created = {title: "初版", _microfeed: {volume: "第一卷"}, id: "it1"};
+    await recordItemEdit(db, {}, created, {forceCheckpoint: true});
+
+    const rows = await listItemAuditRows(db, "it1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.isCheckpoint).toBe(true);
+
+    const rebuilt = await rebuildItemVersion(db, "it1", rows[0]!.id);
+    expect(rebuilt).toEqual(created);
   });
 });
 

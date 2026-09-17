@@ -465,4 +465,21 @@ describe("recordItemEdit", () => {
     expect(readReviewStatus({_microfeed: {reviewStatus: 7}})).toBeNull();
     expect(readReviewStatus({})).toBeNull();
   });
+
+  it("forceCheckpoint emits a checkpoint on the very first edit so version 1 stays restorable", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    // The first write of an item has existingCount === 0, so the normal cadence
+    // would not checkpoint it - but forceCheckpoint must, or version 1 would be
+    // unrecoverable (the write seam passes forceCheckpoint on create).
+    const created: ItemData = {title: "初版", _microfeed: {volume: "第一卷"}, id: "it1"};
+    await recordItemEdit(db, {}, created, {forceCheckpoint: true});
+
+    const rows = readRows(database);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.is_checkpoint).toBe(1);
+    expect(JSON.parse(rows[0]!.checkpoint_data!)).toEqual(created);
+  });
 });

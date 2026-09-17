@@ -75,7 +75,7 @@ export const POST: APIRoute = async ({params, request}) => {
     return jsonResponse(result);
   } catch (error) {
     if (error instanceof ReviewActionError) {
-      return localizedError(request, error.message, 404);
+      return localizedError(request, error.message, error.status);
     }
     const response = serviceError(error);
     if (response) return response;

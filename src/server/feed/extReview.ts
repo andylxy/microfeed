@@ -28,6 +28,26 @@ export const REVIEW_STATUSES: readonly ReviewStatus[] = [
   "rejected",
 ];
 
+/**
+ * Which review actions are legal from a given status. A transition missing from
+ * this table is rejected, so a bad request cannot (for example) approve a raw
+ * draft, or silently unpublish an approved chapter by re-submitting it.
+ */
+const REVIEW_TRANSITIONS: Readonly<Record<ReviewStatus, readonly ReviewAction[]>> = {
+  draft: ["submit"],
+  submitted: ["approve", "reject", "takedown"],
+  approved: ["takedown"],
+  rejected: ["submit", "takedown"],
+};
+
+/** True when `action` is a legal transition out of `from`. */
+export function isAllowedReviewTransition(
+  from: ReviewStatus,
+  action: ReviewAction,
+): boolean {
+  return REVIEW_TRANSITIONS[from]?.includes(action) ?? false;
+}
+
 export type ReviewAction = "submit" | "approve" | "reject" | "takedown";
 
 export interface ReviewTransition {
@@ -110,6 +130,35 @@ export function applyReviewTransition(
     delete microfeed.reviewReason;
   }
   return {...data, _microfeed: microfeed};
+}
+
+/**
+ * Merge a rebuilt historical version back onto the live item for a restore.
+ *
+ * The body (title/content and every `_microfeed.*` content field) comes from
+ * `restored`, but the review *lifecycle* state is taken from the live
+ * `existing` item: rolling a chapter back to an old body must not move it back
+ * into the review queue, clear a takedown, or otherwise change where the
+ * chapter currently sits in the workflow.
+ */
+export function mergeRestoredVersion(
+  existing: ItemData,
+  restored: ItemData,
+): ItemData {
+  const existingMicro = (existing._microfeed ?? {}) as Record<string, unknown>;
+  const restoredMicro = (restored._microfeed ?? {}) as Record<string, unknown>;
+  return {
+    ...existing,
+    ...restored,
+    _microfeed: {
+      ...restoredMicro,
+      reviewStatus: (existingMicro.reviewStatus as string | undefined)
+        ?? (restoredMicro.reviewStatus as string | undefined)
+        ?? "draft",
+      takedown: existingMicro.takedown ?? restoredMicro.takedown ?? false,
+      takedownReason: existingMicro.takedownReason ?? restoredMicro.takedownReason ?? null,
+    },
+  };
 }
 
 export interface ReviewQueueRow {
