@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第1章 戏鬼回家 - 阅读页</title>
+    <style>
+        /* =========================================
+           基础重置
+           ========================================= */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f2f2f2; /* 护眼浅灰背景 */
+            color: #1a1a1a;
+            font-size: 18px;
+            line-height: 2; /* 小说阅读通常需要较大的行距 */
+            display: flex;
+            justify-content: center;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        /* =========================================
+           主体阅读容器
+           ========================================= */
+        .reader-wrapper {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 1040px; /* 控制阅读区最大宽度 */
+            min-height: 100vh;
+            padding: 0 40px 60px 40px;
+            position: relative;
+        }
+
+        /* =========================================
+           顶部导航 (返回 + 登录)
+           ========================================= */
+        .reader-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 72px;
+            border-bottom: 1px solid #f0f0f0;
+            margin-bottom: 40px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .back-link svg {
+            width: 20px;
+            height: 20px;
+            fill: #333;
+        }
+
+        .login-link {
+            cursor: pointer;
+        }
+
+        /* =========================================
+           内容排版区
+           ========================================= */
+        .content-area {
+            max-width: 760px; /* 限制正文宽度，提高阅读体验 */
+            margin: 0 auto;
+        }
+
+        /* 章节标题 */
+        .chapter-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #222;
+        }
+
+        /* 章节元数据 (字数/时间) */
+        .chapter-meta {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 40px;
+            display: flex;
+            gap: 24px;
+        }
+
+        /* 正文段落 */
+        .content-area p {
+            margin-bottom: 24px;
+            text-align: justify; /* 两端对齐，让排版更整齐 */
+            word-break: break-all;
+        }
+
+        /* =========================================
+           右侧悬浮工具栏
+           ========================================= */
+        .sidebar-tools {
+            position: fixed; /* 固定在屏幕右侧 */
+            right: calc(50% - 600px); /* 根据屏幕宽度动态定位，保持在主体右侧 */
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            z-index: 100;
+        }
+
+        .tool-btn {
+            width: 56px;
+            height: 56px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); /* 柔和的阴影 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            gap: 4px;
+            transition: all 0.2s;
+            border: 1px solid #f0f0f0;
+        }
+
+        .tool-btn:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .tool-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: #333;
+            stroke: #333;
+        }
+
+        .tool-btn span {
+            font-size: 11px;
+            color: #666;
+            transform: scale(0.9);
+        }
+
+        /* 针对响应式：屏幕不够宽时，侧边栏贴近屏幕右侧 */
+        @media (max-width: 1200px) {
+            .sidebar-tools {
+                right: 20px;
+            }
+        }
+        @media (max-width: 768px) {
+            .sidebar-tools {
+                display: none; /* 移动端隐藏侧边栏 */
+            }
+            .reader-wrapper {
+                padding: 0 20px 40px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 阅读器主体容器 -->
+    <div class="reader-wrapper">
+        
+        <!-- 顶部导航 -->
+        <header class="reader-header">
+            <div class="back-link">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 0 0 0 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"/></svg>
+                我不是戏神
+            </div>
+            <div class="login-link">登录</div>
+        </header>
+
+        <!-- 正文内容区 -->
+        <main class="content-area">
+            <h1 class="chapter-title">第1章 戏鬼回家</h1>
+            <div class="chapter-meta">
+                <span>本章字数：2057字</span>
+                <span>更新时间：2023-09-28</span>
+            </div>
+
+            <div class="chapter-content">
+                <p>“我……是谁？”</p>
+                <p>轰隆——</p>
+                <p>苍白的雷光闪过如墨云层，</p>
+                <p>雨流狂落，神怒般的雷雨浇灌在泥泞大地，涟漪层叠的水洼倒影中，一道朱红色的人影支离破碎。</p>
+                <p>那是位披着大红戏袍的少年，他好似醉酒般踉跄淌过满地泥泞，宽大的袖摆在狂风中飘舞，戏袍表面的泥沙被雨水冲落，那抹似血的鲜红在黑夜中触目惊心。</p>
+                <p>“别吵了……别吵了！”</p>
+                <p>“都给我住嘴！”</p>
+                <p>“我马上就要想起来了……马上……就要想起来了……”</p>
+                <p>“我有一个名字……一个属于我自己的名字！”</p>
+                <p>少年湿漉的黑发垂至眉梢，那双涣散的眼瞳中满是迷茫，他一边艰难的向前挪动，一边双手抱着脑袋，好像在</p>
+            </div>
+        </main>
+
+        <!-- 右侧悬浮工具栏 -->
+        <aside class="sidebar-tools">
+            <div class="tool-btn">
+                <!-- 加书架图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-40 824H232V136h560v752zM400 312h224v48H400z"/></svg>
+                <span>加书架</span>
+            </div>
+            <div class="tool-btn">
+                <!-- 目录图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M192 256h640v64H192zm0 192h640v64H192zm0 192h640v64H192z"/></svg>
+                <span>目录</span>
+            </div>
+            <div class="tool-btn">
+                <!-- 夜间模式图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 128a384 384 0 0 1 0 768 384 384 0 0 1 0-768m0-64a448 448 0 1 0 0 896 448 448 0 0 0 0-896z" fill="none" stroke="#333" stroke-width="64"/><path d="M512 128a384 384 0 0 1 0 768 384 384 0 0 1 0-768m0-64a448 448 0 1 0 0 896 448 448 0 0 0 0-896z" fill="#333"/></svg>
+                <span>夜间</span>
+            </div>
+            <div class="tool-btn">
+                <!-- 字号图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M128 896h96L448 128h-96L128 896z m256 0h96l80-224h256l80 224h96L704 128h-96L384 896z m176-320l96-272 96 272H560z"/></svg>
+                <span>字号</span>
+            </div>
+            <div class="tool-btn">
+                <!-- 领红包图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64z m0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"/><path d="M512 256c-141.4 0-256 114.6-256 256s114.6 256 256 256 256-114.6 256-256-114.6-256-256-256z m0 448c-106 0-192-86-192-192s86-192 192-192 192 86 192 192-86 192-192 192z"/></svg>
+                <span>领红包</span>
+            </div>
+        </aside>
+
+    </div>
+
+</body>
+</html>

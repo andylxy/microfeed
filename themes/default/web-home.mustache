@@ -1,0 +1,27 @@
+<main class="mf-home-page">
+  {{#category_nav.length}}
+  <nav class="mf-home-tabs" aria-label="题材分类">
+    {{#category_nav}}
+    <a class="mf-home-tab" href="/category/{{slug}}/">{{name}}{{#bookCount}} ({{bookCount}}){{/bookCount}}</a>
+    {{/category_nav}}
+  </nav>
+  {{/category_nav.length}}
+
+  <h2>书库</h2>
+
+  {{^book_samples.length}}
+  <p>书库暂时还没有书。</p>
+  {{/book_samples.length}}
+
+  <ul class="mf-home-grid">
+    {{#book_samples}}
+    <li class="mf-home-card">
+      <a href="{{url}}">
+        {{#image}}<img src="{{image}}" alt="{{title}}" width="96" height="128" loading="lazy"/>{{/image}}
+        <strong>{{title}}</strong>
+      </a>
+      <p>{{#author}}{{author}}{{/author}}{{^author}}未知作者{{/author}}</p>
+    </li>
+    {{/book_samples}}
+  </ul>
+</main>

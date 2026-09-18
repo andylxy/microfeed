@@ -8,7 +8,7 @@ import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
-import {navigationPages} from "@/server/pages/service";
+import {loadSiteNav} from "@/server/feed/siteNav";
 import {loadPublicNotFoundPageRoute} from "@/server/pages/public";
 
 const itemId = getIdFromSlug(Astro.params.slug ?? "");
@@ -43,7 +43,7 @@ const assetBaseUrl = themeAssetBaseUrl(
   loaded.content.activeTheme?.bundle.assets,
   webSettings.publicBucketUrl,
 );
-const navigation = await navigationPages(loaded.database.FEED_DB, Astro.request);
+const navigation = await loadSiteNav(loaded.database.FEED_DB, Astro.request);
 
 // The reading page needs its neighbours and a table of contents, but the item
 // query above is deliberately `limit: 1`. So one extra load fetches the chapter
@@ -53,7 +53,9 @@ const navigation = await navigationPages(loaded.database.FEED_DB, Astro.request)
 const chapterFeed = await loadPublishedFeed(env, Astro.request, {
   queryKwargs: {"status__in": [STATUSES.PUBLISHED, STATUSES.UNLISTED]},
 });
-const chapters = chapterFeed.publicFeed.items.map((chapter) => {
+const currentBookId = ((item?._microfeed ?? {}) as Record<string, unknown>)
+  .bookId ?? null;
+const allChapters = chapterFeed.publicFeed.items.map((chapter) => {
   const extra = (chapter._microfeed ?? {}) as Record<string, unknown>;
   return {
     chapterNo: extra.chapterNo ?? null,
@@ -61,8 +63,15 @@ const chapters = chapterFeed.publicFeed.items.map((chapter) => {
     title: String(chapter.title ?? ""),
     url: String(extra.web_url ?? ""),
     volume: extra.volume ?? "",
+    bookId: (extra.bookId as string) ?? null,
   };
 });
+// Scope the table of contents and prev/next to the current book so chapters
+// from other books never leak in. Until chapters carry a bookId, fall back to
+// every chapter so the reader is never empty during the tagging transition.
+const chapters = currentBookId != null
+  ? allChapters.filter((chapter) => chapter.bookId === currentBookId)
+  : allChapters;
 const currentChapterIndex = chapters.findIndex((chapter) => chapter.id === itemId);
 const previousChapter = currentChapterIndex > 0
   ? chapters[currentChapterIndex - 1]
@@ -72,11 +81,12 @@ const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < chapters.l
   : undefined;
 
 const extraContext = {
-  navigation_pages: navigation,
+  ...navigation,
   chapters,
   current_chapter_id: itemId ?? "",
   next_chapter: nextChapter,
   previous_chapter: previousChapter,
+  toc_url: currentBookId ? `/book/${currentBookId}` : "/",
 };
 const theme = new Theme(
   loaded.publicFeed,

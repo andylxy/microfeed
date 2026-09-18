@@ -454,6 +454,8 @@ export const zhCN: TranslationKey = {
       webPageLabel: "打开一个示例页面",
       webSearchDesc: "编辑专用的公开搜索结果页。该模板会接收 search.query 与 search.results；microfeed 提供搜索弹窗与联想输入行为。",
       webSearchLabel: "打开搜索页面",
+      webHomeDesc: "编辑公开的站首页（书架形式），列出每本书的封面、书名、作者与状态。",
+      webHomeLabel: "打开首页",
     },
     mustacheNoteStart: "该模板可使用 ",
     mustacheNoteMid: " 变量，数据来自本站的 ",
@@ -1153,6 +1155,9 @@ export const zhCN: TranslationKey = {
     volumePlaceholder: "例如：第一卷",
     chapterNo: "章号",
     chapterNoPlaceholder: "例如：12",
+    bookId: "归属书本",
+    bookIdPlaceholder: "选择本章所属的书籍",
+    noBook: "未归属（不归类）",
     // 全部条目列表
     filterAll: "全部条目",
     filterPublished: "已发布",

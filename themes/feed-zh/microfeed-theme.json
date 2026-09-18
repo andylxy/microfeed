@@ -8,7 +8,7 @@
   "name": "feed 中文主题",
   "packageId": "local.feed-zh",
   "previewFixture": "fixtures/editorial.json",
-  "version": "0.1.0",
+  "version": "0.1.16",
   "files": {
     "rssStylesheet": "rss-stylesheet.xsl",
     "webBodyEnd": "web-body-end.mustache",
@@ -16,6 +16,7 @@
     "webCategory": "web-category.mustache",
     "webFeed": "web-feed.mustache",
     "webHeader": "web-header.mustache",
+    "webHome": "web-home.mustache",
     "webItem": "web-item.mustache",
     "webPage": "web-page.mustache",
     "webSearch": "web-search.mustache"

@@ -68,11 +68,83 @@
       "date_published": "2026-08-15T10:00:00.000Z",
       "_microfeed": {
         "volume": "第二卷 长夜",
-        "chapterNo": 3,
+        "chapterNo": 1,
         "web_url": "https://example.test/i/chapter-3/",
         "date_published_short": "Aug 15, 2026",
         "date_published_ms": 1786788000000
       }
+    },
+    {
+      "id": "chapter-4",
+      "title": "第四章 潮声",
+      "content_html": "<p>潮声从夜色尽头传来，旧船向着没有月亮的水面缓缓移动。</p>",
+      "content_text": "潮声从夜色尽头传来，旧船向着没有月亮的水面缓缓移动。",
+      "date_published": "2026-08-18T10:00:00.000Z",
+      "_microfeed": {"volume": "第二卷 长夜", "chapterNo": 2, "web_url": "https://example.test/i/chapter-4/", "date_published_short": "Aug 18, 2026", "date_published_ms": 1787047200000}
+    },
+    {
+      "id": "chapter-5",
+      "title": "第五章 灯下客",
+      "content_html": "<p>船舱里多了一个陌生人，他提着一盏不肯熄灭的青灯。</p>",
+      "content_text": "船舱里多了一个陌生人，他提着一盏不肯熄灭的青灯。",
+      "date_published": "2026-08-21T10:00:00.000Z",
+      "_microfeed": {"volume": "第二卷 长夜", "chapterNo": 3, "web_url": "https://example.test/i/chapter-5/", "date_published_short": "Aug 21, 2026", "date_published_ms": 1787306400000}
+    },
+    {
+      "id": "chapter-6",
+      "title": "第六章 雾中城",
+      "content_html": "<p>雾里浮出一座城，城门上没有名字，只有一行被雨水冲淡的旧字。</p>",
+      "content_text": "雾里浮出一座城，城门上没有名字，只有一行被雨水冲淡的旧字。",
+      "date_published": "2026-08-24T10:00:00.000Z",
+      "_microfeed": {"volume": "第二卷 长夜", "chapterNo": 4, "web_url": "https://example.test/i/chapter-6/", "date_published_short": "Aug 24, 2026", "date_published_ms": 1787565600000}
+    },
+    {
+      "id": "chapter-7",
+      "title": "第七章 不归人",
+      "content_html": "<p>他在城中看见了许多不归的人，也看见了自己留在渡口的影子。</p>",
+      "content_text": "他在城中看见了许多不归的人，也看见了自己留在渡口的影子。",
+      "date_published": "2026-08-27T10:00:00.000Z",
+      "_microfeed": {"volume": "第二卷 长夜", "chapterNo": 5, "web_url": "https://example.test/i/chapter-7/", "date_published_short": "Aug 27, 2026", "date_published_ms": 1787824800000}
+    },
+    {
+      "id": "chapter-8",
+      "title": "第八章 回航",
+      "content_html": "<p>青灯照亮回航的路，船头的木牌上终于显出渡口两个字。</p>",
+      "content_text": "青灯照亮回航的路，船头的木牌上终于显出渡口两个字。",
+      "date_published": "2026-08-30T10:00:00.000Z",
+      "_microfeed": {"volume": "第二卷 长夜", "chapterNo": 6, "web_url": "https://example.test/i/chapter-8/", "date_published_short": "Aug 30, 2026", "date_published_ms": 1788084000000}
+    },
+    {
+      "id": "chapter-9",
+      "title": "第九章 舟上雪",
+      "content_html": "<p>雪落在船上，水面却没有一丝寒意，像有人替漫长的夜晚守着火。</p>",
+      "content_text": "雪落在船上，水面却没有一丝寒意，像有人替漫长的夜晚守着火。",
+      "date_published": "2026-09-02T10:00:00.000Z",
+      "_microfeed": {"volume": "第三卷 归途", "chapterNo": 1, "web_url": "https://example.test/i/chapter-9/", "date_published_short": "Sep 2, 2026", "date_published_ms": 1788343200000}
+    },
+    {
+      "id": "chapter-10",
+      "title": "第十章 旧约",
+      "content_html": "<p>船靠岸时，他想起了与那个人立下的旧约，原来已经过去了很多年。</p>",
+      "content_text": "船靠岸时，他想起了与那个人立下的旧约，原来已经过去了很多年。",
+      "date_published": "2026-09-05T10:00:00.000Z",
+      "_microfeed": {"volume": "第三卷 归途", "chapterNo": 2, "web_url": "https://example.test/i/chapter-10/", "date_published_short": "Sep 5, 2026", "date_published_ms": 1788602400000}
+    },
+    {
+      "id": "chapter-11",
+      "title": "第十一章 天明",
+      "content_html": "<p>天边亮起第一线白，渡口的灯重新点燃，故事也终于有了新的方向。</p>",
+      "content_text": "天边亮起第一线白，渡口的灯重新点燃，故事也终于有了新的方向。",
+      "date_published": "2026-09-08T10:00:00.000Z",
+      "_microfeed": {"volume": "第三卷 归途", "chapterNo": 3, "web_url": "https://example.test/i/chapter-11/", "date_published_short": "Sep 8, 2026", "date_published_ms": 1788861600000}
+    },
+    {
+      "id": "chapter-12",
+      "title": "第十二章 新渡口",
+      "content_html": "<p>他在新渡口放下船桨，回头望去，来时的水路已经藏进晨雾。</p>",
+      "content_text": "他在新渡口放下船桨，回头望去，来时的水路已经藏进晨雾。",
+      "date_published": "2026-09-11T10:00:00.000Z",
+      "_microfeed": {"volume": "第三卷 归途", "chapterNo": 4, "web_url": "https://example.test/i/chapter-12/", "date_published_short": "Sep 11, 2026", "date_published_ms": 1789120800000}
     }
   ]
 }

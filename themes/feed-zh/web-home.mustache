@@ -1,0 +1,81 @@
+<style>
+  .mf-home-page { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
+  .mf-home-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 28px; }
+  .mf-home-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 16px; font-size: 14px;
+    color: #555; background: #f5f6f8; text-decoration: none;
+  }
+  .mf-home-tab:hover { color: #ff6b00; }
+  .mf-home-tab small { color: #999; font-size: 12px; }
+  .mf-home-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+  .mf-home-heading h2 { font-size: 22px; font-weight: 600; color: #222; }
+  .mf-home-heading span { font-size: 13px; color: #999; }
+  .mf-home-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    column-gap: 40px; row-gap: 32px;
+  }
+  .mf-home-card { display: flex; gap: 16px; text-decoration: none; color: inherit; }
+  .mf-home-cover {
+    width: 96px; height: 128px; border-radius: 6px; flex-shrink: 0;
+    object-fit: cover;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .mf-home-cover-empty {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px; font-weight: 600;
+  }
+  .mf-home-info { display: flex; flex-direction: column; justify-content: flex-start; flex: 1; min-width: 0; }
+  .mf-home-title {
+    font-size: 18px; font-weight: 600; color: #333; margin-bottom: 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mf-home-author { font-size: 13px; color: #666; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mf-home-desc {
+    font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 12px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mf-home-status { font-size: 12px; color: #999; margin-top: auto; }
+  .mf-home-empty { color: #999; padding: 40px 0; text-align: center; }
+  @media (max-width: 900px) { .mf-home-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .mf-home-grid { grid-template-columns: 1fr; } }
+</style>
+
+<main class="mf-home-page">
+  {{#category_nav.length}}
+  <nav class="mf-home-tabs" aria-label="题材分类">
+    {{#category_nav}}
+    <a class="mf-home-tab" href="/category/{{slug}}/" rel="tag">{{name}}{{#bookCount}}<small>{{bookCount}}</small>{{/bookCount}}</a>
+    {{/category_nav}}
+  </nav>
+  {{/category_nav.length}}
+
+  <div class="mf-home-heading">
+    <h2>书库</h2>
+    <span>共 {{book_samples.length}} 本作品</span>
+  </div>
+
+  {{^book_samples.length}}
+  <div class="mf-home-empty">书库暂时还没有书，去后台添加一本吧。</div>
+  {{/book_samples.length}}
+
+  <div class="mf-home-grid">
+    {{#book_samples}}
+    <a class="mf-home-card" href="{{url}}">
+      {{#image}}<img class="mf-home-cover" src="{{image}}" alt="{{title}}" loading="lazy"/>{{/image}}
+      {{^image}}<span class="mf-home-cover mf-home-cover-empty">书</span>{{/image}}
+      <div class="mf-home-info">
+        <h3 class="mf-home-title">{{title}}</h3>
+        <p class="mf-home-author">{{#author}}{{author}}{{/author}}{{^author}}未知作者{{/author}}</p>
+        {{#description}}<p class="mf-home-desc">{{description}}</p>{{/description}}
+        <small class="mf-home-status">
+          {{#serialStatus}}{{serialStatus}}{{/serialStatus}}{{^serialStatus}}连载中{{/serialStatus}}
+          {{#wordCount}} · {{wordCount}}字{{/wordCount}}
+          {{#categoryName}} · {{categoryName}}{{/categoryName}}
+        </small>
+      </div>
+    </a>
+    {{/book_samples}}
+  </div>
+</main>

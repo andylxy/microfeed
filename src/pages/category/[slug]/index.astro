@@ -8,7 +8,6 @@ import {
   BUNDLED_DEFAULT_THEME_MANIFEST,
 } from "@/server/themes/BundledThemes";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
-import {navigationPages} from "@/server/pages/service";
 import {
   themeContext,
   renderThemeTemplate,
@@ -18,10 +17,10 @@ import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.ast
 import DEFAULT_WEB_CATEGORY from "../../../../themes/default/web-category.mustache?raw";
 import {
   getCategoryBySlug,
-  listCategoryNav,
   listChannelsByGenre,
 } from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
+import {loadSiteNav} from "@/server/feed/siteNav";
 
 const slug = Astro.params.slug ?? "";
 const loaded = await loadPublishedFeed(env, Astro.request, {
@@ -53,7 +52,7 @@ const assetBaseUrl = themeAssetBaseUrl(
   loaded.content.activeTheme?.bundle.assets,
   webSettings.publicBucketUrl,
 );
-const navigation = await navigationPages(feedDb, Astro.request);
+const navigation = await loadSiteNav(feedDb, Astro.request, slug);
 
 const theme = new Theme(
   loaded.publicFeed,
@@ -61,7 +60,7 @@ const theme = new Theme(
   null,
   loaded.content.activeTheme,
   assetBaseUrl,
-  {navigation_pages: navigation},
+  {...navigation},
 );
 const sharedTheme = new Theme(
   loaded.publicFeed,
@@ -69,7 +68,7 @@ const sharedTheme = new Theme(
   CODE_TYPES.SHARED,
   loaded.content.activeTheme,
   assetBaseUrl,
-  {navigation_pages: navigation},
+  {...navigation},
 );
 
 let bodyHtml = "";
@@ -83,17 +82,20 @@ if (!unavailable && category) {
   const baseContext = themeContext(loaded.publicFeed, metadata);
   const categoryContext = {
     ...baseContext,
-    navigation_pages: navigation,
-    category_nav: await listCategoryNav(db),
+    ...navigation,
     category: {
       name: category.name,
       slug: category.slug,
       bookCount: category.bookCount ?? 0,
     },
     category_books: books.map((book) => ({
-      title: book.title,
+      author: book.author ?? "",
+      description: book.description ?? "",
       image: book.image,
-      url: book.link || "#",
+      serialStatus: book.serialStatus ?? "",
+      title: book.title,
+      url: `/book/${book.id}`,
+      wordCount: book.wordCount ?? "",
     })),
   };
   // Prefer the active theme's own genre page so the page keeps the site's look;

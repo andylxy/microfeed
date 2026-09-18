@@ -1,10 +1,10 @@
 import {CODE_TYPES} from "@/shared/Constants";
 import {DEFAULT_NOT_FOUND_PAGE_SLUG} from "@/shared/Pages";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
+import {loadSiteNav} from "@/server/feed/siteNav";
 import Theme, {themeSupportsPagesAndSearch} from "@/server/themes/Theme";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {
-  navigationPages,
   resolvePagePath,
   type ResolvedPagePath,
 } from "./service";
@@ -65,7 +65,7 @@ export async function loadPublicPageRoute(
   if (!resolved) return {kind: "not-found"};
   const fallback = !requested;
 
-  const navigation = await navigationPages(loaded.database.FEED_DB, request);
+  const navigation = await loadSiteNav(loaded.database.FEED_DB, request);
   const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
   const assetBaseUrl = themeAssetBaseUrl(
     runtimeEnv,
@@ -74,7 +74,7 @@ export async function loadPublicPageRoute(
     loaded.content.activeTheme?.bundle.assets,
     webSettings.publicBucketUrl,
   );
-  const extraContext = {navigation_pages: navigation};
+  const extraContext = {...navigation};
   const theme = new Theme(
     loaded.publicFeed,
     loaded.content.settings,
@@ -95,7 +95,7 @@ export async function loadPublicPageRoute(
     kind: "page",
     layout: {
       bodyEnd: theme.getWebBodyEnd().html,
-      bodyHtml: theme.getWebPage(resolved.page, navigation).html,
+      bodyHtml: theme.getWebPage(resolved.page, navigation.navigation_pages).html,
       bodyStart: theme.getWebBodyStart().html,
       ...(fallback ? {} : {canonicalUrl: resolved.page.url}),
       channelImage: String(loaded.content.channel?.image ?? ""),

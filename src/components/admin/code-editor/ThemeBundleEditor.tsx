@@ -19,6 +19,7 @@ const FILE_LABELS: Record<ThemeFileKey, string> = {
   webItem: i18n.t("codeEditor.files.webItem"),
   webPage: i18n.t("codeEditor.files.webPage"),
   webSearch: i18n.t("codeEditor.files.webSearch"),
+  webHome: i18n.t("codeEditor.files.webHome"),
 };
 
 export const THEME_EDITOR_FILE_KEYS: readonly ThemeFileKey[] = [
@@ -26,6 +27,7 @@ export const THEME_EDITOR_FILE_KEYS: readonly ThemeFileKey[] = [
   "webItem",
   "webPage",
   "webSearch",
+  "webHome",
   "webHeader",
   "webBodyStart",
   "webBodyEnd",
@@ -92,6 +94,11 @@ export const THEME_FILE_HELP: Record<ThemeFileKey, ThemeFileHelp> = {
     description: i18n.t("codeEditor.help.webSearchDesc"),
     exampleLabel: i18n.t("codeEditor.help.webSearchLabel"),
     exampleUrlKey: "webSearchUrl",
+  },
+  webHome: {
+    description: i18n.t("codeEditor.help.webHomeDesc"),
+    exampleLabel: i18n.t("codeEditor.help.webHomeLabel"),
+    exampleUrlKey: "webFeedUrl",
   },
 };
 

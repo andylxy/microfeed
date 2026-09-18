@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我不是戏神 - 番茄小说网 (顶部居中)</title>
+    <style>
+        /* =========================================
+           基础重置
+           ========================================= */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f6f8; /* 整体浅灰背景 */
+            color: #333;
+            font-size: 14px;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        ul {
+            list-style: none;
+        }
+
+        /* 通用居中容器 */
+        .container {
+            max-width: 1000px; /* 详情页内容宽度 */
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* =========================================
+           顶部导航栏 (核心修改区域)
+           ========================================= */
+        .header {
+            width: 100%;
+            background-color: #fff;
+            border-bottom: 1px solid #f0f0f0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        /* 新增内部容器，限制宽度并居中 */
+        .header-inner {
+            max-width: 1200px; /* 控制头部内容的最大宽度，你可以调小一点让它更聚拢，比如 1000px */
+            margin: 0 auto;    /* 水平居中 */
+            height: 64px;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between; /* 在限定的宽度内两端对齐 */
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .logo-icon {
+            width: 28px; height: 28px; background-color: #ff4d4f;
+            border-radius: 50%; border-bottom-left-radius: 10px; position: relative;
+        }
+        .logo-icon::after { content: ''; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; background: #fff; border-radius: 50%; }
+        .logo-icon::before { content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 8px; height: 8px; background: #4caf50; border-radius: 50% 50% 0 0; }
+
+        .nav-menu {
+            display: flex; gap: 32px; font-size: 15px;
+        }
+        .nav-menu a.active { font-weight: 600; }
+
+        .header-right { display: flex; align-items: center; gap: 20px; }
+        
+        .search-box {
+            display: flex; align-items: center; background-color: #f5f5f5;
+            border-radius: 20px; padding: 0 16px; height: 36px; width: 220px;
+        }
+        .search-box input { border: none; background: transparent; outline: none; flex: 1; font-size: 13px; }
+        .search-box svg { width: 16px; height: 16px; fill: #999; }
+
+        .auth-links { display: flex; align-items: center; gap: 16px; }
+        .divider { width: 1px; height: 14px; background-color: #ddd; }
+
+        /* =========================================
+           面包屑导航
+           ========================================= */
+        .breadcrumb {
+            padding: 16px 0;
+            font-size: 13px;
+            color: #666;
+            display: flex;
+            gap: 8px;
+        }
+        .breadcrumb a:hover { color: #ff4d4f; }
+        .breadcrumb span { color: #999; }
+
+        /* =========================================
+           书籍信息头部卡片
+           ========================================= */
+        .book-header-card {
+            background-color: #fff;
+            padding: 32px;
+            display: flex;
+            gap: 32px;
+            margin-bottom: 24px;
+        }
+
+        /* 左侧封面 */
+        .book-cover-large {
+            width: 160px;
+            height: 213px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        /* 中间信息区 */
+        .book-info-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #eee;
+            padding-right: 32px;
+        }
+
+        .book-title-lg {
+            font-size: 28px;
+            font-weight: 600;
+            color: #222;
+            margin-bottom: 12px;
+        }
+
+        .book-tags {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #ffb800;
+            color: #ffb800;
+            background-color: #fffbf0;
+        }
+        .tag.gray {
+            border-color: #ddd;
+            color: #666;
+            background-color: #f9f9f9;
+        }
+
+        .book-word-count {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .book-word-count span {
+            font-size: 24px;
+            color: #333;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .book-update-info {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 24px;
+        }
+        .book-update-info span {
+            color: #333;
+            margin-right: 16px;
+        }
+
+        /* 操作按钮 */
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: auto;
+        }
+
+        .btn {
+            height: 40px;
+            padding: 0 24px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+            font-weight: 500;
+        }
+
+        .btn-primary { background-color: #ff6b00; color: #fff; }
+        .btn-primary:hover { background-color: #e65c00; }
+        .btn-secondary { background-color: #f5f6f8; color: #333; }
+        .btn-secondary:hover { background-color: #e8e9eb; }
+        
+        .btn-icon {
+            width: 40px; height: 40px; border-radius: 50%; background-color: #f5f6f8;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
+        /* 右侧作者信息区 */
+        .author-info-area {
+            width: 200px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .author-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+            margin-bottom: 12px;
+        }
+
+        .author-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .author-badge {
+            background-color: #ffb800;
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        .author-desc {
+            font-size: 12px;
+            color: #999;
+        }
+
+        /* =========================================
+           简介 & 目录区域
+           ========================================= */
+        .content-card {
+            background-color: #fff;
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #222;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .intro-text {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.8;
+            text-indent: 2em;
+        }
+
+        .volume-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            margin-top: 16px;
+        }
+        
+        .volume-title span {
+            font-size: 13px;
+            color: #999;
+            font-weight: normal;
+            margin-left: 8px;
+        }
+
+        .chapter-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            row-gap: 16px;
+            column-gap: 24px;
+        }
+
+        .chapter-item {
+            font-size: 14px;
+            color: #555;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chapter-item:hover {
+            color: #ff6b00;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header class="header">
+        <!-- 核心修改：将内容包裹在 header-inner 中 -->
+        <div class="header-inner">
+            <div class="header-left">
+                <div class="logo">
+                    <div class="logo-icon"></div>
+                    番茄小说网
+                </div>
+                <nav class="nav-menu">
+                    <a href="#">首页</a>
+                    <a href="#">书库</a>
+                    <a href="#">书架</a>
+                    <a href="#">原创榜</a>
+                    <a href="#">作家专区</a>
+                    <a href="#">版权专区</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="search-box">
+                    <input type="text" placeholder="请输入书名或作者名">
+                    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M909.6 854.5L649.9 594.8C690.2 542.7 712 479 712 412c0-80.2-31.3-155.4-87.9-212.1-56.6-56.7-132-87.9-212.1-87.9s-155.5 31.3-212.1 87.9C143.2 256.5 112 331.8 112 412c0 80.1 31.3 155.5 87.9 212.1C256.5 680.8 331.8 712 412 712c67 0 130.6-21.8 182.7-62l259.7 259.6a8.2 8.2 0 0 0 11.6 0l43.6-43.5a8.2 8.2 0 0 0 0-11.6zM570.4 570.4C528 612.7 471.8 636 412 636s-116-23.3-158.4-65.6C211.3 528 188 471.8 188 412s23.3-116.1 65.6-158.4C296 211.3 352.2 188 412 188s116.1 23.2 158.4 65.6S636 352.2 636 412s-23.3 116.1-65.6 158.4z"/></svg>
+                </div>
+                <div class="auth-links">
+                    <a href="#">登录</a>
+                    <div class="divider"></div>
+                    <a href="#">注册</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体内容区 -->
+    <main class="container">
+        
+        <!-- 面包屑 -->
+        <div class="breadcrumb">
+            <a href="#">首页</a>
+            <span>/</span>
+            <a href="#">我不是戏神</a>
+        </div>
+
+        <!-- 书籍信息头部卡片 -->
+        <div class="book-header-card">
+            <!-- 左侧封面 -->
+            <div class="book-cover-large"></div>
+            
+            <!-- 中间信息 -->
+            <div class="book-info-main">
+                <h1 class="book-title-lg">我不是戏神</h1>
+                <div class="book-tags">
+                    <span class="tag">已完结</span>
+                    <span class="tag gray">都市高武</span>
+                    <span class="tag gray">都市</span>
+                    <span class="tag gray">穿越</span>
+                </div>
+                <div class="book-word-count"><span>400.4</span> 万字</div>
+                <div class="book-update-info">
+                    <span>最近更新：完本感言。</span> 2026-04-30 20:28
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-primary">开始阅读</button>
+                    <button class="btn btn-secondary">下载番茄小说APP</button>
+                    <div class="btn-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧作者信息 -->
+            <div class="author-info-area">
+                <div class="author-avatar"></div>
+                <div class="author-name">
+                    <span class="author-badge">Lv.1 作家</span>
+                    三九音域
+                </div>
+                <div class="author-desc">用心写出不一样的故事</div>
+            </div>
+        </div>
+
+        <!-- 作品简介 -->
+        <div class="content-card">
+            <h2 class="section-title">作品简介</h2>
+            <p class="intro-text">
+                《斩神》作家三九音域全新力作 | 澳门国际科幻奖最佳科幻网络文学 | 逆转时代的中式怪诞巨作 赤色流星划过天际后，人类文明陷入停滞。从那天起，人们再也无法制造一枚火箭，一颗核弹，一架飞机，一台汽车……近代科学堆砌而成的文明金字塔轰然坍塌，而灾难，远不止此。灰色的世界随着赤色流星降临，像是镜面后的鬼魅倒影，将文明世界一点点拖入无序的深渊。 在这个时代，人命渺如尘埃；在这个时代，人类灿若星辰。 大厦将倾，有人见一...
+            </p>
+        </div>
+
+        <!-- 目录区域 -->
+        <div class="content-card">
+            <h2 class="section-title">目录 · 1928章</h2>
+            
+            <div class="volume-title">第一卷：戏中人 <span>· 共320章</span></div>
+            
+            <div class="chapter-grid">
+                <div class="chapter-item">第1章 戏鬼回家</div>
+                <div class="chapter-item">第2章 我们在看着你</div>
+                <div class="chapter-item">第3章 灾厄</div>
+                <div class="chapter-item">第4章 它们存在</div>
+                <div class="chapter-item">第5章 灰界</div>
+                <div class="chapter-item">第6章 《陈氏编导法则》</div>
+                <div class="chapter-item">第7章 全区封锁</div>
+                <div class="chapter-item">第8章 杀局</div>
+                <div class="chapter-item">第9章 爸，我饿</div>
+            </div>
+        </div>
+
+    </main>
+
+</body>
+</html>

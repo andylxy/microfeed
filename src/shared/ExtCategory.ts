@@ -35,4 +35,13 @@ export interface ChannelBookSummary {
   title: string;
   image: string;
   link: string;
+  author?: string;
+  description?: string;
+  serialStatus?: string;
+  wordCount?: string;
+  genre?: string;
+  /** Resolved category name for display on public book cards (best-effort). */
+  categoryName?: string;
+  /** The book channel's `_microfeed` pocket (serialStatus / genre / tags / ...). */
+  microfeed?: Record<string, unknown>;
 }

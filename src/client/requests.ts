@@ -10,6 +10,13 @@ const axiosPost = (
   return axios.post(url, bodyDict, config);
 };
 
+const axiosGet = (
+  url: any,
+  config: AxiosRequestConfig = {},
+) => {
+  return axios.get(url, config);
+};
+
 const deleteImage = (
   imageUrl: string,
   target?: ImageMetadataTarget,
@@ -66,6 +73,7 @@ function uploadFile(file: any, cdnFilename: any, onProgress: any, onUploaded: an
 
 const Requests = {
   axiosPost,
+  axiosGet,
   deleteImage,
   upload: uploadFile,
 };

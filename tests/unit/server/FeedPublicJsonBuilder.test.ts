@@ -45,6 +45,78 @@ describe("public JSON feed favicon", () => {
   });
 });
 
+describe("novel-cms extension pockets", () => {
+  it("keeps channel and item _microfeed fields in the public theme context", () => {
+    const json = new FeedPublicJsonBuilder(
+      {
+        channel: {
+          _microfeed: {
+            genre: "cat_x1",
+            serialStatus: "serializing",
+            signStatus: "signed",
+            tags: ["热血", "剑道"],
+          },
+          title: "星河剑歌",
+        },
+        items: [{
+          _microfeed: {
+            chapterNo: 2,
+            order: 2,
+            reviewStatus: "approved",
+            volume: "第一卷 初入江湖",
+            wordCount: 2980,
+          },
+          description: "<p>正文</p>",
+          id: "novel-item-1",
+          pubDateMs: Date.parse("2026-01-11T09:00:00.000Z"),
+          status: STATUSES.PUBLISHED,
+          title: "第二章 断剑之秘",
+        }],
+        settings: {},
+      },
+      "https://feed.example.com",
+      new Request("https://feed.example.com/json/"),
+    ).getJsonData() as any;
+
+    expect(json._microfeed).toMatchObject({
+      genre: "cat_x1",
+      serialStatus: "serializing",
+      signStatus: "signed",
+      tags: ["热血", "剑道"],
+    });
+    expect(json.items[0]._microfeed).toMatchObject({
+      chapterNo: 2,
+      order: 2,
+      reviewStatus: "approved",
+      volume: "第一卷 初入江湖",
+      wordCount: 2980,
+    });
+  });
+
+  it("does not allow custom keys to override builder-owned item metadata", () => {
+    const json = new FeedPublicJsonBuilder(
+      {
+        channel: {title: "Example feed"},
+        items: [{
+          _microfeed: {status: "tampered", web_url: "https://evil.example"},
+          id: "novel-item-2",
+          pubDateMs: Date.parse("2026-01-11T09:00:00.000Z"),
+          status: STATUSES.PUBLISHED,
+          title: "Published item",
+        }],
+        settings: {},
+      },
+      "https://feed.example.com",
+      new Request("https://feed.example.com/json/"),
+    ).getJsonData() as any;
+
+    expect(json.items[0]._microfeed.status).toBe("published");
+    expect(json.items[0]._microfeed.web_url).toBe(
+      "https://feed.example.com/i/published-item-novel-item-2/",
+    );
+  });
+});
+
 describe("public JSON item plain text", () => {
   it("uses only normalized stored text without a runtime HTML fallback", () => {
     const json = new FeedPublicJsonBuilder(

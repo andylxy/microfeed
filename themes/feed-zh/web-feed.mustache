@@ -1,110 +1,101 @@
-<main>
-  {{! Book header. microfeed serves one channel per site, so this page is both
-      the "shelf" and the book's own page: cover, title, author, tags, and the
-      serialization state stored in the novel-cms `_microfeed` pocket. }}
-  <section class="mf-book-head">
-    <div class="flex">
-      {{#icon}}
-      <div class="mr-4">
-        <img alt="{{title}}" src="{{icon}}" class="img-lg mf-book-cover" loading="lazy"/>
-      </div>
-      {{/icon}}
-      <div class="min-w-0">
-        <h1 class="mf-book-title">{{title}}</h1>
+<main class="mf-book-detail-page">
+  <div class="mf-detail-container">
+    <nav class="mf-breadcrumb" aria-label="面包屑">
+      <a href="/">首页</a><span>/</span><span>{{book_title}}</span>
+    </nav>
 
-        {{#authors.length}}
-        <div class="mf-book-authors">
-          {{#authors}}
-          <span class="one-line" title="{{name}}">{{name}}</span>
-          {{/authors}}
+    {{#book_samples.length}}
+    <section class="mf-sample-shelf">
+      <div class="mf-shelf-heading">
+        <div>
+          <p class="mf-shelf-kicker">今日精选</p>
+          <h2>更多好书</h2>
         </div>
-        {{/authors.length}}
+        {{! The prototype hardcoded this to /category/eastern-fantasy/. "进入书库"
+            means the whole library, which is the home page's 书库 grid. }}
+        <a href="/">进入书库</a>
+      </div>
+      <div class="mf-sample-grid">
+        {{#book_samples}}
+        <a class="mf-sample-card" href="{{url}}">
+          {{#image}}<img src="{{image}}" alt="{{title}}" loading="lazy"/>{{/image}}
+          {{^image}}<span class="mf-sample-cover">书</span>{{/image}}
+          <div class="mf-sample-info">
+            <h3>{{title}}</h3>
+            <p>{{author}}</p>
+            <small>{{categoryName}} · {{#serialStatus}}{{serialStatus}}{{/serialStatus}}{{^serialStatus}}连载中{{/serialStatus}}</small>
+          </div>
+        </a>
+        {{/book_samples}}
+      </div>
+    </section>
+    {{/book_samples.length}}
 
-        <div class="mf-book-badges">
+    <section class="mf-detail-card mf-book-header-card">
+      <div class="mf-detail-cover-wrap">
+        {{#icon}}
+        <img class="mf-detail-cover" src="{{icon}}" alt="{{book_title}}" loading="lazy"/>
+        {{/icon}}
+        {{^icon}}
+        <div class="mf-detail-cover mf-detail-cover-empty">暂无封面</div>
+        {{/icon}}
+      </div>
+
+      <div class="mf-detail-main">
+        <h1 class="mf-detail-title">{{book_title}}</h1>
+        <div class="mf-detail-tags">
           {{#_microfeed.serialStatus}}
-          <span class="badge" data-mf-serial="{{_microfeed.serialStatus}}">
+          <span class="mf-detail-tag mf-detail-tag--accent">
             {{#_microfeed.serialStatusFinished}}已完结{{/_microfeed.serialStatusFinished}}
             {{^_microfeed.serialStatusFinished}}连载中{{/_microfeed.serialStatusFinished}}
           </span>
           {{/_microfeed.serialStatus}}
-          {{#_microfeed.tags}}
-          <a href="/search/?q={{.}}" class="badge" rel="tag">{{.}}</a>
-          {{/_microfeed.tags}}
+          {{! genreName is the resolved category name; `_microfeed.genre` is only the id. }}
+          {{#_microfeed.genreName}}<span class="mf-detail-tag">{{_microfeed.genreName}}</span>{{/_microfeed.genreName}}
+          {{#_microfeed.tags}}<span class="mf-detail-tag">{{.}}</span>{{/_microfeed.tags}}
         </div>
 
-        {{#_microfeed.subscribe_methods.length}}
-        <div class="text-sm mt-4 mb-2">订阅：</div>
-        {{/_microfeed.subscribe_methods.length}}
-        <div class="flex flex-wrap">
-          {{#_microfeed.subscribe_methods}}
-          <a href="{{url}}" class="mr-4 mb-2" aria-label="{{name}}">
-            <div class="flex items-center">
-              {{#image}}
-              <img src="{{image}}" class="img-sm flex-none" alt="" loading="lazy"/>
-              {{/image}}
-              <div class="flex-none text-sm{{#image}} ml-1 hide-mobile{{/image}}">{{name}}</div>
-            </div>
-          </a>
-          {{/_microfeed.subscribe_methods}}
+        <div class="mf-detail-word-count">
+          <strong>{{novel_detail.totalWordCount}}</strong> 字
+        </div>
+        <div class="mf-detail-update">
+          <span>最近更新：{{novel_detail.latestChapterTitle}}</span>
+          <time>{{novel_detail.latestDate}}</time>
+        </div>
+
+        <div class="mf-detail-actions">
+          <a class="mf-detail-btn mf-detail-btn--primary" href="{{novel_detail.firstChapterUrl}}" data-mf-detail-start>开始阅读</a>
+          <a class="mf-detail-btn mf-detail-btn--secondary" href="#mf-detail-catalog">查看目录</a>
+          <button class="mf-detail-icon-btn" type="button" data-mf-copy-link aria-label="分享本书">分享</button>
         </div>
       </div>
-    </div>
-  </section>
 
-  {{#category_nav.length}}
-  <nav class="mf-category-nav" aria-label="题材分类">
-    {{#category_nav}}
-    <a href="/category/{{slug}}/" rel="tag">
-      {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
-    </a>
-    {{/category_nav}}
-  </nav>
-  {{/category_nav.length}}
+      <aside class="mf-author-card">
+        <div class="mf-author-avatar" aria-hidden="true">{{novel_detail.author}}</div>
+        <div class="mf-author-name"><span class="mf-author-badge">作者</span>{{novel_detail.author}}</div>
+        <div class="mf-author-desc">用心写出不一样的故事</div>
+      </aside>
+    </section>
 
-  {{#description}}
-  <section>
-    <h2 class="border-b">简介</h2>
-    <div class="mf-rich-content">{{{description}}}</div>
-  </section>
-  {{/description}}
+    <section class="mf-detail-card mf-detail-content-card">
+      <h2 class="mf-detail-section-title">作品简介</h2>
+      {{#description}}
+      <div class="mf-detail-intro mf-rich-content">{{{description}}}</div>
+      {{/description}}
+      {{^description}}<div class="mf-detail-empty">暂无作品简介</div>{{/description}}
+    </section>
 
-  <section>
-    <h2 class="border-b">目录</h2>
-
-    {{! Chapters are emitted flat, tagged with their volume, and grouped under
-        volume headings by the script in web-body-end.mustache - Mustache has no
-        grouping or sorting, so that structure is built client-side. Without JS
-        the list still reads correctly as a plain chapter list. }}
-    <div class="mf-toc" data-mf-toc>
-      {{^items.length}}
-      <div>暂无章节。</div>
-      {{/items.length}}
-
-      {{#items}}
-      <div class="mf-toc-item" data-mf-volume="{{_microfeed.volume}}" data-mf-chapter-no="{{_microfeed.chapterNo}}">
-        <a href="{{_microfeed.web_url}}">
-          {{title}}
-          <span class="icon-arrow-right"></span>
-        </a>
-        <div class="text-sm">
-          <span data-microfeed-date-ms="{{_microfeed.date_published_ms}}">{{_microfeed.date_published_short}}</span>
+    <section class="mf-detail-card mf-detail-content-card" id="mf-detail-catalog">
+      <h2 class="mf-detail-section-title">目录 · {{novel_detail.totalChapterCount}}章</h2>
+      <div class="mf-detail-volume-title">章节目录 <span>共 {{novel_detail.totalChapterCount}} 章</span></div>
+      <div class="mf-detail-chapter-grid" data-mf-toc>
+        {{^items.length}}<div class="mf-detail-empty">暂无章节</div>{{/items.length}}
+        {{#items}}
+        <div class="mf-toc-item mf-detail-chapter-item" data-mf-volume="{{_microfeed.volume}}" data-mf-chapter-no="{{_microfeed.chapterNo}}">
+          <a href="{{_microfeed.web_url}}">{{title}}</a>
         </div>
+        {{/items}}
       </div>
-      {{/items}}
-    </div>
-
-    <div class="flex justify-center mt-4">
-      {{#_microfeed.prev_url}}
-      <div class="px-2">
-        <a href="{{_microfeed.prev_url}}"><span class="icon-arrow-left"> 上一页</span></a>
-      </div>
-      {{/_microfeed.prev_url}}
-
-      {{#_microfeed.next_url}}
-      <div class="px-2">
-        <a href="{{_microfeed.next_url}}">下一页 <span class="icon-arrow-right"></span></a>
-      </div>
-      {{/_microfeed.next_url}}
-    </div>
-  </section>
+    </section>
+  </div>
 </main>

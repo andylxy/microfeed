@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>番茄小说网复刻 - 顶部居中</title>
+    <style>
+        /* --- 基础重置 --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #ffffff;
+            color: #333;
+            font-size: 14px;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        ul {
+            list-style: none;
+        }
+
+        /* =========================================
+           顶部导航栏 (核心修改区域)
+           ========================================= */
+        .header {
+            /* 外层保持 100% 宽度，用于显示底部的边框线 */
+            width: 100%;
+            border-bottom: 1px solid #f0f0f0;
+            background-color: #fff;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        /* 新增内层容器，用于限制宽度并实现居中 */
+        .header-container {
+            max-width: 1200px; /* 与下方内容区宽度保持一致，视觉更整齐 */
+            margin: 0 auto;    /* 水平居中 */
+            height: 64px;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between; /* 内部元素两端对齐 */
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        /* 模拟番茄Logo */
+        .logo-icon {
+            width: 28px;
+            height: 28px;
+            background-color: #ff4d4f;
+            border-radius: 50%;
+            border-bottom-left-radius: 10px;
+            position: relative;
+        }
+        .logo-icon::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 6px;
+            height: 6px;
+            background: #fff;
+            border-radius: 50%;
+        }
+        .logo-icon::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50% 50% 0 0;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 32px;
+            font-size: 15px;
+        }
+
+        .nav-menu a {
+            color: #333;
+        }
+        .nav-menu a.active {
+            font-weight: 600;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* 搜索框 */
+        .search-box {
+            display: flex;
+            align-items: center;
+            background-color: #f5f5f5;
+            border-radius: 20px;
+            padding: 0 16px;
+            height: 36px;
+            width: 240px;
+        }
+
+        .search-box input {
+            border: none;
+            background: transparent;
+            outline: none;
+            flex: 1;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .search-box input::placeholder {
+            color: #999;
+        }
+
+        .search-box svg {
+            width: 16px;
+            height: 16px;
+            fill: #999;
+            cursor: pointer;
+        }
+
+        .auth-links {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 14px;
+        }
+        .auth-links a:hover {
+            color: #ff4d4f;
+        }
+        .divider {
+            width: 1px;
+            height: 14px;
+            background-color: #ddd;
+        }
+
+        /* --- 主要内容区 --- */
+        .main-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* 网格布局 */
+        .book-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            column-gap: 40px;
+            row-gap: 40px;
+        }
+
+        /* 单本书籍卡片 */
+        .book-card {
+            display: flex;
+            gap: 16px;
+        }
+
+        /* 封面占位 */
+        .book-cover {
+            width: 96px;
+            height: 128px;
+            border-radius: 6px;
+            flex-shrink: 0;
+            object-fit: cover;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        /* 不同封面的渐变色 */
+        .book-card:nth-child(2) .book-cover { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
+        .book-card:nth-child(3) .book-cover { background: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 100%); }
+        .book-card:nth-child(4) .book-cover { background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%); }
+        .book-card:nth-child(5) .book-cover { background: linear-gradient(to top, #fbc2eb 0%, #a6c1ee 100%); }
+        .book-card:nth-child(6) .book-cover { background: linear-gradient(to right, #ffecd2 0%, #fcb69f 100%); }
+        .book-card:nth-child(7) .book-cover { background: linear-gradient(to top, #a18cd1 0%, #fbc2eb 100%); }
+        .book-card:nth-child(8) .book-cover { background: linear-gradient(to right, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%); }
+        .book-card:nth-child(9) .book-cover { background: linear-gradient(to right, #b8cbb8 0%, #b8cbb8 0%, #b465da 0%, #cf6cc9 33%, #ee609c 66%, #ee609c 100%); }
+
+
+        /* 书籍信息区 */
+        .book-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .book-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .book-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .book-desc {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-all;
+        }
+
+        .book-status {
+            font-size: 12px;
+            color: #999;
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header class="header">
+        <!-- 新增 header-container 限制宽度并居中 -->
+        <div class="header-container">
+            <div class="header-left">
+                <div class="logo">
+                    <div class="logo-icon"></div>
+                    番茄小说网
+                </div>
+                <nav class="nav-menu">
+                    <a href="#" class="active">首页</a>
+                    <a href="#">书库</a>
+                    <a href="#">书架</a>
+                    <a href="#">原创榜</a>
+                    <a href="#">作家专区</a>
+                    <a href="#">版权专区</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="search-box">
+                    <input type="text" placeholder="请输入书名或作者名">
+                    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M909.6 854.5L649.9 594.8C690.2 542.7 712 479 712 412c0-80.2-31.3-155.4-87.9-212.1-56.6-56.7-132-87.9-212.1-87.9s-155.5 31.3-212.1 87.9C143.2 256.5 112 331.8 112 412c0 80.1 31.3 155.5 87.9 212.1C256.5 680.8 331.8 712 412 712c67 0 130.6-21.8 182.7-62l259.7 259.6a8.2 8.2 0 0 0 11.6 0l43.6-43.5a8.2 8.2 0 0 0 0-11.6zM570.4 570.4C528 612.7 471.8 636 412 636s-116-23.3-158.4-65.6C211.3 528 188 471.8 188 412s23.3-116.1 65.6-158.4C296 211.3 352.2 188 412 188s116.1 23.2 158.4 65.6S636 352.2 636 412s-23.3 116.1-65.6 158.4z"/></svg>
+                </div>
+                <div class="auth-links">
+                    <a href="#">登录</a>
+                    <div class="divider"></div>
+                    <a href="#">注册</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体内容 (保持不变) -->
+    <main class="main-content">
+        <div class="book-grid">
+            
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">神通者</h3>
+                    <p class="book-meta">作者：天蚕土豆</p>
+                    <p class="book-desc">世间生灵，体生异骨，可铭刻承载诸多灵妙之法，执掌伟力，化火引风，叱咤...</p>
+                    <p class="book-status">连载中 · 25.6万字<br>5小时前</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">十日终焉</h3>
+                    <p class="book-meta">作者：杀虫队队员</p>
+                    <p class="book-desc">24年番茄年度巅峰榜TOP1 | 2024年度“中国网络文学影响力榜” | 202...</p>
+                    <p class="book-status">已完结 · 320.1万字<br>2025-10-31 22:10</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">我不是戏神</h3>
+                    <p class="book-meta">作者：三九音域</p>
+                    <p class="book-desc">《斩神》作家三九音域全新力作 | 澳门国际科幻奖最佳科幻网络文学 | 逆...</p>
+                    <p class="book-status">已完结 · 400.4万字<br>2026-04-30 20:28</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">这个游戏不对劲，我挖...</h3>
+                    <p class="book-meta">作者：道不易</p>
+                    <p class="book-desc">【神域降临全球】职业打金人杨凌只是想靠《神域》这款游戏里放松放...</p>
+                    <p class="book-status">连载中 · 189.9万字<br>8小时前</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">规则怪谈：无所谓，系...</h3>
+                    <p class="book-meta">作者：巡山主神</p>
+                    <p class="book-desc">慈航大舞台，没挂你别来。陈风穿越异世界，发现这里的Boss简直阴到没边...</p>
+                    <p class="book-status">连载中 · 115.8万字<br>17小时前</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">系统想害我，我选择上...</h3>
+                    <p class="book-meta">作者：超级吹宝泡泡糖</p>
+                    <p class="book-desc">【非常规上交文，聚焦主角人物成长与国家双向奔赴】好消息！...</p>
+                    <p class="book-status">连载中 · 63.7万字<br>18小时前</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">我在精神病院学斩神</h3>
+                    <p class="book-meta">作者：三九音域</p>
+                    <p class="book-desc">番茄小说进站必读爆款 | 爆款动漫《斩神》原著 | 中国网络文学影响力榜IP...</p>
+                    <p class="book-status">已完结 · 426.4万字<br>2024-07-31 09:55</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">天渊</h3>
+                    <p class="book-meta">作者：沐潇三生</p>
+                    <p class="book-desc">（实体书已出版，网上可购买）百年前，陈青源进入了一个名为天渊的...</p>
+                    <p class="book-status">连载中 · 614.7万字<br>20小时前</p>
+                </div>
+            </div>
+
+            <div class="book-card">
+                <div class="book-cover"></div>
+                <div class="book-info">
+                    <h3 class="book-title">全球死考：刚下刑场你...</h3>
+                    <p class="book-meta">作者：我爱吃猫片哇</p>
+                    <p class="book-desc">【智战+微恐+无限流】死亡高考降临，三千万考生被拉进地狱。当考题...</p>
+                    <p class="book-status">连载中 · 78.1万字<br>17小时前</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+</body>
+</html>

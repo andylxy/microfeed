@@ -452,6 +452,8 @@ export const en = {
       webPageLabel: "Open an example Page",
       webSearchDesc: "Edits the dedicated public search-results page. This template receives search.query and search.results; microfeed supplies the search modal and typeahead behavior.",
       webSearchLabel: "Open search page",
+      webHomeDesc: "Edits the public home page rendered as a bookshelf that lists every published book with cover, title, author, and status.",
+      webHomeLabel: "Open home page",
     },
     mustacheNoteStart: "This template can use ",
     mustacheNoteMid: " variables with data from this site's ",
@@ -1151,6 +1153,9 @@ export const en = {
     volumePlaceholder: "e.g. Volume 1",
     chapterNo: "Chapter number",
     chapterNoPlaceholder: "e.g. 12",
+    bookId: "Belongs to book",
+    bookIdPlaceholder: "Pick the book this chapter belongs to",
+    noBook: "Not assigned (uncategorized)",
     // All items list
     filterAll: "All items",
     filterPublished: "Published",

@@ -7,9 +7,11 @@ import PublicLayout from "../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
-import {navigationPages} from "@/server/pages/service";
-import {listCategoryNav} from "@/server/feed/extCategory";
+import {listPublishedBookSamples} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
+import {loadSiteNav} from "@/server/feed/siteNav";
+import {renderThemeTemplate} from "@/shared/themes/ThemeRenderer";
+import DEFAULT_WEB_HOME from "../../themes/default/web-home.mustache?raw";
 
 const loaded = await loadPublishedFeed(env, Astro.request, {
   includeActiveTheme: true,
@@ -32,18 +34,28 @@ const assetBaseUrl = themeAssetBaseUrl(
   loaded.content.activeTheme?.bundle.assets,
   webSettings.publicBucketUrl,
 );
-const navigation = await navigationPages(loaded.database.FEED_DB, Astro.request);
-const categoryNav = await listCategoryNav(
-  loaded.database.FEED_DB as unknown as CategoryDb,
+const navigation = await loadSiteNav(
+  loaded.database.FEED_DB,
+  Astro.request,
+  "home",
 );
-const extraContext = {navigation_pages: navigation, category_nav: categoryNav};
+const categoryDb = loaded.database.FEED_DB as unknown as CategoryDb;
+const bookSamples = (await listPublishedBookSamples(categoryDb)).map((book) => ({
+  ...book,
+  url: `/book/${book.id}`,
+}));
+
+const homeContext = {
+  ...navigation,
+  book_samples: bookSamples,
+};
 const theme = new Theme(
   loaded.publicFeed,
   loaded.content.settings,
   null,
   loaded.content.activeTheme,
   assetBaseUrl,
-  extraContext,
+  homeContext,
 );
 const sharedTheme = new Theme(
   loaded.publicFeed,
@@ -51,7 +63,12 @@ const sharedTheme = new Theme(
   CODE_TYPES.SHARED,
   loaded.content.activeTheme,
   assetBaseUrl,
-  extraContext,
+  homeContext,
+);
+
+const bodyHtml = renderThemeTemplate(
+  theme.hasWebHome() ? theme.getWebHomeTmpl() : DEFAULT_WEB_HOME,
+  homeContext,
 );
 ---
 
@@ -69,7 +86,7 @@ const sharedTheme = new Theme(
     sharedHeadHtml={sharedTheme.getWebHeader().html}
     bodyStart={theme.getWebBodyStart().html}
     sharedBodyStart={sharedTheme.getWebBodyStart().html}
-    bodyHtml={theme.getWebFeed().html}
+    bodyHtml={bodyHtml}
     bodyEnd={theme.getWebBodyEnd().html}
     sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
     searchEnabled={theme.supportsPagesAndSearch()}

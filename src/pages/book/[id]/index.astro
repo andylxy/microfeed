@@ -1,0 +1,150 @@
+---
+import {env} from "cloudflare:workers";
+
+import {CODE_TYPES} from "@/shared/Constants";
+import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
+import Theme from "@/server/themes/Theme";
+import PublicLayout from "../../../layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
+import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
+import {
+  getBookById,
+  getBookChapters,
+  listPublishedBookSamples,
+} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
+import {loadSiteNav} from "@/server/feed/siteNav";
+
+const bookId = Astro.params.id ?? "";
+
+const loaded = await loadPublishedFeed(env, Astro.request, {
+  includeActiveTheme: true,
+});
+const unavailable = shouldHidePublicWeb(loaded.content);
+if (!unavailable && !loaded.onboarding.requiredOk) {
+  return Astro.redirect(
+    new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
+    302,
+  );
+}
+
+// `feedDb` stays D1Database-typed for the helpers that want the full binding;
+// `db` narrows to the ext_category slice the novel-cms queries use. Same
+// pattern as the category page.
+const feedDb = loaded.database.FEED_DB;
+const db = feedDb as unknown as CategoryDb;
+const book = await getBookById(db, bookId);
+if (!book) {
+  Astro.response.status = 404;
+}
+
+const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
+const assetBaseUrl = themeAssetBaseUrl(
+  env,
+  Astro.request.url,
+  loaded.content.activeTheme?.assetOwnerThemeId,
+  loaded.content.activeTheme?.bundle.assets,
+  webSettings.publicBucketUrl,
+);
+const siteNav = await loadSiteNav(feedDb, Astro.request);
+
+// Resolve this book's chapters directly from the item store by the
+// `_microfeed.bookId` tag, so the catalog is never truncated by the primary
+// feed's paged item window. Fall back to the feed's items during the
+// transition before chapters are tagged.
+const tagged = await getBookChapters(feedDb, bookId, Astro.url.origin);
+const allItems = loaded.publicFeed.items as Array<Record<string, any>>;
+const bookItems = tagged.length > 0 ? tagged : allItems;
+bookItems.sort((a: any, b: any) => {
+  const an = Number(a._microfeed?.chapterNo);
+  const bn = Number(b._microfeed?.chapterNo);
+  if (!Number.isFinite(an)) return 1;
+  if (!Number.isFinite(bn)) return -1;
+  return an - bn;
+});
+
+const totalWordCount = bookItems.reduce(
+  (total: number, item: any) =>
+    total + (Number(item._microfeed?.wordCount) || 0),
+  0,
+);
+const firstChapter = bookItems[0] ?? null;
+const latestChapter = bookItems[bookItems.length - 1] ?? null;
+
+const bookSamples = (await listPublishedBookSamples(feedDb))
+  .filter((b) => b.id !== bookId)
+  .map((b) => ({
+    ...b,
+    url: `/book/${b.id}`,
+  }));
+
+const bookMicrofeed = book?.microfeed ?? {};
+const headerMicrofeed = {
+  ...bookMicrofeed,
+  // `_microfeed.genre` is the category id; the tag list needs the display name.
+  genreName: book?.categoryName ?? "",
+  serialStatusFinished: bookMicrofeed.serialStatus === "finished",
+};
+
+const extraContext = book
+  ? {
+      ...siteNav,
+      // Deliberately NOT `title`: the theme's base context already sets `title`
+      // to the site name, which the header logo renders. Overriding it here made
+      // the logo show the book's name on book pages. The book's own name lives
+      // under `book_title`, used by the detail template.
+      book_title: book.title,
+      description: book.description ?? "",
+      _microfeed: headerMicrofeed,
+      items: bookItems,
+      book_samples: bookSamples,
+      novel_detail: {
+        author: book.author ?? "未知作者",
+        firstChapterUrl: String(firstChapter?._microfeed?.web_url ?? "#"),
+        latestChapterTitle: String(latestChapter?.title ?? "暂无更新"),
+        latestChapterUrl: String(latestChapter?._microfeed?.web_url ?? "#"),
+        latestDate: String(latestChapter?._microfeed?.date_published_short ?? ""),
+        totalChapterCount: bookItems.length,
+        totalWordCount,
+      },
+    }
+  : {};
+
+const theme = new Theme(
+  loaded.publicFeed,
+  loaded.content.settings,
+  null,
+  loaded.content.activeTheme,
+  assetBaseUrl,
+  extraContext,
+);
+const sharedTheme = new Theme(
+  loaded.publicFeed,
+  loaded.content.settings,
+  CODE_TYPES.SHARED,
+  loaded.content.activeTheme,
+  assetBaseUrl,
+  extraContext,
+);
+---
+
+{Astro.response.status === 404 ? (
+  <PublicNotFoundHeading />
+) : (
+  <PublicLayout
+    title={book?.title ?? loaded.publicFeed.title}
+    description={String(book?.description ?? "")}
+    language={loaded.publicFeed.language}
+    channelImage={String(loaded.content.channel?.image ?? "")}
+    favicon={webSettings.favicon}
+    publicBucketUrl={webSettings.publicBucketUrl}
+    headHtml={theme.getWebHeader().html}
+    sharedHeadHtml={sharedTheme.getWebHeader().html}
+    bodyStart={theme.getWebBodyStart().html}
+    sharedBodyStart={sharedTheme.getWebBodyStart().html}
+    bodyHtml={theme.getWebFeed().html}
+    bodyEnd={theme.getWebBodyEnd().html}
+    sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
+    searchEnabled={theme.supportsPagesAndSearch()}
+  />
+)}

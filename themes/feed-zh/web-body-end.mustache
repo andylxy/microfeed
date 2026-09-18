@@ -18,6 +18,27 @@
 <script>
 (function () {
   "use strict";
+  var share = document.querySelector("[data-mf-copy-link]");
+  if (share) {
+    share.addEventListener("click", function () {
+      var done = function () {
+        var old = share.textContent;
+        share.textContent = "已复制";
+        window.setTimeout(function () { share.textContent = old || "分享"; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window.location.href).then(done).catch(done);
+      } else {
+        done();
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
   var elements = document.querySelectorAll("[data-microfeed-date-ms]");
   if (!elements.length || typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return;
   var formatter;
@@ -39,11 +60,28 @@
 <script>
 (function () {
   "use strict";
-  // Group the chapter list into volumes. Mustache cannot group or sort, so
-  // web-feed.mustache emits a flat list where every row carries its volume in
-  // data-mf-volume; this rebuilds the "volume heading + its chapters" shape.
-  // Chapters without a volume keep their feed order and stay heading-less, so
-  // a site that never uses volumes is unaffected.
+  function chapterNumber(row) {
+    var value = parseInt(row.getAttribute("data-mf-chapter-no"), 10);
+    return isFinite(value) ? value : null;
+  }
+
+  // Ascending by chapter number. Rows without one keep their feed position and
+  // land after the numbered chapters, since they are not part of the novel's
+  // running order. Stable, so chapters sharing a number keep their order.
+  function compareChapters(a, b) {
+    var an = chapterNumber(a);
+    var bn = chapterNumber(b);
+    if (an !== null && bn !== null) return an - bn;
+    if (an !== null) return -1;
+    if (bn !== null) return 1;
+    return 0;
+  }
+
+  // Group the chapter list into volumes and put it in reading order. Mustache
+  // cannot group or sort, so web-feed.mustache emits a flat list where every
+  // row carries its volume in data-mf-volume and its number in
+  // data-mf-chapter-no; this rebuilds the "volume heading + its chapters" shape
+  // from chapter one onwards.
   var lists = document.querySelectorAll("[data-mf-toc]");
   for (var listIndex = 0; listIndex < lists.length; listIndex++) {
     var list = lists[listIndex];
@@ -64,9 +102,20 @@
       group.rows.push(row);
     }
 
-    // A single unnamed group means there is nothing to group: leave the list
-    // exactly as rendered.
-    if (groups.length === 1 && groups[0].volume === "") continue;
+    // Items with no volume (posts that are not part of any volume) sink to the
+    // end, so the novel's volumes lead the catalog instead of a stray post.
+    groups.sort(function (a, b) {
+      var aEmpty = a.volume === "";
+      var bEmpty = b.volume === "";
+      if (aEmpty === bEmpty) return 0;
+      return aEmpty ? 1 : -1;
+    });
+
+    // The feed emits chapters newest-first; a novel catalog reads from chapter
+    // one, so sort inside every volume before rebuilding.
+    for (var sortIndex = 0; sortIndex < groups.length; sortIndex++) {
+      groups[sortIndex].rows.sort(compareChapters);
+    }
 
     var fragment = document.createDocumentFragment();
     for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
@@ -83,6 +132,63 @@
     }
     while (list.firstChild) list.removeChild(list.firstChild);
     list.appendChild(fragment);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  // Home page: point "start reading" at chapter one, show the newest chapter,
+  // and fill in the chapter count. Everything degrades to the static markup
+  // when the page has no catalog.
+  var rows = Array.prototype.slice.call(
+    document.querySelectorAll(".mf-novel-home .mf-toc-item"),
+  );
+  if (rows.length === 0) return;
+
+  function number(row) {
+    var value = parseInt(row.getAttribute("data-mf-chapter-no"), 10);
+    return isFinite(value) ? value : null;
+  }
+
+  function link(row) {
+    return row ? row.querySelector("a[href]") : null;
+  }
+
+  // Only rows carrying a chapter number are chapters. A post without one is not
+  // part of the novel, so it must never become the reading entry point or be
+  // counted as a chapter.
+  var chapters = [];
+  for (var index = 0; index < rows.length; index++) {
+    if (number(rows[index]) !== null) chapters.push(rows[index]);
+  }
+
+  var start = document.querySelector("[data-mf-start-reading]");
+  var first = link(chapters.length ? chapters[0] : rows[0]);
+  if (first && start) start.setAttribute("href", first.getAttribute("href"));
+
+  // The ascending sort leaves the highest chapter number last, so the newest
+  // chapter is the final numbered row.
+  var newest = chapters.length
+    ? chapters[chapters.length - 1]
+    : rows[rows.length - 1];
+
+  var slot = document.querySelector("[data-mf-latest]");
+  var newestLink = link(newest);
+  if (slot && newestLink) {
+    var anchor = document.createElement("a");
+    anchor.setAttribute("href", newestLink.getAttribute("href"));
+    anchor.textContent = String(newestLink.textContent || "").trim();
+    slot.textContent = "最新章节：";
+    slot.appendChild(anchor);
+    slot.hidden = false;
+  }
+
+  var count = document.querySelector("[data-mf-chapter-count]");
+  if (count) {
+    count.textContent = "共 " + (chapters.length || rows.length) + " 章";
+    count.hidden = false;
   }
 })();
 </script>
@@ -153,6 +259,15 @@
 
     select("data-mf-font", FONT_KEY, ["small", "medium", "large"]);
     select("data-mf-paper", PAPER_KEY, ["sepia"]);
+  }
+
+  var night = document.querySelector("[data-mf-reader-night]");
+  if (night) {
+    night.addEventListener("click", function () {
+      var active = document.documentElement.hasAttribute("data-mf-reader-night");
+      if (active) document.documentElement.removeAttribute("data-mf-reader-night");
+      else document.documentElement.setAttribute("data-mf-reader-night", "");
+    });
   }
 
   var drawer = document.querySelector("[data-mf-toc-drawer]");

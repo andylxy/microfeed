@@ -34,6 +34,7 @@ export const CODE_FILES = {
   WEB_BODY_END: 'webBodyEnd',
   WEB_FEED: 'webFeed',
   WEB_ITEM: 'webItem',
+  WEB_HOME: 'webHome',
   RSS_STYLESHEET: 'rssStylesheet',
 };
 

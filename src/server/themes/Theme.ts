@@ -262,4 +262,23 @@ export default class Theme {
   getWebCategoryTmpl(): string {
     return this.template("webCategory");
   }
+
+  /** Whether the active theme ships a home/bookshelf page template. */
+  hasWebHome(): boolean {
+    const bundle = this.themeBundle ?? BUNDLED_DEFAULT_THEME_BUNDLE;
+    return typeof bundle.webHome === "string";
+  }
+
+  getWebHome(extra: Record<string, unknown> = {}): {html: string} {
+    return {
+      html: renderThemeTemplate(this.getWebHomeTmpl(), {
+        ...this.context,
+        ...extra,
+      }),
+    };
+  }
+
+  getWebHomeTmpl(): string {
+    return this.template(CODE_FILES.WEB_HOME as ThemeFileKey);
+  }
 }

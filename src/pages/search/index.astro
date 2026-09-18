@@ -5,7 +5,7 @@ import {CODE_TYPES} from "@/shared/Constants";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import {navigationPages} from "@/server/pages/service";
+import {loadSiteNav} from "@/server/feed/siteNav";
 import Theme, {themeSupportsPagesAndSearch} from "@/server/themes/Theme";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 
@@ -13,7 +13,7 @@ const loaded = await loadPublishedFeed(env, Astro.request, {
   includeActiveTheme: true,
   limit: 1,
 });
-const navigation = await navigationPages(
+const navigation = await loadSiteNav(
   loaded.database.FEED_DB,
   Astro.request,
 );
@@ -28,7 +28,7 @@ const assetBaseUrl = themeAssetBaseUrl(
   loaded.content.activeTheme?.bundle.assets,
   webSettings.publicBucketUrl,
 );
-const extraContext = {navigation_pages: navigation};
+const extraContext = {...navigation};
 const theme = new Theme(
   loaded.publicFeed,
   loaded.content.settings,

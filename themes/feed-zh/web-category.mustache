@@ -1,36 +1,43 @@
-<main>
-  <section class="mf-category-head">
-    <h1>{{category.name}}</h1>
-    {{#category.bookCount}}
-    <div class="text-sm">{{category.bookCount}} 本</div>
-    {{/category.bookCount}}
-  </section>
+<main class="mf-library-page">
+  <div class="mf-library-container">
+    <section class="mf-library-heading">
+      <div>
+        <p class="mf-library-kicker">题材分类</p>
+        <h1>{{category.name}}</h1>
+      </div>
+      {{#category.bookCount}}<span class="mf-library-count">{{category.bookCount}} 本作品</span>{{/category.bookCount}}
+    </section>
 
-  {{#category_nav.length}}
-  <nav class="mf-category-nav" aria-label="题材分类">
-    {{#category_nav}}
-    <a href="/category/{{slug}}/" rel="tag">
-      {{name}}{{#bookCount}}<span class="badge">{{bookCount}}</span>{{/bookCount}}
-    </a>
-    {{/category_nav}}
-  </nav>
-  {{/category_nav.length}}
+    {{#category_nav.length}}
+    <nav class="mf-library-tabs" aria-label="题材分类">
+      {{#category_nav}}
+      <a class="mf-library-tab" href="/category/{{slug}}/" rel="tag">{{name}}{{#bookCount}}<small>{{bookCount}}</small>{{/bookCount}}</a>
+      {{/category_nav}}
+    </nav>
+    {{/category_nav.length}}
 
-  <section>
-    <h2 class="border-b">本书单</h2>
-    {{^category_books.length}}
-    <div class="text-sm text-muted">该分类下暂时没有书。</div>
-    {{/category_books.length}}
-
-    <div class="mf-book-grid">
-      {{#category_books}}
-      <a href="{{url}}" class="mf-book-card">
-        {{#image}}
-        <img alt="{{title}}" src="{{image}}" loading="lazy"/>
-        {{/image}}
-        <div class="mf-book-card-title">{{title}}</div>
-      </a>
-      {{/category_books}}
-    </div>
-  </section>
+    <section class="mf-library-section">
+      <div class="mf-library-section-head">
+        <h2>本分类精选</h2>
+        <span>按更新时间排序</span>
+      </div>
+      {{^category_books.length}}
+      <div class="mf-library-empty">该分类下暂时没有书。</div>
+      {{/category_books.length}}
+      <div class="mf-library-grid">
+        {{#category_books}}
+        <a href="{{url}}" class="mf-library-book-card">
+          {{#image}}<img class="mf-library-cover" alt="{{title}}" src="{{image}}" loading="lazy"/>{{/image}}
+          {{^image}}<div class="mf-library-cover mf-library-cover-empty">暂无封面</div>{{/image}}
+          <div class="mf-library-book-info">
+            <h3>{{title}}</h3>
+            <p>作者：{{#author}}{{author}}{{/author}}{{^author}}未知作者{{/author}}</p>
+            {{#description}}<div class="mf-library-desc">{{description}}</div>{{/description}}
+            <small>{{#serialStatus}}{{serialStatus}}{{/serialStatus}}{{^serialStatus}}连载中{{/serialStatus}} · {{#wordCount}}{{wordCount}}{{/wordCount}}{{^wordCount}}暂无字数{{/wordCount}}</small>
+          </div>
+        </a>
+        {{/category_books}}
+      </div>
+    </section>
+  </div>
 </main>

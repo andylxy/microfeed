@@ -16,6 +16,7 @@ import AdminDatetimePicker from '@/components/admin/shared/AdminDatetimePicker';
 import {datetimeLocalStringToMs, datetimeLocalToMs} from "@/shared/TimeUtils";
 import {getPublicBaseUrl} from "@/client/ClientUrlUtils";
 import AdminRadioGroup from "@/components/admin/shared/AdminRadioGroup";
+import AdminSelect from "@/components/admin/shared/AdminSelect";
 import {showToast} from "@/client/ToastUtils";
 import MediaManager from "./components/MediaManager";
 import {
@@ -141,6 +142,7 @@ export default class EditItemApp extends React.Component<Props, any> {
       userChangedLink: false,
       autosaveState: {dirty: false, phase: "idle"} satisfies AutosaveState,
       replacedImageUrls: [],
+      books: [],
     };
 
     this.autosave = new AutosaveCoordinator({
@@ -185,6 +187,11 @@ export default class EditItemApp extends React.Component<Props, any> {
       }
     }
     this.reconcileWebMcpTool();
+
+    // Load the book (channel) list so a chapter can be assigned to a book.
+    Requests.axiosGet(ADMIN_URLS.ajaxBooks())
+      .then((res: any) => this.setState({books: res?.data?.books || []}))
+      .catch(() => this.setState({books: []}));
   }
 
   componentDidUpdate(_previousProps: Props, previousState: any) {
@@ -633,6 +640,39 @@ export default class EditItemApp extends React.Component<Props, any> {
             <p className="mt-1 text-sm text-muted-foreground">
               {t('items.novelFieldsIntro')}
             </p>
+            <div className="mt-5">
+              <AdminSelect
+                label={t('items.bookId')}
+                placeholder={t('items.bookIdPlaceholder')}
+                options={[
+                  {value: "", label: t('items.noBook')},
+                  ...this.state.books.map((b: any) => ({
+                    value: b.id,
+                    label: b.title,
+                  })),
+                ]}
+                value={
+                  (() => {
+                    const bid = microfeed.bookId;
+                    if (!bid) return {value: "", label: t('items.noBook')};
+                    const found = this.state.books.find(
+                      (b: any) => b.id === bid,
+                    );
+                    return {
+                      value: String(bid),
+                      label: found ? found.title : String(bid),
+                    };
+                  })()
+                }
+                onChange={(option: any) => {
+                  if (!option || option.value === "") {
+                    this.onUpdateItemMicrofeedMeta('bookId', undefined);
+                  } else {
+                    this.onUpdateItemMicrofeedMeta('bookId', option.value);
+                  }
+                }}
+              />
+            </div>
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
               <AdminInput
                 label={t('items.volume')}

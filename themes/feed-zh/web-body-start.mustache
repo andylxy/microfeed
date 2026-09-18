@@ -1,86 +1,86 @@
-<!-- Shared navigation rendered immediately after <body>. -->
-<nav class="mf-site-nav" aria-label="站点导航" data-microfeed-site-nav>
-  <a class="mf-site-brand" href="/" aria-label="{{title}} 首页">
-    {{#icon}}<img src="{{icon}}" alt="" loading="lazy" />{{/icon}}
-    {{^icon}}<span>{{title}}</span>{{/icon}}
-  </a>
+<header class="fq-header" data-microfeed-site-nav>
+  <div class="fq-header-inner">
+    <div class="fq-header-left">
+      <a class="fq-logo" href="/" aria-label="{{title}} 首页">
+        <span class="fq-logo-icon" aria-hidden="true"></span>
+        <span class="fq-logo-text">{{title}}</span>
+      </a>
 
-  <div class="mf-nav-links">
-    {{#navigation_pages}}
-    <a href="{{url}}" data-microfeed-nav-item>{{navigation_label}}</a>
-    {{/navigation_pages}}
-    <details class="mf-nav-overflow" data-microfeed-nav-overflow hidden>
-      <summary aria-label="页面菜单" aria-expanded="false">
-        <span class="mf-nav-overflow-label">更多</span>
-        <svg class="mf-nav-overflow-chevron" aria-hidden="true" viewBox="0 0 20 20" width="14" height="14">
-          <path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
-        </svg>
-        <svg class="mf-nav-overflow-menu-icon" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-          <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-        </svg>
-      </summary>
-      <div class="mf-nav-overflow-menu" data-microfeed-nav-overflow-menu></div>
-    </details>
-  </div>
+      {{! The nav is data-driven: 首页 stays fixed, then every visible backend
+          category (内经类 / 本草 / 伤寒 / …), then any custom navigation page.
+          Each category link lands on /category/<slug>/, which lists only that
+          category's books. The prototype's 书库 / 书架 / 原创榜 placeholders are
+          gone. }}
+      <nav class="fq-nav" aria-label="站点导航">
+        <a href="/"{{#nav_active_home}} class="active"{{/nav_active_home}}>首页</a>
+        {{#category_nav}}
+        <a href="/category/{{slug}}/" rel="tag"{{#active}} class="active"{{/active}}>{{name}}</a>
+        {{/category_nav}}
+        {{#navigation_pages}}
+        <a href="{{url}}" data-microfeed-nav-item>{{navigation_label}}</a>
+        {{/navigation_pages}}
+      </nav>
+    </div>
 
-  <div class="mf-site-search" role="search">
-    <label class="mf-visually-hidden" for="microfeed-site-search">搜索本站</label>
-    <svg class="mf-search-icon-graphic" aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-      <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-    </svg>
-    <input id="microfeed-site-search" type="search" placeholder="搜索" autocomplete="off" readonly aria-haspopup="dialog" aria-controls="microfeed-search-dialog" data-microfeed-search-open />
-    <kbd aria-hidden="true">⌘K</kbd>
-  </div>
+    <div class="fq-header-right">
+      {{! A plain form so search works without JS and lands on the real search
+          page; the prototype uses the same inline rounded field. }}
+      <form class="fq-search" action="/search/" method="get" role="search">
+        <input
+          type="search"
+          name="q"
+          class="fq-search-input"
+          placeholder="请输入书名或作者名"
+          aria-label="搜索书名或作者"
+          autocomplete="off"
+        />
+        <button type="submit" class="fq-search-btn" aria-label="搜索">
+          <svg viewBox="0 0 1024 1024" width="16" height="16" aria-hidden="true">
+            <path d="M909.6 854.5L649.9 594.8C690.2 542.7 712 479 712 412c0-80.2-31.3-155.4-87.9-212.1-56.6-56.7-132-87.9-212.1-87.9s-155.5 31.3-212.1 87.9C143.2 256.5 112 331.8 112 412c0 80.1 31.3 155.5 87.9 212.1C256.5 680.8 331.8 712 412 712c67 0 130.6-21.8 182.7-62l259.7 259.6a8.2 8.2 0 0 0 11.6 0l43.6-43.5a8.2 8.2 0 0 0 0-11.6zM570.4 570.4C528 612.7 471.8 636 412 636s-116-23.3-158.4-65.6C211.3 528 188 471.8 188 412s23.3-116.1 65.6-158.4C296 211.3 352.2 188 412 188s116.1 23.2 158.4 65.6S636 352.2 636 412s-23.3 116.1-65.6 158.4z"/>
+          </svg>
+        </button>
+      </form>
 
-  <button type="button" class="mf-search-icon-button" aria-label="搜索本站" data-microfeed-search-open>
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-      <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-    </svg>
-  </button>
+      <div class="fq-auth">
+        <a href="/admin/">登录</a>
+        <span class="fq-auth-divider" aria-hidden="true"></span>
+        <a href="/admin/">注册</a>
+      </div>
 
-  <div class="mf-theme-menu" data-microfeed-theme-menu>
-    <button
-      type="button"
-      class="mf-theme-trigger"
-      aria-label="颜色主题：浅色"
-      aria-haspopup="menu"
-      aria-expanded="false"
-      data-microfeed-theme-trigger
-    >
-      <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="system" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-        <rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-        <path d="M8 22h8M12 18v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-      </svg>
-      <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="light" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-      </svg>
-      <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="dark" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-        <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/>
-      </svg>
-    </button>
-    <div class="mf-theme-menu-panel" role="menu" aria-label="颜色主题" hidden>
-      <div class="mf-theme-menu-label">颜色主题</div>
-      <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="system">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-          <rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-          <path d="M8 22h8M12 18v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-        </svg>
-        <span>跟随系统</span>
-      </button>
-      <button type="button" role="menuitemradio" aria-checked="true" data-microfeed-theme-option="light">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-          <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
-          <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
-        </svg>
-        <span>浅色</span>
-      </button>
-      <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="dark">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-          <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/>
-        </svg>
-        <span>深色</span>
-      </button>
+      <div class="mf-theme-menu" data-microfeed-theme-menu>
+        <button
+          type="button"
+          class="mf-theme-trigger"
+          aria-label="颜色主题：浅色"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          data-microfeed-theme-trigger
+        >
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="system" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 22h8M12 18v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
+          </svg>
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="light" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
+          </svg>
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="dark" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/>
+          </svg>
+        </button>
+        <div class="mf-theme-menu-panel" role="menu" aria-label="颜色主题" hidden>
+          <div class="mf-theme-menu-label">颜色主题</div>
+          <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="system">
+            <span>跟随系统</span>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked="true" data-microfeed-theme-option="light">
+            <span>浅色</span>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="dark">
+            <span>深色</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
-</nav>
+</header>

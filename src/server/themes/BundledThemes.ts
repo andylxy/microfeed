@@ -16,6 +16,7 @@ import DEFAULT_WEB_FEED from "../../../themes/default/web-feed.mustache?raw";
 import DEFAULT_WEB_ITEM from "../../../themes/default/web-item.mustache?raw";
 import DEFAULT_WEB_PAGE from "../../../themes/default/web-page.mustache?raw";
 import DEFAULT_WEB_SEARCH from "../../../themes/default/web-search.mustache?raw";
+import DEFAULT_WEB_HOME from "../../../themes/default/web-home.mustache?raw";
 
 export const BUNDLED_DEFAULT_THEME_ID = "bundled-default-v2";
 
@@ -26,6 +27,7 @@ export const BUNDLED_DEFAULT_THEME_BUNDLE: ThemeBundleV1 = {
   webBodyStart: DEFAULT_WEB_BODY_START,
   webFeed: DEFAULT_WEB_FEED,
   webHeader: DEFAULT_WEB_HEADER,
+  webHome: DEFAULT_WEB_HOME,
   webItem: DEFAULT_WEB_ITEM,
   webPage: DEFAULT_WEB_PAGE,
   webSearch: DEFAULT_WEB_SEARCH,
@@ -55,6 +57,7 @@ export function legacyThemeMigrationSource(
       webFeed: BUNDLED_DEFAULT_THEME_BUNDLE.webFeed,
       webHeader: BUNDLED_DEFAULT_THEME_BUNDLE.webHeader,
       webItem: BUNDLED_DEFAULT_THEME_BUNDLE.webItem,
+      webHome: BUNDLED_DEFAULT_THEME_BUNDLE.webHome,
       ...legacy,
       assets: [],
     },

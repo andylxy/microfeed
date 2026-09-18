@@ -120,7 +120,17 @@ export default class FeedPublicJsonBuilder {
   _buildPublicContentMicrofeedExtra(publicContent: any) {
     const channel = this.content.channel || {};
     const subscribeMethods = this.settings.subscribeMethods || {'methods': []};
+    // Carry the channel's own extension pocket into the theme context
+    // (novel-cms: serialStatus / signStatus / genre / tags). Same reasoning as
+    // the item pocket: without it the book header has nothing to render.
+    // Spread it first so builder-owned keys always win.
+    const channelMicrofeed: Record<string, unknown> =
+      channel != null && typeof channel._microfeed === 'object'
+      && channel._microfeed !== null && !Array.isArray(channel._microfeed)
+        ? channel._microfeed as Record<string, unknown>
+        : {};
     const microfeedExtra: Record<string, any> = {
+      ...channelMicrofeed,
       microfeed_version: MICROFEED_VERSION,
       base_url: this.baseUrl,
       categories: [],
@@ -245,7 +255,19 @@ export default class FeedPublicJsonBuilder {
       title: item.title || 'untitled',
     };
     const attachment = {};
+    // Carry the item's own extension pocket into the theme context
+    // (novel-cms: volume / chapterNo / order / wordCount / reviewStatus /
+    // takedown). This builder used to rebuild `_microfeed` from scratch, which
+    // silently dropped every custom key and left the novel templates with
+    // nothing to render. Spread it first so the builder-owned keys below
+    // always win and cannot be clobbered by the pocket.
+    const itemMicrofeed: Record<string, unknown> =
+      item != null && typeof item._microfeed === 'object'
+      && item._microfeed !== null && !Array.isArray(item._microfeed)
+        ? item._microfeed as Record<string, unknown>
+        : {};
     const _microfeed = {
+      ...itemMicrofeed,
       is_audio: mediaFile.isAudio,
       is_document: mediaFile.isDocument,
       is_external_url: mediaFile.isExternalUrl,
