@@ -233,6 +233,11 @@
               "minLength": 1,
               "maxLength": 240
             },
+            "webHome": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
             "webPage": {
               "type": "string",
               "minLength": 1,
