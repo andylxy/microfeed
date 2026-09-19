@@ -410,100 +410,6 @@ a.mf-chip {
   opacity: 1;
 }
 
-.mf-sample-shelf {
-  background: var(--mf-background);
-  margin-bottom: 1.5em;
-  padding: 1.5em 2em;
-}
-
-.mf-shelf-heading {
-  align-items: baseline;
-  border-bottom: 1px solid var(--mf-border);
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1.25em;
-  padding-bottom: .75em;
-}
-
-.mf-shelf-kicker {
-  color: var(--mf-novel);
-  font-size: .75rem;
-  margin: 0 0 .2em;
-}
-
-.mf-shelf-heading h2 {
-  color: var(--mf-text);
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-.mf-shelf-heading > a {
-  color: var(--mf-novel);
-  font-size: .8125rem;
-}
-
-.mf-sample-grid {
-  display: grid;
-  gap: 1.25em;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.mf-sample-card {
-  align-items: flex-start;
-  display: flex;
-  gap: .75em;
-  min-width: 0;
-}
-
-.mf-sample-card:hover {
-  opacity: 1;
-}
-
-.mf-sample-card img,
-.mf-sample-cover {
-  aspect-ratio: 3 / 4;
-  background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
-  border-radius: .35rem;
-  color: #fff;
-  display: block;
-  flex: 0 0 4.5rem;
-  font-size: 1.5rem;
-  height: 6rem;
-  object-fit: cover;
-  text-align: center;
-  width: 4.5rem;
-}
-
-.mf-sample-cover {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-.mf-sample-info {
-  min-width: 0;
-}
-
-.mf-sample-info h3 {
-  color: var(--mf-text);
-  font-size: .9375rem;
-  margin: 0 0 .35em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mf-sample-info p,
-.mf-sample-info small {
-  color: var(--mf-muted);
-  display: block;
-  font-size: .75rem;
-  margin: 0 0 .35em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mf-detail-card {
   background: var(--mf-background);
   margin-bottom: 1.5em;
@@ -928,8 +834,7 @@ a.mf-chip {
     max-width: 9rem;
   }
 
-  .mf-detail-chapter-grid,
-  .mf-sample-grid {
+  .mf-detail-chapter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -940,13 +845,8 @@ a.mf-chip {
     padding: 1.25em;
   }
 
-  .mf-detail-chapter-grid,
-  .mf-sample-grid {
+  .mf-detail-chapter-grid {
     grid-template-columns: 1fr;
-  }
-
-  .mf-sample-shelf {
-    padding: 1.25em;
   }
 }
 

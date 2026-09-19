@@ -4,33 +4,6 @@
       <a href="/">首页</a><span>/</span><span>{{book_title}}</span>
     </nav>
 
-    {{#book_samples.length}}
-    <section class="mf-sample-shelf">
-      <div class="mf-shelf-heading">
-        <div>
-          <p class="mf-shelf-kicker">今日精选</p>
-          <h2>更多好书</h2>
-        </div>
-        {{! The prototype hardcoded this to /category/eastern-fantasy/. "进入书库"
-            means the whole library, which is the home page's 书库 grid. }}
-        <a href="/">进入书库</a>
-      </div>
-      <div class="mf-sample-grid">
-        {{#book_samples}}
-        <a class="mf-sample-card" href="{{url}}">
-          {{#image}}<img src="{{image}}" alt="{{title}}" loading="lazy"/>{{/image}}
-          {{^image}}<span class="mf-sample-cover">书</span>{{/image}}
-          <div class="mf-sample-info">
-            <h3>{{title}}</h3>
-            <p>{{author}}</p>
-            <small>{{categoryName}} · {{#serialStatus}}{{serialStatus}}{{/serialStatus}}{{^serialStatus}}连载中{{/serialStatus}}</small>
-          </div>
-        </a>
-        {{/book_samples}}
-      </div>
-    </section>
-    {{/book_samples.length}}
-
     <section class="mf-detail-card mf-book-header-card">
       <div class="mf-detail-cover-wrap">
         {{#icon}}
