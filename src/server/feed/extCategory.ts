@@ -86,16 +86,77 @@ export async function listPublishedBookSamples(
         ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
         : {}),
       ...(typeof microfeed.serialStatus === "string"
-        ? {serialStatus: microfeed.serialStatus}
+        ? {
+            serialStatus: microfeed.serialStatus,
+            serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
+          }
         : {}),
       ...(typeof microfeed.wordCount === "number"
-        ? {wordCount: String(microfeed.wordCount)}
+        ? {
+            wordCount: String(microfeed.wordCount),
+            wordCountLabel: toWordCountLabel(microfeed.wordCount),
+          }
         : {}),
       ...(typeof row.genre === "string"
         ? {genre: row.genre, categoryName: nameById.get(row.genre) ?? ""}
         : {}),
     };
   });
+}
+
+/**
+ * Published books (channels) whose **title or author** matches `query`, for the
+ * public search. Chapter/page search never covered books, so a visitor typing a
+ * book title got nothing even though the search box promises "书名或作者名".
+ *
+ * Matching runs over the parsed `data` in JS rather than SQL: D1 rejects nested
+ * `json_extract` paths, the channel table is small by design, and this keeps the
+ * match case-insensitive across the title and every `authors[].name`.
+ */
+export async function searchPublishedBooks(
+  db: CategoryDb,
+  query: string,
+  limit = 6,
+): Promise<ChannelBookSummary[]> {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return [];
+  const result = await db.prepare(
+    "SELECT id, data, genre FROM channels WHERE status = ? ORDER BY created_at ASC",
+  ).bind(STATUSES.PUBLISHED).all();
+  const catRows = await db.prepare(
+    "SELECT id, name FROM ext_category WHERE visible = 1",
+  ).all();
+  const nameById = new Map(
+    catRows.results.map((r) => [String(r.id), String(r.name)]),
+  );
+  const matches: ChannelBookSummary[] = [];
+  for (const row of result.results) {
+    const data = safeParseJson(row.data);
+    const title = typeof data.title === "string" ? data.title : "";
+    const authors = Array.isArray(data.authors) ? data.authors : [];
+    const authorNames = authors
+      .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === "object")
+      .map((a) => (typeof a.name === "string" ? a.name : ""))
+      .filter(Boolean);
+    const haystack = [title, ...authorNames].join(" ").toLocaleLowerCase();
+    if (!haystack.includes(needle)) continue;
+    const genre = typeof row.genre === "string" ? row.genre : "";
+    matches.push({
+      id: String(row.id),
+      title: title || "未命名作品",
+      image: typeof data.image === "string"
+        ? data.image
+        : typeof data.icon === "string" ? data.icon : "",
+      link: typeof data.link === "string" ? data.link : "/",
+      ...(authorNames[0] ? {author: authorNames[0]} : {}),
+      ...(typeof data.description === "string"
+        ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
+        : {}),
+      ...(genre ? {genre, categoryName: nameById.get(genre) ?? ""} : {}),
+    });
+    if (matches.length >= limit) break;
+  }
+  return matches;
 }
 
 function slugify(value: string): string {
@@ -105,6 +166,33 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 120) || "category";
+}
+
+/**
+ * Display label for `_microfeed.serialStatus`. The stored value is an English
+ * enum (`serializing` / `finished`); the book cards used to print it verbatim,
+ * so every card read `serializing` on a Chinese site.
+ */
+function toSerialStatusLabel(value: unknown): string {
+  return value === "finished" ? "已完结" : "连载中";
+}
+
+/**
+ * Display label for a word count: `1240000` -> `124万字`, `800` -> `800字`.
+ * Returns "" when the count is missing or not a positive number, so templates
+ * can fall back to their own placeholder.
+ */
+function toWordCountLabel(value: unknown): string {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count <= 0) return "";
+  if (count >= 10000) {
+    const wan = count / 10000;
+    const text = Number.isInteger(wan)
+      ? String(wan)
+      : wan.toFixed(1).replace(/\.0$/, "");
+    return `${text}万字`;
+  }
+  return `${count}字`;
 }
 
 function rowToCategory(row: Record<string, unknown>): Category {
@@ -282,10 +370,16 @@ export async function listChannelsByGenre(
         ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
         : {}),
       ...(typeof microfeed.serialStatus === "string"
-        ? {serialStatus: microfeed.serialStatus}
+        ? {
+            serialStatus: microfeed.serialStatus,
+            serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
+          }
         : {}),
       ...(typeof microfeed.wordCount === "number"
-        ? {wordCount: String(microfeed.wordCount)}
+        ? {
+            wordCount: String(microfeed.wordCount),
+            wordCountLabel: toWordCountLabel(microfeed.wordCount),
+          }
         : {}),
     };
   });
@@ -344,10 +438,16 @@ export async function getBookById(
       ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
       : {}),
     ...(typeof microfeed.serialStatus === "string"
-      ? {serialStatus: microfeed.serialStatus}
+      ? {
+          serialStatus: microfeed.serialStatus,
+          serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
+        }
       : {}),
     ...(typeof microfeed.wordCount === "number"
-      ? {wordCount: String(microfeed.wordCount)}
+      ? {
+          wordCount: String(microfeed.wordCount),
+          wordCountLabel: toWordCountLabel(microfeed.wordCount),
+        }
       : {}),
     ...(typeof row.genre === "string" ? {genre: row.genre} : {}),
     ...(categoryName ? {categoryName} : {}),
@@ -396,7 +496,16 @@ export async function getBookChapters(
       : Number.isFinite(Number(rawNo)) ? Number(rawNo) : 0;
     tagged.push({row, chapterNo, microfeed, data});
   }
-  tagged.sort((a, b) => a.chapterNo - b.chapterNo);
+  // `chapterNo` restarts per volume — 第一卷 第1章 and 第三卷 第1章 are both 1 —
+  // so sorting by it alone interleaves the volumes (第一章, 第三卷 第1章,
+  // 第二章, 第二卷 第2章, …). `pub_date` is the serial publish order and is
+  // globally monotonic, so it is the primary key; chapterNo breaks same-day ties.
+  tagged.sort((a, b) => {
+    const ad = typeof a.row.pub_date === "string" ? a.row.pub_date : "";
+    const bd = typeof b.row.pub_date === "string" ? b.row.pub_date : "";
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return a.chapterNo - b.chapterNo;
+  });
   return tagged.map(({row, microfeed, data}) => {
     const id = String(row.id);
     const title = typeof data.title === "string" ? data.title : "未命名章节";
@@ -406,6 +515,9 @@ export async function getBookChapters(
       id,
       status: row.status,
       ...data,
+      // Mirrors the public feed item shape so consumers can order chapters
+      // without reaching into the extension pocket.
+      ...(pubDate ? {date_published: pubDate} : {}),
       _microfeed: {
         ...microfeed,
         web_url: PUBLIC_URLS.webItem(id, title, baseUrl),

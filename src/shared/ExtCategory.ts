@@ -38,7 +38,12 @@ export interface ChannelBookSummary {
   author?: string;
   description?: string;
   serialStatus?: string;
+  /** Human label for `serialStatus` (连载中 / 已完结). The raw value is an
+   *  English enum (`serializing` / `finished`) and must not reach the UI. */
+  serialStatusLabel?: string;
   wordCount?: string;
+  /** Human label for the word count (e.g. `86万字`), for card display. */
+  wordCountLabel?: string;
   genre?: string;
   /** Resolved category name for display on public book cards (best-effort). */
   categoryName?: string;

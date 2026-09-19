@@ -88,14 +88,13 @@ if (!unavailable && category) {
       slug: category.slug,
       bookCount: category.bookCount ?? 0,
     },
+    // Spread the whole summary (like the home and book routes) instead of
+    // hand-picking fields: the explicit list silently dropped new fields such
+    // as serialStatusLabel / wordCountLabel, so the cards fell back to their
+    // "暂无字数" placeholder.
     category_books: books.map((book) => ({
-      author: book.author ?? "",
-      description: book.description ?? "",
-      image: book.image,
-      serialStatus: book.serialStatus ?? "",
-      title: book.title,
+      ...book,
       url: `/book/${book.id}`,
-      wordCount: book.wordCount ?? "",
     })),
   };
   // Prefer the active theme's own genre page so the page keeps the site's look;

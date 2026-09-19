@@ -8,6 +8,10 @@ import {
   ItemSearchUnavailableError,
   searchContent,
 } from "@/server/items/search";
+import {searchPublishedBooks} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import {
   activeThemeSearchItemDestination,
   themeSupportsPagesAndSearch,
@@ -51,24 +55,55 @@ export const GET: APIRoute = async ({request}) => {
       statuses: ["published"],
       types: ["item", "page"],
     });
+    // Books are not in the item/page search index, so look them up separately
+    // and surface them first: someone typing a book title or an author name
+    // wants the book, not a chapter that happens to contain the word.
+    const books = await searchPublishedBooks(
+      loaded.database.FEED_DB as unknown as CategoryDb,
+      query,
+    );
+    // The result list is rendered by shared app JS that has no language of its
+    // own, so the type label is resolved here. It follows the SITE language
+    // (the surrounding page is rendered in it) and only falls back to the
+    // visitor's Accept-Language when the channel declares none.
+    const language = languageFromAcceptLanguage(
+      String(loaded.publicFeed.language ?? "") ||
+        request.headers.get("accept-language"),
+    );
+    const typeLabel = (type: string) =>
+      translate(`search.resultType.${type}`, language);
     return jsonResponse({
-      items: response.items.map((item) => ({
-        content_text: item.content_text,
-        date_published: item.date_published,
-        highlights: item.highlights,
-        id: item.id,
-        title: item.title,
-        type: item.type,
-        url: item.type === "item"
-          ? resolveThemeSearchItemUrl(searchItemDestination, {
-              attachmentUrl: item.attachment_url
-                ? buildAudioUrlWithTracking(item.attachment_url, trackingUrls)
-                : undefined,
-              itemUrl: item.item_url,
-              webUrl: item.web_url,
-            })
-          : item.web_url,
-      })),
+      items: [
+        ...books.map((book) => ({
+          content_text: [
+            book.author ? `作者：${book.author}` : "",
+            book.categoryName ?? "",
+          ].filter(Boolean).join(" · "),
+          id: `book-${book.id}`,
+          title: book.title,
+          type: "book" as const,
+          type_label: typeLabel("book"),
+          url: `/book/${book.id}`,
+        })),
+        ...response.items.map((item) => ({
+          content_text: item.content_text,
+          date_published: item.date_published,
+          highlights: item.highlights,
+          id: item.id,
+          title: item.title,
+          type: item.type,
+          type_label: typeLabel(item.type),
+          url: item.type === "item"
+            ? resolveThemeSearchItemUrl(searchItemDestination, {
+                attachmentUrl: item.attachment_url
+                  ? buildAudioUrlWithTracking(item.attachment_url, trackingUrls)
+                  : undefined,
+                itemUrl: item.item_url,
+                webUrl: item.web_url,
+              })
+            : item.web_url,
+        })),
+      ],
     }, {headers: {"cache-control": "private, no-store"}});
   } catch (error) {
     if (error instanceof ItemSearchRequestError) {

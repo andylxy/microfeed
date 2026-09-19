@@ -7,6 +7,8 @@ import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
+import {getBookChapters} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {loadSiteNav} from "@/server/feed/siteNav";
 import {loadPublicNotFoundPageRoute} from "@/server/pages/public";
@@ -45,17 +47,23 @@ const assetBaseUrl = themeAssetBaseUrl(
 );
 const navigation = await loadSiteNav(loaded.database.FEED_DB, Astro.request);
 
-// The reading page needs its neighbours and a table of contents, but the item
-// query above is deliberately `limit: 1`. So one extra load fetches the chapter
-// list. Only lean metadata is kept: `publicFeed.items` carries every chapter's
-// full `content_html`, and handing that to the theme would embed the whole
-// novel into every chapter page.
-const chapterFeed = await loadPublishedFeed(env, Astro.request, {
-  queryKwargs: {"status__in": [STATUSES.PUBLISHED, STATUSES.UNLISTED]},
-});
+// The reading page needs its neighbours and a table of contents. Resolve them
+// from the chapter's own book via a direct `_microfeed.bookId` query rather
+// than the primary feed's paged window: the feed only returns its newest page
+// of items, so this used to list just the current chapter and then render
+// "已是第一章" and "已是最后一章" at the same time.
 const currentBookId = ((item?._microfeed ?? {}) as Record<string, unknown>)
   .bookId ?? null;
-const allChapters = chapterFeed.publicFeed.items.map((chapter) => {
+const bookChapters = currentBookId == null
+  ? []
+  : await getBookChapters(
+      loaded.database.FEED_DB as unknown as CategoryDb,
+      String(currentBookId),
+      Astro.url.origin,
+    );
+// Only lean metadata is kept: each chapter carries its full `content_html`, and
+// handing that to the theme would embed the whole novel into every chapter page.
+const chapters = bookChapters.map((chapter) => {
   const extra = (chapter._microfeed ?? {}) as Record<string, unknown>;
   return {
     chapterNo: extra.chapterNo ?? null,
@@ -63,15 +71,9 @@ const allChapters = chapterFeed.publicFeed.items.map((chapter) => {
     title: String(chapter.title ?? ""),
     url: String(extra.web_url ?? ""),
     volume: extra.volume ?? "",
-    bookId: (extra.bookId as string) ?? null,
+    bookId: currentBookId == null ? null : String(currentBookId),
   };
 });
-// Scope the table of contents and prev/next to the current book so chapters
-// from other books never leak in. Until chapters carry a bookId, fall back to
-// every chapter so the reader is never empty during the tagging transition.
-const chapters = currentBookId != null
-  ? allChapters.filter((chapter) => chapter.bookId === currentBookId)
-  : allChapters;
 const currentChapterIndex = chapters.findIndex((chapter) => chapter.id === itemId);
 const previousChapter = currentChapterIndex > 0
   ? chapters[currentChapterIndex - 1]

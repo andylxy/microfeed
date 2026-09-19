@@ -55,7 +55,12 @@ const siteNav = await loadSiteNav(feedDb, Astro.request);
 const tagged = await getBookChapters(feedDb, bookId, Astro.url.origin);
 const allItems = loaded.publicFeed.items as Array<Record<string, any>>;
 const bookItems = tagged.length > 0 ? tagged : allItems;
+// Order by publish date: `chapterNo` restarts per volume, so sorting on it
+// alone interleaves 第一卷 / 第二卷 / 第三卷. chapterNo only breaks same-day ties.
 bookItems.sort((a: any, b: any) => {
+  const ad = String(a.date_published ?? "");
+  const bd = String(b.date_published ?? "");
+  if (ad !== bd) return ad < bd ? -1 : 1;
   const an = Number(a._microfeed?.chapterNo);
   const bn = Number(b._microfeed?.chapterNo);
   if (!Number.isFinite(an)) return 1;

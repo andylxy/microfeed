@@ -7,7 +7,9 @@ export type PublicSearchResult = Record<string, unknown> & {
   };
   id?: string;
   title: string;
-  type: "item" | "page";
+  type: "item" | "page" | "book";
+  /** Localized label for `type`, resolved by the server in the site language. */
+  type_label?: string;
   url: string;
 };
 
@@ -385,7 +387,9 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
     }
     for (const item of items) {
       const link = document.createElement("a");
-      const resultType = item.type === "page" ? "page" : "item";
+      const resultType = item.type === "page"
+        ? "page"
+        : item.type === "book" ? "book" : "item";
       link.className = "mf-public-search-result";
       link.href = item.url;
       link.setAttribute("data-microfeed-search-result-type", resultType);
@@ -394,7 +398,9 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
       title.textContent = item.title || "Untitled";
       const type = document.createElement("span");
       type.className = "mf-public-search-result__type";
-      type.textContent = resultType;
+      // The server resolves the label in the site language; preview fixtures
+      // have no server round-trip, so fall back to the raw type there.
+      type.textContent = String(item.type_label ?? resultType);
       link.appendChild(title);
       link.appendChild(type);
       const hostname = resultHostname(item.url);
