@@ -327,7 +327,7 @@ describe("D1 item search", () => {
       status: "published",
       title: "API searchable item",
       type: "item",
-      url: `${ORIGIN}/i/api-searchable-item-search-api/`,
+      url: `${ORIGIN}/i/search-api/`,
     });
 
     const invalid = await searchApiItems({

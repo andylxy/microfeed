@@ -66,7 +66,7 @@ describe("Workers Caching response policy", () => {
   });
 
   it("tags item representations independently from aggregate pages", () => {
-    const tags = policy(`/i/a-title-${ITEM_ID}/json/`)
+    const tags = policy(`/i/${ITEM_ID}/json/`)
       .headers.get("cache-tag")?.split(",");
 
     expect(tags).toEqual([

@@ -1,4 +1,3 @@
-import slugify from "slugify";
 import {
   adminUrl,
   browserAdminPath,
@@ -495,34 +494,17 @@ export const ADMIN_URLS = {
  */
 function webItem(
   itemId: string,
-  itemTitle: string | null = null,
+  _itemTitle: string | null = null,
   baseUrl: any = '/',
-  locale: any = 'en',
+  _locale: any = 'en',
 ) {
-  if (itemTitle) {
-    const title = truncateString(itemTitle, 50, false);
-    let slug = slugify(title, {
-      lower: true,
-      strict: true, // strip special characters except replacement
-      locale,
-    });
-    // Fallback to a custom implementation to deal with all non-English characters.
-    if (!slug) {
-      slug = title
-        .toString()
-        .normalize('NFKD')
-        .toLowerCase()
-        .trim()
-        .replace(/['!"#$%&()*+,\-.\/:;<=>?@\[\]^_`{|}~]/g, '-')
-        .replace(/\s+/g, '-')
-        .replace(/\_/g, '-')
-        .replace(/\-\-+/g, '-')
-        .replace(/\-$/g, '');
-    }
-    return urlJoin(baseUrl, `/i/${slug}-${itemId}/`);
-  } else {
-    return urlJoin(baseUrl, `/i/${itemId}/`);
-  }
+  // novel-cms: the id alone. A slug taken from the title came out
+  // percent-encoded for Chinese titles (slugify strips them, and the fallback
+  // deliberately keeps the characters) and moved whenever a chapter was renamed.
+  // `getIdFromSlug` only ever reads the trailing id, so dropping the slug keeps
+  // every existing link working — and canonical now points here, folding the old
+  // pretty URLs into one address.
+  return urlJoin(baseUrl, `/i/${itemId}/`);
 }
 
 export const PUBLIC_URLS = {

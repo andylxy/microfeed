@@ -112,7 +112,7 @@ describe("novel-cms extension pockets", () => {
 
     expect(json.items[0]._microfeed.status).toBe("published");
     expect(json.items[0]._microfeed.web_url).toBe(
-      "https://feed.example.com/i/published-item-novel-item-2/",
+      "https://feed.example.com/i/novel-item-2/",
     );
   });
 });
