@@ -132,8 +132,10 @@ export async function listAdminItems(
   // query untouched.
   let categoryClause = "";
   if (categoryFilter) {
+    // `items.` is required: an unqualified `data` inside the subquery resolves
+    // to `channels.data` (the inner FROM), which silently matches nothing.
     categoryClause = " AND (SELECT genre FROM channels " +
-      "WHERE id = json_extract(data, '$._microfeed.bookId')) = ?";
+      "WHERE id = json_extract(items.data, '$._microfeed.bookId')) = ?";
     bindings.push(categoryFilter);
   }
   const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
