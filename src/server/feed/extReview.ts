@@ -204,6 +204,13 @@ export interface AuditRow {
   reviewStatus: string | null;
   reason: string | null;
   createdAt: string;
+  /**
+   * Whether this version can actually be restored. Replaying needs a full
+   * snapshot at or before the row (ADR-0003), so rows recorded before the
+   * item's first checkpoint can never be rebuilt — the UI disables the action
+   * for them instead of failing after the click.
+   */
+  restorable: boolean;
 }
 
 const SELECT_AUDIT = `SELECT id, action, actor_type, actor_id, diff_data,
@@ -216,6 +223,9 @@ export async function listItemAuditRows(
   itemId: string,
 ): Promise<AuditRow[]> {
   const result = await db.prepare(SELECT_AUDIT).bind(itemId).all();
+  // Rows arrive oldest first, so a single running flag is enough: once a
+  // checkpoint has been seen, every later row can be replayed from it.
+  let checkpointSeen = false;
   return result.results.map((row) => {
     let diffData: FieldChange[] = [];
     try {
@@ -224,6 +234,8 @@ export async function listItemAuditRows(
     } catch {
       // Keep an unreadable diff as empty rather than failing the detail page.
     }
+    const isCheckpoint = Number(row.is_checkpoint ?? 0) === 1;
+    if (isCheckpoint) checkpointSeen = true;
     return {
       action: String(row.action ?? ""),
       actorId: row.actor_id == null ? null : String(row.actor_id),
@@ -231,8 +243,9 @@ export async function listItemAuditRows(
       createdAt: String(row.created_at ?? ""),
       diffData,
       id: String(row.id ?? ""),
-      isCheckpoint: Number(row.is_checkpoint ?? 0) === 1,
+      isCheckpoint,
       reason: row.reason == null ? null : String(row.reason),
+      restorable: checkpointSeen,
       reviewStatus: row.review_status == null ? null : String(row.review_status),
     };
   });

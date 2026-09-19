@@ -1129,6 +1129,7 @@ export const en = {
     restoreThis: "Restore this version",
     restored: "Chapter restored.",
     restoreFailed: "Could not restore that version.",
+    restoreUnavailableHint: "No snapshot covers this version, so it cannot be rebuilt yet.",
     action: {
       edit: "Edited",
       submit: "Submitted",

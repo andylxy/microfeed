@@ -1131,6 +1131,7 @@ export const zhCN: TranslationKey = {
     restoreThis: "恢复到此版本",
     restored: "已恢复。",
     restoreFailed: "无法恢复到该版本。",
+    restoreUnavailableHint: "该版本没有可用的快照，暂时无法恢复（后续版本会恢复可用）。",
     action: {
       edit: "编辑",
       submit: "提交审核",

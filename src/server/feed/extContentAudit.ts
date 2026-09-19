@@ -234,12 +234,26 @@ export async function recordAudit(
 
 const COUNT_AUDIT = `SELECT COUNT(*) AS c FROM ext_content_audit WHERE item_id = ?`;
 
+const COUNT_CHECKPOINTS =
+  `SELECT COUNT(*) AS c FROM ext_content_audit WHERE item_id = ? AND is_checkpoint = 1`;
+
 /** Number of audit rows already recorded for an item (used by checkpointing). */
 export async function countAuditRecords(
   db: AuditDb,
   itemId: string,
 ): Promise<number> {
   const row = await db.prepare(COUNT_AUDIT).bind(itemId).first();
+  if (row == null) return 0;
+  const c = (row as Record<string, unknown>).c;
+  return typeof c === "number" ? c : Number(c);
+}
+
+/** How many of an item's audit rows carry a full snapshot. */
+export async function countCheckpoints(
+  db: AuditDb,
+  itemId: string,
+): Promise<number> {
+  const row = await db.prepare(COUNT_CHECKPOINTS).bind(itemId).first();
   if (row == null) return 0;
   const c = (row as Record<string, unknown>).c;
   return typeof c === "number" ? c : Number(c);
@@ -290,7 +304,16 @@ export async function recordItemEdit(
   if (diffData.length === 0) return;
 
   const existingCount = await countAuditRecords(db, itemId);
-  const isCheckpoint = options.forceCheckpoint
+  // An item must always have a snapshot to replay from, or "restore this
+  // version" can never rebuild anything (ADR-0003 replays diffs forward from the
+  // nearest checkpoint). Callers ask for one on create (`forceCheckpoint`), but
+  // that alone is not enough: items seeded straight into `items` (imports,
+  // fixtures, direct SQL) never produce a create row, so their earliest audit
+  // row is an *edit* and the periodic cadence may not snapshot for several more
+  // edits. So: snapshot whenever the item does not have one yet — the first row,
+  // or the first edit after a legacy chain with no checkpoint.
+  const hasCheckpoint = await countCheckpoints(db, itemId);
+  const isCheckpoint = options.forceCheckpoint || hasCheckpoint === 0
     ? true
     : shouldCheckpoint(existingCount, AUDIT_CHECKPOINT_INTERVAL);
   await recordAudit(db, {

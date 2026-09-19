@@ -35,6 +35,8 @@ interface AuditRow {
   reviewStatus: string | null;
   reason: string | null;
   createdAt: string;
+  /** False when no checkpoint covers this row, so a restore would fail. */
+  restorable: boolean;
 }
 
 interface Correction {
@@ -362,14 +364,22 @@ export default function ReviewDetailApp({itemId}: {itemId: string}) {
 
           <div className="mt-3">
             <Button
-              disabled={busyId === row.id}
+              disabled={busyId === row.id || row.restorable === false}
               onClick={() => restore(row.id)}
               size="sm"
+              title={row.restorable === false
+                ? t("review.restoreUnavailableHint")
+                : undefined}
               type="button"
               variant="outline"
             >
               {t("review.restoreThis")}
             </Button>
+            {row.restorable === false && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {t("review.restoreUnavailableHint")}
+              </span>
+            )}
           </div>
         </li>))}
       </ol>}
