@@ -2,19 +2,10 @@
   <div class="mf-library-container">
     <section class="mf-library-heading">
       <div>
-        <p class="mf-library-kicker">题材分类</p>
         <h1>{{category.name}}</h1>
       </div>
       {{#category.bookCount}}<span class="mf-library-count">{{category.bookCount}} 本作品</span>{{/category.bookCount}}
     </section>
-
-    {{#category_nav.length}}
-    <nav class="mf-library-tabs" aria-label="题材分类">
-      {{#category_nav}}
-      <a class="mf-library-tab" href="/category/{{slug}}/" rel="tag">{{name}}{{#bookCount}}<small>{{bookCount}}</small>{{/bookCount}}</a>
-      {{/category_nav}}
-    </nav>
-    {{/category_nav.length}}
 
     <section class="mf-library-section">
       <div class="mf-library-section-head">

@@ -8,13 +8,13 @@
 
       {{! The nav is data-driven: 首页 stays fixed, then every visible backend
           category (内经类 / 本草 / 伤寒 / …), then any custom navigation page.
-          Each category link lands on /category/<slug>/, which lists only that
+          Each category link lands on /category/<id>/, which lists only that
           category's books. The prototype's 书库 / 书架 / 原创榜 placeholders are
           gone. }}
       <nav class="fq-nav" aria-label="站点导航">
         <a href="/"{{#nav_active_home}} class="active"{{/nav_active_home}}>首页</a>
         {{#category_nav}}
-        <a href="/category/{{slug}}/" rel="tag"{{#active}} class="active"{{/active}}>{{name}}</a>
+        <a href="/category/{{id}}/" rel="tag"{{#active}} class="active"{{/active}}>{{name}}</a>
         {{/category_nav}}
         {{#navigation_pages}}
         <a href="{{url}}" data-microfeed-nav-item>{{navigation_label}}</a>
