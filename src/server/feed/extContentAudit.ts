@@ -22,6 +22,9 @@ export type AuditAction =
   | "takedown"
   | "restore"
   | "auto_flag"
+  /** Soft delete (`items.status = 3`). Distinct from `takedown`, which keeps the
+   *  chapter in place and only unpublishes it. */
+  | "delete"
   /** An approved content correction landing on the original item (see
    *  `extContentCorrection`): carries `approved_by` / `approved_at`. */
   | "correction_apply";

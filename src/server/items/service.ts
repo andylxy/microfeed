@@ -2,6 +2,9 @@ import {ITEM_STATUSES_STRINGS_DICT, STATUSES} from "@/shared/Constants";
 import type FeedCrudManager from "@/server/feed/FeedCrudManager";
 import type FeedDb from "@/server/feed/FeedDb";
 import {
+  computeDiff,
+  readReviewStatus,
+  recordAudit,
   recordItemEdit,
   type AuditDb,
 } from "@/server/feed/extContentAudit";
@@ -116,9 +119,24 @@ export async function deleteItem(
 ): Promise<boolean> {
   const existing = await database.getItemById(id);
   if (!existing) return false;
-  await feedCrud.saveInternalItem(
-    {...existing, id, status: STATUSES.DELETED},
-    commit,
-  );
+  const deleted = {...existing, id, status: STATUSES.DELETED};
+  await feedCrud.saveInternalItem(deleted, commit);
+  // novel-cms audit trail: a deletion is a content change, so it has to leave a
+  // row — otherwise the trail silently loses the fact that a chapter was ever
+  // removed. It is recorded as `delete` (status -> deleted), which is not the
+  // same as `takedown` (unpublished but still present). No checkpoint: there is
+  // no reason to make the deleted state a replay anchor.
+  await recordAudit(database.FEED_DB as unknown as AuditDb, {
+    action: "delete",
+    actorType: "author",
+    channelId: null,
+    diffData: computeDiff(
+      existing as Record<string, unknown>,
+      deleted as Record<string, unknown>,
+    ),
+    isCheckpoint: false,
+    itemId: id,
+    reviewStatus: readReviewStatus(existing as Record<string, unknown>),
+  });
   return true;
 }

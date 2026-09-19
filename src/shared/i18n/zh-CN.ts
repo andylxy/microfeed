@@ -1140,6 +1140,8 @@ export const zhCN: TranslationKey = {
       takedown: "下架",
       restore: "恢复",
       auto_flag: "自动标记",
+      delete: "删除",
+      correction_apply: "应用纠错",
     },
   },
   importChapters: {

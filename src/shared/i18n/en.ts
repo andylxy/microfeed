@@ -1138,6 +1138,8 @@ export const en = {
       takedown: "Taken down",
       restore: "Restored",
       auto_flag: "Flagged automatically",
+      delete: "Deleted",
+      correction_apply: "Correction applied",
     },
   },
   importChapters: {
