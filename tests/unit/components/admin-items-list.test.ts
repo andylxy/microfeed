@@ -70,7 +70,7 @@ function renderItemsList(
 }
 
 describe("admin items list", () => {
-  it("renders the requested filters and six-column layout", () => {
+  it("renders the requested filters and seven-column layout", () => {
     const output = renderItemsList();
 
     expect(output.indexOf(">All items</a>")).toBeLessThan(
@@ -82,8 +82,9 @@ describe("admin items list", () => {
     expect(output.indexOf(">Unlisted</a>")).toBeLessThan(
       output.indexOf(">Unpublished</a>"),
     );
-    expect(output.match(/<th\b/gu)).toHaveLength(6);
+    expect(output.match(/<th\b/gu)).toHaveLength(7);
     expect(output).toContain(">Title</th>");
+    expect(output).toContain(">Book</th>");
     expect(output).toContain("Published at");
     expect(output).toContain("Created at");
     expect(output).toContain("Updated at");

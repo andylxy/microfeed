@@ -69,6 +69,9 @@ interface MediaFile {
 }
 
 interface ItemTableRow {
+  bookId?: string;
+  bookTitle?: string;
+  categoryName?: string;
   createdAtMs?: number;
   id: string;
   imageUrl?: string;
@@ -238,6 +241,9 @@ function tableRows(
   return items.map((item) => {
     const image = String(item.image ?? "").trim();
     return {
+      ...(item.bookId ? {bookId: item.bookId} : {}),
+      ...(item.bookTitle ? {bookTitle: item.bookTitle} : {}),
+      ...(item.categoryName ? {categoryName: item.categoryName} : {}),
       createdAtMs: item.createdAtMs,
       id: item.id,
       imageUrl: image
@@ -403,6 +409,35 @@ export function ItemListTable({
                 </a>
               </div>
             </div>
+          </div>
+        );
+      },
+    }),
+    columnHelper.accessor("bookTitle", {
+      header: t("items.columnBook"),
+      cell: ({row}) => {
+        const item = row.original;
+        if (!item.bookId) {
+          return (
+            <span className="text-sm text-muted-foreground">
+              {t("items.noBook")}
+            </span>
+          );
+        }
+        return (
+          <div className="min-w-0">
+            <a
+              className="block max-w-full truncate text-sm font-medium text-foreground"
+              href={ADMIN_URLS.editItem(item.bookId)}
+              title={item.bookTitle}
+            >
+              {item.bookTitle}
+            </a>
+            {item.categoryName && (
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {item.categoryName}
+              </span>
+            )}
           </div>
         );
       },

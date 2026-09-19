@@ -13,6 +13,11 @@ export interface AdminItemMediaSummary {
 }
 
 export interface AdminItemSummary {
+  /** novel-cms: which book this chapter belongs to, resolved on the server. */
+  bookId?: string;
+  bookTitle?: string;
+  categoryId?: string;
+  categoryName?: string;
   createdAtMs: number;
   id: string;
   image?: string;

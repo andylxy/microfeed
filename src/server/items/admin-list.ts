@@ -20,6 +20,9 @@ import {listCategoryNav} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 
 interface AdminItemRow extends Record<string, unknown> {
+  book_id: string | null;
+  book_title: string | null;
+  category_id: string | null;
   created_at: string;
   id: string;
   image: string | null;
@@ -51,10 +54,23 @@ function mediaSummary(value: unknown): AdminItemMediaSummary | undefined {
   }
 }
 
-function itemSummary(row: AdminItemRow): AdminItemSummary {
+function itemSummary(
+  row: AdminItemRow,
+  categoryNameById: ReadonlyMap<string, string> = new Map(),
+): AdminItemSummary {
   const image = String(row.image ?? "").trim();
   const mediaFile = mediaSummary(row.media_file);
+  const bookId = row.book_id ? String(row.book_id) : "";
+  const bookTitle = row.book_title ? String(row.book_title) : "";
+  const categoryId = row.category_id ? String(row.category_id) : "";
   return {
+    ...(bookId ? {bookId, bookTitle: bookTitle || "Untitled book"} : {}),
+    ...(categoryId
+      ? {
+        categoryId,
+        categoryName: categoryNameById.get(categoryId) ?? "",
+      }
+      : {}),
     createdAtMs: rfc3399ToMs(row.created_at),
     id: String(row.id),
     ...(image ? {image} : {}),
@@ -120,6 +136,16 @@ export async function listAdminItems(
       "WHERE id = json_extract(data, '$._microfeed.bookId')) = ?";
     bindings.push(categoryFilter);
   }
+  const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
+  const categories = (await listCategoryNav(
+    database as unknown as CategoryDb,
+  )).map((category) => ({
+    id: String(category.id),
+    name: String(category.name),
+  }));
+  const categoryNameById = new Map(
+    categories.map((category) => [category.id, category.name]),
+  );
   const result = await database.prepare(`
     SELECT
       id,
@@ -129,14 +155,19 @@ export async function listAdminItems(
       updated_at,
       json_extract(data, '$.title') AS title,
       json_extract(data, '$.image') AS image,
-      json_extract(data, '$.mediaFile') AS media_file
+      json_extract(data, '$.mediaFile') AS media_file,
+      ${bookRef} AS book_id,
+      (SELECT json_extract(c.data, '$.title') FROM channels c
+        WHERE c.id = ${bookRef}) AS book_title,
+      (SELECT c.genre FROM channels c WHERE c.id = ${bookRef}) AS category_id
     FROM items
     WHERE ${where}${cursorClause}${categoryClause}
     ORDER BY ${pagination.column} ${queryDirection}, id ${idDirection}
     LIMIT ?
   `).bind(...bindings, limit + 1).all<AdminItemRow>();
   const hasLookahead = result.results.length > limit;
-  const items = result.results.slice(0, limit).map(itemSummary);
+  const items = result.results.slice(0, limit)
+    .map((row) => itemSummary(row, categoryNameById));
   if (previousPage) items.reverse();
 
   const hasItems = items.length > 0;
@@ -151,13 +182,6 @@ export async function listAdminItems(
       ? timestamp
       : encodeItemCursor(timestamp, item.id);
   };
-
-  const categories = (await listCategoryNav(
-    database as unknown as CategoryDb,
-  )).map((category) => ({
-    id: String(category.id),
-    name: String(category.name),
-  }));
 
   return {
     categories,

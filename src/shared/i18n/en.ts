@@ -1167,6 +1167,7 @@ export const en = {
     importPartial: "Imported {{created}} chapter(s); {{failed}} failed.",
   },
   items: {
+    columnBook: "Book",
     allCategories: "All categories",
     novelFields: "Chapter metadata",
     novelFieldsIntro: "Optional volume name and chapter number. Stored in the item's _microfeed data and read by the novel themes.",

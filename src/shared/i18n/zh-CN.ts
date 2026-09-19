@@ -1169,6 +1169,7 @@ export const zhCN: TranslationKey = {
     importPartial: "已导入 {{created}} 章，{{failed}} 章失败。",
   },
   items: {
+    columnBook: "所属书目",
     allCategories: "全部分类",
     novelFields: "章节信息",
     novelFieldsIntro: "可选的卷名与章号。保存在条目的 _microfeed 数据中，由小说主题读取。",
