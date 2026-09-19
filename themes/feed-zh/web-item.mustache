@@ -53,16 +53,6 @@
         {{^items.0.content_html}}{{#items.0.content_text}}<p>{{items.0.content_text}}</p>{{/items.0.content_text}}{{/items.0.content_html}}
       </div>
 
-      <details class="mf-reader-report mf-report" data-mf-report data-mf-item-id="{{items.0.id}}">
-        <summary>举报本章</summary>
-        <form class="mf-report-form" data-mf-report-form>
-          <label class="mf-report-field"><span>举报类别</span><select name="category"><option value="plagiarism">抄袭</option><option value="pornography">色情</option><option value="violence">暴力</option><option value="advertising">广告</option><option value="other">其他</option></select></label>
-          <label class="mf-report-field"><span>补充说明（可选）</span><textarea name="detail" rows="3" maxlength="2000"></textarea></label>
-          <button type="submit">提交举报</button>
-          <p class="mf-report-status" data-mf-report-status hidden></p>
-        </form>
-      </details>
-
       <nav class="mf-reader-nav" aria-label="章节导航">
         {{#previous_chapter}}<a href="{{url}}" class="mf-reader-nav-prev"><span>上一章</span><strong>{{title}}</strong></a>{{/previous_chapter}}
         {{^previous_chapter}}<span class="mf-reader-nav-empty">已是第一章</span>{{/previous_chapter}}
