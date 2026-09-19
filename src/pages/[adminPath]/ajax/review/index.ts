@@ -8,7 +8,6 @@ import {
   rejectChapterHandler,
 } from "@/server/admin/review-handlers";
 import type {AuditDb} from "@/server/feed/extContentAudit";
-import {AppError} from "@/shared/errors";
 
 /** The review queue: chapters awaiting a decision. */
 export const GET: APIRoute = async () => {
@@ -41,10 +40,19 @@ export const POST: APIRoute = async ({request}) => {
   const body = await request.json().catch(() => null) as ReviewBody | null;
   try {
     if (!body?.itemId || (body.action !== "approve" && body.action !== "reject")) {
-      // AppError, not a plain Error: serviceError() only recognises errors carrying an
-      // i18nKey, so a plain Error would escape as an opaque 500 instead of a 400 with
-      // a message the dashboard can show.
-      throw new AppError("errors.review.invalidAction", 400);
+      // Diagnostic: echo back what actually arrived, so the dashboard can show it.
+      // Remove once the queue action is confirmed working.
+      return jsonResponse(
+        {
+          error: "errors.review.invalidAction",
+          received: {
+            action: body?.action ?? null,
+            actorId: body?.actorId ?? null,
+            itemId: body?.itemId ?? null,
+          },
+        },
+        {status: 400},
+      );
     }
     const db = env.FEED_DB as unknown as AuditDb;
     const result = body.action === "approve"
