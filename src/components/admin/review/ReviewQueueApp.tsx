@@ -92,8 +92,12 @@ export default function ReviewQueueApp() {
         "success",
       );
       await load();
-    } catch {
-      showToast(t("review.actionFailed"), "error");
+    } catch (error) {
+      // Surface what the server actually said — a generic "action failed" hides
+      // the real cause (invalid action, missing row, SQL error).
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error("[review] action failed:", detail);
+      showToast(`${t("review.actionFailed")} ${detail}`, "error");
     } finally {
       setBusyId(null);
     }
