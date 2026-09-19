@@ -1,0 +1,26 @@
+---
+import BooksApp from "@/components/admin/books/BooksApp";
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {NAV_ITEMS} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+---
+
+<AdminShell
+  activeNavItem={NAV_ITEMS.BOOKS}
+  documentTitle={translate("pageDocumentTitle.books", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.books", adminLanguage)}
+>
+  <BooksApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </BooksApp>
+</AdminShell>

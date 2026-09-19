@@ -48,6 +48,7 @@ describe("Webhook Admin", () => {
       "Review queue",
       "Pages",
       "Categories",
+      "Books",
       "Volume board",
       "Site files",
       "API",

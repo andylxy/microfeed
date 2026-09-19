@@ -1,4 +1,5 @@
 import {
+  BookIcon,
   Code2Icon,
   Globe2Icon,
   HomeIcon,
@@ -45,6 +46,7 @@ const navigationIcons: Record<AdminNavItemId, typeof HomeIcon> = {
   [NAV_ITEMS.REVIEW]: ShieldCheckIcon,
   [NAV_ITEMS.PAGES]: FileTextIcon,
   [NAV_ITEMS.CATEGORIES]: TagsIcon,
+  [NAV_ITEMS.BOOKS]: BookIcon,
   [NAV_ITEMS.VOLUMES]: LayersIcon,
   [NAV_ITEMS.SITE_FILES]: FileCode2Icon,
   [NAV_ITEMS.API]: Code2Icon,

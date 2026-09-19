@@ -185,6 +185,7 @@ export const NAV_ITEMS = {
   REVIEW: 'review',
   PAGES: 'pages',
   CATEGORIES: 'categories',
+  BOOKS: 'books',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
   API: 'api',
@@ -213,6 +214,9 @@ export const NAV_ITEMS_DICT = {
   },
   [NAV_ITEMS.CATEGORIES]: {
     name: 'Categories',
+  },
+  [NAV_ITEMS.BOOKS]: {
+    name: 'Books',
   },
   [NAV_ITEMS.VOLUMES]: {
     name: 'Volume board',
