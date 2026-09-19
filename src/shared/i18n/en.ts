@@ -1167,6 +1167,7 @@ export const en = {
     importPartial: "Imported {{created}} chapter(s); {{failed}} failed.",
   },
   items: {
+    allCategories: "All categories",
     novelFields: "Chapter metadata",
     novelFieldsIntro: "Optional volume name and chapter number. Stored in the item's _microfeed data and read by the novel themes.",
     volume: "Volume",
@@ -1523,6 +1524,8 @@ export const en = {
     selectOption: "Select an option",
   },
   books: {
+    allCategories: "All categories",
+    emptyCategory: "No books in this category yet.",
     title: "Books",
     intro: "Every book on this site. A book is a channel, and its chapters link back through `_microfeed.bookId`, so editing a book never rewrites its chapters.",
     newBook: "New book",

@@ -23,7 +23,15 @@ export interface AdminItemSummary {
   updatedAtMs: number;
 }
 
+/** A category offered to filter the item list (novel-cms only). */
+export interface AdminItemCategoryOption {
+  id: string;
+  name: string;
+}
+
 export interface AdminItemListResponse {
+  categories?: AdminItemCategoryOption[];
+  categoryFilter?: string;
   items: AdminItemSummary[];
   nextCursor?: number | string;
   order: ItemOrder;

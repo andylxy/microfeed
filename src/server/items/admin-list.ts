@@ -16,6 +16,8 @@ import {
   resolveItemPagination,
 } from "@/shared/ItemPagination";
 import {msToRFC3339, rfc3399ToMs} from "@/shared/TimeUtils";
+import {listCategoryNav} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
 
 interface AdminItemRow extends Record<string, unknown> {
   created_at: string;
@@ -71,6 +73,7 @@ export async function listAdminItems(
 ): Promise<AdminItemListResponse> {
   const searchParams = new URL(request.url).searchParams;
   const statusFilter = normalizeItemStatusFilter(searchParams.get("status"));
+  const categoryFilter = (searchParams.get("categoryId") ?? "").trim();
   const pagination = resolveItemPagination(searchParams, {
     order: ITEM_ORDERS.DESC,
     sort: ITEM_SORTS.UPDATED_AT,
@@ -107,6 +110,16 @@ export async function listAdminItems(
   const idDirection = pagination.mode === "legacy"
     ? previousPage ? "DESC" : "ASC"
     : queryDirection;
+  // novel-cms: chapters are filed under a book, and books carry the category, so
+  // filtering by category means resolving the chapter's book and comparing its
+  // genre. Only added when a category is asked for, leaving the default list
+  // query untouched.
+  let categoryClause = "";
+  if (categoryFilter) {
+    categoryClause = " AND (SELECT genre FROM channels " +
+      "WHERE id = json_extract(data, '$._microfeed.bookId')) = ?";
+    bindings.push(categoryFilter);
+  }
   const result = await database.prepare(`
     SELECT
       id,
@@ -118,7 +131,7 @@ export async function listAdminItems(
       json_extract(data, '$.image') AS image,
       json_extract(data, '$.mediaFile') AS media_file
     FROM items
-    WHERE ${where}${cursorClause}
+    WHERE ${where}${cursorClause}${categoryClause}
     ORDER BY ${pagination.column} ${queryDirection}, id ${idDirection}
     LIMIT ?
   `).bind(...bindings, limit + 1).all<AdminItemRow>();
@@ -139,7 +152,16 @@ export async function listAdminItems(
       : encodeItemCursor(timestamp, item.id);
   };
 
+  const categories = (await listCategoryNav(
+    database as unknown as CategoryDb,
+  )).map((category) => ({
+    id: String(category.id),
+    name: String(category.name),
+  }));
+
   return {
+    categories,
+    ...(categoryFilter ? {categoryFilter} : {}),
     items,
     ...(hasNextPage ? {nextCursor: cursorForItem(items.at(-1)!)} : {}),
     order: pagination.order,

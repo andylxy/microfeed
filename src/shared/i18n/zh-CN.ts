@@ -1169,6 +1169,7 @@ export const zhCN: TranslationKey = {
     importPartial: "已导入 {{created}} 章，{{failed}} 章失败。",
   },
   items: {
+    allCategories: "全部分类",
     novelFields: "章节信息",
     novelFieldsIntro: "可选的卷名与章号。保存在条目的 _microfeed 数据中，由小说主题读取。",
     volume: "卷名",
@@ -1525,6 +1526,8 @@ export const zhCN: TranslationKey = {
     selectOption: "请选择一个选项",
   },
   books: {
+    allCategories: "全部分类",
+    emptyCategory: "该分类下还没有作品。",
     title: "书籍管理",
     intro: "本站的全部作品。一部作品就是一个频道，章节通过 `_microfeed.bookId` 反查归属，因此编辑作品不会改动它的章节。",
     newBook: "新建作品",

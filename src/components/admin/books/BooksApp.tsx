@@ -79,6 +79,7 @@ export default function BooksApp() {
   const {t} = useTranslation();
   const [books, setBooks] = useState<BookAdmin[]>([]);
   const [categories, setCategories] = useState<BookCategoryOption[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +108,12 @@ export default function BooksApp() {
       setLoading(false);
     }
   }, [t]);
+
+  const visibleBooks = categoryFilter
+    ? books.filter((book) => book.categoryId === categoryFilter)
+    : books;
+  const countFor = (id: string) =>
+    books.filter((book) => book.categoryId === id).length;
 
   useEffect(() => {
     void load();
@@ -312,12 +319,41 @@ export default function BooksApp() {
         </div>
       )}
 
-      {books.length === 0 && !showForm && (
-        <p className="text-sm text-muted-foreground">{t("books.empty")}</p>
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            className={`rounded-full border px-3 py-1 text-sm ${!categoryFilter
+              ? "border-primary text-primary"
+              : "text-muted-foreground"}`}
+            onClick={() => setCategoryFilter("")}
+            type="button"
+          >
+            {t("books.allCategories")}
+          </button>
+          {categories.map((category) => (
+            <button
+              className={`rounded-full border px-3 py-1 text-sm ${categoryFilter === category.id
+                ? "border-primary text-primary"
+                : "text-muted-foreground"}`}
+              key={category.id}
+              onClick={() => setCategoryFilter(category.id)}
+              type="button"
+            >
+              {category.name}
+              <small className="ml-1 opacity-70">{countFor(category.id)}</small>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleBooks.length === 0 && !showForm && (
+        <p className="text-sm text-muted-foreground">
+          {categoryFilter ? t("books.emptyCategory") : t("books.empty")}
+        </p>
       )}
 
       <div className="divide-y rounded-lg border">
-        {books.map((book) => (
+        {visibleBooks.map((book) => (
           <div
             className="flex flex-wrap items-center justify-between gap-3 p-3"
             key={book.id}

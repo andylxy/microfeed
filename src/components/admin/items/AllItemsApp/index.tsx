@@ -575,9 +575,14 @@ export function ItemListTable({
   );
 }
 
-function collectionUrl(search: string, itemsPerPage: number): string {
+function collectionUrl(
+  search: string,
+  itemsPerPage: number,
+  categoryId = "",
+): string {
   const parameters = new URLSearchParams(search);
   parameters.set("limit", String(itemsPerPage));
+  if (categoryId) parameters.set("categoryId", categoryId);
   return `${ADMIN_URLS.ajaxItems()}?${parameters.toString()}`;
 }
 
@@ -586,7 +591,10 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
   const [search, setSearch] = useState(() =>
     typeof window === "undefined" ? "" : window.location.search
   );
-  const endpoint = collectionUrl(search, itemsPerPage);
+  // novel-cms: chapters belong to a book, so the category filter is applied on
+  // the server (chapter -> book -> genre) rather than over the loaded page.
+  const [categoryId, setCategoryId] = useState("");
+  const endpoint = collectionUrl(search, itemsPerPage, categoryId);
   const {data: listing, error, loading, retry} =
     useAdminCollection<AdminItemListResponse>(
       endpoint,
@@ -629,6 +637,31 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
           {error && (
             <div className="mb-4">
               <AdminCollectionError message={error} retry={retry} />
+            </div>
+          )}
+          {(listing.categories?.length ?? 0) > 0 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                className={`rounded-full border px-3 py-1 text-sm ${!categoryId
+                  ? "border-primary text-primary"
+                  : "text-muted-foreground"}`}
+                onClick={() => setCategoryId("")}
+                type="button"
+              >
+                {t("items.allCategories")}
+              </button>
+              {listing.categories?.map((category) => (
+                <button
+                  className={`rounded-full border px-3 py-1 text-sm ${categoryId === category.id
+                    ? "border-primary text-primary"
+                    : "text-muted-foreground"}`}
+                  key={category.id}
+                  onClick={() => setCategoryId(category.id)}
+                  type="button"
+                >
+                  {category.name}
+                </button>
+              ))}
             </div>
           )}
           <div
