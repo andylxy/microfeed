@@ -425,7 +425,7 @@ describe("recordItemEdit", () => {
     expect(readRows(database)).toHaveLength(0);
   });
 
-  it("turns every Nth edit into a checkpoint that carries the full snapshot", async () => {
+  it("snapshots the first row and then every Nth edit", async () => {
     const database = new DatabaseSync(":memory:");
     newAuditTable(database);
     const db = fakeAuditDb(database);
@@ -437,12 +437,17 @@ describe("recordItemEdit", () => {
 
     const rows = readRows(database);
     expect(rows).toHaveLength(AUDIT_CHECKPOINT_INTERVAL);
-    expect(rows.filter((row) => row.is_checkpoint === 1)).toHaveLength(1);
-    // The checkpoint is the last edit, and its snapshot is that version's data.
+    // The first recorded row is always a snapshot — restore needs an anchor even for
+    // items that never went through the write seam's create row — and every Nth edit
+    // after it is one too.
+    expect(rows[0]!.is_checkpoint).toBe(1);
+    expect(JSON.parse(rows[0]!.checkpoint_data!)).toEqual({title: "第1版", id: "it1"});
     expect(rows[AUDIT_CHECKPOINT_INTERVAL - 1]!.is_checkpoint).toBe(1);
     expect(JSON.parse(rows[AUDIT_CHECKPOINT_INTERVAL - 1]!.checkpoint_data!))
       .toEqual({title: `第${AUDIT_CHECKPOINT_INTERVAL}版`, id: "it1"});
-    for (const row of rows.slice(0, -1)) expect(row.checkpoint_data).toBeNull();
+    expect(rows.filter((row) => row.is_checkpoint === 1)).toHaveLength(2);
+    // Only the first and the Nth carry a snapshot.
+    for (const row of rows.slice(1, -1)) expect(row.checkpoint_data).toBeNull();
   });
 
   it("mirrors the novel-cms review state onto the audit row", async () => {
@@ -481,5 +486,61 @@ describe("recordItemEdit", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.is_checkpoint).toBe(1);
     expect(JSON.parse(rows[0]!.checkpoint_data!)).toEqual(created);
+  });
+
+  it("checkpoints an item's first recorded row even without forceCheckpoint", async () => {
+    // Items seeded straight into `items` (imports, fixtures, direct SQL) never
+    // go through the write seam's create row, so their earliest audit row is an
+    // *edit*. With no snapshot at or before it, rebuildItemVersion can never
+    // replay and every "restore this version" fails. The first row must always
+    // be a snapshot, with or without the caller's forceCheckpoint.
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    const first: ItemData = {id: "it1", title: "初版"};
+    const second: ItemData = {id: "it1", title: "第二版"};
+    // No forceCheckpoint anywhere: the first row is still a snapshot, and the
+    // second one (edit #2 of 3) is not.
+    await recordItemEdit(db, {}, first);
+    await recordItemEdit(db, first, second);
+
+    const rows = readRows(database);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.is_checkpoint).toBe(1);
+    expect(JSON.parse(rows[0]!.checkpoint_data!)).toEqual(first);
+    expect(rows[1]!.is_checkpoint).toBe(0);
+
+    // And the periodic cadence still applies afterwards: edit #3 is a checkpoint.
+    await recordItemEdit(db, second, {id: "it1", title: "第三版"});
+    expect(readRows(database)[2]!.is_checkpoint).toBe(1);
+  });
+
+  it("snapshots the next edit when a legacy chain has no checkpoint", async () => {
+    const database = new DatabaseSync(":memory:");
+    newAuditTable(database);
+    const db = fakeAuditDb(database);
+
+    // A row recorded before the guarantee existed: no snapshot anywhere, so
+    // restore had nothing to replay from.
+    database
+      .prepare(
+        "INSERT INTO ext_content_audit " +
+          "(id, item_id, action, actor_type, diff_data, is_checkpoint) " +
+          "VALUES ('legacy1','it1','edit','author','[]',0)",
+      )
+      .run();
+
+    const next: ItemData = {id: "it1", title: "接管后的第一版"};
+    await recordItemEdit(db, {id: "it1", title: "旧版"}, next);
+
+    const rows = readRows(database);
+    expect(rows).toHaveLength(2);
+    // The legacy row is left exactly as it was — history is never rewritten.
+    expect(rows[0]!.is_checkpoint).toBe(0);
+    // The new row gives the chain an anchor, so it (and everything after it)
+    // becomes restorable without waiting for the periodic cadence.
+    expect(rows[1]!.is_checkpoint).toBe(1);
+    expect(JSON.parse(rows[1]!.checkpoint_data!)).toEqual(next);
   });
 });

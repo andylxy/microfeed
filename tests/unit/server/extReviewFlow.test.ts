@@ -170,8 +170,10 @@ describe("novel-cms review flow (end to end)", () => {
 
     const rows = await listItemAuditRows(db, itemId);
     expect(rows.map((row) => row.action)).toEqual(["edit", "edit", "edit", "edit"]);
-    // The third write is the checkpoint: it carries the full snapshot the
-    // restore below replays forward from.
+    // The first recorded row is always a snapshot (an anchor restore can
+    // replay from), and so is every Nth edit after it — here the third.
+    expect(rows[0]!.isCheckpoint).toBe(true);
+    expect(rows[1]!.isCheckpoint).toBe(false);
     expect(rows[2]!.isCheckpoint).toBe(true);
     expect(rows[3]!.isCheckpoint).toBe(false);
 
@@ -205,9 +207,25 @@ describe("novel-cms review flow (end to end)", () => {
       title: "第一章 渡口",
     });
 
-    // A version older than the first checkpoint cannot be rebuilt: the engine
-    // has no snapshot to replay from, and it says so instead of guessing.
-    expect(await rebuildItemVersion(db, itemId, rows[0]!.id)).toBeNull();
+    // The earliest version is rebuildable too: the first recorded row carries
+    // the snapshot, so there is always something to replay from.
+    const firstVersion = await rebuildItemVersion(db, itemId, rows[0]!.id);
+    expect(firstVersion).not.toBeNull();
+    // rows[0] is the submit edit, so its snapshot is that version of the body.
+    expect(firstVersion!.title).toBe("第一章 渡口");
+
+    // A chain with no snapshot at all — rows recorded before that guarantee
+    // existed — is still reported as unrebuildable rather than guessed at,
+    // and the list marks it so the UI can disable the action.
+    database.prepare(
+      "INSERT INTO ext_content_audit " +
+      "(id, item_id, action, actor_type, diff_data, is_checkpoint, created_at) " +
+      "VALUES ('legacy1','legacy-item','edit','author','[]',0,'2026-01-01 00:00:00')",
+    ).run();
+    expect(await rebuildItemVersion(db, "legacy-item", "legacy1")).toBeNull();
+    const legacyRows = await listItemAuditRows(db, "legacy-item");
+    expect(legacyRows).toHaveLength(1);
+    expect(legacyRows[0]!.restorable).toBe(false);
 
     const restored = applyReviewTransition(
       {...rebuilt!, _microfeed: {...(rebuilt!._microfeed as object)}},
