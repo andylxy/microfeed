@@ -8,12 +8,6 @@ import {
   type ItemData,
 } from "@/server/feed/extContentAudit";
 import {
-  listReportsByStatus,
-  setReportStatus,
-  type ReportDb,
-  type ReportStatus,
-} from "@/server/feed/extContentReport";
-import {
   applyReviewTransition,
   isAllowedReviewTransition,
   listItemAuditRows,
@@ -46,17 +40,13 @@ export class ReviewActionError extends Error {
 
 export interface ReviewQueuePayload {
   items: Awaited<ReturnType<typeof listPendingReviewItems>>;
-  reports: Awaited<ReturnType<typeof listReportsByStatus>>;
 }
 
 export async function listReviewQueueHandler(
-  db: AuditDb & ReportDb,
+  db: AuditDb,
 ): Promise<ReviewQueuePayload> {
-  const [items, reports] = await Promise.all([
-    listPendingReviewItems(db),
-    listReportsByStatus(db, "pending"),
-  ]);
-  return {items, reports};
+  const items = await listPendingReviewItems(db);
+  return {items};
 }
 
 export async function listItemAuditHandler(
@@ -182,13 +172,4 @@ export async function restoreItemVersionHandler(
   });
 
   return {restored: true};
-}
-
-/** Mark a report handled. */
-export async function resolveReportHandler(
-  db: ReportDb,
-  reportId: string,
-  status: ReportStatus,
-): Promise<void> {
-  await setReportStatus(db, reportId, status);
 }

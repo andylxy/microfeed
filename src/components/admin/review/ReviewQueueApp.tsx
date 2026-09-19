@@ -7,9 +7,13 @@ import AdminInput from "@/components/admin/shared/AdminInput";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 /**
- * Review queue: chapters waiting for a decision, and reader reports waiting to
- * be handled. Approving publishes; rejecting requires a reason; taking down
- * unpublishes and marks the chapter so the reading page can explain itself.
+ * Review queue: chapters waiting for a decision. Approving publishes; rejecting
+ * requires a reason; taking down unpublishes and marks the chapter so the
+ * reading page can explain itself.
+ *
+ * Reader reports no longer appear here: the reading page's report form was
+ * removed as a design error (see §7.6) — reviewing is about content
+ * correctness, not complaints.
  */
 
 interface QueueItem {
@@ -17,15 +21,6 @@ interface QueueItem {
   title: string;
   reviewStatus: string;
   updatedAt: string;
-}
-
-interface QueueReport {
-  id: string;
-  itemId: string | null;
-  category: string;
-  detail: string;
-  status: string;
-  createdAt: string;
 }
 
 async function requestJson(url: string, init?: RequestInit): Promise<any> {
@@ -45,7 +40,6 @@ async function requestJson(url: string, init?: RequestInit): Promise<any> {
 export default function ReviewQueueApp() {
   const t = i18n.t.bind(i18n);
   const [items, setItems] = useState<QueueItem[]>([]);
-  const [reports, setReports] = useState<QueueReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -55,7 +49,6 @@ export default function ReviewQueueApp() {
     try {
       const payload = await requestJson(ADMIN_URLS.ajaxReview());
       setItems(payload.items ?? []);
-      setReports(payload.reports ?? []);
     } catch {
       showToast(t("review.loadFailed"), "error");
     } finally {
@@ -85,20 +78,6 @@ export default function ReviewQueueApp() {
     }
   }
 
-  async function resolveReport(reportId: string, status: string) {
-    setBusyId(reportId);
-    try {
-      await requestJson(ADMIN_URLS.ajaxReviewReport(reportId), {
-        body: JSON.stringify({status}),
-        method: "POST",
-      });
-      await load();
-    } catch {
-      showToast(t("review.actionFailed"), "error");
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   if (loading) {
     return <div className="text-sm text-muted-foreground">{t("review.loading")}</div>;
@@ -169,46 +148,6 @@ export default function ReviewQueueApp() {
                   {t("review.takedown")}
                 </Button>
               </div>}
-          </li>))}
-        </ul>}
-    </section>
-
-    <section className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-      <h2 className="text-lg font-semibold">{t("review.pendingReports")}</h2>
-      {reports.length === 0
-        ? <p className="mt-2 text-sm text-muted-foreground">{t("review.noPendingReports")}</p>
-        : <ul className="mt-4 flex flex-col gap-3">
-          {reports.map((report) => (<li className="rounded-lg border p-3" key={report.id}>
-            <div className="flex items-center gap-2">
-              <span className="badge rounded-full border px-2 text-xs">
-                {t(`review.category.${report.category}`)}
-              </span>
-              {report.itemId && <a className="text-sm" href={ADMIN_URLS.reviewItem(report.itemId)}>
-                {report.itemId}
-              </a>}
-              <span className="text-xs text-muted-foreground">{report.createdAt}</span>
-            </div>
-            {report.detail && <p className="mt-2 text-sm">{report.detail}</p>}
-            <div className="mt-3 flex gap-2">
-              <Button
-                disabled={busyId === report.id}
-                onClick={() => resolveReport(report.id, "resolved")}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {t("review.markResolved")}
-              </Button>
-              <Button
-                disabled={busyId === report.id}
-                onClick={() => resolveReport(report.id, "dismissed")}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {t("review.dismiss")}
-              </Button>
-            </div>
           </li>))}
         </ul>}
     </section>

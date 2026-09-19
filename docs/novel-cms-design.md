@@ -189,49 +189,71 @@ CREATE INDEX IF NOT EXISTS idx_report_status ON ext_content_report(status);
 
 ## 7. 内容审核系统（重点）
 
-### 7.1 状态机
-```
-draft(未提交) → submitted(待审) → approved(通过) / rejected(驳回+理由)
-配合 item.status：unpublished(草稿) ↔ published(公开)
-```
-- 作者保存 = `reviewStatus=draft`，或提交即 `submitted` 进审核。
-- 审核员通过 = `reviewStatus=approved` + `status=published`。
-- 驳回 = `reviewStatus=rejected` + `reason` + `status=unpublished`。
-- 恢复 = 定位目标版本之前最近的**检查点**（`checkpoint_data` 完整快照）→ 向前**重放 diff** 序列重建目标版本 `data` → 回填 item（见 ADR-0003，diff-only 模型下不再直接回填 before_data）。
+> ⚠️ **方向纠正（2026-09-19 用户纠正）**：本节原先建模成「**发布审批 + 读者举报**」——
+> 回答"这条能不能发"、让读者投诉驱动下架。**这是错的。**
+> 审核真正要管的是「**内容正确性**」：核对**阅读页呈现的内容**，发现错误就改。
+> 改动的流转是「**提出修改 → 确认是否采用 → 同意才写回原存储位置**」，
+> 并且必须留痕「谁提交的更新 / 更新了什么 / **谁同意了更新**」。
+> 原 §7.1 的发布状态机、§7.6 的举报链路均已失效，见 §7.6。
 
-### 7.2 留痕表 `ext_content_audit`（你要的五要素）
-存储模型 = **字段级 diff + 周期性检查点**（决策 Q3+Q4，见 ADR-0003）：常规行存 `diff_data`（字段级差异），每 K 次编辑的检查点行额外存 `checkpoint_data`（完整 `data` 快照）。这样既满足"原始/修改/时间/谁/改了什么"的完整追溯，又避免全量快照无限膨胀。
+### 7.1 纠错流程（取代原"发布状态机"）
+
+```
+审阅读页内容 → 发现错误 → 由【该页审核员】提交修改提案（原数据不动）
+              → 决策：是否同意采用这份【最新修改】？
+                   ├─ 同意 → 把提案内容写回【原存储位置 items.data】+ 记审计（带批准人）
+                   └─ 驳回 → 提案标记 rejected，原数据保持不动
+```
+
+- **审核对象**：阅读页渲染出来的内容（标题、正文、卷章号、标签）。
+- **管理主体**：审核该页面的人（`submitted_by`）——谁审的谁负责改。
+- **决策点**：确认的是**当前这份提案**（"是否同意更新最新修改"），不是历史版本。
+- **落库位置**：`items.data`，即**原存储位置**；不建草稿行、不存影子副本。
+- **不改发布状态**：纠错只动内容，不联动 `status` / `review_status`——这正是"方向纠正"的含义。
+- 同意已决提案（approved/rejected）会被拒绝：重放旧提案会覆盖之后落地的修改。
+
+### 7.2 留痕（你要的三要素）
+
+存储模型仍是 **字段级 diff + 周期性检查点**（ADR-0003）；纠错提案另用一张待决表。
+
+**`ext_content_correction`（迁移 0024，待决提案）**
 
 | 字段 | 记录什么 | 对应要求 |
 |---|---|---|
-| `diff_data` | 本次修改的字段级差异 JSON（标题/正文/卷章号/标签逐一比对） | **原始 vs 修改后 的变化** |
-| `checkpoint_data` | 仅检查点行非空：完整 `data` 快照 | **任意旧版重建的起点** |
-| `created_at` | 毫秒时间戳 | **什么时候改** |
-| `actor_type`+`actor_id` | 管理员/作者/审核员/系统 | **谁改的** |
-| `action`+`reason` | 动作 + 理由 | **改了什么** |
+| `submitted_by` / `submitted_at` | 谁提交的更新（该页审核员） | **谁提交** |
+| `diff_data` | 相对提交时当前数据的字段级差异 | **更新了什么** |
+| `reviewed_by` / `reviewed_at` | 谁同意/驳回、何时 | **谁同意** |
+| `proposed_data` | 提案完整 `data`，同意时写回原位置 | 落库依据 |
+| `status` | `pending` / `approved` / `rejected` | 决策状态 |
 
-> "改了什么"展示：直接渲染 `diff_data` 的字段级差异（高亮增删改）；"恢复任意旧版"见 §7.1（检查点 + diff 重放）。
+`submitted_by == reviewed_by` **允许但如实记录**——v1 单管理员（§7.7），
+与其伪造职责分离，不如把"自己提交、自己确认"真实写进留痕。
+
+**`ext_content_audit`（历史流水，0024 加性补两列）**
+
+| 字段 | 记录什么 |
+|---|---|
+| `diff_data` / `checkpoint_data` | 字段级差异 / 检查点全量快照（ADR-0003） |
+| `actor_type` + `actor_id` | 谁改的 |
+| `approved_by` + `approved_at` | **谁同意的**（0024 新增） |
+| `action` = `correction_apply` | 落库来自一次**被批准的纠错**（区别于普通 `edit`） |
 
 ### 7.3 写入拦截点（精确落点）
-- 实际写库位置：`src/server/feed/FeedDb.ts` 的 `_putItemToContentStatement`（第 558 行，第 609 行调用）。
-- **推荐拦截点**：`src/server/api/handlers.ts` 的 item PUT/POST 处理器（`apiItemInputSchema.safeParse` 在 596 / 669 / 721 行）。在解析出新 `data` 后、落库后，调用：
-  ```ts
-  await extContentAudit.record({
-    itemId, channelId, action: "edit",
-    actorType, actorId,
-    diff: computeDiff(existingItem?.data, newData),  // 字段级 diff
-    isCheckpoint: shouldCheckpoint(itemId),           // 每 K 次为 true
-    checkpointData: shouldCheckpoint(itemId) ? newData : null,
-    reviewStatus: newData._microfeed?.reviewStatus,
-    reason: null, createdAt: Date.now(),
-  });
-  ```
-- 逻辑收口到独立模块 `src/server/feed/extContentAudit.ts`；**核心唯一改动点即 handlers.ts 里这一处调用**，rebase 风险最小。
-- 同一写入点顺带把 `reviewStatus` / `genre` 镜像进 `items.review_status` / `channels.genre` 列（供查询，见 ADR-0004）。
 
-### 7.4 审核队列页 + 审计详情
-- 审核队列：`SELECT * FROM items WHERE review_status='submitted'`（已落成真实列，见 ADR-0004）；举报队列查 `ext_content_report WHERE status='pending'`。
-- 审计详情页（新 admin 路由）：列出某 item 的全部审计行（时间/谁/动作），点开渲染 `diff_data` 的**字段级差异高亮**（原始 vs 修改）。
+- 常规编辑留痕：仍在 `src/server/api/handlers.ts` 的 item PUT/POST 处理器，经
+  `extContentAudit.recordItemEdit`（唯一收口）。
+- 纠错落库：**只在** `extContentCorrection.approveCorrection` 里发生——
+  `UPDATE items SET data = ? WHERE id = ?` 写回原位置，再写一条 `correction_apply` 审计。
+  提案期间**不碰** `items`。
+
+### 7.4 审核详情页（阅读视图 + 纠错提案）
+
+- 路由 `/admin/review/[itemId]/`：展示该章的**阅读页正文**（即读者看到的内容），
+  供审核员核对；下方是纠错提案列表与"提出修改"表单。
+- 提案卡片显示：状态、**提交人**、字段级 diff 高亮、**确认人**；待决提案提供
+  「同意并应用 / 驳回」。自提交时提示会如实记录同人。
+- 接口：`ajax/review/corrections/`（GET 列表 + 当前内容 / POST 提交）、
+  `ajax/review/corrections/[id]`（POST approve / reject）。
 
 ### 7.5 违规内容安全筛查（可选，与"修改留痕"是两件事）
 
@@ -241,9 +263,16 @@ draft(未提交) → submitted(待审) → approved(通过) / rejected(驳回+�
 - 在 item 写入口接关键词预筛或第三方文本审核 API，命中可疑 → 标 `submitted` + 记一条 `auto_flag` 审计，转人工。
 - 若不需要内容安全筛查，直接不实现即可。
 
-### 7.6 举报与下架
-- 读者匿名举报表单 → 写 `ext_content_report` → 进审核队列。
-- 后台"违规下架"：置 `status=unpublished` 或加 `_microfeed.takedown=true`，并记一条 `takedown` 审计。
+### 7.6 举报与下架 —— **已废弃（2026-09-19 用户判定为设计错误）**
+
+> 原设计：读者匿名举报表单 → `ext_content_report` → 审核队列 → `takedown`。
+> **问题**：把「读者投诉」和「内容纠错」混成一条链路，方向跑偏；审核不该由投诉驱动。
+
+- **阅读页的「举报本章」元素已删除**（主题 0.1.20，含标记 / 提交 JS / CSS 共 4 处）。
+- `ext_content_report` 表**保留**（不删历史数据），但相关代码路径（`/report/` 端点、
+  `ajax/review/reports/`、审核队列举报 tab）已下线。
+- 「违规下架」若将来需要，应作为**独立的管理动作**（`takedown` 审计）实现，
+  **不再**挂在审核流程里。
 
 ### 7.7 角色体系（v1 单管理员，扩展预留）
 - **v1（已定，ADR-0002）**：采用单管理员模型——所有作者/编辑共用同一后台登录（或同一把全局 API Key），**不做按书隔离**。零额外代码，最快上线，升级最稳。
