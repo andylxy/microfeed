@@ -27,7 +27,8 @@ interface FieldChange {
 }
 
 interface QueueItem {
-  id: string;
+  itemId: string;
+  /** Matches `PendingChapter.itemId`. Reading `id` here sent an undefined itemId, so every confirm/reject failed validation with a 400. */
   title: string;
   pendingCount: number;
   lastSubmittedBy: string | null;
@@ -117,11 +118,11 @@ export default function ReviewQueueApp() {
         </p>
       : <ul className="mt-4 flex flex-col gap-3">
         {items.map((item) => (
-          <li className="rounded-lg border p-3" key={item.id}>
+          <li className="rounded-lg border p-3" key={item.itemId}>
             <div className="flex flex-wrap items-center gap-2">
               <a
                 className="font-medium hover:underline"
-                href={ADMIN_URLS.reviewItem(item.id)}
+                href={ADMIN_URLS.reviewItem(item.itemId)}
               >
                 {item.title || t("corrections.untitled")}
               </a>
@@ -147,7 +148,7 @@ export default function ReviewQueueApp() {
             {item.changes.length > 0 && (
               <ul className="mt-2 flex flex-col gap-1 font-mono text-xs">
                 {item.changes.map((change, index) => (
-                  <li key={`${item.id}-${index}`}>
+                  <li key={`${item.itemId}-${index}`}>
                     <span className={
                       change.op === "add"
                         ? "text-emerald-600"
@@ -179,16 +180,16 @@ export default function ReviewQueueApp() {
 
             <div className="mt-3 flex gap-2">
               <Button
-                disabled={busyId === item.id}
-                onClick={() => void decide(item.id, "approve")}
+                disabled={busyId === item.itemId}
+                onClick={() => void decide(item.itemId, "approve")}
                 size="sm"
                 type="button"
               >
                 {t("review.confirmChanges")}
               </Button>
               <Button
-                disabled={busyId === item.id}
-                onClick={() => void decide(item.id, "reject")}
+                disabled={busyId === item.itemId}
+                onClick={() => void decide(item.itemId, "reject")}
                 size="sm"
                 type="button"
                 variant="destructive"
