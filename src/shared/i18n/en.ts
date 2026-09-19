@@ -1445,6 +1445,7 @@ export const en = {
     deleteFailed: "Could not delete the category.",
   },
   volumes: {
+    allCategories: "All categories",
     // List screen
     title: "Volume board",
     intro: "Group a book's chapters into volumes. A volume is only a label on each chapter, so filing, renaming, and reordering just rewrite those labels.",
@@ -1510,7 +1511,7 @@ export const en = {
   saveAction: {
     saveNow: "Save now",
     retry: "Retry save",
-    idleMessage: "Changes save automatically after five seconds.",
+    idleMessage: "Save when you are ready.",
     error: "Couldn’t save. Your changes are still on this page.",
     pending: "Unsaved changes",
     saved: "All changes saved",

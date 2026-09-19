@@ -146,6 +146,9 @@ export default class EditItemApp extends React.Component<Props, any> {
     };
 
     this.autosave = new AutosaveCoordinator({
+      // Manual save only: `null` disables the countdown autosave, so a half-typed
+      // field is never written (and never filed for review) on its own.
+      delayMs: null,
       getSnapshot: () => ({
         deleteImageUrls: [...this.state.replacedImageUrls],
         item: {id: this.state.itemId, ...this.state.item},

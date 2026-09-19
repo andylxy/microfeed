@@ -271,9 +271,8 @@ describe("admin editor autosave", () => {
 
     app.onUpdateItemMeta({title: "Draft title"});
     expect(app.state.autosaveState).toEqual({dirty: true, phase: "pending"});
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(axiosPost).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    // Saving is manual now: no countdown writes a half-typed field.
+    await app.onSubmit({preventDefault: vi.fn()});
 
     expect(axiosPost).toHaveBeenCalledOnce();
     expect(axiosPost).toHaveBeenCalledWith(
@@ -288,7 +287,9 @@ describe("admin editor autosave", () => {
       }),
     );
     expect(app.state.action).toBe("edit");
-    expect(app.state.autosaveState).toEqual({dirty: false, phase: "saved"});
+    await vi.waitFor(() => expect(app.state.autosaveState).toEqual(
+      {dirty: false, phase: "saved"},
+    ));
     expect(window.history.replaceState).toHaveBeenCalledWith(
       null,
       "",
@@ -297,13 +298,16 @@ describe("admin editor autosave", () => {
     expect(showToast).toHaveBeenLastCalledWith("Item added.", "success");
 
     app.onUpdateItemMeta({description: "More details"});
-    await vi.advanceTimersByTimeAsync(5000);
+    await app.onSubmit({preventDefault: vi.fn()});
     expect(axiosPost).toHaveBeenCalledTimes(2);
     expect(axiosPost.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
       item: expect.objectContaining({id: itemId}),
     }));
     expect(window.history.replaceState).toHaveBeenCalledOnce();
-    expect(showToast).toHaveBeenLastCalledWith("Item saved.", "success");
+    await vi.waitFor(() => expect(showToast).toHaveBeenLastCalledWith(
+      "Item saved.",
+      "success",
+    ));
     expect(showToast).toHaveBeenCalledTimes(2);
   });
 
@@ -414,9 +418,7 @@ describe("admin editor autosave", () => {
       (element) => element.type === AdminDatetimePicker,
     );
     dateControl?.props.onChange({target: {value: "2026-09-01T18:30"}});
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(Requests.axiosPost).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    await draft.onSubmit({preventDefault: vi.fn()});
     expect(Requests.axiosPost).toHaveBeenCalledOnce();
 
     itemStatusControl(draft)?.props.onValueChange(String(STATUSES.PUBLISHED));
@@ -441,7 +443,7 @@ describe("admin editor autosave", () => {
     expect(legacy.state.item.pubDateIsDraftDefault).toBeUndefined();
   });
 
-  it("preserves a loaded item status while autosaving edits", async () => {
+  it("preserves a loaded item status while saving edits", async () => {
     const app = mount(new EditItemApp({
       ...props({
         guid: "unlisteditem1",
@@ -455,7 +457,7 @@ describe("admin editor autosave", () => {
 
     expect(app.state.item.status).toBe(STATUSES.UNLISTED);
     app.onUpdateItemMeta({title: "Edited item"});
-    await vi.advanceTimersByTimeAsync(5000);
+    await app.onSubmit({preventDefault: vi.fn()});
 
     expect(Requests.axiosPost).toHaveBeenCalledWith(
       expect.any(String),
@@ -469,7 +471,7 @@ describe("admin editor autosave", () => {
     );
   });
 
-  it("debounces ordinary item radio changes for five seconds", async () => {
+  it("saves ordinary item radio changes when the form is submitted", async () => {
     const app = mount(new EditItemApp(props()));
     const explicitControl = findElement(
       app.render(),
@@ -478,9 +480,7 @@ describe("admin editor autosave", () => {
     );
 
     explicitControl?.props.onValueChange("yes");
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(Requests.axiosPost).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    await app.onSubmit({preventDefault: vi.fn()});
 
     expect(Requests.axiosPost).toHaveBeenCalledOnce();
     expect(vi.mocked(Requests.axiosPost).mock.calls[0]?.[1]).toEqual(

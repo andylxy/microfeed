@@ -20,9 +20,16 @@ import type {
   VolumeBookOption,
 } from "@/shared/ExtVolume";
 
+interface CategoryOption {
+  id: string;
+  name: string;
+  bookCount?: number;
+}
+
 interface VolumesResponse {
   board: VolumeBoard | null;
   books: VolumeBookOption[];
+  categories?: CategoryOption[];
 }
 
 /**
@@ -35,6 +42,8 @@ interface VolumesResponse {
 export default function VolumesApp() {
   const {t} = useTranslation();
   const [books, setBooks] = useState<VolumeBookOption[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [bookId, setBookId] = useState("");
   const [board, setBoard] = useState<VolumeBoard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,11 +56,14 @@ export default function VolumesApp() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const load = useCallback(async (id: string) => {
+  const load = useCallback(async (id: string, category = categoryId) => {
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (id) params.set("bookId", id);
+      if (category) params.set("categoryId", category);
       const response = await fetch(
-        `${ADMIN_URLS.ajaxVolumes()}?bookId=${encodeURIComponent(id)}`,
+        `${ADMIN_URLS.ajaxVolumes()}?${params.toString()}`,
       );
       const data = await response.json().catch(() => ({})) as VolumesResponse;
       if (!response.ok) {
@@ -61,6 +73,7 @@ export default function VolumesApp() {
         );
       }
       setBooks(Array.isArray(data.books) ? data.books : []);
+      setCategories(Array.isArray(data.categories) ? data.categories : []);
       setBoard(data.board ?? null);
       setError(null);
     } catch (loadError) {
@@ -72,11 +85,11 @@ export default function VolumesApp() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [categoryId, t]);
 
   useEffect(() => {
-    void load(bookId);
-  }, [bookId, load]);
+    void load(bookId, categoryId);
+  }, [bookId, categoryId, load]);
 
   const post = useCallback(async (
     url: string,
@@ -208,6 +221,41 @@ export default function VolumesApp() {
           </p>
         </div>
       </div>
+
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            className={`rounded-full border px-3 py-1 text-sm ${!categoryId
+              ? "border-primary text-primary"
+              : "text-muted-foreground"}`}
+            onClick={() => {
+              setCategoryId("");
+              setBookId("");
+            }}
+            type="button"
+          >
+            {t("volumes.allCategories")}
+          </button>
+          {categories.map((category) => (
+            <button
+              className={`rounded-full border px-3 py-1 text-sm ${categoryId === category.id
+                ? "border-primary text-primary"
+                : "text-muted-foreground"}`}
+              key={category.id}
+              onClick={() => {
+                setCategoryId(category.id);
+                setBookId("");
+              }}
+              type="button"
+            >
+              {category.name}
+              {typeof category.bookCount === "number" && (
+                <small className="ml-1 opacity-70">{category.bookCount}</small>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="max-w-sm">
         <AdminSelect

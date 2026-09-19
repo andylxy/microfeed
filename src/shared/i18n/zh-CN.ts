@@ -1447,6 +1447,7 @@ export const zhCN: TranslationKey = {
     deleteFailed: "无法删除分类。",
   },
   volumes: {
+    allCategories: "全部分类",
     // List screen
     title: "卷章管理",
     intro: "把一本书的章节按卷归组。卷只是每章身上的一个标签，所以归卷、改名、调序都只是改写这些标签。",
@@ -1512,7 +1513,7 @@ export const zhCN: TranslationKey = {
   saveAction: {
     saveNow: "立即保存",
     retry: "重试保存",
-    idleMessage: "更改将在五秒后自动保存。",
+    idleMessage: "确认无误后点击保存。",
     error: "保存失败。您的更改仍保留在此页面。",
     pending: "有未保存的更改",
     saved: "所有更改已保存",
