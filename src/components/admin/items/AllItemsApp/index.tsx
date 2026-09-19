@@ -424,24 +424,24 @@ export function ItemListTable({
         const item = row.original;
         if (!item.bookId) {
           return (
-            <span className="text-sm text-muted-foreground">
-              {t("items.noBook")}
-            </span>
+            <span className="text-muted-foreground">{t("items.noBook")}</span>
           );
         }
+        // Same shape as `MediaCell`: a plain link that inherits the cell's font,
+        // with an optional muted second line.
         return (
-          <div className="min-w-0">
+          <div>
             <a
-              className="block max-w-full truncate text-sm font-medium text-foreground"
+              className="inline-flex min-w-0 flex-wrap items-center gap-1.5"
               href={ADMIN_URLS.editItem(item.bookId)}
               title={item.bookTitle}
             >
               {item.bookTitle}
             </a>
             {item.categoryName && (
-              <span className="mt-0.5 block text-xs text-muted-foreground">
+              <div className="mt-1 text-xs text-muted-foreground">
                 {item.categoryName}
-              </span>
+              </div>
             )}
           </div>
         );

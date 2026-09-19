@@ -1,4 +1,4 @@
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
@@ -67,7 +67,7 @@ export const POST: APIRoute = async ({request}) => {
     // normally invalidates the public page cache. Without this the reader keeps
     // serving the pre-change content until some later edit happens to purge it —
     // which looked like "the confirm did nothing".
-    const feedDb = new FeedDb(env, request);
+    const feedDb = new FeedDb(env, request, cache);
     await feedDb.purgePublicCacheTags([
       PUBLIC_CACHE_TAGS.PUBLIC,
       PUBLIC_CACHE_TAGS.ITEMS,

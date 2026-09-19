@@ -1,4 +1,4 @@
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
@@ -45,7 +45,7 @@ export const POST: APIRoute = async ({params, request}) => {
     // Writing the correction back updates items.data directly, skipping the save
     // path that invalidates the public cache, so the reader would keep showing
     // the pre-correction text. Purge here.
-    const feedDb = new FeedDb(env, request);
+    const feedDb = new FeedDb(env, request, cache);
     await feedDb.purgePublicCacheTags([
       PUBLIC_CACHE_TAGS.PUBLIC,
       PUBLIC_CACHE_TAGS.ITEMS,
