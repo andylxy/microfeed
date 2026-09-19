@@ -1,0 +1,13 @@
+-- ---------------------------------------------------------------------------
+-- Gate: the proposed content of an unconfirmed change
+--
+-- Until now a change was written to `items.data` immediately, so the public site
+-- showed content that had not been confirmed. `snapshot_data` already holds the
+-- pre-change (last approved) content; this adds the other side of the pair so
+-- confirming can promote it without guessing.
+--
+-- With it, `recordContentChange` can pin `items.data` to the last approved
+-- content while any change is pending, and `approveChapterVersions` promotes the
+-- newest proposed content only when someone confirms.
+-- ---------------------------------------------------------------------------
+ALTER TABLE ext_content_review ADD COLUMN proposed_data TEXT;

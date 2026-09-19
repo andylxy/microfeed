@@ -84,6 +84,7 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
         CHECK (status IN ('pending', 'approved', 'rejected')),
       diff_data TEXT,
       snapshot_data TEXT NOT NULL,
+      proposed_data TEXT,
       action TEXT NOT NULL,
       submitted_by TEXT,
       submitted_at INTEGER,
@@ -132,7 +133,10 @@ describe("content review chain", () => {
     // The queue is driven by pending versions, not by a status label.
     const queue = await listPendingChapters(db);
     expect(queue).toHaveLength(1);
-    expect(queue[0]).toMatchObject({itemId: "chap1", pendingCount: 1, title: "第一章 起航"});
+    expect(queue[0]).toMatchObject({itemId: "chap1", pendingCount: 1, title: "第一章 起锚"});
+
+    // Gate: the change must NOT be public until it is confirmed.
+    expect(readItem(database, "chap1").title).toBe("第一章 起锚");
   });
 
   it("records nothing when the content did not change", async () => {
@@ -157,6 +161,8 @@ describe("content review chain", () => {
     const approved = await approveChapterVersions(db, "chap1", "reviewer-1");
     expect(approved).toBe(1);
     expect(await listPendingChapters(db)).toHaveLength(0);
+    // Confirming is what makes the change public.
+    expect(readItem(database, "chap1").title).toBe("第一章 起航");
     const rows = await listChapterReviews(db, "chap1");
     expect(rows[0]).toMatchObject({status: "approved", reviewedBy: "reviewer-1"});
   });
@@ -168,13 +174,13 @@ describe("content review chain", () => {
       action: "edit", after: v2, before: v1, itemId: "chap1",
     });
 
-    // The chapter currently shows the new title.
-    expect(readItem(database, "chap1").title).toBe("第一章 起航");
+    // The chapter never showed the new title — the gate kept it pinned.
+    expect(readItem(database, "chap1").title).toBe("第一章 起锚");
 
     const result = await rejectChapterVersions(db, "chap1", "reviewer-1");
     expect(result).toEqual({rejected: 1, restored: true});
 
-    // Rejection is a real rollback, not just a relabel.
+    // Still the approved content; the proposed change was dropped.
     expect(readItem(database, "chap1").title).toBe("第一章 起锚");
     expect(await listPendingChapters(db)).toHaveLength(0);
   });

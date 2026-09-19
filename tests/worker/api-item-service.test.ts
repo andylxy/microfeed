@@ -1,3 +1,4 @@
+import {approveChapterVersions} from "@/server/feed/extContentReview";
 import {env} from "cloudflare:workers";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 
@@ -97,12 +98,26 @@ describe("transport-neutral item service", () => {
       "SELECT data, pub_date FROM items WHERE id = ?",
     ).bind(ITEM_ID).first<{data: string; pub_date: string}>();
     expect(row?.pub_date).toBe(publishedAt);
+    // The omitted fields survive the patch...
     expect(JSON.parse(row!.data)).toMatchObject({
       description: "Keep this body",
       guid: "stable-guid",
       mediaFile: {sizeByte: 1234},
-      title: "New title",
     });
+    // ...but the new title is NOT public yet: an unconfirmed change is held back
+    // until someone confirms it (the review gate).
+    expect(JSON.parse(row!.data).title).toBe("Old title");
+
+    // Confirming is what publishes it.
+    await approveChapterVersions(
+      env.FEED_DB as any,
+      ITEM_ID,
+      "reviewer-1",
+    );
+    const after = await env.FEED_DB
+      .prepare("SELECT data FROM items WHERE id = ?").bind(ITEM_ID)
+      .first<{data: string}>();
+    expect(JSON.parse(after!.data).title).toBe("New title");
 
     const publicFeed = await database.getPublicJsonData({
       ...crud.feedContent,

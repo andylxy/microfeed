@@ -61,9 +61,9 @@ export interface PendingChapter {
 }
 
 const INSERT_REVIEW = `INSERT INTO ext_content_review (
-  id, item_id, status, diff_data, snapshot_data, action,
+  id, item_id, status, diff_data, snapshot_data, proposed_data, action,
   submitted_by, submitted_at, reason
-) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)`;
+) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`;
 
 function parseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string" || !value) return fallback;
@@ -87,6 +87,52 @@ function toReview(row: Record<string, unknown>): ContentReview {
     submittedAt: row.submitted_at == null ? null : Number(row.submitted_at),
     submittedBy: row.submitted_by == null ? null : String(row.submitted_by),
   };
+}
+
+/**
+ * Put the chapter's public content back to the last approved state: the snapshot
+ * captured by the earliest still-pending version. No-op when nothing is pending
+ * (everything confirmed), and when the item is already at that content.
+ */
+async function pinToLastApproved(db: AuditDb, itemId: string): Promise<boolean> {
+  const pending = await db.prepare(
+    "SELECT snapshot_data FROM ext_content_review WHERE item_id = ? " +
+      "AND status = 'pending' ORDER BY submitted_at ASC, rowid ASC LIMIT 1",
+  ).bind(itemId).first() as Record<string, unknown> | null;
+  if (!pending) return false;
+
+  const row = await db.prepare("SELECT data FROM items WHERE id = ?")
+    .bind(itemId).first() as Record<string, unknown> | null;
+  if (!row) return false;
+
+  const approvedRaw = String(pending.snapshot_data ?? "");
+  if (!approvedRaw || String(row.data ?? "") === approvedRaw) return false;
+
+  // `items.data` carries its own `status` field alongside the `status` column.
+  // Restoring the snapshot would rewind that copy and make a published chapter
+  // look unpublished again (draft-only enforcement and the public feed both read
+  // it), so the gate only holds back CONTENT — status stays as it is now.
+  let approved = approvedRaw;
+  const current = await db.prepare(
+    "SELECT status FROM items WHERE id = ?",
+  ).bind(itemId).first() as Record<string, unknown> | null;
+  if (current && current.status != null) {
+    try {
+      const parsed = JSON.parse(approvedRaw) as Record<string, unknown>;
+      parsed.status = current.status;
+      approved = JSON.stringify(parsed);
+    } catch {
+      // Unparseable snapshot: leave it exactly as stored rather than guessing.
+    }
+  }
+
+  await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
+    .bind(
+      approved,
+      new Date().toISOString().replace("T", " ").slice(0, 19),
+      itemId,
+    ).run();
+  return true;
 }
 
 /** The single entry point every content change must use. */
@@ -153,16 +199,36 @@ export async function recordContentChange(
 
   const id = randomShortUUID();
   const now = Date.now();
+  // A creation has no prior content, so `before` is empty. Using it as the
+  // snapshot would make the gate pin the item to that empty object and wipe the
+  // chapter that was just created — so for the first version the snapshot IS the
+  // created content (the gate becomes a no-op) while the change still opens for
+  // review, with every field showing as added.
+  const snapshot = Object.keys(before).length === 0 ? after : before;
+
   await db.prepare(INSERT_REVIEW).bind(
     id,
     itemId,
     JSON.stringify(changes),
-    JSON.stringify(before),
+    JSON.stringify(snapshot),
+    JSON.stringify(after),
     params.action,
     params.actorId ?? null,
     now,
     params.reason ?? null,
   ).run();
+
+  // Gate: the caller has already written `after` to items.data, which would put
+  // unconfirmed content on the public site. Pin the item back to the last
+  // approved content — that is the snapshot of the EARLIEST pending version, so
+  // several queued changes do not leak either.
+  //
+  // Only content is held back. A change that moves `status` (publish, unpublish,
+  // delete, create) is an explicit decision, not body text: gating it would
+  // rewind the status copy inside `data` and make published chapters look like
+  // drafts again (draft-only enforcement and the public feed both read it).
+  const touchesStatus = changes.some((change) => change.path === "status");
+  if (!touchesStatus) await pinToLastApproved(db, itemId);
 
   return {
     action: params.action,
@@ -249,6 +315,23 @@ export async function approveChapterVersions(
   if (open.length === 0) return 0;
 
   const now = Date.now();
+
+  // Promote the newest proposed content: this is the moment the change becomes
+  // public. Until now items.data was pinned to the previously approved content.
+  const newest = await db.prepare(
+    "SELECT proposed_data FROM ext_content_review WHERE item_id = ? " +
+      "AND status = 'pending' ORDER BY submitted_at DESC, rowid DESC LIMIT 1",
+  ).bind(itemId).first() as Record<string, unknown> | null;
+  const proposed = newest ? String(newest.proposed_data ?? "") : "";
+  if (proposed) {
+    await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
+      .bind(
+        proposed,
+        new Date(now).toISOString().replace("T", " ").slice(0, 19),
+        itemId,
+      ).run();
+  }
+
   await db.prepare(
     "UPDATE ext_content_review SET status = 'approved', " +
       "reviewed_by = ?, reviewed_at = ? WHERE item_id = ? AND status = 'pending'",
@@ -276,27 +359,13 @@ export async function rejectChapterVersions(
       "reviewed_by = ?, reviewed_at = ? WHERE item_id = ? AND status = 'pending'",
   ).bind(reviewerId, now, itemId).run();
 
-  // Restore the snapshot captured before the earliest unconfirmed change.
-  const earliest = open[0]!;
-  const snapshot = await db.prepare(
-    "SELECT snapshot_data FROM ext_content_review WHERE id = ?",
-  ).bind(earliest.id).first() as Record<string, unknown> | null;
-  const data = snapshot ? parseJson<Record<string, unknown> | null>(
-    snapshot.snapshot_data,
-    null,
-  ) : null;
-  if (!data) return {rejected: open.length, restored: false};
-
-  await db.prepare(
-    "UPDATE items SET data = ?, updated_at = ? WHERE id = ?",
-  ).bind(
-    JSON.stringify(data),
-    new Date(now).toISOString().replace("T", " ").slice(0, 19),
-    itemId,
-  ).run();
+  // The public content was never advanced (the gate pinned it), so dropping the
+  // pending versions is all it takes; if earlier changes are still open, the pin
+  // moves back to the last approved state.
+  await pinToLastApproved(db, itemId);
 
   await recordAudit(db, {
-    action: "restore",
+    action: "reject",
     actorId: reviewerId,
     actorType: "reviewer",
     channelId: null,
@@ -305,7 +374,7 @@ export async function rejectChapterVersions(
     isCheckpoint: false,
     itemId,
     reason: null,
-    reviewStatus: readReviewStatus(data),
+    reviewStatus: null,
   });
 
   return {rejected: open.length, restored: true};
