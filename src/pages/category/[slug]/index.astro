@@ -16,7 +16,7 @@ import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import DEFAULT_WEB_CATEGORY from "../../../../themes/default/web-category.mustache?raw";
 import {
-  getCategoryBySlug,
+  getCategoryBySlugOrId,
   listChannelsByGenre,
 } from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
@@ -38,7 +38,7 @@ if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
 // `db` narrows to the ext_category slice that the novel-cms queries use.
 const feedDb = loaded.database.FEED_DB;
 const db = feedDb as unknown as CategoryDb;
-const category = await getCategoryBySlug(db, slug);
+const category = await getCategoryBySlugOrId(db, slug);
 const unavailable = !category || !category.visible;
 if (unavailable) {
   Astro.response.status = 404;

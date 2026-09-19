@@ -20,8 +20,9 @@ export interface SiteNavContext {
  * route must hand this into its `Theme` instance; a route that forgets it
  * renders an empty category nav instead of failing loudly.
  *
- * `activeNav` is `"home"` on the landing page, a category slug on a category
- * page, and `""` everywhere else (book detail, reader, search, custom pages).
+ * `activeNav` is `"home"` on the landing page, a category id (or a legacy slug)
+ * on a category page, and `""` everywhere else (book detail, reader, search,
+ * custom pages).
  * It only drives the active-link styling, never which links are listed.
  */
 export async function loadSiteNav(
@@ -37,7 +38,7 @@ export async function loadSiteNav(
     navigation_pages,
     category_nav: categories.map((category) => ({
       ...category,
-      active: category.slug === activeNav,
+      active: category.id === activeNav || category.slug === activeNav,
     })),
     nav_active_home: activeNav === "home",
   };

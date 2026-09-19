@@ -238,6 +238,25 @@ export async function getCategoryBySlug(
   return row ? rowToCategory(row) : null;
 }
 
+/**
+ * Resolve a category page address.
+ *
+ * Category urls are now the id (`/category/<id>/`) so they stay plain ASCII —
+ * a slug made from a Chinese name is percent-encoded in the address bar. The
+ * slug is still accepted so existing links and bookmarks keep working.
+ */
+export async function getCategoryBySlugOrId(
+  db: CategoryDb,
+  value: string,
+): Promise<Category | null> {
+  const byId = await db.prepare(
+    "SELECT id, name, slug, parent_id, sort, visible, created_at " +
+      "FROM ext_category WHERE id = ?",
+  ).bind(value).first();
+  if (byId) return rowToCategory(byId);
+  return getCategoryBySlug(db, value);
+}
+
 export async function createCategory(
   db: CategoryDb,
   input: CategoryInput,
