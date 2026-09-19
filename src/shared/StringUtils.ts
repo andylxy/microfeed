@@ -440,6 +440,15 @@ export const ADMIN_URLS = {
   ajaxPage: (id: string) => adminUrl(`ajax/pages/${id}`, browserAdminPath()),
   ajaxCategories: () => adminUrl("ajax/categories", browserAdminPath()),
   ajaxBooks: () => adminUrl("ajax/books", browserAdminPath()),
+  volumes: () => adminUrl("volumes", browserAdminPath()),
+  ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
+  ajaxVolumeAssign: () =>
+    adminUrl("ajax/volumes/assign", browserAdminPath()),
+  ajaxVolumeRename: () =>
+    adminUrl("ajax/volumes/rename", browserAdminPath()),
+  ajaxVolumeReorder: () =>
+    adminUrl("ajax/volumes/reorder", browserAdminPath()),
+  ajaxVolumeOrder: () => adminUrl("ajax/volumes/order", browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),
