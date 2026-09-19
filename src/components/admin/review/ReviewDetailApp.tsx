@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
 
-import i18n from "@/client/i18n";
+import {useTranslation} from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
 import {ADMIN_URLS} from "@/shared/StringUtils";
@@ -9,8 +9,13 @@ import {ADMIN_URLS} from "@/shared/StringUtils";
  * Audit detail for one chapter: every recorded action, the field-level diff it
  * produced, and a button to put the chapter back to that version.
  *
- * The diff model is the one the audit engine stores, so the rendering here is
- * the only place that decides how a change reads.
+ * Above that sits the content-correction panel: review the rendered body,
+ * propose a fix, and confirm (同意) it to write back to the chapter.
+ *
+ * `t` comes from `useTranslation`, NOT `i18n.t.bind(i18n)`: bind() returns a new
+ * function every render, so every `useCallback([t])` changed identity and the
+ * load effect re-ran after each render — which re-fetched and reset the draft
+ * fields, wiping whatever was being typed.
  */
 
 interface FieldChange {
@@ -57,7 +62,7 @@ function renderValue(value: unknown): string {
 }
 
 export default function ReviewDetailApp({itemId}: {itemId: string}) {
-  const t = i18n.t.bind(i18n);
+  const {t} = useTranslation();
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);

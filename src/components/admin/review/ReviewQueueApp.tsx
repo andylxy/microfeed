@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useState} from "react";
 
-import i18n from "@/client/i18n";
+import {useTranslation} from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
 import AdminInput from "@/components/admin/shared/AdminInput";
@@ -11,9 +11,10 @@ import {ADMIN_URLS} from "@/shared/StringUtils";
  * requires a reason; taking down unpublishes and marks the chapter so the
  * reading page can explain itself.
  *
- * Reader reports no longer appear here: the reading page's report form was
- * removed as a design error (see §7.6) — reviewing is about content
- * correctness, not complaints.
+ * `t` comes from `useTranslation`, NOT `i18n.t.bind(i18n)`: bind() returns a new
+ * function on every render, which made every `useCallback([t])` here a new
+ * identity and re-ran the load effect after each render — an endless request
+ * loop that surfaced as a repeating "could not load" toast.
  */
 
 interface QueueItem {
@@ -38,7 +39,7 @@ async function requestJson(url: string, init?: RequestInit): Promise<any> {
 }
 
 export default function ReviewQueueApp() {
-  const t = i18n.t.bind(i18n);
+  const {t} = useTranslation();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
