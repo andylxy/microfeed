@@ -1,13 +1,8 @@
 import {ITEM_STATUSES_STRINGS_DICT, STATUSES} from "@/shared/Constants";
 import type FeedCrudManager from "@/server/feed/FeedCrudManager";
 import type FeedDb from "@/server/feed/FeedDb";
-import {
-  computeDiff,
-  readReviewStatus,
-  recordAudit,
-  recordItemEdit,
-  type AuditDb,
-} from "@/server/feed/extContentAudit";
+import {recordContentChange} from "@/server/feed/extContentReview";
+import type {AuditDb} from "@/server/feed/extContentAudit";
 import type {DatabaseMutationCommit} from "@/server/mutation";
 
 type ItemInput = Record<string, any>;
@@ -59,12 +54,13 @@ export async function createItem(
   if (auditDb) {
     const created = await feedCrud.feedDb.getItemById(id);
     if (created) {
-      await recordItemEdit(
-        auditDb,
-        {},
-        created as Record<string, unknown>,
-        {actorType: "author", forceCheckpoint: true},
-      );
+      await recordContentChange(auditDb, {
+        action: "edit",
+        actorType: "author",
+        after: created as Record<string, unknown>,
+        before: {},
+        itemId: id,
+      });
     }
   }
   return id;
@@ -103,11 +99,12 @@ export async function updateItem(
   // novel-cms audit trail. This is the only call site in the core: the diff
   // model and the checkpoint cadence live in extContentAudit, and an edit that
   // changes nothing records nothing.
-  await recordItemEdit(
-    database.FEED_DB as unknown as AuditDb,
-    existing as Record<string, unknown>,
-    item as Record<string, unknown>,
-  );
+  await recordContentChange(database.FEED_DB as unknown as AuditDb, {
+    action: "edit",
+    after: item as Record<string, unknown>,
+    before: existing as Record<string, unknown>,
+    itemId: id,
+  });
   return item;
 }
 
@@ -126,17 +123,12 @@ export async function deleteItem(
   // removed. It is recorded as `delete` (status -> deleted), which is not the
   // same as `takedown` (unpublished but still present). No checkpoint: there is
   // no reason to make the deleted state a replay anchor.
-  await recordAudit(database.FEED_DB as unknown as AuditDb, {
+  await recordContentChange(database.FEED_DB as unknown as AuditDb, {
     action: "delete",
     actorType: "author",
-    channelId: null,
-    diffData: computeDiff(
-      existing as Record<string, unknown>,
-      deleted as Record<string, unknown>,
-    ),
-    isCheckpoint: false,
+    after: deleted as Record<string, unknown>,
+    before: existing as Record<string, unknown>,
     itemId: id,
-    reviewStatus: readReviewStatus(existing as Record<string, unknown>),
   });
   return true;
 }

@@ -1132,6 +1132,15 @@ export const zhCN: TranslationKey = {
     restored: "已恢复。",
     restoreFailed: "无法恢复到该版本。",
     restoreUnavailableHint: "该版本没有可用的快照，暂时无法恢复（后续版本会恢复可用）。",
+    queueTitle: "待确认章节",
+    queueIntro: "内容一有改动就会进入这里，直到有人确认。确认表示接受这次改动；驳回会把章节恢复到改动前的内容。",
+    pendingCount: "{{count}} 项待确认",
+    chapterMissing: "该章节已不存在。",
+    confirmChanges: "确认改动",
+    rejectAndRestore: "驳回并还原",
+    rejectConfirm: "驳回会把章节恢复到这些改动之前的内容，确定继续？",
+    approved: "已确认改动。",
+    rejected: "已驳回，章节已还原。",
     action: {
       edit: "编辑",
       submit: "提交审核",
@@ -1568,6 +1577,7 @@ export const zhCN: TranslationKey = {
     saveFailed: "无法保存纠错提案。",
     from: "原值",
     to: "改为",
+    untitled: "未命名章节",
   },
   pageTitle: {
     home: "首页",

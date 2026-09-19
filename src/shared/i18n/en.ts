@@ -1130,6 +1130,15 @@ export const en = {
     restored: "Chapter restored.",
     restoreFailed: "Could not restore that version.",
     restoreUnavailableHint: "No snapshot covers this version, so it cannot be rebuilt yet.",
+    queueTitle: "Chapters to confirm",
+    queueIntro: "Content changes land here until someone confirms them. Confirming accepts the change; rejecting restores the chapter to how it was before.",
+    pendingCount: "{{count}} unconfirmed",
+    chapterMissing: "This chapter no longer exists.",
+    confirmChanges: "Confirm",
+    rejectAndRestore: "Reject and restore",
+    rejectConfirm: "Rejecting restores the chapter to its content before these changes. Continue?",
+    approved: "Changes confirmed.",
+    rejected: "Changes rejected; the chapter was restored.",
     action: {
       edit: "Edited",
       submit: "Submitted",
@@ -1566,6 +1575,7 @@ export const en = {
     saveFailed: "Could not save the correction.",
     from: "from",
     to: "to",
+    untitled: "Untitled chapter",
   },
   pageTitle: {
     home: "Home",

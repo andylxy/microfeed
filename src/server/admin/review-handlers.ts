@@ -11,13 +11,17 @@ import {
   applyReviewTransition,
   isAllowedReviewTransition,
   listItemAuditRows,
-  listPendingReviewItems,
   mergeRestoredVersion,
   readItemReviewStatus,
   rebuildItemVersion,
   reviewTransition,
   type ReviewAction,
 } from "@/server/feed/extReview";
+import {
+  approveChapterVersions,
+  listPendingChapters,
+  rejectChapterVersions,
+} from "@/server/feed/extContentReview";
 import {STATUSES} from "@/shared/Constants";
 
 /**
@@ -39,14 +43,48 @@ export class ReviewActionError extends Error {
 }
 
 export interface ReviewQueuePayload {
-  items: Awaited<ReturnType<typeof listPendingReviewItems>>;
+  /**
+   * Chapters with unconfirmed content versions. This used to be
+   * `items.review_status = 'submitted'` — a label nothing ever set, showing the
+   * live body — so the queue could not be entered and showed stale content.
+   */
+  items: Awaited<ReturnType<typeof listPendingChapters>>;
 }
 
 export async function listReviewQueueHandler(
   db: AuditDb,
 ): Promise<ReviewQueuePayload> {
-  const items = await listPendingReviewItems(db);
+  const items = await listPendingChapters(db as unknown as Parameters<
+    typeof listPendingChapters
+  >[0]);
   return {items};
+}
+
+/** Confirm every unconfirmed version of a chapter. */
+export async function approveChapterHandler(
+  db: AuditDb,
+  itemId: string,
+  reviewerId: string | null,
+): Promise<{approved: number}> {
+  const approved = await approveChapterVersions(
+    db as unknown as Parameters<typeof approveChapterVersions>[0],
+    itemId,
+    reviewerId,
+  );
+  return {approved};
+}
+
+/** Reject them and put the chapter back to its pre-change content. */
+export async function rejectChapterHandler(
+  db: AuditDb,
+  itemId: string,
+  reviewerId: string | null,
+): Promise<{restored: boolean; rejected: number}> {
+  return rejectChapterVersions(
+    db as unknown as Parameters<typeof rejectChapterVersions>[0],
+    itemId,
+    reviewerId,
+  );
 }
 
 export async function listItemAuditHandler(

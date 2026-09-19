@@ -47,6 +47,7 @@ export const SNAPSHOT_TABLES = {
     "ext_content_audit",
     "ext_content_report",
     "ext_content_correction",
+    "ext_content_review",
   ],
   ephemeral: [
     "item_create_idempotency",

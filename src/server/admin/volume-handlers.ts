@@ -5,7 +5,8 @@ import {z} from "zod";
 import {AppError} from "@/shared/errors";
 import FeedDb from "@/server/feed/FeedDb";
 import {createFeedCrud} from "@/server/feed/feed";
-import {recordItemEdit, type AuditDb} from "@/server/feed/extContentAudit";
+import {recordContentChange} from "@/server/feed/extContentReview";
+import type {AuditDb} from "@/server/feed/extContentAudit";
 import {
   listVolumeBoard,
   listVolumeBooks,
@@ -89,12 +90,13 @@ async function patchChapter(
     _microfeed: {...microfeed, ...patch},
   };
   await feedCrud.saveInternalItem(next);
-  await recordItemEdit(
-    database.FEED_DB as unknown as AuditDb,
+  await recordContentChange(database.FEED_DB as unknown as AuditDb, {
+    action: "edit",
+    actorType: "author",
+    after: next,
     before,
-    next,
-    {actorType: "author"},
-  );
+    itemId,
+  });
   return true;
 }
 
