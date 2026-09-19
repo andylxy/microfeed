@@ -270,15 +270,10 @@
     });
   }
 
-  var drawer = document.querySelector("[data-mf-toc-drawer]");
-  var drawerToggle = document.querySelector("[data-mf-toc-toggle]");
-  if (drawer && drawerToggle) {
-    drawerToggle.addEventListener("click", function () {
-      drawer.open = !drawer.open;
-      drawerToggle.setAttribute("aria-expanded", String(drawer.open));
-      if (drawer.open) drawer.scrollIntoView({block: "nearest"});
-    });
-  }
+  // The reader's bottom TOC drawer was removed (its 目录(X 章) summary duplicated
+  // the book page's chapter grid), so there is no toggle to wire up. The volume
+  // grouping and current-chapter highlight below still serve the book page,
+  // which also carries [data-mf-toc].
 
   var currentId = document.querySelector("[data-mf-toc]")?.getAttribute("data-mf-current") || "";
   if (currentId) {

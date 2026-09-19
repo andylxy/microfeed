@@ -1,13 +1,5 @@
 <style>
   .mf-home-page { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
-  .mf-home-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 28px; }
-  .mf-home-tab {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 14px; border-radius: 16px; font-size: 14px;
-    color: #555; background: #f5f6f8; text-decoration: none;
-  }
-  .mf-home-tab:hover { color: #ff6b00; }
-  .mf-home-tab small { color: #999; font-size: 12px; }
   .mf-home-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
   .mf-home-heading h2 { font-size: 22px; font-weight: 600; color: #222; }
   .mf-home-heading span { font-size: 13px; color: #999; }
@@ -43,14 +35,6 @@
 </style>
 
 <main class="mf-home-page">
-  {{#category_nav.length}}
-  <nav class="mf-home-tabs" aria-label="题材分类">
-    {{#category_nav}}
-    <a class="mf-home-tab" href="/category/{{slug}}/" rel="tag">{{name}}{{#bookCount}}<small>{{bookCount}}</small>{{/bookCount}}</a>
-    {{/category_nav}}
-  </nav>
-  {{/category_nav.length}}
-
   <div class="mf-home-heading">
     <h2>书库</h2>
     <span>共 {{book_samples.length}} 本作品</span>

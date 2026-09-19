@@ -71,23 +71,14 @@
         {{^next_chapter}}<span class="mf-reader-nav-empty">已是最后一章</span>{{/next_chapter}}
       </nav>
 
-      {{#chapters.length}}
-      <details class="mf-reader-toc mf-toc-drawer" data-mf-toc-drawer>
-        <summary>目录（{{chapters.length}} 章）</summary>
-        <div class="mf-toc" data-mf-toc data-mf-current="{{current_chapter_id}}">
-          {{#chapters}}
-          <div class="mf-toc-item" data-mf-volume="{{volume}}" data-mf-chapter-no="{{chapterNo}}" data-mf-chapter-id="{{id}}"><a href="{{url}}">{{title}}</a></div>
-          {{/chapters}}
-        </div>
-      </details>
-      {{/chapters.length}}
     </article>
 
     <aside class="mf-reader-tools" aria-label="阅读工具">
       {{! 加书架 and 领红包 were prototype-only affordances: neither has a handler
           anywhere in the repo (no bookshelf or red-packet feature exists), so they
-          rendered as buttons that did nothing. Only the three working tools remain. }}
-      <button class="mf-reader-tool" type="button" data-mf-toc-toggle aria-expanded="false"><span aria-hidden="true">☰</span><small>目录</small></button>
+          rendered as buttons that did nothing. Only the working tools remain. The
+          ☰目录 toggle was removed with the bottom TOC drawer it opened — the 目录
+          link above goes to the book page, which lists every chapter. }}
       <button class="mf-reader-tool" type="button" data-mf-reader-night><span aria-hidden="true">◐</span><small>夜间</small></button>
       <button class="mf-reader-tool" type="button" data-mf-font="large"><span aria-hidden="true">A</span><small>字号</small></button>
     </aside>
