@@ -21,7 +21,10 @@ export type AuditAction =
   | "reject"
   | "takedown"
   | "restore"
-  | "auto_flag";
+  | "auto_flag"
+  /** An approved content correction landing on the original item (see
+   *  `extContentCorrection`): carries `approved_by` / `approved_at`. */
+  | "correction_apply";
 
 export type ActorType = "admin" | "author" | "reviewer" | "system";
 

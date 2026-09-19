@@ -38,13 +38,15 @@ export const SNAPSHOT_TABLES = {
     "themes",
     "theme_drafts",
     "theme_state",
-    // novel-cms extension tables (migration 0023). All three hold
-    // user-authored data - the genre list, the field-level audit trail, and
-    // reader reports - so a restored site must keep them. They are additive
-    // and namespaced, so an upstream snapshot never contains them.
+    // novel-cms extension tables (migrations 0023 and 0024). All of them hold
+    // user-authored data - the genre list, the field-level audit trail, reader
+    // reports, and pending content corrections - so a restored site must keep
+    // them. They are additive and namespaced, so an upstream snapshot never
+    // contains them.
     "ext_category",
     "ext_content_audit",
     "ext_content_report",
+    "ext_content_correction",
   ],
   ephemeral: [
     "item_create_idempotency",

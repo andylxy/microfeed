@@ -453,8 +453,10 @@ export const ADMIN_URLS = {
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),
-  ajaxReviewReport: (id: string) =>
-    adminUrl(`ajax/review/reports/${id}`, browserAdminPath()),
+  ajaxReviewCorrections: () =>
+    adminUrl("ajax/review/corrections", browserAdminPath()),
+  ajaxReviewCorrection: (id: string) =>
+    adminUrl(`ajax/review/corrections/${id}`, browserAdminPath()),
   review: () => adminUrl("review", browserAdminPath()),
   reviewItem: (id: string) => adminUrl(`review/${id}`, browserAdminPath()),
   ajaxCategoryOrder: () =>
