@@ -41,6 +41,8 @@ export function itemQueryForStatusFilter(
 }
 
 interface ItemsListUrlOptions {
+  /** novel-cms category id to keep across paging and sorting. */
+  categoryId?: string;
   nextCursor?: number | string;
   order?: ItemOrder;
   prevCursor?: number | string;
@@ -54,12 +56,18 @@ export function buildItemsListUrl({
   prevCursor,
   sort = ITEM_SORTS.UPDATED_AT,
   statusFilter,
+  categoryId = "",
 }: ItemsListUrlOptions = {}): string {
   const searchParams = new URLSearchParams();
   const normalizedStatus = normalizeItemStatusFilter(statusFilter);
 
   if (normalizedStatus !== "all") {
     searchParams.set("status", normalizedStatus);
+  }
+  // novel-cms: keep the chosen category in the address so paging, sorting and
+  // status changes do not silently drop it.
+  if (categoryId) {
+    searchParams.set("categoryId", categoryId);
   }
   applyItemPaginationParams(searchParams, {
     nextCursor,

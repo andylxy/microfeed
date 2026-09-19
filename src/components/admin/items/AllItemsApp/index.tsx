@@ -261,12 +261,15 @@ function tableRows(
 
 function ItemStatusFilters({
   activeFilter,
+  categoryId = "",
   loading,
   navigate,
   order,
   sort,
 }: {
   activeFilter: ItemStatusFilter;
+  /** novel-cms: kept in the address so changing status does not drop it. */
+  categoryId?: string;
   loading: boolean;
   navigate: ListNavigationHandler;
   order: ItemOrder;
@@ -280,7 +283,7 @@ function ItemStatusFilters({
     >
       {ITEM_STATUS_FILTERS.map((statusFilter) => {
         const active = statusFilter === activeFilter;
-        const href = buildItemsListUrl({order, sort, statusFilter});
+        const href = buildItemsListUrl({categoryId,order, sort, statusFilter});
         return (
           <a
             aria-current={active ? "page" : undefined}
@@ -319,9 +322,11 @@ export function ItemListTable({
   const activeFilter = normalizeItemStatusFilter(listing.statusFilter);
   const sort = itemSortDefinition(listing.sort);
   const order = listing.order;
+  // The server echoes the applied category, so paging and sorting keep it.
+  const categoryId = listing.categoryFilter ?? "";
   const nextUrl = listing.nextCursor === undefined
     ? undefined
-    : buildItemsListUrl({
+    : buildItemsListUrl({categoryId,
         nextCursor: listing.nextCursor,
         order,
         sort: sort.sort,
@@ -329,7 +334,7 @@ export function ItemListTable({
       });
   const prevUrl = listing.prevCursor === undefined
     ? undefined
-    : buildItemsListUrl({
+    : buildItemsListUrl({categoryId,
         prevCursor: listing.prevCursor,
         order,
         sort: sort.sort,
@@ -345,7 +350,7 @@ export function ItemListTable({
     const nextOrder = active && descending
       ? ITEM_ORDERS.ASC
       : ITEM_ORDERS.DESC;
-    const sortUrl = buildItemsListUrl({
+    const sortUrl = buildItemsListUrl({categoryId,
       order: nextOrder,
       sort: field,
       statusFilter: activeFilter,
@@ -491,6 +496,7 @@ export function ItemListTable({
     <div>
       <ItemStatusFilters
         activeFilter={activeFilter}
+        categoryId={categoryId}
         loading={loading}
         navigate={navigate}
         order={order}
