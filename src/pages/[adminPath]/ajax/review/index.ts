@@ -8,6 +8,8 @@ import {
   rejectChapterHandler,
 } from "@/server/admin/review-handlers";
 import type {AuditDb} from "@/server/feed/extContentAudit";
+import FeedDb from "@/server/feed/FeedDb";
+import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 
 /** The review queue: chapters with unconfirmed content versions. */
 export const GET: APIRoute = async () => {
@@ -60,6 +62,19 @@ export const POST: APIRoute = async ({request}) => {
     const result = body.action === "approve"
       ? await approveChapterHandler(db, body.itemId, body.actorId ?? null)
       : await rejectChapterHandler(db, body.itemId, body.actorId ?? null);
+
+    // Confirming writes items.data directly, which bypasses the save path that
+    // normally invalidates the public page cache. Without this the reader keeps
+    // serving the pre-change content until some later edit happens to purge it —
+    // which looked like "the confirm did nothing".
+    const feedDb = new FeedDb(env, request);
+    await feedDb.purgePublicCacheTags([
+      PUBLIC_CACHE_TAGS.PUBLIC,
+      PUBLIC_CACHE_TAGS.ITEMS,
+      PUBLIC_CACHE_TAGS.CHANNEL_PRIMARY,
+      PUBLIC_CACHE_TAGS.item(body.itemId),
+    ]);
+
     return jsonResponse(result);
   } catch (error) {
     const response = serviceError(error);
