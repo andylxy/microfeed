@@ -9,7 +9,7 @@ import {
 } from "@/server/admin/review-handlers";
 import type {AuditDb} from "@/server/feed/extContentAudit";
 
-/** The review queue: chapters awaiting a decision. */
+/** The review queue: chapters with unconfirmed content versions. */
 export const GET: APIRoute = async () => {
   try {
     const payload = await listReviewQueueHandler(
@@ -21,7 +21,10 @@ export const GET: APIRoute = async () => {
   } catch (error) {
     const response = serviceError(error);
     if (response) return response;
-    throw error;
+    return jsonResponse(
+      {error: String(error instanceof Error ? error.message : error)},
+      {status: 500},
+    );
   }
 };
 
@@ -32,22 +35,21 @@ interface ReviewBody {
 }
 
 /**
- * Confirm (`approve`) or undo (`reject`) a chapter's unconfirmed versions.
- * Rejecting restores the content captured before the earliest unconfirmed
- * change — it is a real rollback, not just a relabel.
+ * Confirm (`approve`) or discard (`reject`) a chapter's unconfirmed versions.
+ *
+ * Every failure answers with a readable message: an unrecognised exception used
+ * to escape as an opaque 500 with no clue about the cause.
  */
 export const POST: APIRoute = async ({request}) => {
-  const body = await request.json().catch(() => null) as ReviewBody | null;
+  let body: ReviewBody | null = null;
   try {
+    body = await request.json().catch(() => null) as ReviewBody | null;
     if (!body?.itemId || (body.action !== "approve" && body.action !== "reject")) {
-      // Diagnostic: echo back what actually arrived, so the dashboard can show it.
-      // Remove once the queue action is confirmed working.
       return jsonResponse(
         {
           error: "errors.review.invalidAction",
           received: {
             action: body?.action ?? null,
-            actorId: body?.actorId ?? null,
             itemId: body?.itemId ?? null,
           },
         },
@@ -62,6 +64,12 @@ export const POST: APIRoute = async ({request}) => {
   } catch (error) {
     const response = serviceError(error);
     if (response) return response;
-    throw error;
+    return jsonResponse(
+      {
+        error: String(error instanceof Error ? error.message : error),
+        stack: error instanceof Error ? (error.stack ?? null) : null,
+      },
+      {status: 500},
+    );
   }
 };
