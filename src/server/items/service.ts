@@ -3,6 +3,7 @@ import type FeedCrudManager from "@/server/feed/FeedCrudManager";
 import type FeedDb from "@/server/feed/FeedDb";
 import {recordContentChange} from "@/server/feed/extContentReview";
 import type {AuditDb} from "@/server/feed/extContentAudit";
+import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 import type {DatabaseMutationCommit} from "@/server/mutation";
 
 type ItemInput = Record<string, any>;
@@ -99,12 +100,28 @@ export async function updateItem(
   // novel-cms audit trail. This is the only call site in the core: the diff
   // model and the checkpoint cadence live in extContentAudit, and an edit that
   // changes nothing records nothing.
-  await recordContentChange(database.FEED_DB as unknown as AuditDb, {
-    action: "edit",
-    after: item as Record<string, unknown>,
-    before: existing as Record<string, unknown>,
-    itemId: id,
-  });
+  const change = await recordContentChange(
+    database.FEED_DB as unknown as AuditDb,
+    {
+      action: "edit",
+      after: item as Record<string, unknown>,
+      before: existing as Record<string, unknown>,
+      itemId: id,
+    },
+  );
+
+  // The save above purges the public cache, but the review gate then writes the
+  // approved content back over what was just saved. Purge again, or a request
+  // landing in between renders the unconfirmed change — exactly what the gate
+  // exists to prevent.
+  if (change) {
+    await database.purgePublicCacheTags([
+      PUBLIC_CACHE_TAGS.PUBLIC,
+      PUBLIC_CACHE_TAGS.ITEMS,
+      PUBLIC_CACHE_TAGS.CHANNEL_PRIMARY,
+      PUBLIC_CACHE_TAGS.item(id),
+    ]);
+  }
   return item;
 }
 
