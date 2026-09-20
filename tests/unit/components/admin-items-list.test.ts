@@ -70,6 +70,21 @@ function renderItemsList(
 }
 
 describe("admin items list", () => {
+  it("spans the empty-state row across every column", () => {
+    // Adding a column must not leave the empty row one short: the span has to
+    // follow the real column count, not a hardcoded number.
+    const output = renderItemsList(
+      "?status=published&sort=updated_at&order=desc",
+      [],
+    );
+    const headers = output.match(/<th\b/gu)?.length ?? 0;
+    const span = /<td[^>]*colspan="(\d+)"/iu.exec(output)?.[1];
+
+    expect(headers).toBeGreaterThan(0);
+    expect(span).toBeDefined();
+    expect(Number(span)).toBe(headers);
+  });
+
   it("renders the requested filters and seven-column layout", () => {
     const output = renderItemsList();
 
