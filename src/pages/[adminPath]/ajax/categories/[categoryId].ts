@@ -1,13 +1,17 @@
 import type {APIRoute} from "astro";
 
 import {jsonResponse, localizedError, serviceError} from "@/server/http";
+import {
+  PUBLIC_CACHE_TAGS,
+  purgePublicCache,
+} from "@/server/cache/public-cache";
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {
   deleteCategoryHandler,
   getCategoryHandler,
   updateCategoryHandler,
 } from "@/server/admin/category-handlers";
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 
 export const GET: APIRoute = async ({params, request}) => {
   if (!params.categoryId) {
@@ -37,6 +41,7 @@ export const PUT: APIRoute = async ({params, request}) => {
       params.categoryId,
       parsed,
     );
+    await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
     return jsonResponse(category);
   } catch (error) {
     const response = serviceError(error);
@@ -54,6 +59,7 @@ export const DELETE: APIRoute = async ({params, request}) => {
       env.FEED_DB as unknown as CategoryDb,
       params.categoryId,
     );
+    await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
     return jsonResponse({});
   } catch (error) {
     const response = serviceError(error);
