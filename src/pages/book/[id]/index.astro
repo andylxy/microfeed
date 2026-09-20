@@ -20,8 +20,8 @@ const bookId = Astro.params.id ?? "";
 const loaded = await loadPublishedFeed(env, Astro.request, {
   includeActiveTheme: true,
 });
-const unavailable = shouldHidePublicWeb(loaded.content);
-if (!unavailable && !loaded.onboarding.requiredOk) {
+const hidePublicWeb = shouldHidePublicWeb(loaded.content);
+if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
   return Astro.redirect(
     new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
     302,
@@ -34,7 +34,11 @@ if (!unavailable && !loaded.onboarding.requiredOk) {
 const feedDb = loaded.database.FEED_DB;
 const db = feedDb as unknown as CategoryDb;
 const book = await getBookById(db, bookId);
-if (!book) {
+// Both reasons have to reach the render branch below: the page used to key its
+// not-found state off `Astro.response.status`, which only `!book` ever set, so a
+// headless or offline site still served the whole book page.
+const unavailable = hidePublicWeb || !book;
+if (unavailable) {
   Astro.response.status = 404;
 }
 
@@ -133,7 +137,7 @@ const sharedTheme = new Theme(
 );
 ---
 
-{Astro.response.status === 404 ? (
+{unavailable ? (
   <PublicNotFoundHeading />
 ) : (
   <PublicLayout

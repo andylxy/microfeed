@@ -39,7 +39,11 @@ if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
 const feedDb = loaded.database.FEED_DB;
 const db = feedDb as unknown as CategoryDb;
 const category = await getCategoryBySlugOrId(db, slug);
-const unavailable = !category || !category.visible;
+// A headless or offline site must not serve this page either: the redirect guard
+// above only covers onboarding, and `/i/` already counts `hidePublicWeb` as
+// unavailable. Leaving it out here rendered the full category page while the
+// rest of the public site answered 404.
+const unavailable = hidePublicWeb || !category || !category.visible;
 if (unavailable) {
   Astro.response.status = 404;
 }
