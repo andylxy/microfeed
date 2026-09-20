@@ -1,3 +1,5 @@
+import {cache} from "cloudflare:workers";
+
 import type {FeedContent} from "../../types";
 
 import FeedDb from "@/server/feed/FeedDb";
@@ -128,7 +130,7 @@ export async function applyReviewActionHandler(
   action: ReviewAction,
   reason?: string | null,
 ): Promise<Record<string, unknown>> {
-  const database = new FeedDb(runtimeEnv, request);
+  const database = new FeedDb(runtimeEnv, request, cache);
   const existing = await database.getItemById(itemId);
   if (!existing) throw new ReviewActionError("errors.review.itemMissing");
 
@@ -174,7 +176,7 @@ export async function restoreItemVersionHandler(
   itemId: string,
   auditRowId: string,
 ): Promise<Record<string, unknown>> {
-  const database = new FeedDb(runtimeEnv, request);
+  const database = new FeedDb(runtimeEnv, request, cache);
   const existing = await database.getItemById(itemId);
   if (!existing) throw new ReviewActionError("errors.review.itemMissing");
 
