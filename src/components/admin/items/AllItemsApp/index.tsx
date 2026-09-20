@@ -546,7 +546,10 @@ export function ItemListTable({
           <tbody>
             {table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td className="px-5 py-12 text-center" colSpan={6}>
+                <td
+                  className="px-5 py-12 text-center"
+                  colSpan={table.getAllLeafColumns().length}
+                >
                   <div className="font-medium text-foreground">
                     {activeFilter === "all"
                       ? t("items.noItemsYetAll")
