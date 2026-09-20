@@ -1447,6 +1447,8 @@ export const en = {
     deleteFailed: "Could not delete the category.",
   },
   volumes: {
+    auditRecords: "Audit",
+    auditHint: "See every recorded change for this chapter and restore any of them",
     allCategories: "All categories",
     // List screen
     title: "Volume board",

@@ -1449,6 +1449,8 @@ export const zhCN: TranslationKey = {
     deleteFailed: "无法删除分类。",
   },
   volumes: {
+    auditRecords: "审核记录",
+    auditHint: "查看该章节的全部修改记录，并可恢复到其中任一版本",
     allCategories: "全部分类",
     // List screen
     title: "卷章管理",

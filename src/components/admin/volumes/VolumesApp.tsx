@@ -461,6 +461,19 @@ export default function VolumesApp() {
                           ? t("volumes.published")
                           : t("volumes.draft")}
                       </span>
+                      {/*
+                        The chapter's whole audit trail — every recorded change,
+                        with the ability to put an earlier version back. Lives on
+                        the review page for this item, linked here so it is
+                        reachable from wherever chapters are listed.
+                      */}
+                      <a
+                        className="shrink-0 text-xs text-muted-foreground hover:underline"
+                        href={ADMIN_URLS.reviewItem(chapter.id)}
+                        title={t("volumes.auditHint")}
+                      >
+                        {t("volumes.auditRecords")}
+                      </a>
                     </div>
                   ))}
                 </div>
