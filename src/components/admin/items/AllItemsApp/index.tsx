@@ -427,13 +427,15 @@ export function ItemListTable({
             <span className="text-muted-foreground">{t("items.noBook")}</span>
           );
         }
-        // Rendered exactly like the other plain columns (`ItemDate`): a single
-        // text node in the same wrapper, with the category as a muted suffix.
-        // No nested blocks and no link — that is what made the cell look stacked.
+        // One line, never wrapped: a narrow column plus `break-words` made the
+        // value wrap onto several lines, which read as a stacked cell. The full
+        // text stays available through `title`.
         return (
           <span
-            className="block min-w-0 whitespace-normal break-words leading-snug"
-            title={item.bookTitle}
+            className="block min-w-0 truncate leading-snug"
+            title={item.categoryName
+              ? `${item.bookTitle} · ${item.categoryName}`
+              : item.bookTitle}
           >
             {item.bookTitle}
             {item.categoryName && (
@@ -517,7 +519,11 @@ export function ItemListTable({
                     }
                     className={cn(
                       "border-b bg-muted/45 px-5 py-3 text-left text-sm font-semibold text-muted-foreground",
-                      header.column.id === "title" && "w-[29%]",
+                      header.column.id === "title" && "w-[22%]",
+                      // Without an explicit width this column collapsed to the
+                      // leftover space, so its value wrapped onto several lines
+                      // and read as if it shared a cell with the next column.
+                      header.column.id === "bookTitle" && "w-[14%] break-words",
                       header.column.id === "pubDateMs" && "w-[13%] break-words",
                       header.column.id === "createdAtMs" && "w-[13%] break-words",
                       header.column.id === "updatedAtMs" && "w-[13%] break-words",
