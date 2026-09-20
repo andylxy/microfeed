@@ -12,7 +12,16 @@ import {FieldDiff, FieldDiffList, toLines} from "@/components/admin/shared/Field
 function renderDiff(change: Record<string, unknown>): string {
   return renderToStaticMarkup(
     React.createElement(FieldDiff, {change: change as never}),
-  );
+  )
+    // React SSR separates adjacent text nodes with an empty comment, which would
+    // break assertions that span the diff marker and the line itself.
+    .replaceAll("<!-- -->", "")
+    // Un-escape so the assertions can be written as the text the user sees.
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&amp;", "&");
 }
 
 describe("FieldDiff", () => {
@@ -20,6 +29,34 @@ describe("FieldDiff", () => {
     expect(toLines("一\n二")).toEqual(["一", "二"]);
     expect(toLines(null)).toEqual([]);
     expect(toLines({a: 1})).toEqual(["{", '  "a": 1', "}"]);
+  });
+
+  it("splits a single-line HTML body into block lines", () => {
+    // Chapter bodies are stored without newlines (Quill output). Splitting only
+    // on \n would diff the entire chapter as one line.
+    expect(toLines("<p>第一段</p><p>第二段</p>")).toEqual([
+      "<p>第一段</p>",
+      "<p>第二段</p>",
+    ]);
+    // Markdown-rendered bodies already have newlines and must not be touched.
+    expect(toLines("<p>一</p>\n<p>二</p>")).toEqual(["<p>一</p>", "<p>二</p>"]);
+    // Plain text without any block tag is left as-is.
+    expect(toLines("没有标签的纯文本")).toEqual(["没有标签的纯文本"]);
+  });
+
+  it("diffs an HTML body paragraph by paragraph", () => {
+    const html = renderDiff({
+      op: "update",
+      path: "description",
+      before: "<p>第一段</p><p>第二段</p><p>第三段</p><p>第四段</p>",
+      after: "<p>第一段</p><p>第二段改了</p><p>第三段</p><p>第四段</p>",
+    });
+
+    expect(html).toContain("-<p>第二段</p>");
+    expect(html).toContain("+<p>第二段改了</p>");
+    // The untouched paragraphs must show up as context, not as one giant line.
+    expect(html).toContain("<p>第一段</p>");
+    expect(html).toContain("<p>第三段</p>");
   });
 
   it("renders a changed body as a git-style hunk with - and + lines", () => {

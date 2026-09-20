@@ -18,9 +18,27 @@ export interface FieldChange {
   after?: unknown;
 }
 
+/**
+ * A chapter body is stored as one long line of HTML — Quill's output has no
+ * newlines at all. Diffing that as a single line paints the whole chapter as one
+ * `-` and one `+` line, which tells you nothing about what moved. So a body
+ * without newlines is split at block boundaries instead, giving a paragraph-by-
+ * paragraph diff. (Markdown-rendered bodies already carry newlines and are left
+ * alone.)
+ *
+ * Deliberately uses replace-then-split rather than a lookbehind: lookbehind is
+ * unsupported on older Safari, where it would throw while parsing the bundle.
+ */
+const BLOCK_END = /<\/(?:p|div|li|h[1-6]|blockquote|tr)>|<br\s*\/?>/giu;
+
 export function toLines(value: unknown): string[] {
   if (value == null) return [];
-  if (typeof value === "string") return value.split("\n");
+  if (typeof value === "string") {
+    if (value.includes("\n") || !/<\/(?:p|div|li|h[1-6]|blockquote|tr)>/iu.test(value)) {
+      return value.split("\n");
+    }
+    return value.replace(BLOCK_END, "$&\n").split("\n").filter(Boolean);
+  }
   try {
     return JSON.stringify(value, null, 2).split("\n");
   } catch {
