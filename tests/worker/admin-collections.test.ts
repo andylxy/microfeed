@@ -150,6 +150,9 @@ describe("admin collection endpoints", () => {
       {itemId: "admin-summary-item"},
     );
     await expect(response.json()).resolves.toEqual({
+      // The format travels with the body: without it a Markdown chapter would
+      // be handed to the caller as if it were already HTML.
+      content_format: "html",
       content_html: "<p>Editable Item body.</p>",
       id: "admin-summary-item",
       status: STATUSES.UNLISTED,

@@ -69,6 +69,9 @@ export const apiItemInputSchema = z.object({
   attachments: z.array(apiAttachmentSchema).max(1).optional().meta({
     description: "Zero or one main media attachment. This is distinct from the item cover image and becomes the RSS enclosure.",
   }),
+  content_format: z.enum(["html", "markdown"]).optional().meta({
+    description: "How to read content_html: leave unset for HTML, set to markdown when the body is Markdown that the site renders for display.",
+  }),
   content_html: z.string().optional(),
   date_published: z.iso.datetime().optional(),
   date_published_ms: z.number().int().nonnegative().optional(),

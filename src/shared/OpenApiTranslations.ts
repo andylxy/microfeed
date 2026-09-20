@@ -75,6 +75,8 @@ const ZH_CN: Record<string, string> = {
   "Get the feed": "获取信息流",
   "How the main media attachment should be presented. Use external_url only for a linked web page rather than an uploaded file.":
     "主媒体附件的呈现方式。external_url 仅用于外链网页，不用于已上传的文件。",
+  "How to read content_html: leave unset for HTML, set to markdown when the body is Markdown that the site renders for display.":
+    "如何解读 content_html：留空表示 HTML；若正文是 Markdown（由站点渲染后展示），请设为 markdown。",
   "Item-specific cover art or thumbnail. This is not the main media attachment or RSS enclosure.":
     "条目专属的封面图或缩略图。它不是主媒体附件，也不是 RSS enclosure。",
   "List Pages": "列出页面",

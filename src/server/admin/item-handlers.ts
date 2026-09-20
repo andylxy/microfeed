@@ -3,6 +3,7 @@ import type {APIRoute} from "astro";
 
 import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
 import {jsonResponse} from "@/server/http";
+import {bodyFormat} from "@/shared/BodyFormat";
 import {listAdminItems} from "@/server/items/admin-list";
 import FeedDb from "@/server/feed/FeedDb";
 
@@ -22,6 +23,11 @@ export const getAdminItem: APIRoute = async ({params, request}) => {
     : null;
   return item
     ? jsonResponse({
+        // The body may be Markdown now; without the format a caller cannot tell
+        // whether `content_html` is HTML or Markdown that still needs rendering.
+        content_format: bodyFormat(
+          (item as unknown as Record<string, unknown>).content_format,
+        ),
         content_html: String(item.description ?? ""),
         id: String(item.id ?? params.itemId),
         status: item.status,
