@@ -1449,7 +1449,7 @@ export const en = {
   },
   audit: {
     title: "Audit",
-    intro: "Every recorded change to a chapter, newest first, rendered the way git shows a diff.",
+    intro: "Every recorded change to a chapter, newest first, rendered the way git shows a diff. The trail is append-only: restoring adds a row and never clears the history it came from.",
     loading: "Loading audit trail...",
     empty: "No chapter has recorded changes yet.",
     noChanges: "This record carries no field-level changes.",

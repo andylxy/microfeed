@@ -1451,7 +1451,7 @@ export const zhCN: TranslationKey = {
   },
   audit: {
     title: "修改留痕",
-    intro: "每一条章节修改记录，按时间由新到旧排列，以 git diff 的方式展示差异。",
+    intro: "每一条章节修改记录，按时间由新到旧排列，以 git diff 的方式展示差异。记录只增不删，恢复版本也只会新增一条，不会清掉既有历史。",
     loading: "正在加载修改留痕...",
     empty: "还没有任何章节的修改记录。",
     noChanges: "该记录没有字段级改动。",

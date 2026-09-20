@@ -265,6 +265,38 @@ describe("source architecture", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("keeps the audit trail append-only", async () => {
+    // `ext_content_audit` is the version ledger: `rebuildItemVersion` walks back
+    // to the nearest checkpoint and replays forward, so a removed or rewritten
+    // row does not lose one version — it can make every later version
+    // unrecoverable. Restoring a version must ADD a row, never clear the
+    // history that produced it.
+    //
+    // `ext_content_review` is different on purpose: those rows carry a status
+    // that moves pending → approved/rejected, so UPDATE is legitimate there.
+    // Dropping them is not.
+    const files = await sourceFiles(path.join(repositoryRoot, "src"));
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      // Collapse whitespace so a statement split across template-literal lines
+      // still matches.
+      const source = (await readFile(file, "utf8")).replace(/\s+/gu, " ");
+      const patterns = [
+        /DELETE FROM ext_content_audit/iu,
+        /UPDATE ext_content_audit SET/iu,
+        /DELETE FROM ext_content_review/iu,
+      ];
+      for (const pattern of patterns) {
+        if (pattern.test(source)) {
+          offenders.push(`${path.relative(repositoryRoot, file)}: ${pattern.source}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps API settings on their standalone auto-saving page", async () => {
     const [apiRoute, apiSettings, settingsPage] = await Promise.all([
       readFile(
