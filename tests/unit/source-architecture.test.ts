@@ -222,6 +222,49 @@ describe("source architecture", () => {
     expect(routeSource).toContain('settingsActiveSection="custom-code"');
   });
 
+  it("gives every FeedDb that can write a public cache purger", async () => {
+    // `new FeedDb(env, request)` compiles fine but silently disables cache
+    // purging: `publicCacheInvalidationEnabled` stays false, so an admin action
+    // lands in the database and the public site keeps serving the old copy until
+    // the 5-minute TTL expires. Six write paths had that bug (a confirmation
+    // seemed to do nothing for minutes). This is the ratchet: the only
+    // purger-less constructions left are the two read-only ones below.
+    const allowed = new Set([
+      path.join("src", "pages", "[adminPath]", "ajax", "search", "index.ts"),
+      path.join("src", "server", "webhooks", "explorer.ts"),
+    ]);
+    const files = await sourceFiles(path.join(repositoryRoot, "src"));
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      if (allowed.has(path.relative(repositoryRoot, file))) continue;
+      const source = await readFile(file, "utf8");
+      for (const match of source.matchAll(/new FeedDb\(/gu)) {
+        const start = (match.index ?? 0) + match[0].length;
+        let depth = 1;
+        let index = start;
+        while (index < source.length && depth > 0) {
+          if ("([{".includes(source[index]!)) depth += 1;
+          else if (")]}".includes(source[index]!)) depth -= 1;
+          index += 1;
+        }
+        const args = source.slice(start, index - 1);
+        let nesting = 0;
+        let commas = 0;
+        for (const character of args) {
+          if ("([{".includes(character)) nesting += 1;
+          else if (")]}".includes(character)) nesting -= 1;
+          else if (character === "," && nesting === 0) commas += 1;
+        }
+        if (commas + 1 < 3) {
+          offenders.push(`${path.relative(repositoryRoot, file)}: new FeedDb(${args.trim()})`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps API settings on their standalone auto-saving page", async () => {
     const [apiRoute, apiSettings, settingsPage] = await Promise.all([
       readFile(

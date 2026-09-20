@@ -17,6 +17,7 @@ describe("getAdminNavigationItems", () => {
       [NAV_ITEMS.ALL_ITEMS, "/studio/items/list/"],
       [NAV_ITEMS.IMPORT_CHAPTERS, "/studio/items/import/"],
       [NAV_ITEMS.REVIEW, "/studio/review/"],
+      [NAV_ITEMS.AUDIT, "/studio/audit/"],
       [NAV_ITEMS.PAGES, "/studio/pages/"],
       [NAV_ITEMS.CATEGORIES, "/studio/categories/"],
       [NAV_ITEMS.BOOKS, "/studio/books/"],

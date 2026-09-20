@@ -1,4 +1,7 @@
-import {approveChapterVersions} from "@/server/feed/extContentReview";
+import {
+  approveChapterVersions,
+  type AuditDb,
+} from "@/server/feed/extContentReview";
 import {env} from "cloudflare:workers";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 
@@ -54,6 +57,15 @@ describe("transport-neutral item service", () => {
     expect(stored?.content_text).toBe("Canonical & searchable");
     expect(JSON.parse(stored!.data)).not.toHaveProperty("content_text");
     await updateItem(database, crud, id, {content_html: ""});
+    // The review gate holds the edit back, so the stored search text still
+    // mirrors the confirmed body rather than the pending one.
+    expect((await database.getItemById(id))?.contentText).toBe("Canonical & searchable");
+    await approveChapterVersions(
+      database.FEED_DB as unknown as AuditDb,
+      id,
+      "tester",
+    );
+    // Confirming is what lets both `data` and its mirrors catch up.
     expect((await database.getItemById(id))?.contentText).toBe("");
     await env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(id).run();
   });

@@ -1,4 +1,5 @@
-import {randomShortUUID} from "@/shared/StringUtils";
+import {htmlToPlainText, randomShortUUID} from "@/shared/StringUtils";
+import {msToRFC3339} from "@/shared/TimeUtils";
 import {
   computeDiff,
   countCheckpoints,
@@ -126,13 +127,81 @@ async function pinToLastApproved(db: AuditDb, itemId: string): Promise<boolean> 
     }
   }
 
-  await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
-    .bind(
-      approved,
-      new Date().toISOString().replace("T", " ").slice(0, 19),
-      itemId,
-    ).run();
+  await writeItemContent(db, itemId, approved);
   return true;
+}
+
+interface DerivedColumns {
+  contentText: string;
+  pubDate: string | null;
+  reviewStatus: string | null;
+}
+
+/**
+ * Write `items.data` **and** the columns derived from it.
+ *
+ * `items.data` is not the whole row: `content_text` (search), `review_status`
+ * (queue index) and `pub_date` are mirrors the normal save path refreshes
+ * alongside it. Writing only `data` leaves them pointing at different content —
+ * holding a change back still answered searches with the pending body, and
+ * confirming one never refreshed the search text at all.
+ */
+async function writeItemContent(
+  db: AuditDb,
+  itemId: string,
+  dataJson: string,
+): Promise<void> {
+  const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const derived = parseDerivedColumns(dataJson);
+
+  if (!derived) {
+    // Unparseable content: still write it, but leave the mirrors untouched
+    // rather than blanking search text on a guess.
+    await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
+      .bind(dataJson, timestamp, itemId).run();
+    return;
+  }
+
+  await db.prepare(
+    "UPDATE items SET data = ?, content_text = ?, content_text_updated_at = ?, " +
+      "review_status = ?, pub_date = COALESCE(?, pub_date), updated_at = ? " +
+      "WHERE id = ?",
+  ).bind(
+    dataJson,
+    derived.contentText,
+    timestamp,
+    derived.reviewStatus,
+    derived.pubDate,
+    timestamp,
+    itemId,
+  ).run();
+}
+
+/** Re-derive the columns that mirror `items.data`. Null when it will not parse. */
+function parseDerivedColumns(dataJson: string): DerivedColumns | null {
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(dataJson) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  return deriveColumns(data);
+}
+
+function deriveColumns(data: Record<string, unknown>): DerivedColumns {
+  const microfeed = data["_microfeed"] as Record<string, unknown> | undefined;
+  const reviewStatus = typeof microfeed?.["reviewStatus"] === "string"
+    ? microfeed["reviewStatus"]
+    : null;
+  const publishedMs = data["date_published_ms"];
+  const pubDate = typeof publishedMs === "number" && Number.isFinite(publishedMs)
+    ? msToRFC3339(publishedMs)
+    : null;
+  return {
+    contentText: htmlToPlainText(data["description"]),
+    pubDate,
+    reviewStatus,
+  };
 }
 
 /** The single entry point every content change must use. */
@@ -324,12 +393,9 @@ export async function approveChapterVersions(
   ).bind(itemId).first() as Record<string, unknown> | null;
   const proposed = newest ? String(newest.proposed_data ?? "") : "";
   if (proposed) {
-    await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
-      .bind(
-        proposed,
-        new Date(now).toISOString().replace("T", " ").slice(0, 19),
-        itemId,
-      ).run();
+    // Same mirrors as the gate rolls back: confirming a change is the moment the
+    // searchable text has to catch up with the body.
+    await writeItemContent(db, itemId, proposed);
   }
 
   await db.prepare(

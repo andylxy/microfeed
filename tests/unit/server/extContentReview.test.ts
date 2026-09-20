@@ -59,6 +59,9 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
       id VARCHAR(11) PRIMARY KEY,
       status TINYINT,
       data TEXT,
+      content_text TEXT NOT NULL DEFAULT '',
+      content_text_updated_at TIMESTAMP,
+      review_status TEXT,
       pub_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -96,9 +99,32 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
   return {database, db: new SqliteAuditDb(database)};
 }
 
+/**
+ * Mirrors what `FeedDb._putItemToContentStatement` writes: `data` plus the
+ * columns derived from it. The review gate has to roll all of them back, not
+ * just `data`, so the fixture has to carry them.
+ */
 function writeItem(database: DatabaseSync, id: string, data: unknown) {
-  database.prepare("INSERT OR REPLACE INTO items (id, status, data) VALUES (?,?,?)")
-    .run(id, 1, JSON.stringify(data));
+  const row = data as Record<string, unknown>;
+  database.prepare(
+    "INSERT OR REPLACE INTO items (id, status, data, content_text, " +
+      "review_status) VALUES (?,?,?,?,?)",
+  ).run(
+    id,
+    1,
+    JSON.stringify(data),
+    plainText(row["description"]),
+    (row["_microfeed"] as {reviewStatus?: string} | undefined)?.reviewStatus ?? null,
+  );
+}
+
+function plainText(value: unknown): string {
+  return String(value ?? "").replace(/<[^>]*>/g, "");
+}
+
+function readRow(database: DatabaseSync, id: string): Record<string, unknown> {
+  return database.prepare("SELECT * FROM items WHERE id = ?").get(id) as
+    Record<string, unknown>;
 }
 
 function readItem(database: DatabaseSync, id: string): Record<string, unknown> {
@@ -139,6 +165,35 @@ describe("content review chain", () => {
     expect(readItem(database, "chap1").title).toBe("第一章 起锚");
   });
 
+  it("holds back the columns derived from data, not just data itself", async () => {
+    const {database, db} = emptyDatabase();
+    const before = {
+      _microfeed: {reviewStatus: "approved"},
+      id: "chap1",
+      title: "第一章 起锚",
+      description: "<p>原文</p>",
+    };
+    const after = {
+      _microfeed: {reviewStatus: "submitted"},
+      id: "chap1",
+      title: "第一章 起航",
+      description: "<p>待审正文</p>",
+    };
+    // The caller saves `after` first, refreshing the derived columns with the
+    // unconfirmed content — exactly what production does.
+    writeItem(database, "chap1", after);
+    await recordContentChange(db, {
+      action: "edit", after, before, itemId: "chap1",
+    });
+
+    const row = readRow(database, "chap1");
+    expect(JSON.parse(String(row.data)).description).toBe("<p>原文</p>");
+    // Search text and the queue index still pointed at the pending content
+    // before this was fixed: the FTS index would answer with 待审正文.
+    expect(row.content_text).toBe("原文");
+    expect(row.review_status).toBe("approved");
+  });
+
   it("records nothing when the content did not change", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v1);
@@ -149,6 +204,35 @@ describe("content review chain", () => {
       itemId: "chap1",
     })).toBeNull();
     expect(await listPendingChapters(db)).toHaveLength(0);
+  });
+
+  it("refreshes the derived columns when a version is confirmed", async () => {
+    const {database, db} = emptyDatabase();
+    const before = {
+      _microfeed: {reviewStatus: "approved"},
+      id: "chap1",
+      title: "第一章 起锚",
+      description: "<p>原文</p>",
+    };
+    const after = {
+      _microfeed: {reviewStatus: "approved"},
+      id: "chap1",
+      title: "第一章 起航",
+      description: "<p>新正文</p>",
+    };
+    writeItem(database, "chap1", after);
+    await recordContentChange(db, {
+      action: "edit", after, before, itemId: "chap1",
+    });
+    // The gate pinned everything back to `before`.
+    expect(readRow(database, "chap1").content_text).toBe("原文");
+
+    await approveChapterVersions(db, "chap1", "reviewer-1");
+    const row = readRow(database, "chap1");
+    // Confirming only rewrote `data` before this was fixed, so the searchable
+    // text never caught up with the body the reader already shows.
+    expect(JSON.parse(String(row.data)).description).toBe("<p>新正文</p>");
+    expect(row.content_text).toBe("新正文");
   });
 
   it("approving confirms the versions and empties the queue", async () => {

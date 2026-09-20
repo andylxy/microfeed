@@ -1,0 +1,39 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AuditTrail from "@/components/admin/audit/AuditTrail";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {NAV_ITEMS} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import type {AuditDb} from "@/server/feed/extContentAudit";
+import {listAuditTrailHandler} from "@/server/admin/audit-handlers";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const itemId = Astro.params.itemId ?? "";
+const database = Astro.locals.feedDb as unknown as AuditDb;
+const {item, rows} = await listAuditTrailHandler(database, itemId);
+const itemTitle = typeof item?.title === "string" && item.title.trim()
+  ? item.title
+  : translate("review.untitled", adminLanguage);
+---
+
+<AdminShell
+  activeNavItem={NAV_ITEMS.AUDIT}
+  documentTitle={itemTitle}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={itemTitle}
+>
+  <AuditTrail
+    client:only="react"
+    {itemId}
+    initialRows={rows}
+  >
+    <AdminPageFallback slot="fallback" kind="list" />
+  </AuditTrail>
+</AdminShell>

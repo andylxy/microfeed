@@ -1,0 +1,26 @@
+---
+import AuditApp from "@/components/admin/audit/AuditApp";
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {NAV_ITEMS} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+---
+
+<AdminShell
+  activeNavItem={NAV_ITEMS.AUDIT}
+  documentTitle={translate("pageDocumentTitle.audit", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.audit", adminLanguage)}
+>
+  <AuditApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </AuditApp>
+</AdminShell>
