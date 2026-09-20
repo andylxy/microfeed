@@ -70,6 +70,7 @@
     "kysely": "^0.28.5",
     "lucide-react": "^1.27.0",
     "lz-string": "^1.4.4",
+    "marked": "^18.0.13",
     "mustache": "^4.2.0",
     "nanostores": "^1.0.1",
     "quill": "^2.0.3",

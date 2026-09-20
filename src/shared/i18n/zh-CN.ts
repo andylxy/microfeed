@@ -538,6 +538,7 @@ export const zhCN: TranslationKey = {
     editorMode: "编辑器模式",
     visualEditor: "可视化编辑器",
     htmlSource: "HTML 源码",
+    markdownEditor: "Markdown 编辑器",
     // RichEditorMediaDialog
     insert: "插入",
     r2UnavailableUseUrl: "在启用 R2 媒体存储之前，文件上传不可用。请改用「从 URL 添加」。",
@@ -572,6 +573,12 @@ export const zhCN: TranslationKey = {
     // AdminHtmlEditor
     htmlSourceAria: "HTML 源码",
     htmlSourcePlaceholder: "请输入 HTML 源码",
+    markdownSourceAria: "Markdown 源码",
+    markdownSourcePlaceholder: "用 Markdown 编写章节正文",
+    markdownPreview: "预览",
+    markdownEmptyPreview: "暂无内容可预览。",
+    markdownHint: "与另外两种模式一样保存为 HTML；Markdown 原文会一并保留，方便下次继续编辑。",
+
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "例如 100% 或 640px",
     heightPlaceholder: "例如 auto 或 360px",

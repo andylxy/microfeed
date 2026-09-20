@@ -536,6 +536,7 @@ export const en = {
     editorMode: "Editor mode",
     visualEditor: "visual editor",
     htmlSource: "html source",
+    markdownEditor: "Markdown",
     // RichEditorMediaDialog
     insert: "Insert",
     r2UnavailableUseUrl: "File uploads are unavailable until R2 media storage is enabled. Use From URL instead.",
@@ -570,6 +571,12 @@ export const en = {
     // AdminHtmlEditor
     htmlSourceAria: "HTML source",
     htmlSourcePlaceholder: "Enter HTML source",
+    markdownSourceAria: "Markdown source",
+    markdownSourcePlaceholder: "Write the chapter in Markdown",
+    markdownPreview: "Preview",
+    markdownEmptyPreview: "Nothing to preview yet.",
+    markdownHint: "Saved as HTML like the other two modes; the Markdown source is kept so you can reopen it here.",
+
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "e.g., 100% or 640px",
     heightPlaceholder: "e.g., auto or 360px",

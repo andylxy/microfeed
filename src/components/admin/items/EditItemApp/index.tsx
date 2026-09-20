@@ -548,8 +548,11 @@ export default class EditItemApp extends React.Component<Props, any> {
             <div className="mt-8 pt-8 border-t">
               <AdminRichEditor
                 labelComponent={<AdminHelpLabel help={CONTROLS_TEXTS_DICT[ITEM_CONTROLS.DESCRIPTION]}/>}
+                markdownSource={String(item.content_markdown ?? "")}
                 value={item.description}
                 onChange={(value: any) => this.onUpdateItemMeta({'description': value})}
+                onMarkdownChange={(value: string) =>
+                  this.onUpdateItemMeta({'content_markdown': value})}
                 extra={{
                   publicBucketUrl,
                   folderName: `items/${itemId}`,
