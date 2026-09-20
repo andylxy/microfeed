@@ -162,6 +162,12 @@ describe("content review chain", () => {
     const queue = await listPendingChapters(db);
     expect(queue).toHaveLength(1);
     expect(queue[0]).toMatchObject({itemId: "chap1", pendingCount: 1, title: "第一章 起锚"});
+    // The review page renders `changes` as a git diff, so an empty array here
+    // would show an approver an empty diff and no way to tell what they are
+    // confirming.
+    expect(queue[0]!.changes).toEqual([
+      {after: "第一章 起航", before: "第一章 起锚", op: "update", path: "title"},
+    ]);
 
     // Gate: the change must NOT be public until it is confirmed.
     expect(readItem(database, "chap1").title).toBe("第一章 起锚");
@@ -220,6 +226,29 @@ describe("content review chain", () => {
     expect(await rebuildItemVersion(db, "chap1", trail[0]!.id)).toMatchObject({
       title: v2.title,
     });
+  });
+
+  it("queues the newest unconfirmed version's changes for review", async () => {
+    const {database, db} = emptyDatabase();
+    writeItem(database, "chap1", v1);
+    writeItem(database, "chap1", v2);
+    await recordContentChange(db, {
+      action: "edit", after: v2, before: v1, itemId: "chap1",
+    });
+    // A second edit before anyone confirms: the queue shows ONE chapter with
+    // two pending versions, and the diff belongs to the newest one.
+    const v3 = {...v1, title: "第一章 归航"};
+    writeItem(database, "chap1", v3);
+    await recordContentChange(db, {
+      action: "edit", after: v3, before: v2, itemId: "chap1",
+    });
+
+    const queue = await listPendingChapters(db);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.pendingCount).toBe(2);
+    expect(queue[0]!.changes).toEqual([
+      {after: "第一章 归航", before: "第一章 起航", op: "update", path: "title"},
+    ]);
   });
 
   it("records nothing when the content did not change", async () => {
