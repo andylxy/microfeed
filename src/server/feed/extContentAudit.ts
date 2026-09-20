@@ -82,6 +82,24 @@ function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * Keys that move on every single write without anyone editing them:
+ *
+ * - `updatedAtMs` is the write timestamp, so it differs on every save — it made
+ *   every edit look like it changed three fields when it changed one.
+ * - `contentText` / `content_text` are the plain-text mirror derived from the
+ *   body (`FeedDb` recomputes it on save), so they duplicate the `description`
+ *   change instead of reporting anything of their own.
+ *
+ * Neither is content, and showing either hides the field the editor actually
+ * touched.
+ */
+const NON_CONTENT_FIELDS = new Set([
+  "contentText",
+  "content_text",
+  "updatedAtMs",
+]);
+
+/**
  * Compute the field-level difference between two item `data` objects.
  * Nested plain objects (e.g. `_microfeed`) are diffed recursively so that
  * `volume` / `chapterNo` / `tags` are reported as independent fields.
@@ -90,6 +108,7 @@ export function computeDiff(existing: ItemData, next: ItemData): FieldChange[] {
   const changes: FieldChange[] = [];
   const keys = new Set([...Object.keys(existing), ...Object.keys(next)]);
   for (const key of keys) {
+    if (NON_CONTENT_FIELDS.has(key)) continue;
     const inExisting = Object.prototype.hasOwnProperty.call(existing, key);
     const inNext = Object.prototype.hasOwnProperty.call(next, key);
     const existingVal = existing[key];

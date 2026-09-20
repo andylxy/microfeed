@@ -1467,6 +1467,7 @@ export const zhCN: TranslationKey = {
     loadFailed: "无法加载修改留痕。",
     restore: "恢复到此版本",
     restored: "已恢复该章节。",
+    restoreUnchanged: "当前内容已是该版本，无需恢复。",
     restoreFailed: "无法恢复到该版本。",
     restoreUnavailableHint: "该版本没有可用快照，暂时无法重建。",
     op: {

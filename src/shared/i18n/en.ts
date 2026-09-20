@@ -1465,6 +1465,7 @@ export const en = {
     loadFailed: "Could not load the audit trail.",
     restore: "Restore this version",
     restored: "Chapter restored.",
+    restoreUnchanged: "That version is already in place, so nothing was restored.",
     restoreFailed: "Could not restore that version.",
     restoreUnavailableHint: "No snapshot covers this version, so it cannot be rebuilt yet.",
     op: {

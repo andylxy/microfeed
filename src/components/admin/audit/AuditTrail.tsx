@@ -254,13 +254,18 @@ export default function AuditTrail({
         method: "POST",
       });
       const payload = await response.json().catch(() => null) as
-        | {error?: string}
+        | {error?: string; unchanged?: boolean}
         | null;
       if (!response.ok) {
         throw new Error(payload?.error ?? t("audit.restoreFailed"));
       }
-      showToast(t("audit.restored"), "success");
-      await load();
+      // Clicking restore twice on the same row is a no-op, and the server says
+      // so rather than adding another empty trail entry.
+      showToast(
+        payload?.unchanged ? t("audit.restoreUnchanged") : t("audit.restored"),
+        "success",
+      );
+      if (!payload?.unchanged) await load();
     } catch (restoreError) {
       showToast(
         restoreError instanceof Error

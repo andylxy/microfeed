@@ -5,6 +5,7 @@ import type {FeedContent} from "../../types";
 import FeedDb from "@/server/feed/FeedDb";
 import {createFeedCrud} from "@/server/feed/feed";
 import {
+  computeDiff,
   recordAudit,
   type AuditDb,
   type ItemData,
@@ -197,19 +198,30 @@ export async function restoreItemVersionHandler(
     status: existing.status ?? STATUSES.UNPUBLISHED,
   };
 
+  // Restoring to the content already in place is a no-op. Recording it anyway
+  // piled up empty "版本恢复" rows that said nothing, so skip the write and the
+  // trail entirely — the same rule an edit with no changes follows.
+  const changes = computeDiff(
+    existing as unknown as ItemData,
+    item as unknown as ItemData,
+  );
+  if (changes.length === 0) return {restored: true, unchanged: true};
+
   const content = await database.getContent(null) as unknown as FeedContent;
   const feedCrud = createFeedCrud(content, database, request);
   await feedCrud.saveInternalItem(item);
 
+  // Trail the real difference, not an empty diff: that is what makes a restore
+  // row reviewable like any other change.
   await recordAudit(database.FEED_DB as unknown as AuditDb, {
     action: "restore",
     actorType: "reviewer",
     channelId: null,
-    diffData: [],
+    diffData: changes,
     isCheckpoint: false,
     itemId,
     reviewStatus: readItemReviewStatus(item),
   });
 
-  return {restored: true};
+  return {restored: true, unchanged: false};
 }

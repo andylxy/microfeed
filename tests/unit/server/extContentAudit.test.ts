@@ -115,6 +115,37 @@ describe("computeDiff", () => {
     expect(diff.find((d) => d.path === "_microfeed.chapterNo")).toBeUndefined();
   });
 
+  it("ignores fields the writer advances rather than the editor", () => {
+    // A real edit moved one field, but the save also stamps `updatedAtMs` and
+    // recomputes the plain-text mirror of the body — reporting all three buried
+    // the one thing the editor actually changed.
+    const existing: ItemData = {
+      contentText: "旧正文",
+      description: "<p>旧正文</p>",
+      updatedAtMs: 1_700_000_000_000,
+    };
+    const next: ItemData = {
+      contentText: "新正文",
+      description: "<p>新正文</p>",
+      updatedAtMs: 1_700_000_060_000,
+    };
+
+    expect(computeDiff(existing, next)).toEqual([
+      {
+        path: "description",
+        op: "update",
+        before: "<p>旧正文</p>",
+        after: "<p>新正文</p>",
+      },
+    ]);
+  });
+
+  it("records nothing when only the write-only fields moved", () => {
+    const existing: ItemData = {contentText: "正文", updatedAtMs: 1};
+    const next: ItemData = {contentText: "正文", updatedAtMs: 2};
+    expect(computeDiff(existing, next)).toEqual([]);
+  });
+
   it("treats an array field as a single value (no per-element diff)", () => {
     const existing: ItemData = {tags: ["a", "b"]};
     const next: ItemData = {tags: ["a", "c"]};
