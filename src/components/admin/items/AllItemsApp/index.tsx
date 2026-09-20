@@ -427,21 +427,21 @@ export function ItemListTable({
             <span className="text-muted-foreground">{t("items.noBook")}</span>
           );
         }
-        // Same shape as `MediaCell`: a plain link that inherits the cell's font,
-        // with an optional muted second line.
+        // One line, like every other column: the book name with the category as
+        // a muted suffix. Stacking them reads as a different kind of cell.
         return (
-          <div>
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
             <a
-              className="inline-flex min-w-0 flex-wrap items-center gap-1.5"
+              className="truncate"
               href={ADMIN_URLS.editItem(item.bookId)}
               title={item.bookTitle}
             >
               {item.bookTitle}
             </a>
             {item.categoryName && (
-              <div className="mt-1 text-xs text-muted-foreground">
-                {item.categoryName}
-              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                · {item.categoryName}
+              </span>
             )}
           </div>
         );
