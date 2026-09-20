@@ -627,6 +627,18 @@ export function ItemListTable({
   );
 }
 
+/**
+ * Drop the paging cursor. A cursor is only meaningful for the result set it was
+ * taken from, so keeping one across a filter change lands on an arbitrary slice
+ * — often an empty page that looks like "this category has nothing".
+ */
+function withoutCursor(search: string): string {
+  const parameters = new URLSearchParams(search);
+  parameters.delete("next_cursor");
+  parameters.delete("prev_cursor");
+  return parameters.toString();
+}
+
 function collectionUrl(
   search: string,
   itemsPerPage: number,
@@ -647,8 +659,20 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
   );
   // novel-cms: chapters belong to a book, so the category filter is applied on
   // the server (chapter -> book -> genre) rather than over the loaded page.
-  const [categoryId, setCategoryId] = useState("");
-  const [bookId, setBookId] = useState("");
+  // Read the applied filters back out of the address: paging and sorting write
+  // them into the URL, so a reload used to filter the list while the pills still
+  // showed "all categories" as the active choice.
+  const [categoryId, setCategoryId] = useState(
+    () => new URLSearchParams(search).get("categoryId") ?? "",
+  );
+  const [bookId, setBookId] = useState(
+    () => new URLSearchParams(search).get("bookId") ?? "",
+  );
+  const chooseFilter = (next: {bookId?: string; categoryId?: string}) => {
+    setSearch(withoutCursor(search));
+    if (next.categoryId !== undefined) setCategoryId(next.categoryId);
+    if (next.bookId !== undefined) setBookId(next.bookId);
+  };
   const endpoint = collectionUrl(search, itemsPerPage, categoryId, bookId);
   const {data: listing, error, loading, retry} =
     useAdminCollection<AdminItemListResponse>(
@@ -700,10 +724,7 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
                 className={`rounded-full border px-3 py-1 text-sm ${!categoryId
                   ? "border-primary text-primary"
                   : "text-muted-foreground"}`}
-                onClick={() => {
-                  setCategoryId("");
-                  setBookId("");
-                }}
+                onClick={() => chooseFilter({bookId: "", categoryId: ""})}
                 type="button"
               >
                 {t("items.allCategories")}
@@ -714,10 +735,7 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
                     ? "border-primary text-primary"
                     : "text-muted-foreground"}`}
                   key={category.id}
-                  onClick={() => {
-                    setCategoryId(category.id);
-                    setBookId("");
-                  }}
+                  onClick={() => chooseFilter({bookId: "", categoryId: category.id})}
                   type="button"
                 >
                   {category.name}
@@ -743,7 +761,7 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
                       ? "border-primary text-primary"
                       : "text-muted-foreground"}`}
                     key={book.id}
-                    onClick={() => setBookId(active ? "" : book.id)}
+                    onClick={() => chooseFilter({bookId: active ? "" : book.id})}
                     type="button"
                   >
                     {book.title || t("items.untitledBook")}
