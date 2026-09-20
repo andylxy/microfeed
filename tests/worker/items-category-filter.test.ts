@@ -91,6 +91,27 @@ describe("admin item list novel-cms filtering", () => {
     )).toBe(true);
   });
 
+  it("narrows the list to one book's chapters while the category stays applied", async () => {
+    // The combination is the whole point of the drill-down. It also used to be
+    // broken in a way each single filter hid: the SQL asks for the category
+    // before the book, so pushing the book's value into `bindings` first bound a
+    // book id to the genre comparison and matched nothing.
+    await seed();
+    const both = await adminList({
+      bookId: BOOK_ID,
+      categoryId: CATEGORY_ID,
+    });
+    expect(both.items.map((item) => item.id).sort()).toEqual([
+      "catfilter-a",
+      "catfilter-b",
+    ]);
+    expect(both.bookFilter).toBe(BOOK_ID);
+    expect(both.categoryFilter).toBe(CATEGORY_ID);
+    // And it must be a real narrowing, not the category on its own.
+    const categoryOnly = await adminList({categoryId: CATEGORY_ID});
+    expect(categoryOnly.items.length).toBe(both.items.length);
+  });
+
   it("narrows the list to one book's chapters", async () => {
     await seed();
     const filtered = await adminList({bookId: BOOK_ID});

@@ -135,11 +135,11 @@ export async function listAdminItems(
   // genre. Only added when a category is asked for, leaving the default list
   // query untouched.
   const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
-  let bookClause = "";
-  if (bookFilter) {
-    bookClause = ` AND ${bookRef} = ?`;
-    bindings.push(bookFilter);
-  }
+  // Every clause appends its value to `bindings`, so these blocks MUST stay in
+  // the same order as the placeholders in the WHERE clause below. They used to
+  // push the book first while the SQL asked for the category first, which bound
+  // a book id to the genre comparison — a category plus a book then matched
+  // nothing at all, and each filter on its own looked perfectly fine.
   let categoryClause = "";
   if (categoryFilter) {
     // `items.` is required: an unqualified `data` inside the subquery resolves
@@ -147,6 +147,11 @@ export async function listAdminItems(
     categoryClause = " AND (SELECT genre FROM channels " +
       "WHERE id = json_extract(items.data, '$._microfeed.bookId')) = ?";
     bindings.push(categoryFilter);
+  }
+  let bookClause = "";
+  if (bookFilter) {
+    bookClause = ` AND ${bookRef} = ?`;
+    bindings.push(bookFilter);
   }
   const categories = (await listCategoryNav(
     database as unknown as CategoryDb,
