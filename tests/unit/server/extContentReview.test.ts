@@ -228,6 +228,37 @@ describe("content review chain", () => {
     });
   });
 
+  it("restores the Markdown source along with the rendered body", async () => {
+    // A Markdown-edited chapter stores two fields: `description` (rendered HTML)
+    // and `content_markdown` (the source). Both go through the same
+    // checkpoint-and-replay machinery, so restoring a version has to bring back
+    // the source too — otherwise the body and its source drift apart and the
+    // next Markdown save would quietly rewrite the chapter.
+    const {database, db} = emptyDatabase();
+    const before = {
+      content_markdown: "# 一\n\n旧正文。",
+      description: "<h1>一</h1>\n<p>旧正文。</p>",
+      id: "chap1",
+      title: "第一章 起锚",
+    };
+    const after = {
+      ...before,
+      content_markdown: "# 一\n\n新正文。",
+      description: "<h1>一</h1>\n<p>新正文。</p>",
+    };
+    writeItem(database, "chap1", before);
+    writeItem(database, "chap1", after);
+    await recordContentChange(db, {
+      action: "edit", after, before, itemId: "chap1",
+    });
+
+    const trail = await listItemAuditRows(db, "chap1");
+    expect(trail).toHaveLength(1);
+    const rebuilt = await rebuildItemVersion(db, "chap1", trail[0]!.id);
+    expect(rebuilt?.description).toBe(after.description);
+    expect(rebuilt?.content_markdown).toBe(after.content_markdown);
+  });
+
   it("queues the newest unconfirmed version's changes for review", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v1);
