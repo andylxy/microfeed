@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {
   listAuditChaptersHandler,
   listAuditTrailHandler,
+  setAuditRowArchivedHandler,
 } from "@/server/admin/audit-handlers";
 import type {
   AuditDb,
@@ -71,7 +72,8 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
       is_checkpoint BOOLEAN DEFAULT 0,
       review_status TEXT,
       reason TEXT,
-      created_at TIMESTAMP
+      created_at TIMESTAMP,
+      archived INTEGER NOT NULL DEFAULT 0
     );
   `);
   return {database, db: new SqliteAuditDb(database)};
@@ -132,6 +134,29 @@ describe("audit browsing", () => {
       .rejects.toThrow(/env\.FEED_DB/u);
     await expect(listAuditTrailHandler(wrapper, "chap1"))
       .rejects.toThrow(/env\.FEED_DB/u);
+  });
+
+  it("archives a row without deleting it, and can bring it back", async () => {
+    const {database, db} = emptyDatabase();
+    addAuditRow(database, "a1", "chap1", "1700000000000", true);
+    addAuditRow(database, "a2", "chap1", "1700000100000");
+
+    // Scoped to the item: a row from another chapter must not be reachable.
+    expect(await setAuditRowArchivedHandler(db, "chap2", "a2", true))
+      .toEqual({archived: true, found: false});
+
+    expect(await setAuditRowArchivedHandler(db, "chap1", "a2", true))
+      .toEqual({archived: true, found: true});
+
+    const {rows} = await listAuditTrailHandler(db, "chap1");
+    expect(rows.find((row) => row.id === "a2")?.archived).toBe(true);
+    expect(rows.find((row) => row.id === "a1")?.archived).toBe(false);
+    // The row is still there — archiving is a flag, never a delete.
+    expect(rows).toHaveLength(2);
+
+    await setAuditRowArchivedHandler(db, "chap1", "a2", false);
+    const again = await listAuditTrailHandler(db, "chap1");
+    expect(again.rows.find((row) => row.id === "a2")?.archived).toBe(false);
   });
 
   it("returns an empty trail for a chapter with no records", async () => {

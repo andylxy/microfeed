@@ -14,6 +14,34 @@ export interface AuditChapterRow {
 }
 
 /**
+ * Hide a row from the dashboard (or bring it back), without touching the row
+ * itself.
+ *
+ * Deliberately not a DELETE: `rebuildItemVersion` replays diffs forward from the
+ * nearest checkpoint, so dropping one row would corrupt every version after it.
+ * The flag is the only field ever written back to `ext_content_audit` — the
+ * diff, the snapshot and the timestamp are immutable once recorded.
+ */
+export async function setAuditRowArchivedHandler(
+  db: AuditDb,
+  itemId: string,
+  auditRowId: string,
+  archived: boolean,
+): Promise<{archived: boolean; found: boolean}> {
+  assertD1Handle(db);
+  // Scoped to the item so a mismatched id can never reach another chapter.
+  const row = await db.prepare(
+    "SELECT id FROM ext_content_audit WHERE id = ? AND item_id = ?",
+  ).bind(auditRowId, itemId).first();
+  if (!row) return {archived, found: false};
+
+  await db.prepare(
+    "UPDATE ext_content_audit SET archived = ? WHERE id = ? AND item_id = ?",
+  ).bind(archived ? 1 : 0, auditRowId, itemId).run();
+  return {archived, found: true};
+}
+
+/**
  * `created_at` was written in two shapes over time: epoch milliseconds by the
  * audit module, and `YYYY-MM-DD HH:MM:SS` by the correction module. Ordering on
  * the raw column mixes them up, so normalise both to milliseconds first.

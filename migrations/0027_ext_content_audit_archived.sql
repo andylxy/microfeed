@@ -1,0 +1,12 @@
+-- ---------------------------------------------------------------------------
+-- Archive flag for audit rows, so the trail can be tidied without being cut
+--
+-- Audit rows are append-only: `rebuildItemVersion` walks back to the nearest
+-- checkpoint and replays the diffs forward, so deleting a row does not drop one
+-- version — it corrupts every version after it.
+--
+-- Hiding a row from the dashboard therefore has to be a flag. The row stays in
+-- the replay chain; only the listing filters it out, and the flag can be
+-- cleared again, which a DELETE could never offer.
+-- ---------------------------------------------------------------------------
+ALTER TABLE ext_content_audit ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;

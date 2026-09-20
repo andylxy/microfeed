@@ -3,7 +3,10 @@ import type {APIRoute} from "astro";
 
 import {jsonResponse, localizedError, serviceError} from "@/server/http";
 import type {AuditDb} from "@/server/feed/extContentAudit";
-import {listAuditTrailHandler} from "@/server/admin/audit-handlers";
+import {
+  listAuditTrailHandler,
+  setAuditRowArchivedHandler,
+} from "@/server/admin/audit-handlers";
 import {
   restoreItemVersionHandler,
   ReviewActionError,
@@ -28,17 +31,41 @@ export const GET: APIRoute = async ({params}) => {
   }
 };
 
-interface RestoreBody {
+interface ActionBody {
+  /** Restore the chapter to the version this row records. */
   auditRowId?: string;
+  /** Hide a row from the listing, or bring a hidden one back. */
+  archiveRowId?: string;
+  archived?: boolean;
 }
 
 /**
- * Put the chapter back to the version an audit row records. This is a write,
- * so it lives behind POST rather than being folded into the read above.
+ * Restore a version, or archive/unarchive one row. Both are writes, so they
+ * live behind POST rather than being folded into the read above.
  */
 export const POST: APIRoute = async ({params, request}) => {
   const itemId = params.itemId ?? "";
-  const body = await request.json().catch(() => null) as RestoreBody | null;
+  const body = await request.json().catch(() => null) as ActionBody | null;
+
+  if (body?.archiveRowId) {
+    try {
+      const result = await setAuditRowArchivedHandler(
+        env.FEED_DB as unknown as AuditDb,
+        itemId,
+        body.archiveRowId,
+        body.archived === true,
+      );
+      if (!result.found) {
+        return localizedError(request, "errors.review.invalidAction", 404);
+      }
+      return jsonResponse(result);
+    } catch (error) {
+      const response = serviceError(error);
+      if (response) return response;
+      throw error;
+    }
+  }
+
   if (!body?.auditRowId) {
     return localizedError(request, "errors.review.invalidAction", 400);
   }

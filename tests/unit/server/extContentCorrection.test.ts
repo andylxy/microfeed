@@ -80,7 +80,8 @@ function emptyDatabase(): SqliteCorrectionDb {
       reason TEXT,
       approved_by TEXT,
       approved_at INTEGER,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      archived INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE ext_content_correction (
       id VARCHAR(11) PRIMARY KEY,

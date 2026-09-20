@@ -83,7 +83,8 @@ function newDatabase(): DatabaseSync {
     is_checkpoint BOOLEAN DEFAULT 0,
     review_status TEXT,
     reason TEXT,
-    created_at TEXT
+    created_at TEXT,
+    archived INTEGER NOT NULL DEFAULT 0
   )`);
   database.exec(`CREATE TABLE ext_content_report (
     id TEXT PRIMARY KEY,

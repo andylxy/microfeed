@@ -21,6 +21,8 @@ export interface FieldChange {
 export interface AuditTrailRow {
   action: string;
   actorId: string | null;
+  /** Hidden from the listing. Never deleted — the replay chain needs it. */
+  archived: boolean;
   actorType: string;
   createdAt: string;
   diffData: FieldChange[];
@@ -221,6 +223,7 @@ export default function AuditTrail({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -278,9 +281,46 @@ export default function AuditTrail({
     }
   }
 
+  async function setArchived(rowId: string, archived: boolean) {
+    setBusyId(rowId);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxAuditItem(itemId), {
+        body: JSON.stringify({archiveRowId: rowId, archived}),
+        headers: {"Content-Type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as
+          | {error?: string}
+          | null;
+        throw new Error(payload?.error ?? t("audit.archiveFailed"));
+      }
+      // Update in place: the row is still on the server, only the listing
+      // changes, so a full reload would just lose the reader's place.
+      setRows((current) => current.map((row) =>
+        row.id === rowId ? {...row, archived} : row,
+      ));
+      showToast(archived ? t("audit.archived") : t("audit.unarchived"), "success");
+    } catch (archiveError) {
+      showToast(
+        archiveError instanceof Error
+          ? archiveError.message
+          : t("audit.archiveFailed"),
+        "error",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (error) {
     return <AdminCollectionError message={error} retry={() => void load()} />;
   }
+  const archivedCount = rows.filter((row) => row.archived).length;
+  const visibleRows = showArchived
+    ? rows
+    : rows.filter((row) => !row.archived);
+
   if (rows.length === 0) {
     return (
       <div className="rounded-[14px] border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -296,10 +336,26 @@ export default function AuditTrail({
         {loading ? <AdminCollectionLoading label={t("audit.loading")} /> : null}
       </div>
 
+      {archivedCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <label className="inline-flex items-center gap-1.5">
+            <input
+              checked={showArchived}
+              onChange={(event) => setShowArchived(event.target.checked)}
+              type="checkbox"
+            />
+            {t("audit.showArchived")}
+          </label>
+          <span>{archivedCount} {t("audit.archivedCount")}</span>
+        </div>
+      ) : null}
+
       <ol className="space-y-3">
-        {rows.map((row) => (
+        {visibleRows.map((row) => (
           <li
-            className="rounded-[14px] border bg-card p-4 shadow-xs"
+            className={`rounded-[14px] border bg-card p-4 shadow-xs ${
+              row.archived ? "opacity-60" : ""
+            }`}
             key={row.id}
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -312,6 +368,11 @@ export default function AuditTrail({
               {row.isCheckpoint ? (
                 <span className="rounded-full border px-2 py-0.5 text-xs">
                   {t("audit.checkpoint")}
+                </span>
+              ) : null}
+              {row.archived ? (
+                <span className="rounded-full border px-2 py-0.5 text-xs">
+                  {t("audit.archivedBadge")}
                 </span>
               ) : null}
               {row.actorId ? (
@@ -350,6 +411,16 @@ export default function AuditTrail({
                 variant="outline"
               >
                 {t("audit.restore")}
+              </Button>
+              <Button
+                disabled={busyId === row.id}
+                onClick={() => void setArchived(row.id, !row.archived)}
+                size="sm"
+                title={t("audit.archiveHint")}
+                type="button"
+                variant="ghost"
+              >
+                {row.archived ? t("audit.unarchive") : t("audit.archive")}
               </Button>
               {row.restorable ? null : (
                 <span className="text-xs text-muted-foreground">

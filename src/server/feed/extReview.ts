@@ -199,6 +199,8 @@ export interface AuditRow {
   action: string;
   actorType: string;
   actorId: string | null;
+  /** Hidden from the dashboard listing. The row itself is never deleted. */
+  archived: boolean;
   diffData: FieldChange[];
   isCheckpoint: boolean;
   reviewStatus: string | null;
@@ -214,7 +216,7 @@ export interface AuditRow {
 }
 
 const SELECT_AUDIT = `SELECT id, action, actor_type, actor_id, diff_data,
-  is_checkpoint, review_status, reason, created_at
+  is_checkpoint, review_status, reason, created_at, archived
   FROM ext_content_audit WHERE item_id = ? ORDER BY created_at ASC, rowid ASC`;
 
 /** Every audit row for one item, oldest first. */
@@ -240,6 +242,9 @@ export async function listItemAuditRows(
       action: String(row.action ?? ""),
       actorId: row.actor_id == null ? null : String(row.actor_id),
       actorType: String(row.actor_type ?? ""),
+      // Archived rows stay in the replay chain and are only filtered out of the
+      // listing — see migrations/0027.
+      archived: Number(row.archived ?? 0) === 1,
       createdAt: String(row.created_at ?? ""),
       diffData,
       id: String(row.id ?? ""),

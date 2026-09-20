@@ -282,14 +282,19 @@ describe("source architecture", () => {
       // Collapse whitespace so a statement split across template-literal lines
       // still matches.
       const source = (await readFile(file, "utf8")).replace(/\s+/gu, " ");
-      const patterns = [
-        /DELETE FROM ext_content_audit/iu,
-        /UPDATE ext_content_audit SET/iu,
-        /DELETE FROM ext_content_review/iu,
-      ];
-      for (const pattern of patterns) {
-        if (pattern.test(source)) {
-          offenders.push(`${path.relative(repositoryRoot, file)}: ${pattern.source}`);
+      if (/DELETE FROM ext_content_audit/iu.test(source)) {
+        offenders.push(`${path.relative(repositoryRoot, file)}: DELETE FROM ext_content_audit`);
+      }
+      if (/DELETE FROM ext_content_review/iu.test(source)) {
+        offenders.push(`${path.relative(repositoryRoot, file)}: DELETE FROM ext_content_review`);
+      }
+      // The one field that may be written back is the archive flag, which only
+      // hides a row from the listing. Anything else rewrites recorded history.
+      for (const match of source.matchAll(/UPDATE ext_content_audit SET (.+?) WHERE/giu)) {
+        if (String(match[1]).trim() !== "archived = ?") {
+          offenders.push(
+            `${path.relative(repositoryRoot, file)}: UPDATE ext_content_audit SET ${String(match[1]).trim()}`,
+          );
         }
       }
     }
