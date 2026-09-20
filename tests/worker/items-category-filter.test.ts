@@ -90,4 +90,30 @@ describe("admin item list novel-cms filtering", () => {
       (category) => category.id === CATEGORY_ID,
     )).toBe(true);
   });
+
+  it("narrows the list to one book's chapters", async () => {
+    await seed();
+    const filtered = await adminList({bookId: BOOK_ID});
+    expect(filtered.items.map((item) => item.id).sort()).toEqual([
+      "catfilter-a",
+      "catfilter-b",
+    ]);
+    // Echoed so paging and sorting keep the drill-down step.
+    expect(filtered.bookFilter).toBe(BOOK_ID);
+  });
+
+  it("offers the books of the chosen category for the drill-down", async () => {
+    await seed();
+    const listing = await adminList({categoryId: CATEGORY_ID});
+    expect(listing.books).toEqual([{id: BOOK_ID, title: "Filter book"}]);
+  });
+
+  it("keeps category and book independent when only a book is asked for", async () => {
+    // A book narrows on its own; the category is what supplies the book list,
+    // so asking for a book without one must still work.
+    await seed();
+    const filtered = await adminList({bookId: BOOK_ID});
+    expect(filtered.books).toBeUndefined();
+    expect(filtered.categoryFilter).toBeUndefined();
+  });
 });

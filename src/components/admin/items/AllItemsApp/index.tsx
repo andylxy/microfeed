@@ -261,6 +261,7 @@ function tableRows(
 
 function ItemStatusFilters({
   activeFilter,
+  bookId = "",
   categoryId = "",
   loading,
   navigate,
@@ -269,6 +270,7 @@ function ItemStatusFilters({
 }: {
   activeFilter: ItemStatusFilter;
   /** novel-cms: kept in the address so changing status does not drop it. */
+  bookId?: string;
   categoryId?: string;
   loading: boolean;
   navigate: ListNavigationHandler;
@@ -283,7 +285,12 @@ function ItemStatusFilters({
     >
       {ITEM_STATUS_FILTERS.map((statusFilter) => {
         const active = statusFilter === activeFilter;
-        const href = buildItemsListUrl({categoryId,order, sort, statusFilter});
+        const href = buildItemsListUrl({bookId,
+          categoryId,
+          order,
+          sort,
+          statusFilter,
+        });
         return (
           <a
             aria-current={active ? "page" : undefined}
@@ -324,9 +331,10 @@ export function ItemListTable({
   const order = listing.order;
   // The server echoes the applied category, so paging and sorting keep it.
   const categoryId = listing.categoryFilter ?? "";
+  const bookId = listing.bookFilter ?? "";
   const nextUrl = listing.nextCursor === undefined
     ? undefined
-    : buildItemsListUrl({categoryId,
+    : buildItemsListUrl({bookId, categoryId,
         nextCursor: listing.nextCursor,
         order,
         sort: sort.sort,
@@ -334,7 +342,7 @@ export function ItemListTable({
       });
   const prevUrl = listing.prevCursor === undefined
     ? undefined
-    : buildItemsListUrl({categoryId,
+    : buildItemsListUrl({bookId, categoryId,
         prevCursor: listing.prevCursor,
         order,
         sort: sort.sort,
@@ -350,7 +358,7 @@ export function ItemListTable({
     const nextOrder = active && descending
       ? ITEM_ORDERS.ASC
       : ITEM_ORDERS.DESC;
-    const sortUrl = buildItemsListUrl({categoryId,
+    const sortUrl = buildItemsListUrl({bookId, categoryId,
       order: nextOrder,
       sort: field,
       statusFilter: activeFilter,
@@ -430,20 +438,14 @@ export function ItemListTable({
         // One line, never wrapped: a narrow column plus `break-words` made the
         // value wrap onto several lines, which read as a stacked cell. The full
         // text stays available through `title`.
+        // Book name only. The category is its own filter above the table, and
+        // repeating it here pushed the name out of a 14% column.
         return (
           <span
             className="block min-w-0 truncate leading-snug"
-            title={item.categoryName
-              ? `${item.bookTitle} · ${item.categoryName}`
-              : item.bookTitle}
+            title={item.bookTitle}
           >
             {item.bookTitle}
-            {item.categoryName && (
-              <span className="text-muted-foreground">
-                {" · "}
-                {item.categoryName}
-              </span>
-            )}
           </span>
         );
       },
@@ -497,6 +499,7 @@ export function ItemListTable({
     <div>
       <ItemStatusFilters
         activeFilter={activeFilter}
+        bookId={bookId}
         categoryId={categoryId}
         loading={loading}
         navigate={navigate}
@@ -628,10 +631,12 @@ function collectionUrl(
   search: string,
   itemsPerPage: number,
   categoryId = "",
+  bookId = "",
 ): string {
   const parameters = new URLSearchParams(search);
   parameters.set("limit", String(itemsPerPage));
   if (categoryId) parameters.set("categoryId", categoryId);
+  if (bookId) parameters.set("bookId", bookId);
   return `${ADMIN_URLS.ajaxItems()}?${parameters.toString()}`;
 }
 
@@ -643,7 +648,8 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
   // novel-cms: chapters belong to a book, so the category filter is applied on
   // the server (chapter -> book -> genre) rather than over the loaded page.
   const [categoryId, setCategoryId] = useState("");
-  const endpoint = collectionUrl(search, itemsPerPage, categoryId);
+  const [bookId, setBookId] = useState("");
+  const endpoint = collectionUrl(search, itemsPerPage, categoryId, bookId);
   const {data: listing, error, loading, retry} =
     useAdminCollection<AdminItemListResponse>(
       endpoint,
@@ -694,7 +700,10 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
                 className={`rounded-full border px-3 py-1 text-sm ${!categoryId
                   ? "border-primary text-primary"
                   : "text-muted-foreground"}`}
-                onClick={() => setCategoryId("")}
+                onClick={() => {
+                  setCategoryId("");
+                  setBookId("");
+                }}
                 type="button"
               >
                 {t("items.allCategories")}
@@ -705,12 +714,42 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
                     ? "border-primary text-primary"
                     : "text-muted-foreground"}`}
                   key={category.id}
-                  onClick={() => setCategoryId(category.id)}
+                  onClick={() => {
+                    setCategoryId(category.id);
+                    setBookId("");
+                  }}
                   type="button"
                 >
                   {category.name}
                 </button>
               ))}
+            </div>
+          )}
+          {/*
+            Step 2 of the drill-down: the books of the chosen category, right
+            under the pills that produced them. Picking one narrows the table to
+            that book's chapters; picking it again clears the filter.
+          */}
+          {(listing.books?.length ?? 0) > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 border-t pt-4">
+              <span className="text-xs text-muted-foreground">
+                {t("items.booksInCategory")}
+              </span>
+              {listing.books?.map((book) => {
+                const active = bookId === book.id;
+                return (
+                  <button
+                    className={`rounded-full border px-3 py-1 text-sm ${active
+                      ? "border-primary text-primary"
+                      : "text-muted-foreground"}`}
+                    key={book.id}
+                    onClick={() => setBookId(active ? "" : book.id)}
+                    type="button"
+                  >
+                    {book.title || t("items.untitledBook")}
+                  </button>
+                );
+              })}
             </div>
           )}
           <div

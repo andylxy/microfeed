@@ -16,7 +16,10 @@ import {
   resolveItemPagination,
 } from "@/shared/ItemPagination";
 import {msToRFC3339, rfc3399ToMs} from "@/shared/TimeUtils";
-import {listCategoryNav} from "@/server/feed/extCategory";
+import {
+  listCategoryNav,
+  listChannelsByGenre,
+} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 
 interface AdminItemRow extends Record<string, unknown> {
@@ -90,6 +93,7 @@ export async function listAdminItems(
   const searchParams = new URL(request.url).searchParams;
   const statusFilter = normalizeItemStatusFilter(searchParams.get("status"));
   const categoryFilter = (searchParams.get("categoryId") ?? "").trim();
+  const bookFilter = (searchParams.get("bookId") ?? "").trim();
   const pagination = resolveItemPagination(searchParams, {
     order: ITEM_ORDERS.DESC,
     sort: ITEM_SORTS.UPDATED_AT,
@@ -130,6 +134,12 @@ export async function listAdminItems(
   // filtering by category means resolving the chapter's book and comparing its
   // genre. Only added when a category is asked for, leaving the default list
   // query untouched.
+  const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
+  let bookClause = "";
+  if (bookFilter) {
+    bookClause = ` AND ${bookRef} = ?`;
+    bindings.push(bookFilter);
+  }
   let categoryClause = "";
   if (categoryFilter) {
     // `items.` is required: an unqualified `data` inside the subquery resolves
@@ -138,7 +148,6 @@ export async function listAdminItems(
       "WHERE id = json_extract(items.data, '$._microfeed.bookId')) = ?";
     bindings.push(categoryFilter);
   }
-  const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
   const categories = (await listCategoryNav(
     database as unknown as CategoryDb,
   )).map((category) => ({
@@ -148,6 +157,17 @@ export async function listAdminItems(
   const categoryNameById = new Map(
     categories.map((category) => [category.id, category.name]),
   );
+  // Category → books is the second step of the drill-down; the client shows
+  // these under the category pills instead of making a second round trip.
+  const books = categoryFilter
+    ? (await listChannelsByGenre(
+        database as unknown as CategoryDb,
+        categoryFilter,
+      )).map((book) => ({
+        id: String(book.id),
+        title: String(book.title ?? ""),
+      }))
+    : [];
   const result = await database.prepare(`
     SELECT
       id,
@@ -163,7 +183,7 @@ export async function listAdminItems(
         WHERE c.id = ${bookRef}) AS book_title,
       (SELECT c.genre FROM channels c WHERE c.id = ${bookRef}) AS category_id
     FROM items
-    WHERE ${where}${cursorClause}${categoryClause}
+    WHERE ${where}${cursorClause}${categoryClause}${bookClause}
     ORDER BY ${pagination.column} ${queryDirection}, id ${idDirection}
     LIMIT ?
   `).bind(...bindings, limit + 1).all<AdminItemRow>();
@@ -186,6 +206,8 @@ export async function listAdminItems(
   };
 
   return {
+    ...(books.length > 0 ? {books} : {}),
+    ...(bookFilter ? {bookFilter} : {}),
     categories,
     ...(categoryFilter ? {categoryFilter} : {}),
     items,

@@ -34,7 +34,16 @@ export interface AdminItemCategoryOption {
   name: string;
 }
 
+/** A book offered after a category is picked (novel-cms only). */
+export interface AdminItemBookOption {
+  id: string;
+  title: string;
+}
+
 export interface AdminItemListResponse {
+  /** novel-cms: books offered after picking a category, for the drill-down. */
+  books?: AdminItemBookOption[];
+  bookFilter?: string;
   categories?: AdminItemCategoryOption[];
   categoryFilter?: string;
   items: AdminItemSummary[];

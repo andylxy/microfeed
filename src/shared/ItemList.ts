@@ -43,6 +43,8 @@ export function itemQueryForStatusFilter(
 interface ItemsListUrlOptions {
   /** novel-cms category id to keep across paging and sorting. */
   categoryId?: string;
+  /** novel-cms book id, for the category → book → chapters drill-down. */
+  bookId?: string;
   nextCursor?: number | string;
   order?: ItemOrder;
   prevCursor?: number | string;
@@ -51,6 +53,7 @@ interface ItemsListUrlOptions {
 }
 
 export function buildItemsListUrl({
+  bookId = "",
   nextCursor,
   order = ITEM_ORDERS.DESC,
   prevCursor,
@@ -68,6 +71,11 @@ export function buildItemsListUrl({
   // status changes do not silently drop it.
   if (categoryId) {
     searchParams.set("categoryId", categoryId);
+  }
+  // A book is chosen inside a category, so both have to travel together or the
+  // table would silently widen back to the whole category on the next page.
+  if (bookId) {
+    searchParams.set("bookId", bookId);
   }
   applyItemPaginationParams(searchParams, {
     nextCursor,

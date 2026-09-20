@@ -1170,6 +1170,8 @@ export const zhCN: TranslationKey = {
   items: {
     columnBook: "所属书目",
     allCategories: "全部分类",
+    booksInCategory: "书本：",
+    untitledBook: "未命名书本",
     novelFields: "章节信息",
     novelFieldsIntro: "可选的卷名与章号。保存在条目的 _microfeed 数据中，由小说主题读取。",
     volume: "卷名",

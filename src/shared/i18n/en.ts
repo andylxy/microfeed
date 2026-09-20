@@ -1168,6 +1168,8 @@ export const en = {
   items: {
     columnBook: "Book",
     allCategories: "All categories",
+    booksInCategory: "Books:",
+    untitledBook: "Untitled book",
     novelFields: "Chapter metadata",
     novelFieldsIntro: "Optional volume name and chapter number. Stored in the item's _microfeed data and read by the novel themes.",
     volume: "Volume",
