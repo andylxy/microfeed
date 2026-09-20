@@ -358,6 +358,37 @@
     return {id: id, title: title, url: url, cover: cover || "", addedAt: Date.now()};
   }
 
+  /* Where "继续阅读" lands: the last chapter read when we know it, otherwise
+     the book itself. Falls back to the book when the stored chapter is gone. */
+  function resumeUrl(entry) {
+    if (entry.last && entry.last.url) return entry.last.url;
+    return entry.url;
+  }
+
+  /* Reading a chapter of a book that is already on the shelf moves its
+     bookmark. Books are never added implicitly — the shelf stays opt-in. */
+  function rememberChapter() {
+    var button = document.querySelector("[data-mf-shelf-add][data-mf-shelf-chapter-id]");
+    if (!button) return;
+    var entry = describe(button);
+    var chapterId = button.getAttribute("data-mf-shelf-chapter-id");
+    if (!entry || !chapterId) return;
+    var list = read();
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i].id !== entry.id) continue;
+      var last = list[i].last;
+      if (last && last.id === chapterId) return;
+      list[i].last = {
+        id: chapterId,
+        title: button.getAttribute("data-mf-shelf-chapter-title") || "",
+        url: window.location.pathname,
+        at: Date.now()
+      };
+      write(list);
+      return;
+    }
+  }
+
   var scrim = document.createElement("div");
   scrim.className = "mf-shelf-scrim";
   scrim.hidden = true;
@@ -393,8 +424,12 @@
         : '<div class="mf-shelf-cover-empty" aria-hidden="true"></div>';
       return '<li class="mf-shelf-item">' + cover +
         '<div class="mf-shelf-info">' +
-        '<a class="mf-shelf-name" href="' + escapeHtml(entry.url) + '">' + escapeHtml(entry.title) + '</a>' +
-        '<div class="mf-shelf-meta">继续阅读</div>' +
+        '<a class="mf-shelf-name" href="' + escapeHtml(resumeUrl(entry)) + '">' + escapeHtml(entry.title) + '</a>' +
+        '<div class="mf-shelf-meta">' +
+        (entry.last && entry.last.title
+          ? '继续阅读：' + escapeHtml(entry.last.title)
+          : '尚未开始阅读') +
+        '</div>' +
         '<button class="mf-shelf-remove" type="button" data-mf-shelf-remove="' + escapeHtml(entry.id) + '">移出书架</button>' +
         '</div></li>';
     }).join("");
@@ -472,6 +507,7 @@
     if (event.key === KEY) render();
   });
 
+  rememberChapter();
   render();
 })();
 </script>

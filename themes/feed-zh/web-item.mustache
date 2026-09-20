@@ -22,6 +22,8 @@
             data-mf-shelf-id="{{book.id}}"
             data-mf-shelf-title="{{book.title}}"
             data-mf-shelf-url="{{book.url}}"
+            data-mf-shelf-chapter-id="{{current_chapter_id}}"
+            data-mf-shelf-chapter-title="{{items.0.title}}"
           >加入书架</button>
           {{/book.id}}
           <time data-microfeed-date-ms="{{items.0._microfeed.date_published_ms}}">{{items.0._microfeed.date_published_short}}</time>
