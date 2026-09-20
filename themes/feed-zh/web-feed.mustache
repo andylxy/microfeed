@@ -40,6 +40,9 @@
           <a class="mf-detail-btn mf-detail-btn--primary" href="{{novel_detail.firstChapterUrl}}" data-mf-detail-start>开始阅读</a>
           <a class="mf-detail-btn mf-detail-btn--secondary" href="#mf-detail-catalog">查看目录</a>
           <button class="mf-detail-icon-btn" type="button" data-mf-copy-link aria-label="分享本书">分享</button>
+          {{! No book id in the template context: the script reads it from the
+              /book/<id>/ URL and the title from the heading below. }}
+          <button class="mf-detail-icon-btn" type="button" data-mf-shelf-add data-mf-shelf-source="book">加入书架</button>
         </div>
       </div>
 

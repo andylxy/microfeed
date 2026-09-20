@@ -14,6 +14,16 @@
         <div class="mf-reader-meta">
           {{#items.0._microfeed.volume}}<span>{{items.0._microfeed.volume}}</span>{{/items.0._microfeed.volume}}
           {{#items.0._microfeed.wordCount}}<span>本章字数：{{items.0._microfeed.wordCount}}字</span>{{/items.0._microfeed.wordCount}}
+          {{#book.id}}
+          <button
+            class="mf-shelf-btn"
+            type="button"
+            data-mf-shelf-add
+            data-mf-shelf-id="{{book.id}}"
+            data-mf-shelf-title="{{book.title}}"
+            data-mf-shelf-url="{{book.url}}"
+          >加入书架</button>
+          {{/book.id}}
           <time data-microfeed-date-ms="{{items.0._microfeed.date_published_ms}}">{{items.0._microfeed.date_published_short}}</time>
         </div>
       </header>

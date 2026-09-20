@@ -47,6 +47,18 @@
         <a href="/admin/">注册</a>
       </div>
 
+      {{! Bookshelf entry. The list itself is rendered by the script in
+          web-body-end from localStorage, so it works without any account. }}
+      <button
+        type="button"
+        class="mf-shelf-trigger"
+        aria-label="我的书架"
+        data-mf-shelf-trigger
+      >
+        <span>我的书架</span>
+        <span class="mf-shelf-count" data-mf-shelf-count hidden>0</span>
+      </button>
+
       <div class="mf-theme-menu" data-microfeed-theme-menu>
         <button
           type="button"

@@ -7,7 +7,7 @@ import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import {getBookChapters} from "@/server/feed/extCategory";
+import {getBookChapters, getBookById} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {loadSiteNav} from "@/server/feed/siteNav";
@@ -82,8 +82,24 @@ const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < chapters.l
   ? chapters[currentChapterIndex + 1]
   : undefined;
 
+// Light metadata for the bookshelf button: the reader knows its own chapter but
+// the shelf is keyed on the book, so hand the theme just enough to add one.
+const book = currentBookId
+  ? await getBookById(
+      loaded.database.FEED_DB as unknown as CategoryDb,
+      String(currentBookId),
+    )
+  : null;
+
 const extraContext = {
   ...navigation,
+  book: book
+    ? {
+        id: String(book.id),
+        title: String(book.title ?? ""),
+        url: `/book/${book.id}`,
+      }
+    : null,
   chapters,
   current_chapter_id: itemId ?? "",
   next_chapter: nextChapter,

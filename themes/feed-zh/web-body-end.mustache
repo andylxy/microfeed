@@ -294,3 +294,184 @@
   }
 })();
 </script>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "microfeed:bookshelf";
+  var LIMIT = 200;
+
+  function read() {
+    try {
+      var raw = window.localStorage.getItem(KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.filter(function (entry) {
+        return entry && typeof entry.id === "string" && entry.id;
+      }) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function write(list) {
+    try {
+      window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, LIMIT)));
+    } catch (error) {
+      /* private mode or a full quota: the shelf simply does not persist */
+    }
+  }
+
+  function has(list, id) {
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i].id === id) return true;
+    }
+    return false;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
+      return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[char];
+    });
+  }
+
+  /* The book page has no id in its context, so recover it from the URL and the
+     visible heading. Everywhere else the button carries the values itself. */
+  function describe(button) {
+    var id = button.getAttribute("data-mf-shelf-id");
+    var title = button.getAttribute("data-mf-shelf-title");
+    var url = button.getAttribute("data-mf-shelf-url");
+    var cover = button.getAttribute("data-mf-shelf-cover");
+    if (!id) {
+      var match = /\/book\/([^/?#]+)/.exec(window.location.pathname);
+      id = match ? decodeURIComponent(match[1]) : "";
+    }
+    if (!id) return null;
+    if (!title) {
+      var heading = document.querySelector(".mf-detail-title, h1");
+      title = heading ? heading.textContent.trim() : id;
+    }
+    if (!url) url = "/book/" + id + "/";
+    if (!cover) {
+      var image = document.querySelector(".mf-detail-cover");
+      if (image && image.tagName === "IMG") cover = image.getAttribute("src");
+    }
+    return {id: id, title: title, url: url, cover: cover || "", addedAt: Date.now()};
+  }
+
+  var scrim = document.createElement("div");
+  scrim.className = "mf-shelf-scrim";
+  scrim.hidden = true;
+  var panel = document.createElement("aside");
+  panel.className = "mf-shelf-panel";
+  panel.hidden = true;
+  panel.setAttribute("aria-label", "我的书架");
+  document.body.appendChild(scrim);
+  document.body.appendChild(panel);
+
+  function close() {
+    panel.hidden = true;
+    scrim.hidden = true;
+    var trigger = document.querySelector("[data-mf-shelf-trigger]");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function open() {
+    render();
+    panel.hidden = false;
+    scrim.hidden = false;
+    var trigger = document.querySelector("[data-mf-shelf-trigger]");
+    if (trigger) trigger.setAttribute("aria-expanded", "true");
+    var closer = panel.querySelector("[data-mf-shelf-close]");
+    if (closer) closer.focus();
+  }
+
+  function render() {
+    var list = read();
+    var items = list.map(function (entry) {
+      var cover = entry.cover
+        ? '<img class="mf-shelf-cover" src="' + escapeHtml(entry.cover) + '" alt="" loading="lazy"/>'
+        : '<div class="mf-shelf-cover-empty" aria-hidden="true"></div>';
+      return '<li class="mf-shelf-item">' + cover +
+        '<div class="mf-shelf-info">' +
+        '<a class="mf-shelf-name" href="' + escapeHtml(entry.url) + '">' + escapeHtml(entry.title) + '</a>' +
+        '<div class="mf-shelf-meta">继续阅读</div>' +
+        '<button class="mf-shelf-remove" type="button" data-mf-shelf-remove="' + escapeHtml(entry.id) + '">移出书架</button>' +
+        '</div></li>';
+    }).join("");
+
+    panel.innerHTML =
+      '<div class="mf-shelf-head">' +
+      '<h2 class="mf-shelf-title">我的书架</h2>' +
+      '<button class="mf-shelf-close" type="button" aria-label="关闭" data-mf-shelf-close>&times;</button>' +
+      '</div>' +
+      '<div class="mf-shelf-body">' +
+      (list.length
+        ? '<ul style="list-style:none;margin:0;padding:0">' + items + '</ul>'
+        : '<p class="mf-shelf-empty">书架还是空的。在书本页或阅读页点「加入书架」即可收藏。</p>') +
+      '</div>';
+
+    var counter = document.querySelector("[data-mf-shelf-count]");
+    if (counter) {
+      counter.textContent = String(list.length);
+      counter.hidden = list.length === 0;
+    }
+    syncButtons(list);
+  }
+
+  function syncButtons(list) {
+    var buttons = document.querySelectorAll("[data-mf-shelf-add]");
+    for (var i = 0; i < buttons.length; i += 1) {
+      var button = buttons[i];
+      var entry = describe(button);
+      var added = entry ? has(list, entry.id) : false;
+      button.setAttribute("data-added", String(added));
+      button.textContent = added ? "已在书架" : "加入书架";
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!(target instanceof Element)) return;
+
+    var trigger = target.closest("[data-mf-shelf-trigger]");
+    if (trigger) {
+      panel.hidden ? open() : close();
+      return;
+    }
+    if (target.closest("[data-mf-shelf-close]") || target === scrim) {
+      close();
+      return;
+    }
+    var remove = target.closest("[data-mf-shelf-remove]");
+    if (remove) {
+      var removeId = remove.getAttribute("data-mf-shelf-remove");
+      write(read().filter(function (entry) { return entry.id !== removeId; }));
+      render();
+      return;
+    }
+    var add = target.closest("[data-mf-shelf-add]");
+    if (add) {
+      var entry = describe(add);
+      if (!entry) return;
+      var list = read();
+      if (has(list, entry.id)) {
+        write(list.filter(function (item) { return item.id !== entry.id; }));
+      } else {
+        list.unshift(entry);
+        write(list);
+      }
+      render();
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !panel.hidden) close();
+  });
+
+  window.addEventListener("storage", function (event) {
+    if (event.key === KEY) render();
+  });
+
+  render();
+})();
+</script>
