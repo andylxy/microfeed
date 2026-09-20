@@ -27,7 +27,6 @@ interface BookFormState {
   serialStatus: string;
   status: number;
   title: string;
-  wordCount: string;
 }
 
 const EMPTY_FORM: BookFormState = {
@@ -38,7 +37,6 @@ const EMPTY_FORM: BookFormState = {
   serialStatus: "serializing",
   status: STATUSES.PUBLISHED,
   title: "",
-  wordCount: "",
 };
 
 function formFromBook(book: BookAdmin): BookFormState {
@@ -50,12 +48,10 @@ function formFromBook(book: BookAdmin): BookFormState {
     serialStatus: book.serialStatus || "serializing",
     status: book.status || STATUSES.PUBLISHED,
     title: book.title,
-    wordCount: book.wordCount == null ? "" : String(book.wordCount),
   };
 }
 
 function formToPayload(form: BookFormState) {
-  const trimmedWordCount = form.wordCount.trim();
   return {
     author: form.author.trim(),
     categoryId: form.categoryId || null,
@@ -64,7 +60,6 @@ function formToPayload(form: BookFormState) {
     serialStatus: form.serialStatus,
     status: form.status,
     title: form.title.trim(),
-    wordCount: trimmedWordCount ? Number(trimmedWordCount) : null,
   };
 }
 
@@ -259,13 +254,15 @@ export default function BooksApp() {
               setForm({...form, cover: event.target.value})}
             value={form.cover}
           />
-          <AdminInput
-            label={t("books.wordCountLabel")}
-            onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-              setForm({...form, wordCount: event.target.value})}
-            type="number"
-            value={form.wordCount}
-          />
+          <div className="grid gap-1 text-sm">
+            <span className="font-medium">{t("books.wordCountLabel")}</span>
+            <span className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              {editing ? `${editing.wordCount} ${t("books.wordCountUnit")}` : "—"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {t("books.wordCountDerivedHint")}
+            </span>
+          </div>
           <AdminSelect
             label={t("books.categoryLabel")}
             onChange={(option) =>

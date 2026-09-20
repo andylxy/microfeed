@@ -1578,6 +1578,8 @@ export const en = {
     categoryLabel: "Category",
     serialStatusLabel: "Serial status",
     wordCountLabel: "Word count",
+    wordCountUnit: "characters",
+    wordCountDerivedHint: "Counted from the published chapters, so it cannot drift out of date.",
     statusLabel: "Visibility",
     serializing: "Serializing",
     finished: "Finished",

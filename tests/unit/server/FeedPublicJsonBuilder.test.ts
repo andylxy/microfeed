@@ -89,7 +89,9 @@ describe("novel-cms extension pockets", () => {
       order: 2,
       reviewStatus: "approved",
       volume: "第一卷 初入江湖",
-      wordCount: 2980,
+      // Builder-owned: counted from the body (`<p>正文</p>`) rather than the
+      // 2980 the pocket declares, so the site can never show a stale total.
+      wordCount: 2,
     });
   });
 

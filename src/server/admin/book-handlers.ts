@@ -34,7 +34,6 @@ const bookCreateSchema = z.object({
   serialStatus: z.string().trim().max(40).optional(),
   status: z.union([z.literal(1), z.literal(2)]).optional(),
   title: titleField,
-  wordCount: z.number().int().min(0).max(100000000).nullable().optional(),
 });
 
 const bookUpdateSchema = bookCreateSchema.partial();
@@ -54,7 +53,6 @@ function toInput(parsed: z.infer<typeof bookUpdateSchema>): Partial<BookInput> {
   if (parsed.serialStatus !== undefined) {
     input.serialStatus = parsed.serialStatus;
   }
-  if (parsed.wordCount !== undefined) input.wordCount = parsed.wordCount;
   if (parsed.categoryId !== undefined) input.categoryId = parsed.categoryId;
   if (parsed.status !== undefined) input.status = parsed.status;
   return input;

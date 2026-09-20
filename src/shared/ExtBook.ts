@@ -20,7 +20,8 @@ export interface BookAdmin {
   cover: string;
   description: string;
   serialStatus: string;
-  wordCount: number | null;
+  /** Derived from the book's published chapters — never hand-typed. */
+  wordCount: number;
   categoryId: string;
   categoryName: string;
   /** `channels.status`: 1 published, 2 draft, 3 deleted. */
@@ -36,7 +37,6 @@ export interface BookInput {
   cover?: string;
   description?: string;
   serialStatus?: string;
-  wordCount?: number | null;
   categoryId?: string | null;
   status?: number;
 }

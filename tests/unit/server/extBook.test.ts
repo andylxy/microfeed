@@ -148,13 +148,19 @@ function seed(db: SqliteBookDb) {
     "INSERT INTO items (id, status, data, pub_date) VALUES (?,?,?,?)",
   );
   insertItem.run("chap1", 1, JSON.stringify({
-    title: "第一章", _microfeed: {bookId: "book2", chapterNo: 1},
+    description: "<p>陆尘握紧断剑。</p>",
+    title: "第一章",
+    _microfeed: {bookId: "book2", chapterNo: 1, wordCount: 999999},
   }), "2026-03-01 00:00:00");
   insertItem.run("chap2", 1, JSON.stringify({
-    title: "第二章", _microfeed: {bookId: "book2", chapterNo: 2},
+    description: "<p>海面浮起灯火。</p>",
+    title: "第二章",
+    _microfeed: {bookId: "book2", chapterNo: 2},
   }), "2026-03-02 00:00:00");
   insertItem.run("chap3", 1, JSON.stringify({
-    title: "主频道章节", _microfeed: {bookId: "primary1", chapterNo: 1},
+    description: "<p>星河入梦。</p>",
+    title: "主频道章节",
+    _microfeed: {bookId: "primary1", chapterNo: 1},
   }), "2026-01-01 00:00:00");
   // A deleted chapter must not be counted.
   insertItem.run("chap4", 3, JSON.stringify({
@@ -185,7 +191,8 @@ describe("novel-cms book management", () => {
       serialStatus: "finished",
       status: 2,
       title: "夜航风暴",
-      wordCount: 860000,
+      // Counted from the chapters, not from the 860000 the pocket declares.
+      wordCount: 14,
     });
   });
 
@@ -203,7 +210,6 @@ describe("novel-cms book management", () => {
       author: "新作者",
       categoryId: "cat_east",
       title: "新书",
-      wordCount: 12000,
     });
 
     expect(created.id).toHaveLength(11);
@@ -216,7 +222,6 @@ describe("novel-cms book management", () => {
       serialStatus: "serializing",
       status: 1,
       title: "新书",
-      wordCount: 12000,
     });
     // Two zeroes would violate the UNIQUE constraint on is_primary.
     const row = (db as unknown as {database: DatabaseSync}).database.prepare(
@@ -242,7 +247,8 @@ describe("novel-cms book management", () => {
     });
     // Untouched keys survive, and the genre mirror is cleared with the genre.
     expect(updated?.cover).toBe("https://example.test/cover.png");
-    expect(updated?.wordCount).toBe(860000);
+    // Still derived from the same chapters, so an edit cannot move it.
+    expect(updated?.wordCount).toBe(14);
     const row = (db as unknown as {database: DatabaseSync}).database.prepare(
       "SELECT genre FROM channels WHERE id = ?",
     ).get("book2") as Record<string, unknown>;

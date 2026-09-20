@@ -1,3 +1,4 @@
+import {chapterWordCount} from "@/server/feed/bookWordCount";
 import {STATUSES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import type {
@@ -75,21 +76,31 @@ function firstAuthorName(data: Record<string, unknown>): string {
   return "";
 }
 
-/** Count published-and-draft chapters per book. `_microfeed.bookId` is the only
- *  link from a chapter to its book, so membership is resolved in JavaScript. */
-async function chapterCounts(db: BookDb): Promise<Map<string, number>> {
+/**
+ * Chapter count and word count per book, in one pass. `_microfeed.bookId` is
+ * the only link from a chapter to its book, so membership is resolved in
+ * JavaScript.
+ *
+ * The dashboard counts every chapter that is not soft-deleted, while the public
+ * site only counts published ones — the admin needs to see drafts too.
+ */
+async function bookStats(
+  db: BookDb,
+): Promise<{chapters: Map<string, number>; words: Map<string, number>}> {
   const result = await db.prepare(
     "SELECT data FROM items WHERE status != ?",
   ).bind(STATUSES.DELETED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
-  const counts = new Map<string, number>();
+  const chapters = new Map<string, number>();
+  const words = new Map<string, number>();
   for (const row of rows) {
     const data = safeParseJson(row.data);
     const bookId = asText(microfeedOf(data).bookId).trim();
     if (!bookId) continue;
-    counts.set(bookId, (counts.get(bookId) ?? 0) + 1);
+    chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
+    words.set(bookId, (words.get(bookId) ?? 0) + chapterWordCount(data));
   }
-  return counts;
+  return {chapters, words};
 }
 
 async function categoryNames(db: BookDb): Promise<Map<string, string>> {
@@ -102,19 +113,18 @@ async function categoryNames(db: BookDb): Promise<Map<string, string>> {
 
 function toBookAdmin(
   row: Record<string, unknown>,
-  counts: Map<string, number>,
+  stats: {chapters: Map<string, number>; words: Map<string, number>},
   names: Map<string, string>,
 ): BookAdmin {
   const data = safeParseJson(row.data);
   const microfeed = microfeedOf(data);
   const id = asText(row.id);
   const categoryId = asText(microfeed.genre).trim();
-  const wordCount = microfeed.wordCount;
   return {
     author: firstAuthorName(data),
     categoryId,
     categoryName: names.get(categoryId) ?? "",
-    chapterCount: counts.get(id) ?? 0,
+    chapterCount: stats.chapters.get(id) ?? 0,
     cover: asText(data.image),
     description: asText(data.description),
     id,
@@ -122,12 +132,10 @@ function toBookAdmin(
     serialStatus: asText(microfeed.serialStatus),
     status: Number(row.status ?? 0),
     title: asText(data.title),
-    wordCount: typeof wordCount === "number" && Number.isFinite(wordCount)
-      ? wordCount
-      : Number.isFinite(Number(wordCount)) && wordCount !== null &&
-          asText(wordCount) !== ""
-        ? Number(wordCount)
-        : null,
+    // Counted from the chapters that exist, never from `_microfeed.wordCount`:
+    // a hand-typed total is never recomputed, and the sample books declared
+    // ~700 characters per chapter against bodies of ~50.
+    wordCount: stats.words.get(id) ?? 0,
   };
 }
 
@@ -139,9 +147,9 @@ export async function listAdminBooks(db: BookDb): Promise<BookAdmin[]> {
       "WHERE status IS NULL OR status != ? ORDER BY created_at ASC",
   ).bind(STATUSES.DELETED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
-  const counts = await chapterCounts(db);
+  const stats = await bookStats(db);
   const names = await categoryNames(db);
-  return rows.map((row) => toBookAdmin(row, counts, names));
+  return rows.map((row) => toBookAdmin(row, stats, names));
 }
 
 export async function getAdminBook(
@@ -152,9 +160,9 @@ export async function getAdminBook(
     "SELECT id, data, status, is_primary FROM channels WHERE id = ?",
   ).bind(id).first();
   if (!row) return null;
-  const counts = await chapterCounts(db);
+  const stats = await bookStats(db);
   const names = await categoryNames(db);
-  return toBookAdmin(row, counts, names);
+  return toBookAdmin(row, stats, names);
 }
 
 /** Categories a book can be filed under. */
@@ -188,7 +196,6 @@ function buildBookData(input: BookInput, id: string): string {
       bookId: id,
       serialStatus: input.serialStatus || "serializing",
       signStatus: "signed",
-      ...(input.wordCount != null ? {wordCount: input.wordCount} : {}),
       ...(input.categoryId ? {genre: input.categoryId} : {}),
     },
   };
@@ -248,10 +255,6 @@ export async function updateAdminBook(
   }
   if (patch.serialStatus !== undefined) {
     microfeed.serialStatus = patch.serialStatus || "serializing";
-  }
-  if (patch.wordCount !== undefined) {
-    if (patch.wordCount == null) delete microfeed.wordCount;
-    else microfeed.wordCount = patch.wordCount;
   }
   if (patch.categoryId !== undefined) {
     if (patch.categoryId) microfeed.genre = patch.categoryId;

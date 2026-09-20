@@ -1580,6 +1580,8 @@ export const zhCN: TranslationKey = {
     categoryLabel: "分类",
     serialStatusLabel: "连载状态",
     wordCountLabel: "字数",
+    wordCountUnit: "字",
+    wordCountDerivedHint: "按已发布章节正文实时统计，不会随编辑漂移。",
     statusLabel: "状态",
     serializing: "连载中",
     finished: "已完结",

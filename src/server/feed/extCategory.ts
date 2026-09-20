@@ -1,5 +1,9 @@
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
+import {
+  bookWordCounts,
+  chapterWordCount,
+} from "@/server/feed/bookWordCount";
 // The plain data shapes live in src/shared so the admin React app can use them
 // without importing from src/server (a hard boundary in this repo). Re-exported
 // here so existing server-side imports keep working unchanged.
@@ -65,6 +69,7 @@ export async function listPublishedBookSamples(
   const nameById = new Map(
     catRows.results.map((r) => [String(r.id), String(r.name)]),
   );
+  const counts = await bookWordCounts(db);
   return result.results.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
@@ -91,12 +96,7 @@ export async function listPublishedBookSamples(
             serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
           }
         : {}),
-      ...(typeof microfeed.wordCount === "number"
-        ? {
-            wordCount: String(microfeed.wordCount),
-            wordCountLabel: toWordCountLabel(microfeed.wordCount),
-          }
-        : {}),
+      ...wordCountFields(counts, String(row.id)),
       ...(typeof row.genre === "string"
         ? {genre: row.genre, categoryName: nameById.get(row.genre) ?? ""}
         : {}),
@@ -370,6 +370,7 @@ export async function listChannelsByGenre(
     // `channels.status` is the numeric STATUSES value, not the status name.
     "SELECT id, data FROM channels WHERE genre = ? AND status = ?",
   ).bind(genre, STATUSES.PUBLISHED).all();
+  const counts = await bookWordCounts(db);
   return result.results.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
@@ -394,14 +395,26 @@ export async function listChannelsByGenre(
             serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
           }
         : {}),
-      ...(typeof microfeed.wordCount === "number"
-        ? {
-            wordCount: String(microfeed.wordCount),
-            wordCountLabel: toWordCountLabel(microfeed.wordCount),
-          }
-        : {}),
+      ...wordCountFields(counts, String(row.id)),
     };
   });
+}
+
+/**
+ * Word-count fields for a book card, from the count derived from its published
+ * chapters. Omitted entirely at zero so the templates can fall back to
+ * 「暂无字数」 instead of printing "0字".
+ */
+function wordCountFields(
+  counts: Map<string, number>,
+  bookId: string,
+): Record<string, string> {
+  const count = counts.get(bookId) ?? 0;
+  if (count <= 0) return {};
+  return {
+    wordCount: String(count),
+    wordCountLabel: toWordCountLabel(count),
+  };
 }
 
 function safeParseJson(value: unknown): Record<string, unknown> {
@@ -462,12 +475,7 @@ export async function getBookById(
           serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
         }
       : {}),
-    ...(typeof microfeed.wordCount === "number"
-      ? {
-          wordCount: String(microfeed.wordCount),
-          wordCountLabel: toWordCountLabel(microfeed.wordCount),
-        }
-      : {}),
+    ...wordCountFields(await bookWordCounts(db), String(row.id)),
     ...(typeof row.genre === "string" ? {genre: row.genre} : {}),
     ...(categoryName ? {categoryName} : {}),
     microfeed,
@@ -539,6 +547,9 @@ export async function getBookChapters(
       ...(pubDate ? {date_published: pubDate} : {}),
       _microfeed: {
         ...microfeed,
+        // Same derivation the public feed uses, so the reader header and the
+        // book's total are the same number instead of two different ones.
+        wordCount: chapterWordCount(data),
         web_url: PUBLIC_URLS.webItem(id, title, baseUrl),
         ...(shortDate ? {date_published_short: shortDate} : {}),
       },

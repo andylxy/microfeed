@@ -13,6 +13,7 @@ import {MICROFEED_VERSION} from "@/shared/Version";
 import {buildItemPaginationUrl} from "@/shared/ItemPagination";
 import {resolveEffectiveFavicon} from "@/shared/Favicon";
 import {resolveBuiltInTemplateVariables} from "@/shared/TemplateVariables";
+import {chapterWordCount} from "@/server/feed/bookWordCount";
 
 export default class FeedPublicJsonBuilder {
   [member: string]: any;
@@ -268,6 +269,10 @@ export default class FeedPublicJsonBuilder {
         : {};
     const _microfeed = {
       ...itemMicrofeed,
+      // Counted from the body that is actually published, so the reader, the
+      // shelf total and the dashboard all agree. Overrides whatever the pocket
+      // declared — see `bookWordCount` for why the declaration cannot be used.
+      wordCount: chapterWordCount(item as unknown as Record<string, unknown>),
       is_audio: mediaFile.isAudio,
       is_document: mediaFile.isDocument,
       is_external_url: mediaFile.isExternalUrl,
