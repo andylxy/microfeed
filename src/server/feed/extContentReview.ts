@@ -146,7 +146,7 @@ interface DerivedColumns {
  * holding a change back still answered searches with the pending body, and
  * confirming one never refreshed the search text at all.
  */
-async function writeItemContent(
+export async function writeItemContent(
   db: AuditDb,
   itemId: string,
   dataJson: string,

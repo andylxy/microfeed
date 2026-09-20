@@ -59,6 +59,9 @@ function emptyDatabase(): SqliteCorrectionDb {
       id VARCHAR(11) PRIMARY KEY,
       status TINYINT,
       data TEXT,
+      content_text TEXT NOT NULL DEFAULT '',
+      content_text_updated_at TIMESTAMP,
+      review_status TEXT,
       pub_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -139,6 +142,31 @@ describe("content correction", () => {
       "SELECT data FROM items WHERE id = ?",
     ).get("chap1") as Record<string, unknown>;
     expect(JSON.parse(String(row.data)).title).toBe("第一章 起锚");
+  });
+
+  it("refreshes the searchable text when a correction is confirmed", async () => {
+    const db = emptyDatabase();
+    const before = {
+      id: "chap1",
+      title: "第一章 起锚",
+      description: "<p>旧正文</p>",
+      _microfeed: {bookId: "book2", chapterNo: 1},
+    };
+    seed(db, before);
+    const submitted = await submitCorrection(db, {
+      itemId: "chap1",
+      proposedData: {...before, description: "<p>新正文</p>"},
+      submittedBy: "reviewer-a",
+    });
+    await approveCorrection(db, submitted.id, "reviewer-b");
+
+    const row = (db as unknown as {database: DatabaseSync}).database.prepare(
+      "SELECT data, content_text FROM items WHERE id = ?",
+    ).get("chap1") as Record<string, unknown>;
+    expect(JSON.parse(String(row.data)).description).toBe("<p>新正文</p>");
+    // Approving used to write `data` only, so the FTS index kept answering
+    // searches with the body the correction had just replaced.
+    expect(row.content_text).toBe("新正文");
   });
 
   it("refuses a proposal that changes nothing", async () => {

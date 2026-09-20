@@ -1,4 +1,5 @@
 import {randomShortUUID} from "@/shared/StringUtils";
+import {writeItemContent} from "@/server/feed/extContentReview";
 import {AppError} from "@/shared/errors";
 import {
   computeDiff,
@@ -209,14 +210,15 @@ export async function approveCorrection(
   const now = Date.now();
   const changes = computeDiff(existing, proposedData);
 
-  // Write to the original storage location.
-  await db.prepare(
-    "UPDATE items SET data = ?, updated_at = ? WHERE id = ?",
-  ).bind(
-    JSON.stringify(proposedData),
-    new Date(now).toISOString().replace("T", " ").slice(0, 19),
+  // Write to the original storage location. `data` is not the whole row —
+  // `content_text` (search) and `review_status` are mirrors the normal save path
+  // refreshes alongside it, so writing only `data` left search answering with
+  // the pre-correction body long after the fix was confirmed.
+  await writeItemContent(
+    db as unknown as Parameters<typeof writeItemContent>[0],
     itemId,
-  ).run();
+    JSON.stringify(proposedData),
+  );
 
   // Trail: what changed, who submitted it, who approved it.
   const existingCount = await countAuditRecords(
