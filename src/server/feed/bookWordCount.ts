@@ -1,5 +1,5 @@
 import {STATUSES} from "@/shared/Constants";
-import {htmlToPlainText} from "@/shared/StringUtils";
+import {bodyToPlainText} from "@/shared/BodyFormat";
 
 /**
  * One word count for the whole site.
@@ -33,9 +33,14 @@ export interface WordCountDb {
  * characters the way novel sites do: what is left after the markup and the
  * indentation are gone.
  */
-export function countBodyText(value: unknown): number {
+export function countBodyText(
+  value: unknown,
+  format: unknown = undefined,
+): number {
   if (typeof value !== "string" || !value) return 0;
-  return htmlToPlainText(value).replace(/\s+/gu, "").length;
+  // Markdown syntax is not prose: `#` and `**` must not count as characters, so
+  // the body is rendered before it is measured.
+  return bodyToPlainText(value, format).replace(/\s+/gu, "").length;
 }
 
 /**
@@ -47,7 +52,7 @@ export function countBodyText(value: unknown): number {
  */
 export function chapterWordCount(data: Record<string, unknown>): number {
   for (const field of ["description", "content_html", "content_text"]) {
-    const count = countBodyText(data[field]);
+    const count = countBodyText(data[field], data["content_format"]);
     if (count > 0) return count;
   }
   return 0;

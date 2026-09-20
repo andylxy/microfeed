@@ -1,3 +1,4 @@
+import {bodyToHtml} from "@/shared/BodyFormat";
 import {
   urlJoinWithRelative,
   buildAudioUrlWithTracking,
@@ -311,7 +312,12 @@ export default class FeedPublicJsonBuilder {
       (newItem as any)['external_url'] = mediaFile.url;
     }
 
-    (newItem as any)['content_html'] = item.description || '';
+    // The body may be Markdown now: render it here rather than at save time, so
+    // what is stored is always exactly what the author wrote.
+    (newItem as any)['content_html'] = bodyToHtml(
+      item.description,
+      (item as any).contentFormat ?? (item as any).content_format,
+    );
     (newItem as any)['content_text'] = item.descriptionText || '';
 
     if (item.image) {

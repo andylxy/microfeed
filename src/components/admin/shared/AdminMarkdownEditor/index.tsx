@@ -2,7 +2,7 @@ import {useState, type ChangeEvent} from "react";
 
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
 import {useTranslation} from "@/client/i18n";
-import {renderMarkdown} from "@/client/markdown";
+import {renderMarkdown} from "@/shared/BodyFormat";
 
 interface Props {
   /**

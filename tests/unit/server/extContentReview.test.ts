@@ -228,23 +228,21 @@ describe("content review chain", () => {
     });
   });
 
-  it("restores the Markdown source along with the rendered body", async () => {
-    // A Markdown-edited chapter stores two fields: `description` (rendered HTML)
-    // and `content_markdown` (the source). Both go through the same
-    // checkpoint-and-replay machinery, so restoring a version has to bring back
-    // the source too — otherwise the body and its source drift apart and the
-    // next Markdown save would quietly rewrite the chapter.
+  it("restores a Markdown body as Markdown, not as rendered HTML", async () => {
+    // The body is stored as written, so restoring an old version must bring back
+    // the Markdown source together with its format flag. Losing the flag would
+    // make the reader print raw Markdown; rendering at save time would degrade
+    // the source on every round trip.
     const {database, db} = emptyDatabase();
     const before = {
-      content_markdown: "# 一\n\n旧正文。",
-      description: "<h1>一</h1>\n<p>旧正文。</p>",
+      content_format: "markdown",
+      description: "# 一\n\n旧正文。",
       id: "chap1",
       title: "第一章 起锚",
     };
     const after = {
       ...before,
-      content_markdown: "# 一\n\n新正文。",
-      description: "<h1>一</h1>\n<p>新正文。</p>",
+      description: "# 一\n\n新正文。",
     };
     writeItem(database, "chap1", before);
     writeItem(database, "chap1", after);
@@ -256,7 +254,7 @@ describe("content review chain", () => {
     expect(trail).toHaveLength(1);
     const rebuilt = await rebuildItemVersion(db, "chap1", trail[0]!.id);
     expect(rebuilt?.description).toBe(after.description);
-    expect(rebuilt?.content_markdown).toBe(after.content_markdown);
+    expect(rebuilt?.content_format).toBe("markdown");
   });
 
   it("queues the newest unconfirmed version's changes for review", async () => {

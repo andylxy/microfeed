@@ -1,4 +1,5 @@
-import {htmlToPlainText, randomShortUUID} from "@/shared/StringUtils";
+import {bodyToPlainText} from "@/shared/BodyFormat";
+import {randomShortUUID} from "@/shared/StringUtils";
 import {ITEM_CONTENT_TEXT_REVISION} from "@/shared/ItemSearch";
 import {
   STATUSES, PREDEFINED_SUBSCRIBE_METHODS,
@@ -574,7 +575,12 @@ export default class FeedDb {
       ...data
     } = item;
     const timestamp = (new Date()).toISOString();
-    const contentText = htmlToPlainText(data.description);
+    // Search index: Markdown has to be rendered first, or the index fills up
+    // with `#` and `**` instead of the words people search for.
+    const contentText = bodyToPlainText(
+      data.description,
+      data.content_format,
+    );
     item.contentText = contentText;
     // Mirror the novel-cms review state into a real column so the review queue
     // can select on it without parsing every item's JSON. The JSON stays the

@@ -7,15 +7,25 @@ import AdminRadioGroup from "../AdminRadioGroup";
 import AdminHtmlEditor from "../AdminHtmlEditor";
 import AdminMarkdownEditor from "../AdminMarkdownEditor";
 import RichEditorQuill from "./component/RichEditorQuill";
-import {renderMarkdown} from "@/client/markdown";
+import {
+  BODY_FORMAT_HTML,
+  BODY_FORMAT_MARKDOWN,
+  bodyFormat,
+  bodyToHtml,
+} from "@/shared/BodyFormat";
 
 export default class AdminRichEditor extends React.Component<any, any> {
   constructor(props: any) {
     super(props);
+    const format = bodyFormat(props.bodyFormat);
     this.state = {
-      mode: 'rich',
+      // Open in the mode the body was written in: a Markdown chapter must not
+      // open in a HTML box full of Markdown.
+      mode: format === BODY_FORMAT_MARKDOWN ? 'markdown' : 'rich',
       htmlSource: formatHtmlForEditing(
-        stripTransientRichEditorAttributes(props.value || ""),
+        stripTransientRichEditorAttributes(
+          bodyToHtml(props.value, format) || "",
+        ),
       ),
 
       isOpenImage: false,
@@ -27,28 +37,40 @@ export default class AdminRichEditor extends React.Component<any, any> {
 
   onHtmlChange(value: string) {
     this.setState({htmlSource: value});
+    this.setFormat(BODY_FORMAT_HTML);
     this.props.onChange(value);
   }
 
   onRichChange(value: string) {
     this.setState({htmlSource: formatHtmlForEditing(value)});
-    // The stored Markdown no longer matches the body: drop it rather than let it
-    // silently overwrite these edits the next time the tab is opened.
-    if (this.props.onMarkdownChange) this.props.onMarkdownChange("");
+    this.setFormat(BODY_FORMAT_HTML);
     this.props.onChange(value);
   }
 
+  /**
+   * Store the Markdown verbatim. Rendering happens when the page is displayed,
+   * never here — converting on save is what used to degrade the source every
+   * time the body was edited.
+   */
   onMarkdownChange(source: string) {
-    // Same contract as the other two modes: hand the parent the HTML body. The
-    // source travels separately so it survives the round trip.
-    this.props.onChange(renderMarkdown(source));
-    if (this.props.onMarkdownChange) this.props.onMarkdownChange(source);
+    this.setFormat(BODY_FORMAT_MARKDOWN);
+    this.props.onChange(source);
+  }
+
+  setFormat(format: string) {
+    if (this.props.onFormatChange) this.props.onFormatChange(format);
   }
 
   render() {
     const {htmlSource, mode} = this.state;
-    const {label, value, extra, labelComponent, markdownSource} = this.props;
-    const editorValue = stripTransientRichEditorAttributes(value || "");
+    const {label, value, extra, labelComponent} = this.props;
+    const format = bodyFormat(this.props.bodyFormat);
+    // `value` is the body exactly as stored, so it is Markdown when the chapter
+    // was written in Markdown. The visual and HTML editors need HTML; Markdown
+    // is handed over verbatim.
+    const bodyHtml = bodyToHtml(value, format);
+    const editorValue = stripTransientRichEditorAttributes(bodyHtml);
+    const markdownValue = format === BODY_FORMAT_MARKDOWN ? String(value || "") : "";
     return (
       <div className="admin-rich-editor">
         {label && <div className="mb-2 font-semibold text-foreground">
@@ -76,9 +98,9 @@ export default class AdminRichEditor extends React.Component<any, any> {
         /> : mode === 'html'
           ? <AdminHtmlEditor value={htmlSource} onChange={this.onHtmlChange} />
           : <AdminMarkdownEditor
-            bodyHtml={String(value || "")}
+            bodyHtml={bodyHtml}
             onChange={this.onMarkdownChange}
-            value={markdownSource || ""}
+            value={markdownValue}
           />}
       </div>
     );

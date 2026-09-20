@@ -1,3 +1,4 @@
+import {bodyToPlainText} from "@/shared/BodyFormat";
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
 import {
@@ -88,7 +89,12 @@ export async function listPublishedBookSamples(
       link: typeof data.link === "string" ? data.link : "/",
       ...(typeof author === "string" ? {author} : {}),
       ...(typeof data.description === "string"
-        ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
+        ? {
+            description: bodyToPlainText(
+              data.description,
+              data.content_format,
+            ),
+          }
         : {}),
       ...(typeof microfeed.serialStatus === "string"
         ? {
@@ -150,7 +156,12 @@ export async function searchPublishedBooks(
       link: typeof data.link === "string" ? data.link : "/",
       ...(authorNames[0] ? {author: authorNames[0]} : {}),
       ...(typeof data.description === "string"
-        ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
+        ? {
+            description: bodyToPlainText(
+              data.description,
+              data.content_format,
+            ),
+          }
         : {}),
       ...(genre ? {genre, categoryName: nameById.get(genre) ?? ""} : {}),
     });
@@ -387,7 +398,12 @@ export async function listChannelsByGenre(
       link: typeof data.link === "string" ? data.link : "",
       ...(typeof author === "string" ? {author} : {}),
       ...(typeof data.description === "string"
-        ? {description: data.description.replace(/<[^>]+>/g, "").trim()}
+        ? {
+            description: bodyToPlainText(
+              data.description,
+              data.content_format,
+            ),
+          }
         : {}),
       ...(typeof microfeed.serialStatus === "string"
         ? {

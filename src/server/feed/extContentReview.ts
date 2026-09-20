@@ -1,4 +1,5 @@
-import {htmlToPlainText, randomShortUUID} from "@/shared/StringUtils";
+import {bodyToPlainText} from "@/shared/BodyFormat";
+import {randomShortUUID} from "@/shared/StringUtils";
 import {msToRFC3339} from "@/shared/TimeUtils";
 import {
   computeDiff,
@@ -198,7 +199,7 @@ function deriveColumns(data: Record<string, unknown>): DerivedColumns {
     ? msToRFC3339(publishedMs)
     : null;
   return {
-    contentText: htmlToPlainText(data["description"]),
+    contentText: bodyToPlainText(data["description"], data["content_format"]),
     pubDate,
     reviewStatus,
   };

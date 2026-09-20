@@ -1,6 +1,12 @@
 import {describe, expect, it} from "vitest";
 
-import {renderMarkdown} from "@/client/markdown";
+import {
+  BODY_FORMAT_MARKDOWN,
+  bodyFormat,
+  bodyToHtml,
+  bodyToPlainText,
+  renderMarkdown,
+} from "@/shared/BodyFormat";
 
 /**
  * The Markdown editor is only worth having if what it saves renders correctly on
@@ -49,5 +55,36 @@ describe("renderMarkdown", () => {
     const html = renderMarkdown("## 小节\n\n内容");
     expect(html).toContain("<h2>小节</h2>");
     expect(html).toContain("<p>内容</p>");
+  });
+});
+describe("body format", () => {
+  it("treats a missing or unknown format as HTML", () => {
+    expect(bodyFormat(undefined)).toBe("html");
+    expect(bodyFormat("")).toBe("html");
+    expect(bodyFormat("HTML")).toBe("html");
+    expect(bodyFormat(BODY_FORMAT_MARKDOWN)).toBe("markdown");
+  });
+
+  it("keeps Markdown verbatim and renders it only on the way out", () => {
+    // The whole point: what is stored must be exactly what was written.
+    const markdown = "# 第一章\n\n正文 **粗体**。";
+    expect(bodyToHtml(markdown, "markdown")).toContain("<h1>第一章</h1>");
+    // The source itself is never rewritten in place.
+    expect(markdown).toBe("# 第一章\n\n正文 **粗体**。");
+  });
+
+  it("passes HTML through untouched", () => {
+    const html = "<p>已经渲染好的正文</p>";
+    expect(bodyToHtml(html, "html")).toBe(html);
+    expect(bodyToHtml(html, undefined)).toBe(html);
+  });
+
+  it("indexes Markdown as words, not as syntax", () => {
+    // Otherwise the search index fills with # and ** and misses the prose.
+    const text = bodyToPlainText("# 标题\n\n正文 **粗体**。", "markdown");
+    expect(text).toContain("标题");
+    expect(text).toContain("粗体");
+    expect(text).not.toContain("**");
+    expect(text).not.toContain("#");
   });
 });
