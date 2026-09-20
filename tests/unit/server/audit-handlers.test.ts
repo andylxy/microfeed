@@ -123,6 +123,17 @@ describe("audit browsing", () => {
     expect(rows[0]?.restorable).toBe(true);
   });
 
+  it("rejects a FeedDb wrapper passed where a D1 handle is required", async () => {
+    // `FeedDb` declares `[member: string]: any`, so it satisfies the `AuditDb`
+    // port at compile time but has no `prepare()` at runtime. That combination
+    // 500s the audit page with a bare "prepare is not a function".
+    const wrapper = {} as Parameters<typeof listAuditChaptersHandler>[0];
+    await expect(listAuditChaptersHandler(wrapper))
+      .rejects.toThrow(/env\.FEED_DB/u);
+    await expect(listAuditTrailHandler(wrapper, "chap1"))
+      .rejects.toThrow(/env\.FEED_DB/u);
+  });
+
   it("returns an empty trail for a chapter with no records", async () => {
     const {db} = emptyDatabase();
     await expect(listAuditTrailHandler(db, "missing")).resolves

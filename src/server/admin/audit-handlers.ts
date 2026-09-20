@@ -21,11 +21,26 @@ export interface AuditChapterRow {
 const CREATED_AT_MS =
   "COALESCE(strftime('%s', created_at) * 1000, CAST(created_at AS INTEGER))";
 
+/**
+ * `FeedDb` declares `[member: string]: any`, so it is structurally assignable
+ * to `AuditDb` — passing the wrapper instead of `env.FEED_DB` type-checks and
+ * then dies at runtime with "prepare is not a function" (a bare 500 in the
+ * dashboard). Fail loudly instead.
+ */
+function assertD1Handle(db: AuditDb): void {
+  if (typeof db?.prepare !== "function") {
+    throw new Error(
+      "audit handlers need a D1 handle (env.FEED_DB), not a FeedDb wrapper",
+    );
+  }
+}
+
 /** Chapters that have an audit trail, most recently changed first. */
 export async function listAuditChaptersHandler(
   db: AuditDb,
   limit = 200,
 ): Promise<{chapters: AuditChapterRow[]}> {
+  assertD1Handle(db);
   const result = await db.prepare(`
     SELECT
       a.item_id AS id,
@@ -74,6 +89,7 @@ export async function listAuditTrailHandler(
   item: Record<string, unknown> | null;
   rows: Awaited<ReturnType<typeof listItemAuditRows>>;
 }> {
+  assertD1Handle(db);
   const [rows, item] = await Promise.all([
     listItemAuditRows(db, itemId),
     getItemData(db, itemId),

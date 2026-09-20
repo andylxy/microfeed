@@ -1,4 +1,6 @@
 ---
+import {env} from "cloudflare:workers";
+
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AuditTrail from "@/components/admin/audit/AuditTrail";
 import AdminShell from "@/layouts/AdminShell.astro";
@@ -15,7 +17,11 @@ if (!feedContent || !onboardingResult) {
 }
 
 const itemId = Astro.params.itemId ?? "";
-const database = Astro.locals.feedDb as unknown as AuditDb;
+// `locals.feedDb` is a `FeedDb` wrapper, NOT a D1 handle: it has no `prepare()`
+// of its own (internally it calls `this.FEED_DB.prepare`). Passing the wrapper
+// straight to a query helper throws "prepare is not a function" and the page
+// 500s. The ajax endpoints below use `env.FEED_DB` for the same reason.
+const database = env.FEED_DB as unknown as AuditDb;
 const {item, rows} = await listAuditTrailHandler(database, itemId);
 const itemTitle = typeof item?.title === "string" && item.title.trim()
   ? item.title
