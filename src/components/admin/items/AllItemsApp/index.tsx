@@ -668,10 +668,29 @@ export default function AllItemsApp({itemsPerPage, publicBucketUrl}: Props) {
   const [bookId, setBookId] = useState(
     () => new URLSearchParams(search).get("bookId") ?? "",
   );
+  // Every other view control on this page (status, sort, order) lives in the
+  // address. Writing the filter there too means a reload, a bookmark or a shared
+  // link reproduces exactly what the approver was looking at — and the pills can
+  // be initialised from it above.
   const chooseFilter = (next: {bookId?: string; categoryId?: string}) => {
-    setSearch(withoutCursor(search));
-    if (next.categoryId !== undefined) setCategoryId(next.categoryId);
-    if (next.bookId !== undefined) setBookId(next.bookId);
+    const nextCategory = next.categoryId ?? categoryId;
+    const nextBook = next.bookId ?? bookId;
+    const parameters = new URLSearchParams(withoutCursor(search));
+    if (nextCategory) parameters.set("categoryId", nextCategory);
+    else parameters.delete("categoryId");
+    if (nextBook) parameters.set("bookId", nextBook);
+    else parameters.delete("bookId");
+    const query = parameters.toString();
+    if (typeof window !== "undefined") {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
+    }
+    setSearch(query);
+    setCategoryId(nextCategory);
+    setBookId(nextBook);
   };
   const endpoint = collectionUrl(search, itemsPerPage, categoryId, bookId);
   const {data: listing, error, loading, retry} =
