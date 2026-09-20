@@ -121,11 +121,6 @@ export default function VolumesApp() {
     }
   }, [bookId, load, t]);
 
-  const bookOptions: AdminSelectOption[] = books.map((book) => ({
-    label: book.title,
-    value: book.id,
-  }));
-  const selectedBook = bookOptions.find(({value}) => value === bookId) ?? null;
 
   const volumeOptions: AdminSelectOption[] = (board?.volumeNames ?? []).map(
     (name) => ({label: name, value: name}),
@@ -257,19 +252,26 @@ export default function VolumesApp() {
         </div>
       )}
 
-      <div className="max-w-sm">
-        <AdminSelect
-          label={t("volumes.bookLabel")}
-          options={bookOptions}
-          onChange={(option) => {
-            setBookId(option.value);
-            setSelected([]);
-            setChapterEdits({});
-          }}
-          placeholder={t("volumes.bookPlaceholder")}
-          value={selectedBook}
-        />
-      </div>
+      {books.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {books.map((book) => (
+            <button
+              className={`rounded-full border px-3 py-1 text-sm ${bookId === book.id
+                ? "border-primary text-primary"
+                : "text-muted-foreground"}`}
+              key={book.id}
+              onClick={() => {
+                setBookId(book.id);
+                setSelected([]);
+                setChapterEdits({});
+              }}
+              type="button"
+            >
+              {book.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!bookId && (
         <section className="rounded-[14px] border bg-card p-8 text-center shadow-xs">
