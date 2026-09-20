@@ -55,3 +55,12 @@ label:has(input[type="radio"]:disabled) {
 .ql-indent-6 { padding-left: 12em; }
 .ql-indent-7 { padding-left: 14em; }
 .ql-indent-8 { padding-left: 16em; }
+
+/* Quill's size and font formats are class-based, so the reader page needs the
+   same rules the editor uses (values taken from Quill's own snow theme). */
+.ql-size-small { font-size: 0.75em; }
+.ql-size-large { font-size: 1.5em; }
+.ql-size-huge { font-size: 2.5em; }
+
+.ql-font-serif { font-family: Georgia, "Times New Roman", serif; }
+.ql-font-monospace { font-family: Monaco, "Courier New", monospace; }

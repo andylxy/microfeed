@@ -139,6 +139,8 @@ const toolbarOptions = [
   ['bold', 'italic', 'underline', 'strike', 'blockquote', 'code', 'code-block'],
   [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
   [{'align': []}],
+  [{'size': ['small', false, 'large', 'huge']}, {'font': []}],
+  [{'script': 'sub'}, {'script': 'super'}],
   [{'color': []}, {'background': []}, 'clean'],
   ['link', 'image', 'video'],
 ];
@@ -212,6 +214,7 @@ const formats = [
   'header',
   'bold', 'italic', 'underline', 'strike', 'blockquote', 'code', 'code-block',
   'list', 'indent', 'align',
+  'size', 'font', 'script',
   'color', 'background',
   'link',
   'image', 'video', RICH_EDITOR_LEGACY_VIDEO_FORMAT,
