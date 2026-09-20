@@ -9,6 +9,10 @@ export default defineConfig({
     },
   },
   test: {
+    // Date and Intl formatting follow the machine timezone, and several
+    // assertions spell out a formatted timestamp. Pinning it keeps the suite
+    // identical on a developer box in UTC+8 and on CI.
+    env: {TZ: "UTC"},
     exclude: ["tests/worker/**", "node_modules/**", "dist/**"],
     globals: true,
     include: ["tests/unit/**/*.test.ts"],

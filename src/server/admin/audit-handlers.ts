@@ -80,7 +80,12 @@ export async function listAuditTrailHandler(
   ]);
   return {
     item,
-    rows: rows.map((row) => ({...row, createdAt: toIso(row.createdAt)})),
+    // `listItemAuditRows` walks oldest → newest (it needs that order to decide
+    // which rows a checkpoint can rebuild). `git log` reads newest first, and
+    // the newest change is the one you came to look at, so flip it for display.
+    rows: rows
+      .map((row) => ({...row, createdAt: toIso(row.createdAt)}))
+      .reverse(),
   };
 }
 

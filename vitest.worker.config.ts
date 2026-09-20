@@ -36,6 +36,9 @@ export default defineConfig({
     },
   },
   test: {
+    // Same reason as the unit config: formatted timestamps are asserted as
+    // literal strings, so pin the clock rather than depend on the host.
+    env: {TZ: "UTC"},
     include: ["tests/worker/**/*.test.ts"],
     setupFiles: ["./tests/worker/setup.ts"],
   },
