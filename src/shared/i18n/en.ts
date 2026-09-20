@@ -576,6 +576,7 @@ export const en = {
     markdownPreview: "Preview",
     markdownEmptyPreview: "Nothing to preview yet.",
     markdownHint: "Saved as HTML like the other two modes; the Markdown source is kept so you can reopen it here.",
+    markdownHtmlBodyWarning: "This chapter's body is currently HTML (written in the visual or HTML-source mode). Markdown starts empty on purpose — saving here replaces that HTML. Switch back to HTML source to see the saved body.",
 
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "e.g., 100% or 640px",

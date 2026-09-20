@@ -76,6 +76,7 @@ export default class AdminRichEditor extends React.Component<any, any> {
         /> : mode === 'html'
           ? <AdminHtmlEditor value={htmlSource} onChange={this.onHtmlChange} />
           : <AdminMarkdownEditor
+            bodyHtml={String(value || "")}
             onChange={this.onMarkdownChange}
             value={markdownSource || ""}
           />}

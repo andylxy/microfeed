@@ -5,6 +5,12 @@ import {useTranslation} from "@/client/i18n";
 import {renderMarkdown} from "@/client/markdown";
 
 interface Props {
+  /**
+   * The body as it is currently saved. Used to warn that this item was authored
+   * in the other two modes: the box legitimately starts empty (there is no
+   * Markdown to show), and saving from here replaces that HTML.
+   */
+  bodyHtml?: string;
   onChange: (value: string) => void;
   value?: string;
 }
@@ -16,7 +22,11 @@ interface Props {
  * store. (The item editor renders it to HTML for the body and keeps the source
  * for the next edit.)
  */
-export default function AdminMarkdownEditor({onChange, value = ""}: Props) {
+export default function AdminMarkdownEditor({
+  bodyHtml = "",
+  onChange,
+  value = "",
+}: Props) {
   const {t} = useTranslation();
   const [preview, setPreview] = useState(true);
   const onCodeChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -24,8 +34,17 @@ export default function AdminMarkdownEditor({onChange, value = ""}: Props) {
   };
   const html = renderMarkdown(value);
 
+  // Nothing here yet, but the saved body is HTML: say so, or the empty box
+  // reads as "the content is gone" and an innocent save silently drops it.
+  const withoutSource = !value.trim() && bodyHtml.trim().length > 0;
+
   return (
     <div className="admin-markdown-editor">
+      {withoutSource && (
+        <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {t("shared.markdownHtmlBodyWarning")}
+        </p>
+      )}
       <AdminCodeEditor
         ariaLabel={t("shared.markdownSourceAria")}
         code={value}

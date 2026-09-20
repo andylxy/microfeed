@@ -578,6 +578,7 @@ export const zhCN: TranslationKey = {
     markdownPreview: "预览",
     markdownEmptyPreview: "暂无内容可预览。",
     markdownHint: "与另外两种模式一样保存为 HTML；Markdown 原文会一并保留，方便下次继续编辑。",
+    markdownHtmlBodyWarning: "该章节正文当前是 HTML（用可视化或 HTML 源码模式写的）。Markdown 模式故意从空白开始——在此保存会替换掉那段 HTML。想看已保存的正文请切回 HTML 源码模式。",
 
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "例如 100% 或 640px",
