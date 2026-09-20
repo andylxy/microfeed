@@ -1,7 +1,11 @@
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
+import {
+  PUBLIC_CACHE_TAGS,
+  purgePublicCache,
+} from "@/server/cache/public-cache";
 import type {BookDb} from "@/server/feed/extBook";
 import {
   deleteBookHandler,
@@ -19,6 +23,7 @@ export const PUT: APIRoute = async ({params, request}) => {
       bookId,
       body,
     );
+    await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
     return jsonResponse(book);
   } catch (error) {
     const response = serviceError(error);
@@ -33,6 +38,7 @@ export const DELETE: APIRoute = async ({params}) => {
       env.FEED_DB as unknown as BookDb,
       params.bookId ?? "",
     );
+    await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
     return jsonResponse(result);
   } catch (error) {
     const response = serviceError(error);
