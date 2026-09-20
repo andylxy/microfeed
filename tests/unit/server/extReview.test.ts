@@ -9,15 +9,6 @@ import {
   type AuditDbPreparedStatement,
 } from "@/server/feed/extContentAudit";
 import {
-  createReport,
-  countPendingReports,
-  getReport,
-  listReportsByStatus,
-  setReportStatus,
-  type ReportDb,
-  type ReportDbPreparedStatement,
-} from "@/server/feed/extContentReport";
-import {
   applyReviewTransition,
   isAllowedReviewTransition,
   listItemAuditRows,
@@ -36,7 +27,7 @@ function makeStatement(
   database: DatabaseSync,
   sql: string,
   boundValues: unknown[] = [],
-): AuditDbPreparedStatement & ReportDbPreparedStatement {
+): AuditDbPreparedStatement {
   return {
     bind(...values: unknown[]) {
       return makeStatement(database, sql, values);
@@ -99,7 +90,7 @@ function newDatabase(): DatabaseSync {
   return database;
 }
 
-const dbOf = (database: DatabaseSync): AuditDb & ReportDb => ({
+const dbOf = (database: DatabaseSync): AuditDb => ({
   prepare: (sql: string) => makeStatement(database, sql),
 });
 
@@ -316,53 +307,5 @@ describe("creation checkpoint recoverability", () => {
 
     const rebuilt = await rebuildItemVersion(db, "it1", rows[0]!.id);
     expect(rebuilt).toEqual(created);
-  });
-});
-
-describe("reader reports", () => {
-  it("stores an anonymous report as pending and queues it oldest first", async () => {
-    const database = newDatabase();
-    const db = dbOf(database);
-
-    const first = await createReport(db, {category: "plagiarism", itemId: "it1"});
-    const second = await createReport(db, {
-      category: "not-a-category",
-      detail: "广告太多",
-      itemId: "it2",
-    });
-
-    const pending = await listReportsByStatus(db, "pending");
-    expect(pending).toHaveLength(2);
-    expect(pending.map((report) => report.id)).toEqual([first, second]);
-    expect(pending[0]!.reporterType).toBe("anonymous");
-    // An unrecognised category is normalised rather than rejected.
-    expect(pending[1]!.category).toBe("other");
-    expect(await countPendingReports(db)).toBe(2);
-  });
-
-  it("moves a report out of the pending queue and refuses unknown statuses", async () => {
-    const database = newDatabase();
-    const db = dbOf(database);
-    const id = await createReport(db, {category: "violence", itemId: "it1"});
-
-    await setReportStatus(db, id, "resolved");
-    expect(await countPendingReports(db)).toBe(0);
-    expect((await getReport(db, id))!.status).toBe("resolved");
-
-    await expect(
-      setReportStatus(db, id, "nonsense" as never),
-    ).rejects.toThrow(/unknown status/);
-  });
-
-  it("truncates an over-long detail instead of rejecting the report", async () => {
-    const database = newDatabase();
-    const db = dbOf(database);
-    const id = await createReport(db, {
-      category: "other",
-      detail: "x".repeat(5000),
-      itemId: "it1",
-    });
-
-    expect((await getReport(db, id))!.detail).toHaveLength(2000);
   });
 });

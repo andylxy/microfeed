@@ -1112,8 +1112,6 @@ export const en = {
       submit: "Chapter submitted for review.",
       takedown: "Chapter taken down.",
     },
-    pendingReports: "Reader reports",
-    noPendingReports: "No reader reports are waiting.",
     markResolved: "Mark resolved",
     dismiss: "Dismiss",
     category: {
@@ -1816,12 +1814,6 @@ export const en = {
       restoreUnavailable: "That version cannot be restored: no checkpoint covers it.",
       invalidAction: "Unrecognised review action.",
       invalidTransition: "That review action is not allowed from the chapter's current state.",
-      invalidReportStatus: "Unrecognised report status.",
-    },
-    report: {
-      crossOrigin: "That report came from another site.",
-      itemRequired: "Choose the chapter you are reporting.",
-      itemMissing: "That chapter no longer exists.",
     },
     general: {
       notFound: "Not found",

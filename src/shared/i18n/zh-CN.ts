@@ -1114,8 +1114,6 @@ export const zhCN: TranslationKey = {
       submit: "已提交审核。",
       takedown: "已下架。",
     },
-    pendingReports: "读者举报",
-    noPendingReports: "暂无待处理举报。",
     markResolved: "标记已处理",
     dismiss: "忽略",
     category: {
@@ -1818,12 +1816,6 @@ export const zhCN: TranslationKey = {
       restoreUnavailable: "无法恢复到该版本：没有覆盖它的检查点。",
       invalidAction: "无法识别的审核操作。",
       invalidTransition: "该章节当前状态不允许执行此审核操作。",
-      invalidReportStatus: "无法识别的举报状态。",
-    },
-    report: {
-      crossOrigin: "该举报来自其他站点。",
-      itemRequired: "请选择要举报的章节。",
-      itemMissing: "该章节已不存在。",
     },
     general: {
       notFound: "未找到",

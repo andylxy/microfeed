@@ -8,14 +8,6 @@ import {
   type AuditDbPreparedStatement,
 } from "@/server/feed/extContentAudit";
 import {
-  countPendingReports,
-  createReport,
-  listReportsByStatus,
-  setReportStatus,
-  type ReportDb,
-  type ReportDbPreparedStatement,
-} from "@/server/feed/extContentReport";
-import {
   applyReviewTransition,
   listItemAuditRows,
   listPendingReviewItems,
@@ -25,7 +17,7 @@ import {
 
 /**
  * End-to-end cover for ticket 05 at the data layer: one chapter is written,
- * submitted, edited, approved, taken down, restored, and finally reported on -
+ * submitted, edited, approved, taken down, and restored -
  * against the real SQL the production code issues.
  *
  * This stands in for the ticket's "manual walkthrough", which needs a running
@@ -37,7 +29,7 @@ function makeStatement(
   database: DatabaseSync,
   sql: string,
   boundValues: unknown[] = [],
-): AuditDbPreparedStatement & ReportDbPreparedStatement {
+): AuditDbPreparedStatement {
   return {
     bind(...values: unknown[]) {
       return makeStatement(database, sql, values);
@@ -124,7 +116,7 @@ function writeItem(
 describe("novel-cms review flow (end to end)", () => {
   it("carries a chapter from author draft through review, takedown, and restore", async () => {
     const database = newDatabase();
-    const db: AuditDb & ReportDb = {
+    const db: AuditDb = {
       prepare: (sql: string) => makeStatement(database, sql),
     };
     const itemId = "chapter-1";
@@ -178,25 +170,12 @@ describe("novel-cms review flow (end to end)", () => {
     expect(rows[2]!.isCheckpoint).toBe(true);
     expect(rows[3]!.isCheckpoint).toBe(false);
 
-    // 4. A reader reports it; the report lands in the pending queue.
-    const reportId = await createReport(db, {
-      category: "plagiarism",
-      detail: "与另一本书高度相似",
-      itemId,
-    });
-    expect(await countPendingReports(db)).toBe(1);
-
-    // 5. Reviewer takes the chapter down. It unpublishes and records why.
+    // 4. Reviewer takes the chapter down. It unpublishes and records why.
     const takenDown = applyReviewTransition(approved, reviewTransition("takedown", "侵权"));
     writeItem(database, itemId, takenDown, STATUSES.UNPUBLISHED, "2026-08-05T00:00:00.000Z");
     expect((takenDown._microfeed as any).takedown).toBe(true);
 
-    // The reader's report is then closed out.
-    await setReportStatus(db, reportId, "resolved");
-    expect(await countPendingReports(db)).toBe(0);
-    expect((await listReportsByStatus(db, "resolved"))[0]!.id).toBe(reportId);
-
-    // 6. Reviewer restores the last approved body. The rebuild must reproduce
+    // 5. Reviewer restores the last approved body. The rebuild must reproduce
     //    it from the checkpoint plus the diffs recorded after it, and restoring
     //    must not republish the chapter that was just taken down.
     // `polished` was written before the approval was applied, so its recorded
@@ -246,7 +225,7 @@ describe("novel-cms review flow (end to end)", () => {
 
   it("keeps the queue and the mirror column in step for every transition", async () => {
     const database = newDatabase();
-    const db: AuditDb & ReportDb = {
+    const db: AuditDb = {
       prepare: (sql: string) => makeStatement(database, sql),
     };
     const itemId = "chapter-2";
