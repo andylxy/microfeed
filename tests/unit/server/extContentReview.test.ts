@@ -10,6 +10,7 @@ import {
   type AuditDb,
   type AuditDbPreparedStatement,
 } from "@/server/feed/extContentReview";
+import {listItemAuditRows, rebuildItemVersion} from "@/server/feed/extReview";
 
 type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
@@ -78,7 +79,8 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
       is_checkpoint BOOLEAN DEFAULT 0,
       review_status TEXT,
       reason TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      archived INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE ext_content_review (
       id VARCHAR(11) PRIMARY KEY,
@@ -192,6 +194,32 @@ describe("content review chain", () => {
     // before this was fixed: the FTS index would answer with 待审正文.
     expect(row.content_text).toBe("原文");
     expect(row.review_status).toBe("approved");
+  });
+
+  it("rebuilds the chain from scratch when the ledger is empty", async () => {
+    // The audit table can legitimately start empty — a fresh site, or one whose
+    // trail was cleared. The first change recorded after that MUST be a
+    // checkpoint, otherwise nothing is ever restorable again: replaying walks
+    // back to the nearest snapshot and an empty ledger has none.
+    const {database, db} = emptyDatabase();
+    writeItem(database, "chap1", v1);
+    writeItem(database, "chap1", v2);
+
+    await recordContentChange(db, {
+      action: "edit", after: v2, before: v1, itemId: "chap1",
+    });
+
+    expect(await listChapterReviews(db, "chap1")).toHaveLength(1);
+
+    const trail = await listItemAuditRows(db, "chap1");
+    expect(trail).toHaveLength(1);
+    expect(trail[0]!.isCheckpoint).toBe(true);
+    // Without that first snapshot the row could never be replayed, and the
+    // dashboard would disable restore for every version of the chapter.
+    expect(trail[0]!.restorable).toBe(true);
+    expect(await rebuildItemVersion(db, "chap1", trail[0]!.id)).toMatchObject({
+      title: v2.title,
+    });
   });
 
   it("records nothing when the content did not change", async () => {
