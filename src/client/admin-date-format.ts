@@ -52,3 +52,16 @@ export function formatAdminTimestamp(
 ): string {
   return formatAdminDate(value, {dateStyle: "medium", timeStyle});
 }
+
+/**
+ * 24-hour timestamp. Use where the exact time is the point — an audit trail
+ * row, for instance, where "6:29 PM" forces the reader to convert before they
+ * can line it up with another row. Still formatted in the admin language.
+ */
+export function formatAdminDateTime24(value: Date | number | string): string {
+  return formatAdminDate(value, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    hour12: false,
+  });
+}

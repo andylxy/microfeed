@@ -1,5 +1,6 @@
 import {useCallback, useState} from "react";
 
+import {formatAdminDateTime24} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
@@ -37,9 +38,9 @@ interface Props {
 }
 
 function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {hour12: false});
+  // Falls back to the raw value: the server normalises two `created_at` shapes,
+  // and whatever is left had better still be visible than blanked out.
+  return formatAdminDateTime24(value) || value;
 }
 
 export default function AuditTrail({

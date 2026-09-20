@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
 
+import {formatAdminTimestamp} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
@@ -128,7 +129,7 @@ export default function ReviewQueueApp() {
               </span>
               {item.lastSubmittedAt && (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(item.lastSubmittedAt).toLocaleString()}
+                  {formatAdminTimestamp(item.lastSubmittedAt)}
                 </span>
               )}
               {!item.exists && (
