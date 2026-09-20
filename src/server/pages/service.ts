@@ -206,6 +206,12 @@ function validatedSlug(value: string, adminPath?: string | null): string {
 
 async function purgePageCaches(database: FeedDb, pageId: string): Promise<void> {
   await database.purgePublicCacheTags([
+    // A custom page is not only its own URL: `loadSiteNav()` puts it in the
+    // header of every public route. Only some of those responses carry the
+    // `PAGES` tag (`publicCacheTagsForPath` matches standalone slugs, so
+    // `/book/<id>/` and `/category/<slug>/` do not), so the specific tags below
+    // alone left the nav stale there until the TTL expired.
+    PUBLIC_CACHE_TAGS.PUBLIC,
     PUBLIC_CACHE_TAGS.PAGES,
     PUBLIC_CACHE_TAGS.page(pageId),
     PUBLIC_CACHE_TAGS.ITEMS,
