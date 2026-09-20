@@ -32,3 +32,26 @@ label:has(input[type="checkbox"]:disabled),
 label:has(input[type="radio"]:disabled) {
   cursor: not-allowed;
 }
+
+/*
+  Rich-text (Quill) formatting that reaches the published page.
+  The admin editor's toolbar writes these classes; without matching rules the
+  alignment and indent buttons would format text that the reader never sees.
+*/
+.ql-align-center,
+.ql-align-right,
+.ql-align-justify {
+  display: block;
+}
+.ql-align-center { text-align: center; }
+.ql-align-right { text-align: right; }
+.ql-align-justify { text-align: justify; }
+
+.ql-indent-1 { padding-left: 2em; }
+.ql-indent-2 { padding-left: 4em; }
+.ql-indent-3 { padding-left: 6em; }
+.ql-indent-4 { padding-left: 8em; }
+.ql-indent-5 { padding-left: 10em; }
+.ql-indent-6 { padding-left: 12em; }
+.ql-indent-7 { padding-left: 14em; }
+.ql-indent-8 { padding-left: 16em; }

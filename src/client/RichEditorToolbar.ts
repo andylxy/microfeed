@@ -18,6 +18,10 @@ const RICH_EDITOR_TOOLBAR_LABEL_KEYS = [
   ["button.ql-link", "richEditor.insertLink"],
   ["button.ql-image", "richEditor.insertImage"],
   ["button.ql-video", "richEditor.insertVideo"],
+  ["button.ql-strike", "richEditor.strikeThrough"],
+  ["select.ql-align", "richEditor.textAlign"],
+  ["select.ql-color", "richEditor.textColor"],
+  ["select.ql-background", "richEditor.backgroundColor"],
   ["button.ql-clean", "richEditor.clearFormatting"],
 ] as const;
 

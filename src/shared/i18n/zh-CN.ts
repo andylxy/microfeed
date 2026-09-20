@@ -31,6 +31,10 @@ export const zhCN: TranslationKey = {
     insertLink: "插入链接",
     insertImage: "插入图片",
     insertVideo: "插入视频",
+    strikeThrough: "删除线",
+    textAlign: "对齐方式",
+    textColor: "文字颜色",
+    backgroundColor: "背景高亮",
     clearFormatting: "清除格式",
   },
   login: {

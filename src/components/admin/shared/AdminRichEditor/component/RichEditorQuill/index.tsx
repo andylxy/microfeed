@@ -130,11 +130,17 @@ function preserveScrollPositions(editorRoot: HTMLElement): () => void {
 }
 
 const toolbarOptions = [
+  // The visual editor is rich text (Quill), not Markdown: it writes HTML and
+  // marks the chapter `content_format: html`. Everything offered here has to
+  // survive on the public side too — see the alignment/indent rules in
+  // src/styles/interactive.css, without which these buttons format text the
+  // reader never sees.
   [{'header': [2, 3, false]}],
-  ['bold', 'italic', 'underline', 'blockquote', 'code', 'code-block'],
+  ['bold', 'italic', 'underline', 'strike', 'blockquote', 'code', 'code-block'],
   [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+  [{'align': []}],
+  [{'color': []}, {'background': []}, 'clean'],
   ['link', 'image', 'video'],
-  ['clean']
 ];
 
 const modules = {
@@ -204,8 +210,9 @@ const modules = {
 
 const formats = [
   'header',
-  'bold', 'italic', 'underline', 'blockquote', 'code', 'code-block',
-  'list', 'indent',
+  'bold', 'italic', 'underline', 'strike', 'blockquote', 'code', 'code-block',
+  'list', 'indent', 'align',
+  'color', 'background',
   'link',
   'image', 'video', RICH_EDITOR_LEGACY_VIDEO_FORMAT,
   RICH_EDITOR_MEDIA_STYLE_FORMAT,

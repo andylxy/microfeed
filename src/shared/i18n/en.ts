@@ -29,6 +29,10 @@ export const en = {
     insertLink: "Insert link",
     insertImage: "Insert image",
     insertVideo: "Insert video",
+    strikeThrough: "Strikethrough",
+    textAlign: "Text alignment",
+    textColor: "Text colour",
+    backgroundColor: "Highlight colour",
     clearFormatting: "Clear formatting",
   },
   login: {
