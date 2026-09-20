@@ -427,23 +427,22 @@ export function ItemListTable({
             <span className="text-muted-foreground">{t("items.noBook")}</span>
           );
         }
-        // One line, like every other column: the book name with the category as
-        // a muted suffix. Stacking them reads as a different kind of cell.
+        // Rendered exactly like the other plain columns (`ItemDate`): a single
+        // text node in the same wrapper, with the category as a muted suffix.
+        // No nested blocks and no link — that is what made the cell look stacked.
         return (
-          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-            <a
-              className="truncate"
-              href={ADMIN_URLS.editItem(item.bookId)}
-              title={item.bookTitle}
-            >
-              {item.bookTitle}
-            </a>
+          <span
+            className="block min-w-0 whitespace-normal break-words leading-snug"
+            title={item.bookTitle}
+          >
+            {item.bookTitle}
             {item.categoryName && (
-              <span className="shrink-0 text-xs text-muted-foreground">
-                · {item.categoryName}
+              <span className="text-muted-foreground">
+                {" · "}
+                {item.categoryName}
               </span>
             )}
-          </div>
+          </span>
         );
       },
     }),
