@@ -34,6 +34,8 @@ export interface AuditTrailRow {
 interface Props {
   /** Chapter id — needed to re-fetch after a restore. */
   itemId: string;
+  /** Set when the server could not read the trail, so the page shows why. */
+  initialError?: string | null;
   initialRows: AuditTrailRow[];
 }
 
@@ -209,11 +211,15 @@ function ChangeDiff({change}: {change: FieldChange}) {
   );
 }
 
-export default function AuditTrail({initialRows, itemId}: Props) {
+export default function AuditTrail({
+  initialError = null,
+  initialRows,
+  itemId,
+}: Props) {
   const {t} = useTranslation();
   const [rows, setRows] = useState<AuditTrailRow[]>(initialRows);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {

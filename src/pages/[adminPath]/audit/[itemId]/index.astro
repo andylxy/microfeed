@@ -18,11 +18,21 @@ if (!feedContent || !onboardingResult) {
 
 const itemId = Astro.params.itemId ?? "";
 // `locals.feedDb` is a `FeedDb` wrapper, NOT a D1 handle: it has no `prepare()`
-// of its own (internally it calls `this.FEED_DB.prepare`). Passing the wrapper
-// straight to a query helper throws "prepare is not a function" and the page
-// 500s. The ajax endpoints below use `env.FEED_DB` for the same reason.
+// of its own (internally it calls `this.FEED_DB.prepare`), so passing it to a
+// query helper throws and the page 500s. The public book/category pages unwrap
+// `loaded.database.FEED_DB` for the same reason; the ajax endpoints use
+// `env.FEED_DB`. `env` is the shortest path to the same binding.
 const database = env.FEED_DB as unknown as AuditDb;
-const {item, rows} = await listAuditTrailHandler(database, itemId);
+// Surface the failure instead of a bare 500: this page reads a table that older
+// sites may not have, and an unreadable trail is a message, not a crash.
+let loadError: string | null = null;
+let item: Record<string, unknown> | null = null;
+let rows: Awaited<ReturnType<typeof listAuditTrailHandler>>["rows"] = [];
+try {
+  ({item, rows} = await listAuditTrailHandler(database, itemId));
+} catch (error) {
+  loadError = error instanceof Error ? error.message : String(error);
+}
 const itemTitle = typeof item?.title === "string" && item.title.trim()
   ? item.title
   : translate("review.untitled", adminLanguage);
@@ -38,6 +48,7 @@ const itemTitle = typeof item?.title === "string" && item.title.trim()
   <AuditTrail
     client:only="react"
     {itemId}
+    initialError={loadError}
     initialRows={rows}
   >
     <AdminPageFallback slot="fallback" kind="list" />
