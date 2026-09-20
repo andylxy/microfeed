@@ -91,6 +91,17 @@ export default class AdminRichEditor extends React.Component<any, any> {
             onValueChange={(value) => this.setState({mode: value})}
           />
         </div>
+        {/*
+          Saving from either HTML mode makes a Markdown chapter HTML for good:
+          the body becomes the rendered HTML and the source is overwritten. A
+          legitimate choice, but it has to be a conscious one — warn before it
+          happens, not after.
+        */}
+        {format === BODY_FORMAT_MARKDOWN && mode !== 'markdown' && (
+          <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            {i18n.t("shared.markdownToHtmlWarning")}
+          </p>
+        )}
         {mode === 'rich' ? <RichEditorQuill
           value={editorValue}
           onChange={this.onRichChange}
