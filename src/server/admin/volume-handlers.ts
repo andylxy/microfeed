@@ -1,3 +1,5 @@
+import {cache} from "cloudflare:workers";
+
 import type {FeedContent} from "../../types";
 
 import {z} from "zod";
@@ -111,7 +113,7 @@ async function openBook(
   database: FeedDb;
   feedCrud: ReturnType<typeof createFeedCrud>;
 }> {
-  const database = new FeedDb(runtimeEnv, request);
+  const database = new FeedDb(runtimeEnv, request, cache);
   const board = await listVolumeBoard(
     database.FEED_DB as unknown as VolumeDb,
     bookId,
