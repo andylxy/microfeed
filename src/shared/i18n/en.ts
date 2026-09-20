@@ -1445,13 +1445,22 @@ export const en = {
     saveFailed: "Could not save the category.",
     deleteFailed: "Could not delete the category.",
   },
+  diff: {
+    // Shared by the audit trail and the review queue: both render one field
+    // change as a `git diff` block.
+    unavailable: "No diff available for this change.",
+    op: {
+      add: "add",
+      update: "update",
+      remove: "remove",
+    },
+  },
   audit: {
     title: "Audit",
     intro: "Every recorded change to a chapter, newest first, rendered the way git shows a diff. The trail is append-only: restoring adds a row and never clears the history it came from.",
     loading: "Loading audit trail...",
     empty: "No chapter has recorded changes yet.",
     noChanges: "This record carries no field-level changes.",
-    diffUnavailable: "No diff available for this change.",
     checkpoint: "Checkpoint",
     searchLabel: "Search chapters",
     searchPlaceholder: "Title or ID",
@@ -1475,11 +1484,6 @@ export const en = {
     restoreUnchanged: "That version is already in place, so nothing was restored.",
     restoreFailed: "Could not restore that version.",
     restoreUnavailableHint: "No snapshot covers this version, so it cannot be rebuilt yet.",
-    op: {
-      add: "add",
-      update: "update",
-      remove: "remove",
-    },
     action: {
       edit: "Edit",
       submit: "Submitted for review",

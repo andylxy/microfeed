@@ -3,6 +3,10 @@ import {useCallback, useEffect, useState} from "react";
 import {useTranslation} from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
+import {
+  FieldDiffList,
+  type FieldChange,
+} from "@/components/admin/shared/FieldDiff";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 /**
@@ -18,12 +22,6 @@ import {ADMIN_URLS} from "@/shared/StringUtils";
  * fields, wiping whatever was being typed.
  */
 
-interface FieldChange {
-  op: "add" | "update" | "remove";
-  path: string;
-  before?: unknown;
-  after?: unknown;
-}
 
 interface Correction {
   id: string;
@@ -43,11 +41,6 @@ interface Correction {
  */
 const ACTOR = "admin";
 
-function renderValue(value: unknown): string {
-  if (value === undefined) return "";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
-}
 
 export default function ReviewDetailApp({itemId}: {itemId: string}) {
   const {t} = useTranslation();
@@ -220,23 +213,7 @@ export default function ReviewDetailApp({itemId}: {itemId: string}) {
               )}
 
               {correction.changes.length > 0 && (
-                <ul className="mt-2 flex flex-col gap-1 font-mono text-xs">
-                  {correction.changes.map((change, index) => (
-                    <li key={`${correction.id}-${index}`}>
-                      <span className="font-semibold">{change.path}</span>
-                      {change.op !== "add" && (
-                        <span className="text-destructive">
-                          {" "}{renderValue(change.before)}
-                        </span>
-                      )}
-                      {change.op !== "remove" && (
-                        <span className="text-emerald-600">
-                          {" "}{renderValue(change.after)}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <FieldDiffList changes={correction.changes} />
               )}
 
               {correction.status === "pending" && (
