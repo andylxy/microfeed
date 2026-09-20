@@ -136,6 +136,8 @@ export const zhCN: TranslationKey = {
     noItemsYet: "还没有条目。",
     sessionExpired: "管理会话已过期。请重新登录后再搜索。",
     temporarilyUnavailable: "搜索暂时不可用。",
+    // 书籍搜索结果里作者名的前缀。
+    authorPrefix: "作者：",
     resultType: {
       book: "书籍",
       item: "章节",

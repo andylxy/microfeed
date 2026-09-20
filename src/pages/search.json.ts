@@ -76,7 +76,9 @@ export const GET: APIRoute = async ({request}) => {
       items: [
         ...books.map((book) => ({
           content_text: [
-            book.author ? `作者：${book.author}` : "",
+            book.author
+              ? `${translate("search.authorPrefix", language)}${book.author}`
+              : "",
             book.categoryName ?? "",
           ].filter(Boolean).join(" · "),
           id: `book-${book.id}`,

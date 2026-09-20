@@ -134,6 +134,8 @@ export const en = {
     noItemsYet: "No items yet.",
     sessionExpired: "Your admin session expired. Sign in again, then reopen search.",
     temporarilyUnavailable: "Search is temporarily unavailable.",
+    // Prefix for the author name in a book search result.
+    authorPrefix: "By ",
     resultType: {
       book: "Book",
       item: "Chapter",
