@@ -222,6 +222,48 @@ describe("admin editor autosave", () => {
     expect(registerTool).not.toHaveBeenCalled();
   });
 
+  it("stops a Markdown draft from keeping its flag when the tool writes HTML", async () => {
+    // The tool only ever writes `content_html`, so a Markdown chapter would end
+    // up flagged as Markdown while holding HTML. The body and its format have to
+    // move together, or the reader renders the body by the wrong rules.
+    const registerTool = vi.fn(async (
+      _tool: any,
+      _options: {signal: AbortSignal},
+    ) => undefined);
+    vi.mocked(document.querySelector).mockImplementation((selector: string) =>
+      selector.includes("microfeed-webmcp-enabled")
+        ? {content: "true"} as HTMLMetaElement
+        : {content: "admin"} as HTMLMetaElement
+    );
+    Reflect.set(document, "modelContext", {registerTool});
+    mount(new EditItemApp(props({
+      content_format: "markdown",
+      description: "## 原文标题",
+      id: "markdown-webmcp",
+      status: STATUSES.UNPUBLISHED,
+      title: "Markdown draft",
+    })));
+    await vi.waitFor(() => expect(registerTool).toHaveBeenCalledOnce());
+    const [tool] = registerTool.mock.calls[0]!;
+
+    const pending = deferred<any>();
+    vi.mocked(Requests.axiosPost).mockReturnValueOnce(pending.promise);
+    const execution = tool.execute({content_html: "<p>Agent body</p>"});
+    await vi.waitFor(() => expect(Requests.axiosPost).toHaveBeenCalledOnce());
+    expect(vi.mocked(Requests.axiosPost)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        item: expect.objectContaining({
+          content_format: "html",
+          description: "<p>Agent body</p>",
+        }),
+      }),
+      expect.any(Object),
+    );
+    pending.resolve({});
+    await execution;
+  });
+
   it("reports autosave state and exposes a retry action after failure", () => {
     const clean = renderToStaticMarkup(
       React.createElement(AdminSaveAction, {

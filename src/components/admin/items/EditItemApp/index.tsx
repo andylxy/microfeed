@@ -13,6 +13,11 @@ import {
 } from '@/shared/StringUtils';
 import AdminImageUploaderApp from "@/components/admin/shared/AdminImageUploaderApp";
 import AdminDatetimePicker from '@/components/admin/shared/AdminDatetimePicker';
+import {
+  BODY_FORMAT_HTML,
+  BODY_FORMAT_MARKDOWN,
+  bodyFormat,
+} from "@/shared/BodyFormat";
 import {datetimeLocalStringToMs, datetimeLocalToMs} from "@/shared/TimeUtils";
 import {getPublicBaseUrl} from "@/client/ClientUrlUtils";
 import AdminRadioGroup from "@/components/admin/shared/AdminRadioGroup";
@@ -384,7 +389,17 @@ export default class EditItemApp extends React.Component<Props, any> {
           ...previousState.item,
           ...(input.title !== undefined ? {title: input.title} : {}),
           ...(input.content_html !== undefined
-            ? {description: input.content_html}
+            ? {
+                // The tool writes an HTML body, so the way to read it has to
+                // say so. Writing only `description` would leave a Markdown
+                // chapter flagged as Markdown while holding HTML — the body and
+                // its format must move together. Mirrors the two HTML editors,
+                // which record HTML only when the chapter was Markdown.
+                ...(bodyFormat(previousState.item.content_format) === BODY_FORMAT_MARKDOWN
+                  ? {content_format: BODY_FORMAT_HTML}
+                  : {}),
+                description: input.content_html,
+              }
             : {}),
           status: STATUSES.UNPUBLISHED,
         },
