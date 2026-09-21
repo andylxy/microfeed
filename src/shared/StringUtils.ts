@@ -443,6 +443,8 @@ export const ADMIN_URLS = {
   ajaxRbacBoard: () => adminUrl("ajax/rbac", browserAdminPath()),
   ajaxRbacRolePermissions: () =>
     adminUrl("ajax/rbac/role-permissions", browserAdminPath()),
+  ajaxRbacUsers: () => adminUrl("ajax/rbac/users", browserAdminPath()),
+  ajaxRbacUserRoles: () => adminUrl("ajax/rbac/user-roles", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
   ajaxVolumeAssign: () =>

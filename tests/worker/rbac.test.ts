@@ -12,9 +12,13 @@ import {checkReplay} from "@/server/rbac/replay";
 import {RBAC_PERMISSIONS} from "@/server/rbac/seed";
 import {
   getAdminRbacBoard,
+  getAdminRbacUsers,
   readRbacBoard,
+  readRbacUsers,
   replaceRolePermissions,
+  replaceUserRoles,
   updateAdminRbacRole,
+  updateAdminRbacUser,
 } from "@/server/admin/rbac-handlers";
 
 async function clearRbacRows(): Promise<void> {
@@ -458,5 +462,119 @@ describe("RBAC administration", () => {
       "content:volume:read",
       "content:volume:update",
     ]);
+  });
+});
+
+describe("RBAC user administration", () => {
+  it("lists accounts with the roles granted to them", async () => {
+    await seedUser("u-admin", "admin");
+    await seedUser("u-writer", "user");
+    await assignRole("u-writer", "r_editor");
+
+    const board = await readRbacUsers(env.FEED_DB);
+    const writer = board.users.find((entry) => entry.id === "u-writer");
+    expect(writer?.roles).toEqual(["editor"]);
+    expect(writer?.legacyRole).toBe("user");
+    expect(writer?.banned).toBe(false);
+    expect(board.roles.map((role) => role.code)).toContain("super_admin");
+  });
+
+  it("replaces an account's roles", async () => {
+    await seedUser("u-swap", "user");
+    expect(await replaceUserRoles(env.FEED_DB, "u-swap", ["editor"]))
+      .toEqual({ok: true});
+
+    const board = await readRbacUsers(env.FEED_DB);
+    expect(board.users.find((entry) => entry.id === "u-swap")?.roles)
+      .toEqual(["editor"]);
+
+    // The swap matters: the new set replaces the old one rather than adding.
+    expect(await replaceUserRoles(env.FEED_DB, "u-swap", []))
+      .toEqual({ok: true});
+    const after = await readRbacUsers(env.FEED_DB);
+    expect(after.users.find((entry) => entry.id === "u-swap")?.roles).toEqual([]);
+  });
+
+  it("refuses to strip super_admin from the last account holding it", async () => {
+    // Without this the deployment could be left with nobody able to administer
+    // it, and the dashboard offers no way back in.
+    await seedUser("u-only-super", "admin");
+    await assignRole("u-only-super", "r_super_admin");
+
+    expect(await replaceUserRoles(env.FEED_DB, "u-only-super", ["editor"]))
+      .toEqual({ok: false, reason: "lastSuperAdmin"});
+
+    const board = await readRbacUsers(env.FEED_DB);
+    expect(board.users.find((entry) => entry.id === "u-only-super")?.roles)
+      .toEqual(["super_admin"]);
+  });
+
+  it("allows dropping super_admin once a second holder exists", async () => {
+    await seedUser("u-super-a", "admin");
+    await seedUser("u-super-b", "admin");
+    await assignRole("u-super-a", "r_super_admin");
+    await assignRole("u-super-b", "r_super_admin");
+
+    expect(await replaceUserRoles(env.FEED_DB, "u-super-a", ["editor"]))
+      .toEqual({ok: true});
+  });
+
+  it("rejects an unknown account and an unknown role code", async () => {
+    expect(await replaceUserRoles(env.FEED_DB, "nobody", []))
+      .toEqual({ok: false, reason: "unknownUser"});
+    await seedUser("u-known", "user");
+    expect(await replaceUserRoles(env.FEED_DB, "u-known", ["nope"]))
+      .toEqual({ok: false, reason: "unknownRole"});
+  });
+
+  it("gates the user board and the assignment write on system:user:manage", async () => {
+    const get = new Request("https://feed.example.com/admin/ajax/rbac/users");
+
+    const anonymous = await getAdminRbacUsers({locals: {}, request: get} as never);
+    expect(anonymous.status).toBe(401);
+
+    const withoutGrant = await getAdminRbacUsers({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: get,
+    } as never);
+    expect(withoutGrant.status).toBe(403);
+
+    const allowed = await getAdminRbacUsers({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:user:manage"]),
+      },
+      request: get,
+    } as never);
+    expect(allowed.status).toBe(200);
+
+    await seedUser("u-gated", "user");
+    const post = () => new Request(
+      "https://feed.example.com/admin/ajax/rbac/user-roles",
+      {
+        body: JSON.stringify({roles: ["editor"], userId: "u-gated"}),
+        method: "POST",
+      },
+    );
+    const writeWithoutGrant = await updateAdminRbacUser({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: post(),
+    } as never);
+    expect(writeWithoutGrant.status).toBe(403);
+
+    const writeAllowed = await updateAdminRbacUser({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:user:manage"]),
+      },
+      request: post(),
+    } as never);
+    expect(writeAllowed.status).toBe(200);
   });
 });

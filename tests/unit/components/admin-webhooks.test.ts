@@ -55,6 +55,7 @@ describe("Webhook Admin", () => {
       "API",
       "Webhooks",
       "Roles & permissions",
+      "Users",
       "Settings",
     ]);
     expect(items.find(({id}) => id === NAV_ITEMS.WEBHOOKS)).toMatchObject({

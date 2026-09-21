@@ -27,6 +27,7 @@ const NAVIGATION_PATHS: Array<[AdminNavItemId, string]> = [
   [NAV_ITEMS.API, "api"],
   [NAV_ITEMS.WEBHOOKS, "webhooks"],
   [NAV_ITEMS.RBAC, "rbac"],
+  [NAV_ITEMS.USERS, "users"],
   [NAV_ITEMS.SETTINGS, "settings"],
 ];
 

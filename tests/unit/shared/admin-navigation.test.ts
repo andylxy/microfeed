@@ -26,6 +26,7 @@ describe("getAdminNavigationItems", () => {
       [NAV_ITEMS.API, "/studio/api/"],
       [NAV_ITEMS.WEBHOOKS, "/studio/webhooks/"],
       [NAV_ITEMS.RBAC, "/studio/rbac/"],
+      [NAV_ITEMS.USERS, "/studio/users/"],
       [NAV_ITEMS.SETTINGS, "/studio/settings/"],
     ]);
     expect(items.filter((item) => item.active).map((item) => item.id)).toEqual([

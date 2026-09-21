@@ -192,6 +192,7 @@ export const NAV_ITEMS = {
   API: 'api',
   WEBHOOKS: 'webhooks',
   RBAC: 'rbac',
+  USERS: 'users',
   SETTINGS: 'settings',
 } as const;
 
@@ -237,6 +238,9 @@ export const NAV_ITEMS_DICT = {
   },
   [NAV_ITEMS.RBAC]: {
     name: 'Roles & permissions',
+  },
+  [NAV_ITEMS.USERS]: {
+    name: 'Users',
   },
   [NAV_ITEMS.SETTINGS]: {
     name: 'Settings',
