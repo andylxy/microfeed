@@ -1,0 +1,30 @@
+---
+import {env} from "cloudflare:workers";
+
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import RbacApp from "@/components/admin/rbac/RbacApp";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {readRbacBoard} from "@/server/admin/rbac-handlers";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {NAV_ITEMS} from "@/shared/Constants";
+import {translate} from "@/shared/i18n";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+const board = await readRbacBoard(env.FEED_DB);
+---
+
+<AdminShell
+  activeNavItem={NAV_ITEMS.RBAC}
+  documentTitle={translate("pageDocumentTitle.rbac", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.rbac", adminLanguage)}
+>
+  <RbacApp client:only="react" initialBoard={board}>
+    <AdminPageFallback slot="fallback" kind="list" />
+  </RbacApp>
+</AdminShell>

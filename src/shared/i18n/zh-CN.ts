@@ -99,6 +99,7 @@ export const zhCN: TranslationKey = {
       site_files: "站点文件",
       api: "API",
       webhooks: "Webhook",
+      rbac: "角色与权限",
       settings: "设置",
     },
   },
@@ -1651,6 +1652,15 @@ export const zhCN: TranslationKey = {
     to: "改为",
     untitled: "未命名章节",
   },
+  rbac: {
+    save: "保存权限",
+    saving: "保存中…",
+    saved: "权限已更新",
+    saveFailed: "权限保存失败",
+    description: "勾选该角色应拥有的权限。改动在下次请求即刻生效，无需任何人重新登录。",
+    wildcardRoleNotice: "该角色持有 * 通配权限，始终拥有全部权限。此处只读，避免管理员把自己锁在外面。",
+    noRoles: "尚未播种任何角色。",
+  },
   pageTitle: {
     home: "首页",
     accountSettings: "账户设置",
@@ -1664,6 +1674,7 @@ export const zhCN: TranslationKey = {
     importChapters: "从 txt 导入章节",
     review: "审核队列",
     reviewDetail: "章节纠错",
+    rbac: "角色与权限",
     audit: "修改留痕",
     editItem: "编辑条目",
     itemNotFound: "未找到条目",
@@ -1691,6 +1702,7 @@ export const zhCN: TranslationKey = {
   },
   pageDocumentTitle: {
     admin: "管理后台 | microfeed.org",
+    rbac: "角色与权限 | microfeed.org",
     accountSettings: "账户设置 | microfeed.org",
     apiOverview: "API 概览 | microfeed.org",
     apiAuthentication: "API 认证 | microfeed.org",
@@ -1828,6 +1840,12 @@ export const zhCN: TranslationKey = {
     statusText: "条目的状态可以是已发布、不列出或未发布。<ul class='list-decimal list-inside'>{{items}}</ul>",
   },
   errors: {
+    rbac: {
+      invalidAssignment: "请提供角色代码与要授予的权限代码列表。",
+      unknownRole: "该角色不存在。",
+      unknownPermission: "其中有权限代码不在目录里。",
+      wildcardRole: "super_admin 角色始终拥有全部权限，不可编辑。",
+    },
     review: {
       itemMissing: "该章节已不存在。",
       restoreUnavailable: "无法恢复到该版本：没有覆盖它的检查点。",

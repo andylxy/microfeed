@@ -97,6 +97,7 @@ export const en = {
       site_files: "Site files",
       api: "API",
       webhooks: "Webhooks",
+      rbac: "Roles & permissions",
       settings: "Settings",
     },
   },
@@ -1650,6 +1651,15 @@ export const en = {
     to: "to",
     untitled: "Untitled chapter",
   },
+  rbac: {
+    save: "Save permissions",
+    saving: "Saving…",
+    saved: "Permissions updated",
+    saveFailed: "Could not save permissions",
+    description: "Tick the permissions this role should have. Changes apply on the next request — nobody has to sign in again.",
+    wildcardRoleNotice: "This role holds the * wildcard, so it always has every permission. It is read-only here to keep administrators from locking themselves out.",
+    noRoles: "No roles have been seeded yet.",
+  },
   pageTitle: {
     home: "Home",
     accountSettings: "Account settings",
@@ -1663,6 +1673,7 @@ export const en = {
     importChapters: "Import chapters from txt",
     review: "Review queue",
     reviewDetail: "Chapter corrections",
+    rbac: "Roles & permissions",
     audit: "Audit trail",
     editItem: "Edit item",
     itemNotFound: "Item not found",
@@ -1690,6 +1701,7 @@ export const en = {
   },
   pageDocumentTitle: {
     admin: "Admin | microfeed.org",
+    rbac: "Roles & permissions | microfeed.org",
     accountSettings: "Account settings | microfeed.org",
     apiOverview: "API Overview | microfeed.org",
     apiAuthentication: "API Authentication | microfeed.org",
@@ -1827,6 +1839,12 @@ export const en = {
     statusText: "An item's status is either published, unlisted, or unpublished. <ul class='list-decimal list-inside'>{{items}}</ul>",
   },
   errors: {
+    rbac: {
+      invalidAssignment: "Send a role code and the list of permission codes to grant.",
+      unknownRole: "That role does not exist.",
+      unknownPermission: "One of the permission codes is not in the catalogue.",
+      wildcardRole: "The super_admin role always holds every permission and cannot be edited.",
+    },
     review: {
       itemMissing: "That chapter no longer exists.",
       restoreUnavailable: "That version cannot be restored: no checkpoint covers it.",
