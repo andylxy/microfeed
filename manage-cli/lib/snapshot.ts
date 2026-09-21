@@ -48,12 +48,26 @@ export const SNAPSHOT_TABLES = {
     "ext_content_report",
     "ext_content_correction",
     "ext_content_review",
+    // RBAC (migrations 0028 and 0029). Roles, the permission catalogue, the
+    // grants, the per-user security flags, and the device registry are operator
+    // policy rather than session state: a restored site has to keep them, or it
+    // comes back with nobody able to reach the dashboard. `auth_user` above is
+    // their parent, so they travel together.
+    "ext_roles",
+    "ext_permissions",
+    "ext_user_roles",
+    "ext_role_permissions",
+    "ext_user_security",
+    "ext_user_devices",
   ],
   ephemeral: [
     "item_create_idempotency",
     "item_search_metadata",
     "site_search_documents",
     "site_search_metadata",
+    // Anti-replay nonce ledger (migration 0030). Rows expire within minutes, so
+    // there is nothing worth carrying across a snapshot boundary.
+    "ext_replay_nonces",
     "oauth_access_token",
     "oauth_refresh_token",
     "oauth_consent",
