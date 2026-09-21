@@ -35,8 +35,9 @@ label:has(input[type="radio"]:disabled) {
 
 /*
   Rich-text (Quill) formatting that reaches the published page.
-  The admin editor's toolbar writes these classes; without matching rules the
-  alignment and indent buttons would format text that the reader never sees.
+  Quill writes these as classes, not inline styles, so without matching rules the
+  indent button formats text the reader never sees. The alignment rules are a small
+  safety net for content created while alignment was offered; unused rules cost nothing.
 */
 .ql-align-center,
 .ql-align-right,
@@ -56,11 +57,3 @@ label:has(input[type="radio"]:disabled) {
 .ql-indent-7 { padding-left: 14em; }
 .ql-indent-8 { padding-left: 16em; }
 
-/* Quill's size and font formats are class-based, so the reader page needs the
-   same rules the editor uses (values taken from Quill's own snow theme). */
-.ql-size-small { font-size: 0.75em; }
-.ql-size-large { font-size: 1.5em; }
-.ql-size-huge { font-size: 2.5em; }
-
-.ql-font-serif { font-family: Georgia, "Times New Roman", serif; }
-.ql-font-monospace { font-family: Monaco, "Courier New", monospace; }
