@@ -68,15 +68,14 @@ export default class FeedCrudManager {
       (internalSchema as any).link = item.url;
     }
 
-    if (Object.hasOwn(item, "content_html")) {
-      (internalSchema as any).description = item.content_html ?? "";
-    }
-
-    // The body may be Markdown now, and this schema is an explicit whitelist —
-    // without this the field would be dropped on the way in, so an API client
-    // asking for Markdown would silently get HTML and the reader would print raw
-    // Markdown.
-    if (Object.hasOwn(item, "content_format")) {
+    // The body and the way to read it are one unit, so they are written from a
+    // single decision. Kept apart, a later edit to this whitelist could drop one
+    // and keep the other: an unrecorded format makes the reader print raw
+    // Markdown, and a recorded one with no body means nothing.
+    if (Object.hasOwn(item, "content_html") || Object.hasOwn(item, "content_format")) {
+      if (Object.hasOwn(item, "content_html")) {
+        (internalSchema as any).description = item.content_html ?? "";
+      }
       (internalSchema as any).content_format = bodyFormat(item.content_format);
     }
 

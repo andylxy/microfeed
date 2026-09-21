@@ -152,6 +152,54 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("public JSON item body format", () => {
+  function itemJson(item: Record<string, unknown>) {
+    return new FeedPublicJsonBuilder(
+      {
+        channel: {title: "Example feed"},
+        items: [{
+          description: "<p>正文</p>",
+          id: "fmt-item",
+          pubDateMs: Date.parse("2026-01-11T09:00:00.000Z"),
+          status: STATUSES.PUBLISHED,
+          title: "章节",
+          ...item,
+        }],
+        settings: {},
+      },
+      "https://feed.example.com",
+      new Request("https://feed.example.com/json/"),
+    ).getJsonData() as any;
+  }
+
+  it("tells a client that the body is Markdown", () => {
+    // `apiItemOutputSchema` advertises content_format. Without it a client that
+    // reads a chapter and writes it back stores the rendered HTML, and the
+    // Markdown source is gone the next time the author opens the editor.
+    const json = itemJson({
+      content_format: "markdown",
+      description: "## 标题\n\n正文 **粗体**。",
+    });
+    expect(json.items[0].content_format).toBe("markdown");
+    expect(json.items[0].content_html).toContain("<h2>标题</h2>");
+    expect(json.items[0].content_html).toContain("<strong>粗体</strong>");
+  });
+
+  it("leaves the field unset for HTML, as the schema describes", () => {
+    const json = itemJson({description: "<p>正文</p>"});
+    expect(json.items[0].content_format).toBeUndefined();
+    expect(json.items[0].content_html).toBe("<p>正文</p>");
+  });
+
+  it("accepts the camelCase alias the builder already reads", () => {
+    const json = itemJson({
+      contentFormat: "markdown",
+      description: "# 标题",
+    });
+    expect(json.items[0].content_format).toBe("markdown");
+  });
+});
+
 describe("public channel copyright", () => {
   it("resolves current_year in JSON and RSS output", () => {
     vi.useFakeTimers();

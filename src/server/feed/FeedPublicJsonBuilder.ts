@@ -1,4 +1,4 @@
-import {bodyToHtml} from "@/shared/BodyFormat";
+import {BODY_FORMAT_MARKDOWN, bodyFormat, bodyToHtml} from "@/shared/BodyFormat";
 import {
   urlJoinWithRelative,
   buildAudioUrlWithTracking,
@@ -314,11 +314,18 @@ export default class FeedPublicJsonBuilder {
 
     // The body may be Markdown now: render it here rather than at save time, so
     // what is stored is always exactly what the author wrote.
-    (newItem as any)['content_html'] = bodyToHtml(
-      item.description,
+    const contentFormat = bodyFormat(
       (item as any).contentFormat ?? (item as any).content_format,
     );
+    (newItem as any)['content_html'] = bodyToHtml(item.description, contentFormat);
     (newItem as any)['content_text'] = item.descriptionText || '';
+    // `apiItemOutputSchema` advertises this field, but it was never emitted — so
+    // a client that read a Markdown chapter and wrote it back stored the
+    // rendered HTML and silently lost the Markdown source. Per the schema
+    // description it stays unset for HTML.
+    if (contentFormat === BODY_FORMAT_MARKDOWN) {
+      (newItem as any)['content_format'] = contentFormat;
+    }
 
     if (item.image) {
       (newItem as any)['image'] = item.image;

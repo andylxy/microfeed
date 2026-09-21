@@ -6,6 +6,7 @@ import {env} from "cloudflare:workers";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 
 import {STATUSES} from "@/shared/Constants";
+import {bodyFormat, bodyToHtml} from "@/shared/BodyFormat";
 import {apiFeedSchema} from "@/shared/ApiSchemas";
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 import FeedDb from "@/server/feed/FeedDb";
@@ -91,6 +92,26 @@ describe("transport-neutral item service", () => {
     expect(stored?.content_text).toContain("粗体");
     expect(stored?.content_text).not.toContain("**");
     await env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(markdownId).run();
+  });
+
+  it("reads an unmarked body as HTML, so body and format never disagree", async () => {
+    // The other half of the pair: a client that sends no format gets HTML. What
+    // matters is the *effective* format, not whether the field was written — an
+    // absent format must still mean HTML, never "unreadable".
+    const {crud} = await databaseAndCrud();
+    const id = await createItem(crud, {
+      content_html: "<p>正文</p>",
+      title: "HTML item",
+    });
+    const stored = await env.FEED_DB.prepare(
+      "SELECT content_text, data FROM items WHERE id = ?",
+    ).bind(id).first<{content_text: string; data: string}>();
+    const data = JSON.parse(stored!.data);
+    expect(bodyFormat(data.content_format)).toBe("html");
+    // Rendered for the reader, the body is still itself.
+    expect(bodyToHtml(data.description, data.content_format)).toBe("<p>正文</p>");
+    expect(stored?.content_text).toContain("正文");
+    await env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(id).run();
   });
 
   it("preserves omitted fields, the GUID, attachments, and publication date", async () => {
