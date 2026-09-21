@@ -1,3 +1,4 @@
+import {bodyFormat} from "@/shared/BodyFormat";
 import {
   mediaReferenceForStorage,
   randomShortUUID,
@@ -69,6 +70,14 @@ export default class FeedCrudManager {
 
     if (Object.hasOwn(item, "content_html")) {
       (internalSchema as any).description = item.content_html ?? "";
+    }
+
+    // The body may be Markdown now, and this schema is an explicit whitelist —
+    // without this the field would be dropped on the way in, so an API client
+    // asking for Markdown would silently get HTML and the reader would print raw
+    // Markdown.
+    if (Object.hasOwn(item, "content_format")) {
+      (internalSchema as any).content_format = bodyFormat(item.content_format);
     }
 
     if (item.image) {

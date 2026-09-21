@@ -70,6 +70,29 @@ describe("transport-neutral item service", () => {
     await env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(id).run();
   });
 
+  it("keeps the body format it was given and indexes Markdown as prose", async () => {
+    // The API can create a Markdown chapter. Two things have to happen: the
+    // format is stored (or the reader would print raw Markdown), and the search
+    // index comes from the rendered body (or it fills with # and **).
+    const {crud} = await databaseAndCrud();
+    // createItem ignores an id supplied in the input (it only honours the
+    // separate reservedId argument), so use the id it returns.
+    const markdownId = await createItem(crud, {
+      content_format: "markdown",
+      content_html: "# 标题\n\n正文 **粗体**。",
+      title: "Markdown item",
+    });
+    const stored = await env.FEED_DB.prepare(
+      "SELECT content_text, data FROM items WHERE id = ?",
+    ).bind(markdownId).first<{content_text: string; data: string}>();
+    expect(stored).not.toBeNull();
+    const data = JSON.parse(stored!.data);
+    expect(data.content_format).toBe("markdown");
+    expect(stored?.content_text).toContain("粗体");
+    expect(stored?.content_text).not.toContain("**");
+    await env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(markdownId).run();
+  });
+
   it("preserves omitted fields, the GUID, attachments, and publication date", async () => {
     const {crud, database} = await databaseAndCrud();
     const publishedAt = "2026-08-01T10:00:00.000Z";
