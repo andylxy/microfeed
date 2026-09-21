@@ -21,6 +21,7 @@ import {
   isUnpublishedStatus,
   isWebMcpInteraction,
 } from "@/shared/WebMcp";
+import {requireRbac} from "@/server/rbac/guard";
 
 export async function updateAdminFeed(
   request: Request,
@@ -135,5 +136,8 @@ export async function updateAdminFeed(
   return jsonResponse({});
 }
 
-export const POST: APIRoute = async ({request}) =>
-  updateAdminFeed(request, env, waitUntil, cache);
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, "content:article:update", request, env.FEED_DB);
+  if (guard) return guard;
+  return updateAdminFeed(request, env, waitUntil, cache);
+};

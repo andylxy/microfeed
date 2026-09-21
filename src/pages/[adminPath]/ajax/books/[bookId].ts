@@ -11,10 +11,13 @@ import {
   deleteBookHandler,
   updateBookHandler,
 } from "@/server/admin/book-handlers";
+import {requireRbac} from "@/server/rbac/guard";
 
 /** `PUT` edits one book; `DELETE` soft-deletes it (the primary channel is
  *  rejected — it is the site's own feed). */
-export const PUT: APIRoute = async ({params, request}) => {
+export const PUT: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, "content:book:update", request, env.FEED_DB);
+  if (guard) return guard;
   const bookId = params.bookId ?? "";
   const body = await request.json().catch(() => null);
   try {
@@ -32,7 +35,9 @@ export const PUT: APIRoute = async ({params, request}) => {
   }
 };
 
-export const DELETE: APIRoute = async ({params}) => {
+export const DELETE: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, "content:book:delete", request, env.FEED_DB);
+  if (guard) return guard;
   try {
     const result = await deleteBookHandler(
       env.FEED_DB as unknown as BookDb,

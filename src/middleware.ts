@@ -40,6 +40,8 @@ import {
   addLegacyApiDeprecationHeaders,
   decideApiRequest,
 } from "@/server/api/access";
+import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
+import {requireAppVersion} from "@/server/rbac/guard";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
 import {applyWorkerCachePolicy} from "@/server/cache/public-cache";
 import {publicSiteFileResponse} from "@/server/site-files/public";
@@ -224,6 +226,13 @@ const handleRequest = defineMiddleware(async (context, next) => {
       pathname,
     );
   } else if (isAdminPathname(pathname, adminPath)) {
+    // Version gate runs first, ahead of auth and RBAC (ADR-001 D-010: the gate
+    // belongs in the middleware). Web admin sends no `App-Version` header and is
+    // skipped, so the browser dashboard is untouched.
+    const versionGate = requireAppVersion(context.request);
+    if (versionGate) {
+      return versionGate;
+    }
     const loginPath = adminUrl("login", adminPath);
     const passwordSetupPath = isAdminPasswordSetupPath(pathname, adminPath);
     if (!builtInAuthEnabled && passwordSetupPath) {
@@ -299,6 +308,19 @@ const handleRequest = defineMiddleware(async (context, next) => {
       }
       context.locals.authSession = authSession.session;
       context.locals.authUser = authSession.user;
+      // RBAC: resolve fine-grained permissions + device + must-change flag for
+      // the authenticated session (D-03 / D-09).
+      {
+        const rbac = await resolveRbacContext(
+          env.FEED_DB,
+          authSession.user.id,
+          context.request,
+        );
+        context.locals.rbacPermissions = rbac.permissions;
+        context.locals.rbacMustChangePassword = rbac.mustChangePassword;
+        context.locals.rbacDeviceRevoked = rbac.deviceRevoked;
+        context.locals.rbacBanned = rbac.banned;
+      }
       protection = adminProtectionStatus(context.request, true);
     } else if (pathname === loginPath) {
       return Response.redirect(
@@ -307,6 +329,18 @@ const handleRequest = defineMiddleware(async (context, next) => {
       );
     }
     context.locals.adminProtection = protection;
+
+    // RBAC: when authentication is disabled the admin area is fully open, so a
+    // wildcard permission set keeps the guarded endpoints passing and preserves
+    // the prior behavior. When auth is enabled, the session branch above has
+    // already resolved the real permission set (and a 401/redirect returns
+    // before we get here for unauthenticated requests).
+    if (!builtInAuthEnabled) {
+      context.locals.rbacPermissions = new Set([RBAC_WILDCARD]);
+      context.locals.rbacMustChangePassword = false;
+      context.locals.rbacDeviceRevoked = false;
+      context.locals.rbacBanned = false;
+    }
 
     if (
       isUnsafeMethod(context.request.method) &&

@@ -11,6 +11,7 @@ import {
   createCategoryHandler,
   listCategoriesHandler,
 } from "@/server/admin/category-handlers";
+import {requireRbac} from "@/server/rbac/guard";
 
 export const GET: APIRoute = async () => {
   try {
@@ -28,7 +29,9 @@ export const GET: APIRoute = async () => {
   }
 };
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, "content:category:create", request, env.FEED_DB);
+  if (guard) return guard;
   const parsed = await request.json().catch(() => null);
   try {
     const category = await createCategoryHandler(

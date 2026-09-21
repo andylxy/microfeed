@@ -71,6 +71,11 @@ declare global {
       feedDb?: FeedDb;
       onboardingResult?: OnboardingResult;
       publicBucketUrl?: string;
+      // RBAC (microfeed adaptation): resolved by src/middleware.ts.
+      rbacPermissions?: Set<string>;
+      rbacMustChangePassword?: boolean;
+      rbacDeviceRevoked?: boolean;
+      rbacBanned?: boolean;
     }
   }
 }

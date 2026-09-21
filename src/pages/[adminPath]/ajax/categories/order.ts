@@ -8,8 +8,11 @@ import {
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {reorderCategoriesHandler} from "@/server/admin/category-handlers";
 import {cache, env} from "cloudflare:workers";
+import {requireRbac} from "@/server/rbac/guard";
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, "content:category:order", request, env.FEED_DB);
+  if (guard) return guard;
   const parsed = await request.json().catch(() => null);
   try {
     await reorderCategoriesHandler(

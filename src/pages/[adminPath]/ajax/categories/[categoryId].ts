@@ -12,6 +12,7 @@ import {
   updateCategoryHandler,
 } from "@/server/admin/category-handlers";
 import {cache, env} from "cloudflare:workers";
+import {requireRbac} from "@/server/rbac/guard";
 
 export const GET: APIRoute = async ({params, request}) => {
   if (!params.categoryId) {
@@ -30,10 +31,12 @@ export const GET: APIRoute = async ({params, request}) => {
   }
 };
 
-export const PUT: APIRoute = async ({params, request}) => {
+export const PUT: APIRoute = async ({locals, params, request}) => {
   if (!params.categoryId) {
     return localizedError(request, "errors.category.notFound", 400);
   }
+  const guard = await requireRbac(locals, "content:category:update", request, env.FEED_DB);
+  if (guard) return guard;
   const parsed = await request.json().catch(() => null);
   try {
     const category = await updateCategoryHandler(
@@ -50,10 +53,12 @@ export const PUT: APIRoute = async ({params, request}) => {
   }
 };
 
-export const DELETE: APIRoute = async ({params, request}) => {
+export const DELETE: APIRoute = async ({locals, params, request}) => {
   if (!params.categoryId) {
     return localizedError(request, "errors.category.notFound", 400);
   }
+  const guard = await requireRbac(locals, "content:category:delete", request, env.FEED_DB);
+  if (guard) return guard;
   try {
     await deleteCategoryHandler(
       env.FEED_DB as unknown as CategoryDb,

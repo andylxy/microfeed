@@ -6,6 +6,7 @@ import {
   withAuthSessionCookies,
 } from "@/server/auth/better-auth";
 import {jsonResponse, localizedError, localizedTextError} from "@/server/http";
+import {clearMustChangePassword} from "@/server/rbac/guard";
 
 export const POST: APIRoute = async ({locals, request}) => {
   if (!locals.authUser?.id) return localizedTextError(request, "errors.account.notFound", 404);
@@ -30,6 +31,7 @@ export const POST: APIRoute = async ({locals, request}) => {
       headers: request.headers,
       returnHeaders: true,
     });
+    await clearMustChangePassword(env.FEED_DB, locals.authUser.id);
     return withAuthSessionCookies(
       jsonResponse({changed: true}),
       changed.headers,

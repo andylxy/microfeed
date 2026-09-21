@@ -6,6 +6,7 @@ import {
   validateAdminSetupCredentials,
 } from "@/shared/AdminCredentials";
 import {hasAdminOwner} from "@/server/auth/admin-owner";
+import {seedRbac} from "@/server/rbac/seed";
 
 export type AdminBootstrapStatus =
   | "already_initialized"
@@ -62,6 +63,10 @@ export async function bootstrapAdmin(
   const timestamp = new Date().toISOString();
 
   try {
+    // Guarantee the RBAC catalog (roles/permissions/grants) exists before we
+    // reference `r_super_admin` below. This is idempotent, so it is a harmless
+    // no-op when migration 0031 has already seeded the catalog.
+    await seedRbac(runtimeEnv.FEED_DB);
     await runtimeEnv.FEED_DB.batch([
       runtimeEnv.FEED_DB.prepare(
         'INSERT INTO "auth_user" ' +
@@ -89,6 +94,12 @@ export async function bootstrapAdmin(
         timestamp,
         timestamp,
       ),
+      // Assign the bootstrap admin to super_admin so a fresh install is fully
+      // provisioned (migration 0031 also backfills any pre-existing
+      // role='admin' users, and the guard keeps a legacy-admin bypass).
+      runtimeEnv.FEED_DB.prepare(
+        "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, 'r_super_admin')",
+      ).bind(userId),
     ]);
     return "created";
   } catch (error) {
