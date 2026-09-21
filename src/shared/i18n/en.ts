@@ -577,9 +577,8 @@ export const en = {
     markdownSourcePlaceholder: "Write the chapter in Markdown",
     markdownPreview: "Preview",
     markdownEmptyPreview: "Nothing to preview yet.",
-    markdownHint: "Saved as HTML like the other two modes; the Markdown source is kept so you can reopen it here.",
-markdownToHtmlWarning: "This chapter is Markdown. Saving from the visual or HTML-source mode converts it to HTML for good — the Markdown source is overwritten. Switch back to Markdown to keep editing the source.",
-    markdownHtmlBodyWarning: "This chapter's body is currently HTML (written in the visual or HTML-source mode). Markdown starts empty on purpose — saving here replaces that HTML. Switch back to HTML source to see the saved body.",
+    markdownHint: "Saved as the Markdown you type; the reader page renders it to HTML.",
+    markdownToHtmlWarning: "This chapter is Markdown. Saving from the visual or HTML-source mode converts it to HTML for good — the Markdown source is overwritten. Switch back to Markdown to keep editing the source.",
 
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "e.g., 100% or 640px",

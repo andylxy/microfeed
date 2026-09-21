@@ -579,9 +579,8 @@ export const zhCN: TranslationKey = {
     markdownSourcePlaceholder: "用 Markdown 编写章节正文",
     markdownPreview: "预览",
     markdownEmptyPreview: "暂无内容可预览。",
-    markdownHint: "与另外两种模式一样保存为 HTML；Markdown 原文会一并保留，方便下次继续编辑。",
-markdownToHtmlWarning: "该章节正文是 Markdown。在可视化或 HTML 源码模式保存会把它永久转为 HTML，Markdown 原文将被覆盖。想继续编辑原文请切回 Markdown 模式。",
-    markdownHtmlBodyWarning: "该章节正文当前是 HTML（用可视化或 HTML 源码模式写的）。Markdown 模式故意从空白开始——在此保存会替换掉那段 HTML。想看已保存的正文请切回 HTML 源码模式。",
+    markdownHint: "按你写的 Markdown 原文保存，阅读页渲染时再转成 HTML。",
+    markdownToHtmlWarning: "该章节正文是 Markdown。在可视化或 HTML 源码模式保存会把它永久转为 HTML，Markdown 原文将被覆盖。想继续编辑原文请切回 Markdown 模式。",
 
     // RichEditorMediaSettingsDialog
     widthPlaceholder: "例如 100% 或 640px",

@@ -7,12 +7,6 @@ import {useTranslation} from "@/client/i18n";
 import {renderMarkdown} from "@/shared/BodyFormat";
 
 interface Props {
-  /**
-   * The body as it is currently saved. Used to warn that this item was authored
-   * in the other two modes: the box legitimately starts empty (there is no
-   * Markdown to show), and saving from here replaces that HTML.
-   */
-  bodyHtml?: string;
   onChange: (value: string) => void;
   value?: string;
 }
@@ -21,11 +15,10 @@ interface Props {
  * Markdown source editor with a live preview.
  *
  * `onChange` receives the Markdown source, not HTML — the caller decides what to
- * store. (The item editor renders it to HTML for the body and keeps the source
- * for the next edit.)
+ * store. The body keeps its source, so reopening this box shows what was typed
+ * rather than a rendering of it.
  */
 export default function AdminMarkdownEditor({
-  bodyHtml = "",
   onChange,
   value = "",
 }: Props) {
@@ -65,26 +58,24 @@ export default function AdminMarkdownEditor({
     const target = pendingSelection.current;
     if (!target) return;
     pendingSelection.current = null;
-    const textarea = findTextarea();
-    if (!textarea) return;
-    textarea.focus();
-    textarea.setSelectionRange(target.start, target.end);
+    // The code editor writes the new value into the textarea a tick after the
+    // render, and assigning `value` moves the caret to the very end. Restore on
+    // the next tick, or the selection the action just made is clobbered and the
+    // caret jumps to the end of the chapter.
+    const timer = window.setTimeout(() => {
+      const textarea = findTextarea();
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(target.start, target.end);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [value]);
 
   const html = renderMarkdown(value);
 
-  // Nothing here yet, but the saved body is HTML: say so, or the empty box
-  // reads as "the content is gone" and an innocent save silently drops it.
-  const withoutSource = !value.trim() && bodyHtml.trim().length > 0;
-
   return (
     <div className="admin-markdown-editor" ref={containerRef}>
       <EditorFormatToolbar onAction={onToolbarAction} />
-      {withoutSource && (
-        <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          {t("shared.markdownHtmlBodyWarning")}
-        </p>
-      )}
       <AdminCodeEditor
         ariaLabel={t("shared.markdownSourceAria")}
         code={value}
