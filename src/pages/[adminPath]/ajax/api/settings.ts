@@ -5,9 +5,18 @@ import {updateApiAccessSettings} from "@/server/api/api-keys";
 import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 import FeedDb from "@/server/feed/FeedDb";
 import {jsonResponse, localizedError} from "@/server/http";
+import {requireRbac} from "@/server/rbac/guard";
 import {apiSettingsCommandSchema} from "@/shared/ApiSchemas";
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  // Site settings are a system-domain write (plan §8.1).
+  const guard = await requireRbac(
+    locals,
+    "content:settings:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
   const parsed = apiSettingsCommandSchema.safeParse(await request.json().catch(
     () => null,
   ));

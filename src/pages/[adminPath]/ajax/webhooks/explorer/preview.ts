@@ -1,1 +1,6 @@
-export {previewAdminWebhookExplorerEvent as POST} from "@/server/admin/webhook-handlers";
+import {
+  previewAdminWebhookExplorerEvent,
+  withWebhookGuard,
+} from "@/server/admin/webhook-handlers";
+
+export const POST = withWebhookGuard(previewAdminWebhookExplorerEvent);

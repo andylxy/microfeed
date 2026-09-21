@@ -509,7 +509,11 @@ describe("webhook endpoint lifecycle", () => {
   it("reveals an encrypted endpoint secret through a non-cacheable Admin response", async () => {
     const {secret} = await insertEndpoint("reveal-secret");
     const response = await revealAdminWebhookEndpointSecret({
+      // The reveal handler now runs behind the system-domain RBAC gate, so it
+      // needs locals and a request like any other guarded route.
+      locals: {authUser: {id: "admin-1", role: "admin"}},
       params: {endpointId: "reveal-secret"},
+      request: new Request("https://feed.example.com/admin/ajax/webhooks/x"),
     } as unknown as APIContext);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");

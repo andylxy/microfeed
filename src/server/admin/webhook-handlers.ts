@@ -1,6 +1,7 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
+import {requireRbac} from "@/server/rbac/guard";
 import {
   jsonResponse,
   localizedError,
@@ -54,6 +55,24 @@ function errorResponse(
   // a 500 exactly as before. Guessing a status here would silently turn a 500
   // into a 400.
   return undefined;
+}
+
+/**
+ * Compose the system-domain RBAC gate around an admin webhook handler
+ * (plan §8.1: `webhooks/*` -> `system:webhook:manage`). Route files wrap their
+ * write handlers with this so the gate is stated once instead of per handler.
+ */
+export function withWebhookGuard(handler: APIRoute): APIRoute {
+  return async (context) => {
+    const denied = await requireRbac(
+      context.locals,
+      "system:webhook:manage",
+      context.request,
+      env.FEED_DB,
+    );
+    if (denied) return denied;
+    return handler(context);
+  };
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {

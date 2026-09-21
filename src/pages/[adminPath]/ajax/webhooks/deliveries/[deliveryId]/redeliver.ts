@@ -1,1 +1,6 @@
-export {redeliverAdminWebhookDelivery as POST} from "@/server/admin/webhook-handlers";
+import {
+  redeliverAdminWebhookDelivery,
+  withWebhookGuard,
+} from "@/server/admin/webhook-handlers";
+
+export const POST = withWebhookGuard(redeliverAdminWebhookDelivery);

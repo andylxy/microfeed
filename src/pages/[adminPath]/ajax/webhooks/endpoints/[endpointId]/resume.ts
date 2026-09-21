@@ -1,1 +1,6 @@
-export {resumeAdminWebhookEndpoint as POST} from "@/server/admin/webhook-handlers";
+import {
+  resumeAdminWebhookEndpoint,
+  withWebhookGuard,
+} from "@/server/admin/webhook-handlers";
+
+export const POST = withWebhookGuard(resumeAdminWebhookEndpoint);

@@ -1,1 +1,6 @@
-export {testAdminWebhookEndpoint as POST} from "@/server/admin/webhook-handlers";
+import {
+  testAdminWebhookEndpoint,
+  withWebhookGuard,
+} from "@/server/admin/webhook-handlers";
+
+export const POST = withWebhookGuard(testAdminWebhookEndpoint);

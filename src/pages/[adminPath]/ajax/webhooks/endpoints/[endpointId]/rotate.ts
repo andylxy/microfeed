@@ -1,1 +1,6 @@
-export {rotateAdminWebhookEndpointSecret as POST} from "@/server/admin/webhook-handlers";
+import {
+  rotateAdminWebhookEndpointSecret,
+  withWebhookGuard,
+} from "@/server/admin/webhook-handlers";
+
+export const POST = withWebhookGuard(rotateAdminWebhookEndpointSecret);
