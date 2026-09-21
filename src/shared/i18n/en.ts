@@ -15,6 +15,8 @@ export const en = {
     examplePrefix: "e.g., ",
   },
   richEditor: {
+    heading2: "Heading 2",
+    heading3: "Heading 3",
     textStyle: "Text style",
     bold: "Bold",
     italic: "Italic",

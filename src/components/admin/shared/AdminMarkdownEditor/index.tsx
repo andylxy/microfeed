@@ -1,6 +1,8 @@
-import {useState, type ChangeEvent} from "react";
+import {useEffect, useRef, useState, type ChangeEvent} from "react";
 
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
+import EditorFormatToolbar from "@/components/admin/shared/EditorFormatToolbar";
+import {applyMarkdownAction, type EditorToolbarAction} from "@/client/markdownActions";
 import {useTranslation} from "@/client/i18n";
 import {renderMarkdown} from "@/shared/BodyFormat";
 
@@ -29,9 +31,46 @@ export default function AdminMarkdownEditor({
 }: Props) {
   const {t} = useTranslation();
   const [preview, setPreview] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Where the caret should land after an action. The textarea is owned by
+  // AdminCodeEditor, so the selection is restored once the new value has been
+  // rendered.
+  const pendingSelection = useRef<{start: number; end: number} | null>(null);
+
+  const findTextarea = (): HTMLTextAreaElement | null => (
+    containerRef.current?.querySelector("textarea") ?? null
+  );
+
   const onCodeChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(event.target.value);
   };
+
+  const onToolbarAction = (action: EditorToolbarAction) => {
+    const textarea = findTextarea();
+    if (!textarea) return;
+    const result = applyMarkdownAction(
+      value,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      action,
+    );
+    pendingSelection.current = {
+      start: result.selectionStart,
+      end: result.selectionEnd,
+    };
+    onChange(result.value);
+  };
+
+  useEffect(() => {
+    const target = pendingSelection.current;
+    if (!target) return;
+    pendingSelection.current = null;
+    const textarea = findTextarea();
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(target.start, target.end);
+  }, [value]);
+
   const html = renderMarkdown(value);
 
   // Nothing here yet, but the saved body is HTML: say so, or the empty box
@@ -39,7 +78,8 @@ export default function AdminMarkdownEditor({
   const withoutSource = !value.trim() && bodyHtml.trim().length > 0;
 
   return (
-    <div className="admin-markdown-editor">
+    <div className="admin-markdown-editor" ref={containerRef}>
+      <EditorFormatToolbar onAction={onToolbarAction} />
       {withoutSource && (
         <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           {t("shared.markdownHtmlBodyWarning")}

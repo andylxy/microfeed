@@ -17,6 +17,8 @@ export const zhCN: TranslationKey = {
     examplePrefix: "例如，",
   },
   richEditor: {
+    heading2: "二级标题",
+    heading3: "三级标题",
     textStyle: "文本样式",
     bold: "加粗",
     italic: "斜体",
