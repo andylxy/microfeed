@@ -11,8 +11,9 @@ import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, localizedError} from "@/server/http";
+import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {requireRbac} from "@/server/rbac/guard";
-import {permissionId} from "@/server/rbac/seed";
+import {permissionId, roleId} from "@/server/rbac/seed";
 import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import type {RbacBoard, RbacUserBoard} from "@/shared/Rbac";
 
@@ -245,6 +246,298 @@ export async function replaceUserRoles(
   ]);
   return {ok: true};
 }
+
+export type RoleMutationResult =
+  | {ok: true}
+  | {ok: false; reason: "duplicateRole" | "unknownRole" | "reservedRole" | "roleInUse"};
+
+const RESERVED_ROLES = new Set(["super_admin"]);
+
+/**
+ * Create a role. `super_admin` is reserved: it is defined by the seed and
+ * carries the `*` wildcard, so a second one would only muddy the decision chain.
+ */
+export async function createRbacRole(
+  db: D1Database,
+  code: string,
+  name: string,
+): Promise<RoleMutationResult> {
+  if (RESERVED_ROLES.has(code)) {
+    return {ok: false, reason: "reservedRole"};
+  }
+  const existing = await db
+    .prepare("SELECT id FROM ext_roles WHERE code = ?")
+    .bind(code)
+    .first<{id: string}>();
+  if (existing) {
+    return {ok: false, reason: "duplicateRole"};
+  }
+  await db
+    .prepare("INSERT INTO ext_roles (id, code, name) VALUES (?, ?, ?)")
+    .bind(roleId(code), code, name)
+    .run();
+  return {ok: true};
+}
+
+/** Rename a role. The code is the stable identity, so only the label changes. */
+export async function renameRbacRole(
+  db: D1Database,
+  code: string,
+  name: string,
+): Promise<RoleMutationResult> {
+  if (RESERVED_ROLES.has(code)) {
+    return {ok: false, reason: "reservedRole"};
+  }
+  const result = await db
+    .prepare("UPDATE ext_roles SET name = ? WHERE code = ?")
+    .bind(name, code)
+    .run();
+  if (!result.success || result.meta?.changes === 0) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  return {ok: true};
+}
+
+/**
+ * Delete a role.
+ *
+ * Refuses when anybody still holds it: removing the row cascades away their
+ * grants silently, and the operator should re-assign those accounts first so the
+ * effect is deliberate.
+ */
+export async function deleteRbacRole(
+  db: D1Database,
+  code: string,
+): Promise<RoleMutationResult> {
+  if (RESERVED_ROLES.has(code)) {
+    return {ok: false, reason: "reservedRole"};
+  }
+  const holders = await db
+    .prepare(
+      `SELECT COUNT(*) AS total FROM ext_user_roles ur
+       JOIN ext_roles r ON r.id = ur.role_id
+       WHERE r.code = ?`,
+    )
+    .bind(code)
+    .first<{total: number}>();
+  if ((holders?.total ?? 0) > 0) {
+    return {ok: false, reason: "roleInUse"};
+  }
+  const result = await db
+    .prepare("DELETE FROM ext_roles WHERE code = ?")
+    .bind(code)
+    .run();
+  if (!result.success || result.meta?.changes === 0) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  return {ok: true};
+}
+
+export const createAdminRbacRole: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:role:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {code?: unknown; name?: unknown}
+    | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!code || !name || !/^[a-z][a-z0-9_]*$/u.test(code)) {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await createRbacRole(env.FEED_DB, code, name);
+  if (!result.ok) {
+    return localizedError(
+      request,
+      `errors.rbac.${result.reason}`,
+      result.reason === "unknownRole" ? 404 : 400,
+    );
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB));
+};
+
+export const updateAdminRbacRoleName: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:role:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    {code?: unknown; name?: unknown} | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!code || !name) {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await renameRbacRole(env.FEED_DB, code, name);
+  if (!result.ok) {
+    return localizedError(
+      request,
+      `errors.rbac.${result.reason}`,
+      result.reason === "unknownRole" ? 404 : 400,
+    );
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB));
+};
+
+export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:role:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as {code?: unknown} | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  if (!code) {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await deleteRbacRole(env.FEED_DB, code);
+  if (!result.ok) {
+    return localizedError(
+      request,
+      `errors.rbac.${result.reason}`,
+      result.reason === "unknownRole" ? 404 : 409,
+    );
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB));
+};
+
+/**
+ * Account lifecycle, delegated to Better Auth's admin plugin.
+ *
+ * Creating and removing accounts is deliberately not done with SQL here: the
+ * plugin owns `auth_user` (and the credential rows), so going through it keeps
+ * password hashing and session cleanup on the supported path. RBAC only supplies
+ * the `system:user:manage` gate and the role assignment on top.
+ */
+export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:user:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {email?: unknown; name?: unknown; password?: unknown}
+    | null;
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+  if (!email || !name || password.length < 8) {
+    return localizedError(request, "errors.rbac.invalidNewUser", 400);
+  }
+
+  try {
+    await createMicrofeedAuth(env, request).api.createUser({
+      body: {email, name, password, role: "user"},
+      headers: request.headers,
+    });
+  } catch {
+    return localizedError(request, "errors.rbac.createUserFailed", 400);
+  }
+  return jsonResponse(await readRbacUsers(env.FEED_DB));
+};
+
+export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:user:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as {userId?: unknown} | null;
+  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  if (!userId) {
+    return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+  }
+  // The last super_admin holder cannot delete themselves: the guard on
+  // `replaceUserRoles` covers dropping the role, this covers removing the account
+  // that carries it.
+  const board = await readRbacUsers(env.FEED_DB);
+  const target = board.users.find((entry) => entry.id === userId);
+  if (!target) {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
+  }
+  if (target.roles.includes(SUPER_ADMIN)) {
+    const holders = board.users.filter((entry) =>
+      entry.roles.includes(SUPER_ADMIN),
+    ).length;
+    if (holders <= 1) {
+      return localizedError(request, "errors.rbac.lastSuperAdmin", 400);
+    }
+  }
+
+  try {
+    await createMicrofeedAuth(env, request).api.removeUser({
+      body: {userId},
+      headers: request.headers,
+    });
+  } catch {
+    return localizedError(request, "errors.rbac.deleteUserFailed", 400);
+  }
+  return jsonResponse(await readRbacUsers(env.FEED_DB));
+};
+
+export const updateAdminRbacUserBan: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(
+    locals,
+    "system:user:manage",
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {banned?: unknown; userId?: unknown}
+    | null;
+  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  if (!userId || typeof body?.banned !== "boolean") {
+    return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+  }
+  // Refusing to ban the last super_admin keeps the deployment reachable: the
+  // gate would 401 them on every guarded endpoint with no way back in.
+  if (body.banned) {
+    const board = await readRbacUsers(env.FEED_DB);
+    const target = board.users.find((entry) => entry.id === userId);
+    if (target?.roles.includes(SUPER_ADMIN)) {
+      const holders = board.users.filter((entry) =>
+        entry.roles.includes(SUPER_ADMIN) && !entry.banned,
+      ).length;
+      if (holders <= 1) {
+        return localizedError(request, "errors.rbac.lastSuperAdmin", 400);
+      }
+    }
+  }
+
+  try {
+    const auth = createMicrofeedAuth(env, request);
+    await (body.banned ? auth.api.banUser : auth.api.unbanUser)({
+      body: {userId},
+      headers: request.headers,
+    });
+  } catch {
+    return localizedError(request, "errors.rbac.banUserFailed", 400);
+  }
+  return jsonResponse(await readRbacUsers(env.FEED_DB));
+};
 
 export const getAdminRbacUsers: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(

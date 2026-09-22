@@ -3,6 +3,7 @@ import {useState} from "react";
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {cn} from "@/lib/utils";
 import type {RbacUserBoard} from "@/shared/Rbac";
 import {ADMIN_URLS} from "@/shared/StringUtils";
@@ -15,8 +16,18 @@ interface Props {
 
 const ROW_CLASS = "w-full rounded-[10px] px-3 py-2 text-left text-sm";
 
+/** Pull a localized message out of a failed RBAC ajax response. */
+async function parseError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as {error?: string};
+    return data.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
- * Which roles each account holds.
+ * Which roles each account holds, plus account lifecycle (create, ban, delete).
  *
  * Reading and writing both need `system:user:manage` (plan §8.1, the user
  * management row). Without this page the RBAC layer is inert: roles can be
@@ -27,6 +38,11 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [board, setBoard] = useState(initialBoard);
   const [selectedId, setSelectedId] = useState(initialBoard.users[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
+
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const user = board.users.find((entry) => entry.id === selectedId);
 
@@ -61,6 +77,87 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     }
   };
 
+  const createUser = async () => {
+    const name = newName.trim();
+    const email = newEmail.trim();
+    const password = newPassword;
+    if (!name || !email || password.length < 8) {
+      showToast(t("errors.rbac.invalidNewUser"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserCreate(), {
+        body: JSON.stringify({email, name, password}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.createUserFailed")), "error");
+        return;
+      }
+      const next = (await response.json()) as RbacUserBoard;
+      setBoard(next);
+      setSelectedId(next.users[0]?.id ?? "");
+      setCreating(false);
+      setNewName("");
+      setNewEmail("");
+      setNewPassword("");
+      showToast(t("rbac.userRolesSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.createUserFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleBan = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserBan(), {
+        body: JSON.stringify({banned: !user.banned, userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.banUserFailed")), "error");
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      showToast(t("rbac.userRolesSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.banUserFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteUser = async () => {
+    if (!user) return;
+    if (!window.confirm(t("rbac.confirmDeleteAccount", {email: user.email}))) return;
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserDelete(), {
+        body: JSON.stringify({userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.deleteUserFailed")), "error");
+        return;
+      }
+      const next = (await response.json()) as RbacUserBoard;
+      setBoard(next);
+      setSelectedId(next.users[0]?.id ?? "");
+      showToast(t("rbac.userRolesSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.deleteUserFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-72">
@@ -88,6 +185,77 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
             </li>
           ))}
         </ul>
+
+        <div className="mt-2 border-t p-1 pt-2">
+          {creating ? (
+            <div className="flex flex-col gap-2 rounded-[10px] border bg-background p-2">
+              <Input
+                aria-label={t("rbac.accountName")}
+                disabled={saving}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder={t("rbac.accountName")}
+                value={newName}
+              />
+              <Input
+                aria-label={t("rbac.accountEmail")}
+                disabled={saving}
+                onChange={(event) => setNewEmail(event.target.value)}
+                placeholder={t("rbac.accountEmail")}
+                type="email"
+                value={newEmail}
+              />
+              <Input
+                aria-label={t("rbac.accountPassword")}
+                disabled={saving}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder={t("rbac.accountPassword")}
+                type="password"
+                value={newPassword}
+              />
+              <p className="text-xs text-muted-foreground">{t("rbac.passwordHint")}</p>
+              <div className="flex gap-2">
+                <Button
+                  disabled={saving}
+                  onClick={createUser}
+                  size="xs"
+                  type="button"
+                >
+                  {t("common.save")}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => {
+                    setCreating(false);
+                    setNewName("");
+                    setNewEmail("");
+                    setNewPassword("");
+                  }}
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("common.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              className="w-full"
+              disabled={saving}
+              onClick={() => {
+                setNewName("");
+                setNewEmail("");
+                setNewPassword("");
+                setCreating(true);
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("rbac.newAccount")}
+            </Button>
+          )}
+        </div>
       </nav>
 
       <section className="min-w-0 flex-1 rounded-[14px] border bg-card p-5 shadow-xs">
@@ -102,9 +270,29 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                   {user.email}
                 </p>
               </div>
-              <Button disabled={saving} onClick={save} size="sm" type="button">
-                {saving ? t("rbac.saving") : t("rbac.saveUserRoles")}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button disabled={saving} onClick={save} size="sm" type="button">
+                  {saving ? t("rbac.saving") : t("rbac.saveUserRoles")}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={toggleBan}
+                  size="sm"
+                  type="button"
+                  variant={user.banned ? "outline" : "secondary"}
+                >
+                  {user.banned ? t("rbac.unbanAccount") : t("rbac.banAccount")}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={deleteUser}
+                  size="sm"
+                  type="button"
+                  variant="destructive"
+                >
+                  {t("rbac.deleteAccount")}
+                </Button>
+              </div>
             </header>
 
             <dl className="mb-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">

@@ -3,6 +3,7 @@ import {useMemo, useState} from "react";
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {RbacBoard} from "@/shared/Rbac";
 
@@ -17,6 +18,9 @@ interface Props {
  */
 const WILDCARD = "*";
 
+/** Mirrors the server's role-code rule (`^[a-z][a-z0-9_]*$`). */
+const ROLE_CODE_PATTERN = /^[a-z][a-z0-9_]*$/u;
+
 /**
  * `content:book` -> `rbac.group.content_book`; `*` -> `rbac.group.all`.
  *
@@ -30,19 +34,36 @@ function groupLabelKey(group: string): string {
   return `rbac.group.${slug || "all"}`;
 }
 
+/** Pull a localized message out of a failed RBAC ajax response. */
+async function parseError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as {error?: string};
+    return data.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Roles and the permissions granted to them.
  *
  * The board is read from `GET /ajax/rbac` (`system:role:manage`) and written
  * back with `POST /ajax/rbac/role-permissions` (`system:permission:manage`).
  * `super_admin` is read-only here: its access comes from the `*` wildcard, so
- * an assignment that stripped it would lock every administrator out.
+ * an assignment that stripped it would lock every administrator out. Roles can
+ * also be created, renamed and deleted through the sibling endpoints.
  */
 export default function RbacApp({initialBoard}: Props) {
   const {t} = useTranslation();
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(initialBoard.roles[0]?.code ?? "");
   const [saving, setSaving] = useState(false);
+
+  const [creating, setCreating] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
 
   const role = board.roles.find((entry) => entry.code === selected);
   const isWildcardRole = role?.code === "super_admin";
@@ -95,6 +116,97 @@ export default function RbacApp({initialBoard}: Props) {
     }
   };
 
+  const createRole = async () => {
+    const code = newCode.trim();
+    const name = newName.trim();
+    if (!ROLE_CODE_PATTERN.test(code) || !name) {
+      showToast(t("errors.rbac.invalidRole"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacRoles(), {
+        body: JSON.stringify({code, name}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.duplicateRole")), "error");
+        return;
+      }
+      const next = (await response.json()) as RbacBoard;
+      setBoard(next);
+      setSelected(code);
+      setCreating(false);
+      setNewCode("");
+      setNewName("");
+      showToast(t("rbac.saved"), "success");
+    } catch {
+      showToast(t("errors.rbac.duplicateRole"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startRename = () => {
+    if (!role) return;
+    setRenaming(true);
+    setRenameValue(role.name);
+  };
+
+  const saveRename = async () => {
+    if (!role) return;
+    const name = renameValue.trim();
+    if (!name) {
+      showToast(t("errors.rbac.invalidRole"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacRoleName(), {
+        body: JSON.stringify({code: role.code, name}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.reservedRole")), "error");
+        return;
+      }
+      setBoard(await response.json() as RbacBoard);
+      setRenaming(false);
+      showToast(t("rbac.saved"), "success");
+    } catch {
+      showToast(t("errors.rbac.reservedRole"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteRole = async () => {
+    if (!role) return;
+    if (!window.confirm(t("rbac.confirmDeleteRole", {name: role.name}))) return;
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacRoleDelete(), {
+        body: JSON.stringify({code: role.code}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.roleInUse")), "error");
+        return;
+      }
+      const next = (await response.json()) as RbacBoard;
+      setBoard(next);
+      setSelected(next.roles[0]?.code ?? "");
+      showToast(t("rbac.saved"), "success");
+    } catch {
+      showToast(t("errors.rbac.roleInUse"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-64">
@@ -119,6 +231,65 @@ export default function RbacApp({initialBoard}: Props) {
             </li>
           ))}
         </ul>
+
+        <div className="mt-2 border-t p-1 pt-2">
+          {creating ? (
+            <div className="flex flex-col gap-2 rounded-[10px] border bg-background p-2">
+              <Input
+                aria-label={t("rbac.roleCode")}
+                disabled={saving}
+                onChange={(event) => setNewCode(event.target.value)}
+                placeholder={t("rbac.roleCodePlaceholder")}
+                value={newCode}
+              />
+              <Input
+                aria-label={t("rbac.roleName")}
+                disabled={saving}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder={t("rbac.roleName")}
+                value={newName}
+              />
+              <div className="flex gap-2">
+                <Button
+                  disabled={saving}
+                  onClick={createRole}
+                  size="xs"
+                  type="button"
+                >
+                  {t("common.save")}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => {
+                    setCreating(false);
+                    setNewCode("");
+                    setNewName("");
+                  }}
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("common.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              className="w-full"
+              disabled={saving}
+              onClick={() => {
+                setNewCode("");
+                setNewName("");
+                setCreating(true);
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("rbac.newRole")}
+            </Button>
+          )}
+        </div>
       </nav>
 
       <section className="min-w-0 flex-1 rounded-[14px] border bg-card p-5 shadow-xs">
@@ -131,14 +302,63 @@ export default function RbacApp({initialBoard}: Props) {
                   {role.code}
                 </p>
               </div>
-              <Button
-                disabled={saving || isWildcardRole}
-                onClick={save}
-                size="sm"
-                type="button"
-              >
-                {saving ? t("rbac.saving") : t("rbac.save")}
-              </Button>
+              {renaming ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    aria-label={t("rbac.roleName")}
+                    className="w-44"
+                    disabled={saving}
+                    onChange={(event) => setRenameValue(event.target.value)}
+                    value={renameValue}
+                  />
+                  <Button
+                    disabled={saving}
+                    onClick={saveRename}
+                    size="sm"
+                    type="button"
+                  >
+                    {t("common.save")}
+                  </Button>
+                  <Button
+                    disabled={saving}
+                    onClick={() => setRenaming(false)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    disabled={saving || isWildcardRole}
+                    onClick={save}
+                    size="sm"
+                    type="button"
+                  >
+                    {saving ? t("rbac.saving") : t("rbac.save")}
+                  </Button>
+                  <Button
+                    disabled={saving || isWildcardRole}
+                    onClick={startRename}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {t("rbac.rename")}
+                  </Button>
+                  <Button
+                    disabled={saving || isWildcardRole}
+                    onClick={deleteRole}
+                    size="sm"
+                    type="button"
+                    variant="destructive"
+                  >
+                    {t("rbac.deleteRole")}
+                  </Button>
+                </div>
+              )}
             </header>
 
             {isWildcardRole && (

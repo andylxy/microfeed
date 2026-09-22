@@ -4,6 +4,8 @@ import {beforeEach, describe, expect, it} from "vitest";
 import {STATUSES} from "@/shared/Constants";
 import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
 
+import {createMicrofeedAuth} from "@/server/auth/better-auth";
+import {handleAdminBootstrap} from "@/server/auth/bootstrap";
 import {
   clearMustChangePassword,
   requireAppVersion,
@@ -14,15 +16,26 @@ import {resolveUserPermissions} from "@/server/rbac/resolve";
 import {checkReplay} from "@/server/rbac/replay";
 import {RBAC_PERMISSIONS} from "@/server/rbac/seed";
 import {
+  createAdminRbacRole,
+  createAdminRbacUser,
+  createRbacRole,
+  deleteAdminRbacRole,
+  deleteAdminRbacUser,
+  deleteRbacRole,
   getAdminRbacBoard,
   getAdminRbacUsers,
   readRbacBoard,
   readRbacUsers,
+  renameRbacRole,
   replaceRolePermissions,
   replaceUserRoles,
   updateAdminRbacRole,
+  updateAdminRbacRoleName,
   updateAdminRbacUser,
+  updateAdminRbacUserBan,
 } from "@/server/admin/rbac-handlers";
+
+const ORIGIN = "https://feed.example.com";
 
 async function clearRbacRows(): Promise<void> {
   await env.FEED_DB.batch([
@@ -643,5 +656,323 @@ describe("chapter deletion permission", () => {
       }),
     } as never);
     expect(response.status).toBe(403);
+  });
+});
+
+describe("RBAC role CRUD (pure functions)", () => {
+  it("creates a role and shows it on the board", async () => {
+    expect(await createRbacRole(env.FEED_DB, "reviewer", "Reviewer")).toEqual({ok: true});
+    const board = await readRbacBoard(env.FEED_DB);
+    expect(board.roles.find((role) => role.code === "reviewer")?.name).toBe("Reviewer");
+    // Keep the catalogue clean for later tests.
+    await deleteRbacRole(env.FEED_DB, "reviewer");
+  });
+
+  it("rejects a duplicate role code", async () => {
+    await createRbacRole(env.FEED_DB, "dupe_role", "Dupe");
+    expect(await createRbacRole(env.FEED_DB, "dupe_role", "Dupe again"))
+      .toEqual({ok: false, reason: "duplicateRole"});
+    await deleteRbacRole(env.FEED_DB, "dupe_role");
+  });
+
+  it("refuses to create or touch the reserved super_admin role", async () => {
+    expect(await createRbacRole(env.FEED_DB, "super_admin", "God mode"))
+      .toEqual({ok: false, reason: "reservedRole"});
+    expect(await renameRbacRole(env.FEED_DB, "super_admin", "Anything"))
+      .toEqual({ok: false, reason: "reservedRole"});
+    expect(await deleteRbacRole(env.FEED_DB, "super_admin"))
+      .toEqual({ok: false, reason: "reservedRole"});
+  });
+
+  it("renames a role", async () => {
+    await createRbacRole(env.FEED_DB, "rename_me", "Before");
+    expect(await renameRbacRole(env.FEED_DB, "rename_me", "After")).toEqual({ok: true});
+    const board = await readRbacBoard(env.FEED_DB);
+    expect(board.roles.find((role) => role.code === "rename_me")?.name).toBe("After");
+    await deleteRbacRole(env.FEED_DB, "rename_me");
+  });
+
+  it("refuses to delete a role that an account still holds", async () => {
+    await seedUser("u-busy", "user");
+    await createRbacRole(env.FEED_DB, "busy_role", "Busy");
+    await assignRole("u-busy", "r_busy_role");
+    expect(await deleteRbacRole(env.FEED_DB, "busy_role"))
+      .toEqual({ok: false, reason: "roleInUse"});
+  });
+
+  it("deletes a role that nobody holds", async () => {
+    await createRbacRole(env.FEED_DB, "busy_role", "Busy");
+    expect(await deleteRbacRole(env.FEED_DB, "busy_role")).toEqual({ok: true});
+  });
+});
+
+describe("RBAC role CRUD endpoints", () => {
+  function roleRequest(code: string, name: string): Request {
+    return new Request("https://feed.example.com/admin/ajax/rbac/roles", {
+      body: JSON.stringify({code, name}),
+      headers: {"content-type": "application/json"},
+      method: "POST",
+    });
+  }
+
+  it("gates create on system:role:manage (401 / 403 / 200)", async () => {
+    const anonymous = await createAdminRbacRole({locals: {}, request: roleRequest("x", "X")} as never);
+    expect(anonymous.status).toBe(401);
+
+    const forbidden = await createAdminRbacRole({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["content:book:read"]),
+      },
+      request: roleRequest("x", "X"),
+    } as never);
+    expect(forbidden.status).toBe(403);
+
+    const allowed = await createAdminRbacRole({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: roleRequest("endpoint_role", "Endpoint"),
+    } as never);
+    expect(allowed.status).toBe(200);
+    const board = await allowed.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "endpoint_role")?.name).toBe("Endpoint");
+    await deleteRbacRole(env.FEED_DB, "endpoint_role");
+  });
+
+  it("rejects an invalid role code with 400", async () => {
+    const response = await createAdminRbacRole({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: roleRequest("Bad Code!", "Bad"),
+    } as never);
+    expect(response.status).toBe(400);
+  });
+
+  it("renames via the endpoint and refuses the reserved role", async () => {
+    await createRbacRole(env.FEED_DB, "rename_ep", "Start");
+    const ok = await updateAdminRbacRoleName({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-name", {
+        body: JSON.stringify({code: "rename_ep", name: "Renamed"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(ok.status).toBe(200);
+    const board = await ok.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "rename_ep")?.name).toBe("Renamed");
+
+    const reserved = await updateAdminRbacRoleName({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-name", {
+        body: JSON.stringify({code: "super_admin", name: "Nope"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(reserved.status).toBe(400);
+    await deleteRbacRole(env.FEED_DB, "rename_ep");
+  });
+
+  it("deletes via the endpoint and refuses the reserved role", async () => {
+    await createRbacRole(env.FEED_DB, "delete_ep", "To go");
+    const ok = await deleteAdminRbacRole({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-delete", {
+        body: JSON.stringify({code: "delete_ep"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(ok.status).toBe(200);
+    const board = await ok.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "delete_ep")).toBeUndefined();
+
+    const reserved = await deleteAdminRbacRole({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-delete", {
+        body: JSON.stringify({code: "super_admin"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(reserved.status).toBe(409);
+  });
+});
+
+describe("RBAC user CRUD endpoints", () => {
+  const userManage = (codes: string[]) => ({
+    authUser: {id: "u9", role: null},
+    rbacPermissions: new Set(codes),
+  });
+
+  it("gates create / ban / delete on system:user:manage", async () => {
+    const noSession = {locals: {}, request: new Request("https://feed.example.com/admin/ajax/rbac/user-create", {
+      body: JSON.stringify({email: "a@b.com", name: "A", password: "password123"}),
+      headers: {"content-type": "application/json"},
+      method: "POST",
+    })} as never;
+    expect((await createAdminRbacUser(noSession)).status).toBe(401);
+
+    const forbidden = {
+      locals: userManage(["content:book:read"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-create", {
+        body: JSON.stringify({email: "a@b.com", name: "A", password: "password123"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await createAdminRbacUser(forbidden)).status).toBe(403);
+
+    const banForbidden = {
+      locals: userManage(["content:book:read"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-ban", {
+        body: JSON.stringify({banned: true, userId: "u1"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await updateAdminRbacUserBan(banForbidden)).status).toBe(403);
+
+    const delForbidden = {
+      locals: userManage(["content:book:read"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-delete", {
+        body: JSON.stringify({userId: "u1"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await deleteAdminRbacUser(delForbidden)).status).toBe(403);
+  });
+
+  it("rejects malformed create / ban / delete bodies before touching Better Auth", async () => {
+    const grant = userManage(["system:user:manage"]);
+    const shortPassword = {
+      locals: grant,
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-create", {
+        body: JSON.stringify({email: "a@b.com", name: "A", password: "short"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await createAdminRbacUser(shortPassword)).status).toBe(400);
+
+    const missingUserId = {
+      locals: grant,
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-delete", {
+        body: JSON.stringify({}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await deleteAdminRbacUser(missingUserId)).status).toBe(400);
+
+    const badBanBody = {
+      locals: grant,
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-ban", {
+        body: JSON.stringify({banned: "yes", userId: "u1"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never;
+    expect((await updateAdminRbacUserBan(badBanBody)).status).toBe(400);
+  });
+
+  it("returns 404 when deleting an unknown account", async () => {
+    const response = await deleteAdminRbacUser({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-delete", {
+        body: JSON.stringify({userId: "does-not-exist"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(response.status).toBe(404);
+  });
+
+  it("creates, bans, and deletes an account through Better Auth", async () => {
+    // The lifecycle endpoints delegate to Better Auth's admin plugin, so the
+    // request must carry an administrator session.
+    await handleAdminBootstrap(
+      {
+        FEED_DB: env.FEED_DB,
+        MICROFEED_SETUP_ADMIN_EMAIL: "admin@example.com",
+        MICROFEED_SETUP_ADMIN_PASSWORD: "correct horse battery staple",
+        MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION: "correct horse battery staple",
+      },
+      new Request(`${ORIGIN}/.well-known/microfeed/bootstrap-admin/`, {method: "POST"}),
+    );
+    const signIn = await createMicrofeedAuth(env, new Request(
+      `${ORIGIN}/api/auth/sign-in/email`,
+      {
+        body: JSON.stringify({email: "admin@example.com", password: "correct horse battery staple"}),
+        headers: {"content-type": "application/json", origin: ORIGIN},
+        method: "POST",
+      },
+    )).handler(new Request(
+      `${ORIGIN}/api/auth/sign-in/email`,
+      {
+        body: JSON.stringify({email: "admin@example.com", password: "correct horse battery staple"}),
+        headers: {"content-type": "application/json", origin: ORIGIN},
+        method: "POST",
+      },
+    ));
+    const cookie = (signIn.headers.getSetCookie?.() ?? []).join("; ");
+    expect(cookie).toBeTruthy();
+
+    const withSession = (path: string, body: unknown) => new Request(
+      `${ORIGIN}/admin/ajax/rbac/${path}`,
+      {
+        body: JSON.stringify(body),
+        headers: {cookie, "content-type": "application/json"},
+        method: "POST",
+      },
+    );
+
+    const created = await createAdminRbacUser({
+      locals: userManage(["system:user:manage"]),
+      request: withSession("user-create", {
+        email: "created@example.com",
+        name: "Created",
+        password: "created password",
+      }),
+    } as never);
+    expect(created.status).toBe(200);
+    const afterCreate = await created.json() as Awaited<ReturnType<typeof readRbacUsers>>;
+    const newUser = afterCreate.users.find((entry) => entry.email === "created@example.com");
+    expect(newUser).toBeTruthy();
+    expect(newUser?.banned).toBe(false);
+
+    const banned = await updateAdminRbacUserBan({
+      locals: userManage(["system:user:manage"]),
+      request: withSession("user-ban", {banned: true, userId: newUser?.id}),
+    } as never);
+    expect(banned.status).toBe(200);
+    const afterBan = await banned.json() as Awaited<ReturnType<typeof readRbacUsers>>;
+    expect(afterBan.users.find((entry) => entry.id === newUser?.id)?.banned).toBe(true);
+
+    const deleted = await deleteAdminRbacUser({
+      locals: userManage(["system:user:manage"]),
+      request: withSession("user-delete", {userId: newUser?.id}),
+    } as never);
+    expect(deleted.status).toBe(200);
+    const afterDelete = await deleted.json() as Awaited<ReturnType<typeof readRbacUsers>>;
+    expect(afterDelete.users.find((entry) => entry.id === newUser?.id)).toBeUndefined();
   });
 });

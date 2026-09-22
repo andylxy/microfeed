@@ -445,6 +445,12 @@ export const ADMIN_URLS = {
     adminUrl("ajax/rbac/role-permissions", browserAdminPath()),
   ajaxRbacUsers: () => adminUrl("ajax/rbac/users", browserAdminPath()),
   ajaxRbacUserRoles: () => adminUrl("ajax/rbac/user-roles", browserAdminPath()),
+  ajaxRbacRoles: () => adminUrl("ajax/rbac/roles", browserAdminPath()),
+  ajaxRbacRoleName: () => adminUrl("ajax/rbac/role-name", browserAdminPath()),
+  ajaxRbacRoleDelete: () => adminUrl("ajax/rbac/role-delete", browserAdminPath()),
+  ajaxRbacUserCreate: () => adminUrl("ajax/rbac/user-create", browserAdminPath()),
+  ajaxRbacUserDelete: () => adminUrl("ajax/rbac/user-delete", browserAdminPath()),
+  ajaxRbacUserBan: () => adminUrl("ajax/rbac/user-ban", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
   ajaxVolumeAssign: () =>
