@@ -1870,9 +1870,11 @@ export const en = {
       unknownRole: "That role does not exist.",
       unknownPermission: "One of the permission codes is not in the catalogue.",
       wildcardRole: "The super_admin role always holds every permission and cannot be edited.",
+      wildcardPermission: "The * wildcard cannot be granted to a role: it would make that role a second super administrator.",
       invalidUserAssignment: "Send an account id and the list of role codes to grant.",
       unknownUser: "That account does not exist.",
       lastSuperAdmin: "This is the last account holding super_admin, so that role cannot be removed.",
+      forbidden: "You do not have permission to open this page.",
     },
     review: {
       itemMissing: "That chapter no longer exists.",

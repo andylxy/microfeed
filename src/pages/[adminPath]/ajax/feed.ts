@@ -137,7 +137,20 @@ export async function updateAdminFeed(
 }
 
 export const POST: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, "content:article:update", request, env.FEED_DB);
+  // Deleting a chapter is its own permission (§8.1 `content:article:delete`),
+  // separate from editing one. The delete arrives as a POST whose item status is
+  // DELETED, so the code depends on the body. Peek through a clone: the handler
+  // below still has to read the original request body.
+  const preview = await request.clone().json().catch(() => null) as
+    | {item?: {status?: unknown}}
+    | null;
+  const isDeleting = preview?.item?.status === STATUSES.DELETED;
+  const guard = await requireRbac(
+    locals,
+    isDeleting ? "content:article:delete" : "content:article:update",
+    request,
+    env.FEED_DB,
+  );
   if (guard) return guard;
   return updateAdminFeed(request, env, waitUntil, cache);
 };

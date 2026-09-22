@@ -5,6 +5,7 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import UsersApp from "@/components/admin/rbac/UsersApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {readRbacUsers} from "@/server/admin/rbac-handlers";
+import {requirePermission} from "@/server/rbac/guard";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {NAV_ITEMS} from "@/shared/Constants";
 import {translate} from "@/shared/i18n";
@@ -13,6 +14,11 @@ const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+// Same reasoning as the roles page: the endpoint is guarded, the page must be.
+const denied = requirePermission(Astro.locals, "system:user:manage");
+if (denied) {
+  return new Response(translate("errors.rbac.forbidden", adminLanguage), {status: 403});
 }
 const board = await readRbacUsers(env.FEED_DB);
 ---

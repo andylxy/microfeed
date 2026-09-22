@@ -1,6 +1,9 @@
 import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
+import {STATUSES} from "@/shared/Constants";
+import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
+
 import {
   clearMustChangePassword,
   requireAppVersion,
@@ -390,6 +393,17 @@ describe("RBAC administration", () => {
     expect(superAdmin?.permissions).toEqual(["*"]);
   });
 
+  it("refuses to grant the wildcard to an ordinary role", async () => {
+    // Holding `system:permission:manage` must not be an escalation path to
+    // full access, so the server rejects `*` even though the dashboard hides it.
+    expect(await replaceRolePermissions(env.FEED_DB, "editor", ["*"]))
+      .toEqual({ok: false, reason: "wildcardPermission"});
+
+    const board = await readRbacBoard(env.FEED_DB);
+    expect(board.roles.find((role) => role.code === "editor")?.permissions)
+      .not.toContain("*");
+  });
+
   it("rejects an unknown role and an unknown permission code", async () => {
     expect(await replaceRolePermissions(env.FEED_DB, "nope", []))
       .toEqual({ok: false, reason: "unknownRole"});
@@ -576,5 +590,58 @@ describe("RBAC user administration", () => {
       request: post(),
     } as never);
     expect(writeAllowed.status).toBe(200);
+  });
+});
+
+describe("chapter deletion permission", () => {
+  // A delete arrives as a POST whose item status is DELETED, and §8.1 maps it to
+  // `content:article:delete` — an editor who may only edit must not be able to
+  // remove a chapter.
+  const deletion = () => new Request(
+    "https://feed.example.com/admin/ajax/feed",
+    {
+      body: JSON.stringify({
+        item: {
+          createdAtMs: 1,
+          id: "any-id",
+          pubDateMs: 1,
+          status: STATUSES.DELETED,
+          updatedAtMs: 1,
+        },
+      }),
+      method: "POST",
+    },
+  );
+  const withPermissions = (codes: string[]) =>
+    feedPost({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(codes),
+      },
+      request: deletion(),
+    } as never);
+
+  it("refuses a delete for an account that may only edit", async () => {
+    const response = await withPermissions(["content:article:update"]);
+    expect(response.status).toBe(403);
+  });
+
+  it("lets the delete through once the delete permission is held", async () => {
+    const response = await withPermissions(["content:article:delete"]);
+    expect(response.status).not.toBe(403);
+  });
+
+  it("still guards ordinary edits with content:article:update", async () => {
+    const response = await feedPost({
+      locals: {
+        authUser: {id: "u9", role: null},
+        rbacPermissions: new Set(["content:book:update"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/feed", {
+        body: JSON.stringify({item: {id: "any-id", status: STATUSES.PUBLISHED}}),
+        method: "POST",
+      }),
+    } as never);
+    expect(response.status).toBe(403);
   });
 });

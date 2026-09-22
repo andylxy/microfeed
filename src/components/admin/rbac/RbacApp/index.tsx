@@ -11,6 +11,13 @@ interface Props {
 }
 
 /**
+ * Mirrors `RBAC_WILDCARD` on the server. Duplicated on purpose: this is browser
+ * code and must not import from `@/server/` (enforced by
+ * `tests/unit/source-architecture.test.ts`).
+ */
+const WILDCARD = "*";
+
+/**
  * `content:book` -> `rbac.group.content_book`; `*` -> `rbac.group.all`.
  *
  * The caller falls back to the raw group code when a group has no label yet, so
@@ -45,6 +52,10 @@ export default function RbacApp({initialBoard}: Props) {
   const groups = useMemo(() => {
     const map = new Map<string, {code: string; name: string}[]>();
     for (const permission of board.permissions) {
+      // The wildcard is never assignable here: it means "everything", so
+      // ticking it on an ordinary role would turn that role into a super
+      // administrator and make `system:permission:manage` an escalation path.
+      if (permission.code === WILDCARD) continue;
       const key = permission.code.split(":").slice(0, 2).join(":");
       const list = map.get(key) ?? [];
       list.push(permission);

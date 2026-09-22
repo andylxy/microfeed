@@ -1871,9 +1871,11 @@ export const zhCN: TranslationKey = {
       unknownRole: "该角色不存在。",
       unknownPermission: "其中有权限代码不在目录里。",
       wildcardRole: "super_admin 角色始终拥有全部权限，不可编辑。",
+      wildcardPermission: "* 通配权限不能授予角色：那会让它变成第二个超级管理员。",
       invalidUserAssignment: "请提供账号 id 与要授予的角色代码列表。",
       unknownUser: "该账号不存在。",
       lastSuperAdmin: "这是最后一个持有 super_admin 的账号，该角色不能移除。",
+      forbidden: "你没有权限打开这个页面。",
     },
     review: {
       itemMissing: "该章节已不存在。",

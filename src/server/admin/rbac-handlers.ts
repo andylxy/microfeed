@@ -13,6 +13,7 @@ import type {APIRoute} from "astro";
 import {jsonResponse, localizedError} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {permissionId} from "@/server/rbac/seed";
+import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import type {RbacBoard, RbacUserBoard} from "@/shared/Rbac";
 
 export type {RbacBoard, RbacBoardRole, RbacUser, RbacUserBoard} from "@/shared/Rbac";
@@ -57,13 +58,25 @@ export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
 
 export type ReplaceRoleResult =
   | {ok: true}
-  | {ok: false; reason: "unknownRole" | "unknownPermission" | "wildcardRole"};
+  | {
+      ok: false;
+      reason:
+        | "unknownRole"
+        | "unknownPermission"
+        | "wildcardRole"
+        | "wildcardPermission";
+    };
 
 /**
  * Replace a role's grants wholesale.
  *
- * `super_admin` is refused on purpose: its access comes from the `*` wildcard,
- * so an assignment that stripped it would lock every administrator out.
+ * Two refusals, both about the wildcard:
+ * - `super_admin` may not be edited at all: its access comes from `*`, so an
+ *   assignment that stripped it would lock every administrator out.
+ * - `*` may not be granted to any other role: that would turn the grant into a
+ *   second super administrator and make `system:permission:manage` an
+ *   escalation path. The dashboard hides the row, but the server has to refuse
+ *   too — a crafted request would otherwise bypass the UI.
  */
 export async function replaceRolePermissions(
   db: D1Database,
@@ -72,6 +85,9 @@ export async function replaceRolePermissions(
 ): Promise<ReplaceRoleResult> {
   if (roleCode === "super_admin") {
     return {ok: false, reason: "wildcardRole"};
+  }
+  if (codes.includes(RBAC_WILDCARD)) {
+    return {ok: false, reason: "wildcardPermission"};
   }
 
   const role = await db
