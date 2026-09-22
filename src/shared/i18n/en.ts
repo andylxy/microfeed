@@ -1671,6 +1671,18 @@ export const en = {
     accountBanned: "banned",
     editingSelfNotice: "This is your own account. The last holder of super_admin cannot drop it, so you cannot lock the deployment out from here.",
     noUsers: "No accounts yet.",
+    group: {
+      all: "Everything",
+      content_book: "Books",
+      content_category: "Categories",
+      content_volume: "Volumes",
+      content_article: "Chapters",
+      content_settings: "Site settings",
+      system_user: "Users",
+      system_role: "Roles",
+      system_permission: "Permissions",
+      system_webhook: "Webhooks",
+    },
   },
   pageTitle: {
     home: "Home",

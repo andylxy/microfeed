@@ -11,6 +11,19 @@ interface Props {
 }
 
 /**
+ * `content:book` -> `rbac.group.content_book`; `*` -> `rbac.group.all`.
+ *
+ * The caller falls back to the raw group code when a group has no label yet, so
+ * a newly seeded permission shows something readable instead of a missing key.
+ */
+function groupLabelKey(group: string): string {
+  const slug = group
+    .replace(/[^a-zA-Z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "");
+  return `rbac.group.${slug || "all"}`;
+}
+
+/**
  * Roles and the permissions granted to them.
  *
  * The board is read from `GET /ajax/rbac` (`system:role:manage`) and written
@@ -130,8 +143,8 @@ export default function RbacApp({initialBoard}: Props) {
             <div className="flex flex-col gap-5">
               {groups.map(([group, permissions]) => (
                 <div key={group}>
-                  <h3 className="mb-2 font-mono text-xs uppercase text-muted-foreground">
-                    {group}
+                  <h3 className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                    {t(groupLabelKey(group), {defaultValue: group})}
                   </h3>
                   <ul className="grid gap-2 sm:grid-cols-2">
                     {permissions.map((permission) => (

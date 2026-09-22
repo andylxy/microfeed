@@ -1672,6 +1672,18 @@ export const zhCN: TranslationKey = {
     accountBanned: "已封禁",
     editingSelfNotice: "这是你自己的账号。最后一个持有 super_admin 的账号不能摘掉该角色，所以无法从这里把部署锁死。",
     noUsers: "还没有任何账号。",
+    group: {
+      all: "全部权限",
+      content_book: "书籍",
+      content_category: "分类",
+      content_volume: "卷",
+      content_article: "章节",
+      content_settings: "站点设置",
+      system_user: "用户管理",
+      system_role: "角色管理",
+      system_permission: "权限管理",
+      system_webhook: "Webhook 管理",
+    },
   },
   pageTitle: {
     home: "首页",
