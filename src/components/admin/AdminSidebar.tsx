@@ -1,22 +1,4 @@
-import {
-  HistoryIcon,
-  BookIcon,
-  Code2Icon,
-  Globe2Icon,
-  HomeIcon,
-  LayersIcon,
-  ListIcon,
-  ShieldCheckIcon,
-  UploadIcon,
-  FileTextIcon,
-  FileCode2Icon,
-  PencilIcon,
-  PlusIcon,
-  SettingsIcon,
-  TagsIcon,
-  UsersIcon,
-  WebhookIcon,
-} from "lucide-react";
+import {Globe2Icon, PlusIcon} from "lucide-react";
 
 import {
   Dialog,
@@ -28,7 +10,9 @@ import {
 import {buttonVariants} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
+import {ADMIN_MENU_CODES} from "@/shared/Constants";
 import AdminAboutDialog from "./AdminAboutDialog";
+import AdminMenuItemLink from "./AdminMenuItemLink";
 import AdminPublicAccess from "./shared/AdminPublicAccess";
 import type {AdminSidebarData} from "./admin-shell-types";
 import {UNTITLED_CHANNEL_TITLE} from "./admin-shell-types";
@@ -38,36 +22,17 @@ interface Props {
   onNavigate?: () => void;
 }
 
-/**
- * Menu icons are named in the data (`ext_menu.icon`, e.g. "book"), so the
- * sidebar resolves a name to a component here instead of keying off a menu id.
- * An unknown name falls back rather than rendering an empty slot.
- */
-const MENU_ICONS: Record<string, typeof HomeIcon> = {
-  book: BookIcon,
-  "code-2": Code2Icon,
-  "file-code-2": FileCode2Icon,
-  "file-text": FileTextIcon,
-  history: HistoryIcon,
-  home: HomeIcon,
-  layers: LayersIcon,
-  list: ListIcon,
-  pencil: PencilIcon,
-  "shield-check": ShieldCheckIcon,
-  settings: SettingsIcon,
-  tags: TagsIcon,
-  upload: UploadIcon,
-  users: UsersIcon,
-  webhook: WebhookIcon,
-};
-
-const FALLBACK_MENU_ICON = ListIcon;
-
 export default function AdminSidebar({data, onNavigate}: Props) {
   const {t} = useTranslation();
   const channelTitle = data.channel.title === UNTITLED_CHANNEL_TITLE
     ? t("channel.untitled")
     : data.channel.title;
+  // Home is always present and is public, so "only the home entry" means the
+  // account holds no permission any menu binds — surface that rather than
+  // leaving an unexplained one-item sidebar.
+  const onlyHome = data.items.length === 1 &&
+    data.items[0]?.id === ADMIN_MENU_CODES.ADMIN_HOME;
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="p-3">
@@ -143,39 +108,15 @@ export default function AdminSidebar({data, onNavigate}: Props) {
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label={t("nav.adminNavigation")}>
         <ul className="grid gap-1">
-          {data.items.map((item) => {
-            const Icon = (item.icon && MENU_ICONS[item.icon]) || FALLBACK_MENU_ICON;
-            const classes = [
-              "relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-base font-medium outline-none transition-colors",
-              item.active
-                ? "bg-brand-light/12 text-brand-dark before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-brand-light dark:text-brand-light"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-              item.disabled ? "cursor-not-allowed opacity-45" : "",
-            ].filter(Boolean).join(" ");
-
-            return (
-              <li key={item.id}>
-                {item.disabled ? (
-                  <span aria-disabled="true" className={classes}>
-                    <Icon aria-hidden="true" className="size-[18px]" />
-                    {t(`menu.item.${item.id}`)}
-                  </span>
-                ) : (
-                  <a
-                    aria-current={item.active ? "page" : undefined}
-                    className={classes}
-                    data-astro-prefetch="hover"
-                    href={item.url}
-                    onClick={onNavigate}
-                  >
-                    <Icon aria-hidden="true" className="size-[18px]" />
-                    {t(`menu.item.${item.id}`)}
-                  </a>
-                )}
-              </li>
-            );
-          })}
+          {data.items.map((item) => (
+            <AdminMenuItemLink item={item} key={item.id} onNavigate={onNavigate} />
+          ))}
         </ul>
+        {onlyHome && (
+          <p className="mt-3 rounded-xl border border-sidebar-border bg-sidebar-accent px-3 py-2 text-xs leading-5 text-sidebar-foreground/70">
+            {t("menu.noPermissions")}
+          </p>
+        )}
       </nav>
 
       <div className="border-t border-sidebar-border p-3">

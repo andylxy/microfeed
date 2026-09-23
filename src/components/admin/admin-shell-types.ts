@@ -46,6 +46,18 @@ export interface AdminSidebarData {
   publicLinks: AdminPublicLinks;
 }
 
+/**
+ * The sub-sidebar shown inside a menu group. `groupId` is the group's
+ * `ext_menu.code` (e.g. `group_content`); its label resolves through
+ * `menu.group.*`, and `items` are the group's already-filtered children.
+ */
+export interface AdminGroupSidebarData {
+  backUrl: string;
+  deployment: AdminDeploymentSummary;
+  groupId: string;
+  items: AdminMenuItem[];
+}
+
 export interface AdminSettingsSidebarData {
   activeSection?: AdminSettingsSection["id"];
   backUrl: string;

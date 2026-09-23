@@ -40,13 +40,18 @@ import {
   MAX_LOGIN_CREDENTIALS_PER_USER,
   type LoginCredentialBoard,
 } from "@/shared/LoginCredential";
-import type {RbacBoard, RbacUserBoard} from "@/shared/Rbac";
+import {
+  buildPermissionTree,
+  DEFAULT_USER_ROLE,
+  type RbacBoard,
+  type RbacUserBoard,
+} from "@/shared/Rbac";
 
 export type {RbacBoard, RbacBoardRole, RbacUser, RbacUserBoard} from "@/shared/Rbac";
 
-/** Roles, their grants, and the permission catalog the UI assigns from. */
+/** Roles, their grants, and the permission tree the UI assigns from. */
 export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
-  const [roles, catalog, grants] = await Promise.all([
+  const [roles, catalog, grants, menuRows, mappingRows] = await Promise.all([
     db
       .prepare("SELECT id, code, name FROM ext_roles ORDER BY code")
       .all<{id: string; code: string; name: string}>(),
@@ -60,6 +65,14 @@ export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
          JOIN ext_permissions p ON p.id = rp.permission_id`,
       )
       .all<{roleId: string; code: string}>(),
+    db
+      .prepare(
+        "SELECT code, parent_code, sort FROM ext_menu WHERE is_visible = 1 ORDER BY sort, code",
+      )
+      .all<{code: string; parent_code: string | null; sort: number}>(),
+    db
+      .prepare("SELECT menu_code, permission_code FROM ext_menu_permissions")
+      .all<{menu_code: string; permission_code: string}>(),
   ]);
 
   const byRole = new Map<string, string[]>();
@@ -69,11 +82,32 @@ export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
     byRole.set(grant.roleId, list);
   }
 
+  // The tree is organised by the menu: a group is any row another row points at
+  // through `parent_code`, and its pages are those children, in `sort` order.
+  const pagesByGroup = new Map<string, string[]>();
+  for (const row of menuRows.results ?? []) {
+    if (!row.parent_code) continue;
+    const pages = pagesByGroup.get(row.parent_code) ?? [];
+    pages.push(row.code);
+    pagesByGroup.set(row.parent_code, pages);
+  }
+  const menu = (menuRows.results ?? [])
+    .filter((row) => pagesByGroup.has(row.code))
+    .map((row) => ({code: row.code, pages: pagesByGroup.get(row.code) ?? []}));
+
+  const mapping: Record<string, string[]> = {};
+  for (const row of mappingRows.results ?? []) {
+    (mapping[row.menu_code] ??= []).push(row.permission_code);
+  }
+
+  const permissions = (catalog.results ?? []).map((row) => ({
+    code: row.code,
+    name: row.name,
+  }));
+
   return {
-    permissions: (catalog.results ?? []).map((row) => ({
-      code: row.code,
-      name: row.name,
-    })),
+    groups: buildPermissionTree({mapping, menu, permissions}),
+    permissions,
     roles: (roles.results ?? []).map((row) => ({
       code: row.code,
       name: row.name,
@@ -351,9 +385,26 @@ export async function replaceUserRoles(
 
 export type RoleMutationResult =
   | {ok: true}
-  | {ok: false; reason: "duplicateRole" | "unknownRole" | "reservedRole" | "roleInUse"};
+  | {
+    ok: false;
+    reason:
+      | "duplicateRole"
+      | "unknownRole"
+      | "reservedRole"
+      | "roleInUse"
+      | "invalidRole";
+  };
 
 const RESERVED_ROLES = new Set(["super_admin"]);
+
+/**
+ * Role codes the code itself depends on *by name*: `super_admin` carries the `*`
+ * wildcard, and `readonly` is `DEFAULT_USER_ROLE` — the role a newly created
+ * account receives. Both may be relabelled, but their code (the stable identity,
+ * mirrored into `ext_roles.id`) must never change and they must not be deleted,
+ * or the deployment loses its administrator / its default role.
+ */
+const CODE_LOCKED_ROLES = new Set(["super_admin", "readonly"]);
 
 /**
  * Create a role. `super_admin` is reserved: it is defined by the seed and
@@ -401,6 +452,75 @@ export async function renameRbacRole(
 }
 
 /**
+ * Change a role's code.
+ *
+ * `ext_roles.id` is `r_<code>` and both `ext_user_roles.role_id` and
+ * `ext_role_permissions.role_id` reference that id with `ON DELETE CASCADE`
+ * only — there is no `ON UPDATE CASCADE`, so a bare `UPDATE id` would leave the
+ * children pointing at a row that no longer exists. Instead this rebuilds the
+ * role under the new id and re-points everything, in one atomic `batch`:
+ *
+ *   1. copy the role to (id = `r_<new>`, code = new),
+ *   2. copy its grants onto the new id,
+ *   3. move every account assignment to the new id (`OR REPLACE` guards the
+ *      `(user_id, role_id)` primary key should an account hold both),
+ *   4. drop the old row; its now-orphaned grants cascade away.
+ *
+ * `super_admin` / `readonly` are refused ({@link CODE_LOCKED_ROLES}).
+ */
+export async function renameRbacRoleCode(
+  db: D1Database,
+  oldCode: string,
+  newCode: string,
+): Promise<RoleMutationResult> {
+  if (CODE_LOCKED_ROLES.has(oldCode)) {
+    return {ok: false, reason: "reservedRole"};
+  }
+  if (!/^[a-z][a-z0-9_]*$/u.test(newCode)) {
+    return {ok: false, reason: "invalidRole"};
+  }
+  if (newCode === oldCode) {
+    return {ok: true};
+  }
+  const [taken, role] = await Promise.all([
+    db.prepare("SELECT id FROM ext_roles WHERE code = ?").bind(newCode)
+      .first<{id: string}>(),
+    db.prepare("SELECT id FROM ext_roles WHERE code = ?").bind(oldCode)
+      .first<{id: string}>(),
+  ]);
+  if (taken) {
+    return {ok: false, reason: "duplicateRole"};
+  }
+  if (!role) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  const oldId = role.id;
+  const newId = roleId(newCode);
+  await db.batch([
+    db.prepare(
+      `INSERT INTO ext_roles (id, code, name, created_at, updated_at)
+       SELECT ?, ?, name, created_at, CURRENT_TIMESTAMP FROM ext_roles WHERE id = ?`,
+    ).bind(newId, newCode, oldId),
+    db.prepare(
+      `INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id)
+       SELECT ?, permission_id FROM ext_role_permissions WHERE role_id = ?`,
+    ).bind(newId, oldId),
+    db.prepare(
+      "UPDATE OR REPLACE ext_user_roles SET role_id = ? WHERE role_id = ?",
+    ).bind(newId, oldId),
+    db.prepare("DELETE FROM ext_roles WHERE id = ?").bind(oldId),
+  ]);
+  const moved = await db
+    .prepare("SELECT id FROM ext_roles WHERE id = ?")
+    .bind(newId)
+    .first<{id: string}>();
+  if (!moved) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  return {ok: true};
+}
+
+/**
  * Delete a role.
  *
  * Refuses when anybody still holds it: removing the row cascades away their
@@ -411,7 +531,7 @@ export async function deleteRbacRole(
   db: D1Database,
   code: string,
 ): Promise<RoleMutationResult> {
-  if (RESERVED_ROLES.has(code)) {
+  if (CODE_LOCKED_ROLES.has(code)) {
     return {ok: false, reason: "reservedRole"};
   }
   const holders = await db
@@ -488,6 +608,37 @@ export const updateAdminRbacRoleName: APIRoute = async ({locals, request}) => {
   return jsonResponse(await readRbacBoard(env.FEED_DB));
 };
 
+/**
+ * Change a role's code (cascading rebuild — see {@link renameRbacRoleCode}).
+ * Gated like the other role mutations (`system:role:manage`).
+ */
+export const updateAdminRbacRoleCode: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    {code?: unknown; newCode?: unknown} | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  const newCode = typeof body?.newCode === "string" ? body.newCode.trim() : "";
+  if (!code || !newCode) {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await renameRbacRoleCode(env.FEED_DB, code, newCode);
+  if (!result.ok) {
+    const status = result.reason === "unknownRole"
+      ? 404
+      : result.reason === "duplicateRole"
+        ? 409
+        : 400;
+    return localizedError(request, `errors.rbac.${result.reason}`, status);
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB));
+};
+
 export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
     request,
@@ -528,7 +679,13 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
   if (guard) return guard;
 
   const body = await request.json().catch(() => null) as
-    | {account?: unknown; email?: unknown; name?: unknown; password?: unknown}
+    | {
+      account?: unknown;
+      email?: unknown;
+      name?: unknown;
+      password?: unknown;
+      roles?: unknown;
+    }
     | null;
   // `account` is the current field: it holds either an address or a username.
   // `email` is still accepted so an older dashboard build keeps working.
@@ -537,6 +694,14 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
   const account = typeof typedAccount === "string" ? typedAccount.trim() : "";
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  // Roles come from the create form; when none are sent the account still gets
+  // the read-only default rather than being created permission-less.
+  const requestedRoles = Array.isArray(body?.roles)
+    ? body.roles.filter((role): role is string => typeof role === "string")
+    : [];
+  const roleCodes = requestedRoles.length > 0
+    ? requestedRoles
+    : [DEFAULT_USER_ROLE];
   if (!account || !name) {
     return localizedError(request, "errors.rbac.invalidNewUser", 400);
   }
@@ -572,6 +737,18 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     }
   }
 
+  // Validate the role codes before the account exists: a bad code must not
+  // leave an orphan account that no error message can explain.
+  const knownRoles = await env.FEED_DB.prepare("SELECT code FROM ext_roles")
+    .all<{code: string}>();
+  const knownRoleCodes = new Set(
+    (knownRoles.results ?? []).map((row) => row.code),
+  );
+  const unknownRole = roleCodes.find((code) => !knownRoleCodes.has(code));
+  if (unknownRole) {
+    return localizedError(request, "errors.rbac.unknownRole", 404);
+  }
+
   let newUserId: string | null = null;
   try {
     const created = await createMicrofeedAuth(env, request).api.createUser({
@@ -594,10 +771,8 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.createUserFailed", 400);
   }
 
-  // Gap D producer (DESIGN §7 / ADR D-010): an admin-provisioned account starts
-  // with a forced password change, so the guard's 428 branch is reachable in
-  // production. The self-service `/admin/ajax/account/password` endpoint clears
-  // this flag after the user sets their own password.
+  // Better Auth's createUser may not echo the id; fall back to a lookup so the
+  // role rows below always land on the right account.
   if (!newUserId) {
     const row = await env.FEED_DB.prepare(
       "SELECT id FROM auth_user WHERE email = ?",
@@ -605,12 +780,20 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     newUserId = row?.id ?? null;
   }
   if (newUserId) {
-    // `ext_user_security` only carries (user_id, must_change_password) — see
-    // migration 0028 — so there is no `created_at` column to write here.
-    await env.FEED_DB.prepare(
-      `INSERT OR IGNORE INTO ext_user_security (user_id, must_change_password)
-       VALUES (?, 1)`,
-    ).bind(newUserId).run();
+    // Local policy — this deployment does not force a password change on first
+    // sign-in (see the upstream-divergence note in .workbuddy memory; migration
+    // 0042 clears the flag for accounts created under the old behaviour). The
+    // account starts with the roles the operator ticked, defaulting to
+    // `readonly`, so a fresh account is never permission-less.
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare("DELETE FROM ext_user_roles WHERE user_id = ?")
+        .bind(newUserId),
+      ...roleCodes.map((code) =>
+        env.FEED_DB.prepare(
+          "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
+        ).bind(newUserId, roleId(code)),
+      ),
+    ]);
   }
 
   return jsonResponse(await readRbacUsers(env.FEED_DB));

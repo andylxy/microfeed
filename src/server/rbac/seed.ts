@@ -104,6 +104,19 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "api:media:write",
     ],
   },
+  {
+    // Read-only content role, seeded by migration 0043 and the default handed
+    // to a newly created account (see `DEFAULT_USER_ROLE`). Read codes only —
+    // no writes, no `*:manage`, no API grants.
+    code: "readonly",
+    name: "只读",
+    permissions: [
+      "content:article:read",
+      "content:book:read",
+      "content:category:read",
+      "content:volume:read",
+    ],
+  },
 ];
 
 export function permissionId(code: string): string {

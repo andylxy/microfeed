@@ -91,8 +91,12 @@ export async function readAdminMenu(
     });
   }
 
+  // A group's code counts as a parent as long as *any* row points at it —
+  // including a row this account may not see. Deriving this from `allowed`
+  // instead would miss a group whose children were all filtered out, leaving an
+  // empty heading behind.
   const parentCodes = new Set(
-    allowed
+    rows
       .map((row) => row.parent_code)
       .filter((code): code is string => typeof code === "string" && code.length > 0),
   );
@@ -114,7 +118,20 @@ export async function readAdminMenu(
     return [homeEntry(adminPath, activeCode)];
   }
 
-  return flatten(tree);
+  // A group has no landing page of its own: it links to its first visible
+  // child. The main sidebar then renders it like any other entry, and the
+  // group sub-sidebar lists the children.
+  const linkGroups = (nodes: MenuNode[]): void => {
+    for (const node of nodes) {
+      const first = node.children[0];
+      if (!first) continue;
+      node.url = first.url;
+      linkGroups(node.children);
+    }
+  };
+  linkGroups(tree);
+
+  return tree;
 }
 
 function homeEntry(adminPath: string, activeCode: string | null): AdminMenuItem {
@@ -125,17 +142,4 @@ function homeEntry(adminPath: string, activeCode: string | null): AdminMenuItem 
     id: ADMIN_MENU_CODES.ADMIN_HOME,
     url: adminUrl("", adminPath),
   };
-}
-
-function flatten(nodes: MenuNode[]): AdminMenuItem[] {
-  const out: AdminMenuItem[] = [];
-  const walk = (list: MenuNode[]) => {
-    for (const node of list) {
-      const {children, ...entry} = node;
-      out.push(entry);
-      walk(children);
-    }
-  };
-  walk(nodes);
-  return out;
 }

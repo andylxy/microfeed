@@ -17,8 +17,36 @@ export type AdminMenuCode = typeof ADMIN_MENU_CODES[keyof typeof ADMIN_MENU_CODE
  */
 export interface AdminMenuItem {
   active: boolean;
+  /**
+   * Present on a *group* row (a heading, not a link): its children, already
+   * filtered to what the account may see. A group whose children were all
+   * filtered out is pruned before it reaches the renderer, so this is either
+   * absent (a leaf) or non-empty.
+   */
+  children?: AdminMenuItem[];
   disabled: boolean;
   icon: string | null;
   id: string;
   url: string;
+}
+
+/** A group row's heading key: `group_content` -> `menu.group.content`. */
+export function menuGroupLabelKey(code: string): string {
+  return `menu.group.${code.replace(/^group_/u, "")}`;
+}
+
+/** A page row's heading key: `books` -> `menu.item.books`. */
+export function menuItemLabelKey(code: string): string {
+  return `menu.item.${code}`;
+}
+
+/**
+ * The heading key for one rendered entry: a group reads `menu.group.*`, a page
+ * reads `menu.item.*`. Shared so the sidebar, the group sub-sidebar and the
+ * role editor's permission tree cannot drift apart.
+ */
+export function menuEntryLabelKey(item: AdminMenuItem): string {
+  return item.children?.length
+    ? menuGroupLabelKey(item.id)
+    : menuItemLabelKey(item.id);
 }

@@ -13,7 +13,10 @@ import {
   validateAdminPassword,
   validateAdminUsername,
 } from "@/shared/AdminCredentials";
-import type {RbacUserBoard} from "@/shared/Rbac";
+import {
+  DEFAULT_USER_ROLE,
+  type RbacUserBoard,
+} from "@/shared/Rbac";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 interface Props {
@@ -51,6 +54,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [newName, setNewName] = useState("");
   const [newAccount, setNewAccount] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  // Pre-ticked `readonly` so a fresh account is never created permission-less.
+  const [newRoles, setNewRoles] = useState<string[]>([DEFAULT_USER_ROLE]);
 
   const user = board.users.find((entry) => entry.id === selectedId);
 
@@ -112,7 +117,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     setSaving(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxRbacUserCreate(), {
-        body: JSON.stringify({account, name, password}),
+        body: JSON.stringify({account, name, password, roles: newRoles}),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -127,6 +132,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
       setNewName("");
       setNewAccount("");
       setNewPassword("");
+      setNewRoles([DEFAULT_USER_ROLE]);
       showToast(t("rbac.userRolesSaved"), "success");
     } catch {
       showToast(t("errors.rbac.createUserFailed"), "error");
@@ -242,6 +248,30 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               <p className="text-xs text-muted-foreground">
                 {t("rbac.passwordHint", {min: MIN_ADMIN_PASSWORD_LENGTH})}
               </p>
+              <div className="grid gap-1">
+                <span className="text-xs text-muted-foreground">
+                  {t("rbac.newAccountRoles")}
+                </span>
+                <ul className="grid gap-0.5">
+                  {board.roles.map((role) => (
+                    <li key={role.code}>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          checked={newRoles.includes(role.code)}
+                          className="size-3.5 shrink-0"
+                          disabled={saving}
+                          onChange={(event) => setNewRoles((previous) =>
+                            event.target.checked
+                              ? [...previous, role.code].sort()
+                              : previous.filter((code) => code !== role.code))}
+                          type="checkbox"
+                        />
+                        <span>{role.name}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <div className="flex gap-2">
                 <Button
                   disabled={saving}
@@ -258,6 +288,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                     setNewName("");
                     setNewAccount("");
                     setNewPassword("");
+                    setNewRoles([DEFAULT_USER_ROLE]);
                   }}
                   size="xs"
                   type="button"
@@ -275,6 +306,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 setNewName("");
                 setNewAccount("");
                 setNewPassword("");
+                setNewRoles([DEFAULT_USER_ROLE]);
                 setCreating(true);
               }}
               size="sm"

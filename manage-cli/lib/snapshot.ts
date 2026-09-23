@@ -74,6 +74,10 @@ export const SNAPSHOT_TABLES = {
     // Admin menu (migration 0041). The menu is data, not code: a restore that
     // dropped these rows would leave the dashboard with an empty sidebar.
     "ext_menu",
+    // Menu page -> permission codes (migration 0052). Also data: without it the
+    // role editor's permission tree would drop every code into the "other
+    // permissions" bucket.
+    "ext_menu_permissions",
   ],
   ephemeral: [
     "item_create_idempotency",

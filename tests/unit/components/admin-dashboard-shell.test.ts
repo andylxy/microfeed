@@ -8,6 +8,7 @@ import {
   adminSourceCommitView,
   adminUpdatePrompt,
 } from "@/components/admin/AdminAboutDialog";
+import AdminGroupSidebar from "@/components/admin/AdminGroupSidebar";
 import AdminMobileNavigation from "@/components/admin/AdminMobileNavigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import {
@@ -94,6 +95,42 @@ describe("admin dashboard shell models", () => {
 
     expect(output).toContain('aria-label="Open admin navigation"');
     expect(output).toContain("lg:hidden");
+  });
+
+  it("renders a group sub-sidebar with a home link and its children", () => {
+    const output = renderToStaticMarkup(
+      React.createElement(AdminGroupSidebar, {
+        data: {
+          backUrl: "/admin/",
+          deployment: {
+            deployedAt: "2026-08-03T20:00:00.000Z",
+            protected: true,
+          },
+          groupId: "group_content",
+          items: [
+            {
+              active: true,
+              disabled: false,
+              icon: "book",
+              id: "books",
+              url: "/admin/books/",
+            },
+            {
+              active: false,
+              disabled: false,
+              icon: "layers",
+              id: "volumes",
+              url: "/admin/volumes/",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(output).toContain("Content");
+    expect(output).toContain('href="/admin/"');
+    expect(output).toContain('href="/admin/books/"');
+    expect(output).toContain('aria-current="page"');
   });
 
   it("shows both authentication layers and routes logout through Access", () => {

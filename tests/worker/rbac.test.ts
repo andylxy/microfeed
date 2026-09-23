@@ -2,6 +2,7 @@ import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {STATUSES} from "@/shared/Constants";
+import {DEFAULT_USER_ROLE} from "@/shared/Rbac";
 import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
@@ -29,11 +30,13 @@ import {
   readRbacUserDevices,
   readRbacUsers,
   renameRbacRole,
+  renameRbacRoleCode,
   replaceRolePermissions,
   replaceUserRoles,
   restoreUserDevice,
   revokeUserDevice,
   updateAdminRbacRole,
+  updateAdminRbacRoleCode,
   updateAdminRbacRoleName,
   updateAdminRbacUser,
   updateAdminRbacUserBan,
@@ -347,6 +350,25 @@ describe("RBAC catalog integrity", () => {
     ).first<{c: number}>();
     expect(superAdminWildcard?.c).toBe(1);
   });
+
+  it("seeds the read-only role granted only content read codes", async () => {
+    const role = await env.FEED_DB.prepare(
+      "SELECT code FROM ext_roles WHERE code = ?",
+    ).bind(DEFAULT_USER_ROLE).first<{code: string}>();
+    expect(role?.code).toBe(DEFAULT_USER_ROLE);
+
+    const grants = await env.FEED_DB.prepare(
+      "SELECT p.code AS code FROM ext_role_permissions rp " +
+        "JOIN ext_permissions p ON p.id = rp.permission_id " +
+        "WHERE rp.role_id = 'r_readonly' ORDER BY p.code",
+    ).all<{code: string}>();
+    expect((grants.results ?? []).map((row) => row.code)).toEqual([
+      "content:article:read",
+      "content:book:read",
+      "content:category:read",
+      "content:volume:read",
+    ]);
+  });
 });
 
 describe("clearMustChangePassword", () => {
@@ -374,6 +396,30 @@ describe("RBAC administration", () => {
       "system:role:manage",
     );
     expect(board.roles.map((role) => role.code)).toContain("super_admin");
+
+    // The permission tree is organised by the menu (migration 0052): books sits
+    // under the content group and governs all four of its codes.
+    const content = board.groups.find((group) => group.code === "group_content");
+    const books = content?.pages.find((page) => page.code === "books");
+    expect(books?.codes).toEqual([
+      "content:book:create",
+      "content:book:delete",
+      "content:book:read",
+      "content:book:update",
+    ]);
+
+    // Nothing assignable may be invisible: every catalogue code but `*` appears
+    // in the tree exactly once, whether mapped to a page or parked in the
+    // catch-all group.
+    const treeCodes = board.groups
+      .flatMap((group) => group.pages)
+      .flatMap((page) => page.codes)
+      .sort();
+    const assignable = board.permissions
+      .map((entry) => entry.code)
+      .filter((code) => code !== "*")
+      .sort();
+    expect(treeCodes).toEqual(assignable);
   });
 
   it("replaces a role's grants wholesale", async () => {
@@ -712,6 +758,92 @@ describe("RBAC role CRUD (pure functions)", () => {
   });
 });
 
+describe("RBAC role code rename (Feature A)", () => {
+  it("rebuilds the role under the new code, keeping grants and assignments", async () => {
+    await createRbacRole(env.FEED_DB, "code_a", "Before");
+    await replaceRolePermissions(env.FEED_DB, "code_a", ["content:book:read"]);
+    await seedUser("u-code-a", "user");
+    await assignRole("u-code-a", "r_code_a");
+
+    expect(await renameRbacRoleCode(env.FEED_DB, "code_a", "code_b"))
+      .toEqual({ok: true});
+
+    const board = await readRbacBoard(env.FEED_DB);
+    expect(board.roles.find((role) => role.code === "code_a")).toBeUndefined();
+    const moved = board.roles.find((role) => role.code === "code_b");
+    expect(moved?.name).toBe("Before");
+    expect(moved?.permissions).toContain("content:book:read");
+
+    const users = await readRbacUsers(env.FEED_DB);
+    expect(users.users.find((entry) => entry.id === "u-code-a")?.roles)
+      .toEqual(["code_b"]);
+    // Clean the catalogue for later tests.
+    await deleteRbacRole(env.FEED_DB, "code_b");
+  });
+
+  it("refuses locked codes (super_admin and the default readonly role)", async () => {
+    expect(await renameRbacRoleCode(env.FEED_DB, "super_admin", "god_mode"))
+      .toEqual({ok: false, reason: "reservedRole"});
+    expect(await renameRbacRoleCode(env.FEED_DB, DEFAULT_USER_ROLE, "reader"))
+      .toEqual({ok: false, reason: "reservedRole"});
+  });
+
+  it("rejects a taken, invalid, or unknown code", async () => {
+    await createRbacRole(env.FEED_DB, "code_taken", "Taken");
+    expect(await renameRbacRoleCode(env.FEED_DB, "code_taken", "editor"))
+      .toEqual({ok: false, reason: "duplicateRole"});
+    expect(await renameRbacRoleCode(env.FEED_DB, "code_taken", "Bad Code!"))
+      .toEqual({ok: false, reason: "invalidRole"});
+    expect(await renameRbacRoleCode(env.FEED_DB, "does_not_exist", "fine"))
+      .toEqual({ok: false, reason: "unknownRole"});
+    await deleteRbacRole(env.FEED_DB, "code_taken");
+  });
+});
+
+describe("RBAC role code rename endpoints (Feature A)", () => {
+  const roleManage = () => ({
+    authUser: {id: "u9", role: null},
+    rbacPermissions: new Set(["system:role:manage"]),
+  });
+
+  it("gates the rename on system:role:manage and refuses a locked code", async () => {
+    await createRbacRole(env.FEED_DB, "code_ep", "Endpoint");
+
+    const anonymous = await updateAdminRbacRoleCode({
+      locals: {},
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-code", {
+        body: JSON.stringify({code: "code_ep", newCode: "code_ep2"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(anonymous.status).toBe(401);
+
+    const ok = await updateAdminRbacRoleCode({
+      locals: roleManage(),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-code", {
+        body: JSON.stringify({code: "code_ep", newCode: "code_ep2"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(ok.status).toBe(200);
+    const board = await ok.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "code_ep2")?.name).toBe("Endpoint");
+
+    const locked = await updateAdminRbacRoleCode({
+      locals: roleManage(),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-code", {
+        body: JSON.stringify({code: DEFAULT_USER_ROLE, newCode: "reader"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(locked.status).toBe(400);
+    await deleteRbacRole(env.FEED_DB, "code_ep2");
+  });
+});
+
 describe("RBAC role CRUD endpoints", () => {
   function roleRequest(code: string, name: string): Request {
     return new Request("https://feed.example.com/admin/ajax/rbac/roles", {
@@ -965,12 +1097,17 @@ describe("RBAC user CRUD endpoints", () => {
     expect(newUser).toBeTruthy();
     expect(newUser?.banned).toBe(false);
 
-    // Gap D producer: a freshly created account must carry the forced
-    // password-change flag so the guard's 428 branch is reachable in production.
+    // This deployment does not force a password change on first sign-in, so a
+    // freshly created account must NOT carry the flag (migration 0042 also
+    // clears it for accounts created under the old behaviour).
     const security = await env.FEED_DB.prepare(
       "SELECT must_change_password AS flag FROM ext_user_security WHERE user_id = ?",
-    ).bind(newUser?.id).first<{flag: number}>();
-    expect(security?.flag).toBe(1);
+    ).bind(newUser?.id).first<{flag: number} | null>();
+    expect(security?.flag ?? 0).toBe(0);
+
+    // The request sent no `roles`, so the account falls back to the read-only
+    // default rather than being created permission-less.
+    expect(newUser?.roles).toEqual([DEFAULT_USER_ROLE]);
 
     const banned = await updateAdminRbacUserBan({
       locals: userManage(["system:user:manage"]),
