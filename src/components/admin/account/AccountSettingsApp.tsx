@@ -13,6 +13,7 @@ import {
 
 import {authClient} from "@/client/auth-client";
 import {showToast} from "@/client/ToastUtils";
+import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
 import type {
   AccountPasskeySummary,
   AccountSessionSummary,
@@ -20,6 +21,7 @@ import type {
 import type {OAuthApplicationAccessSummary} from "@/shared/OAuth";
 import {OAUTH_SCOPE_DESCRIPTIONS} from "@/shared/OAuth";
 import {adminUrl, browserAdminPath} from "@/shared/AdminPath";
+import {MIN_ADMIN_PASSWORD_LENGTH} from "@/shared/AdminCredentials";
 import {Button} from "@/components/ui/button";
 import {
   Card,
@@ -316,6 +318,16 @@ export default function AccountSettingsApp(props: Props) {
         </SectionCard>
       </section>
 
+      <section className="scroll-mt-6" id="login-credentials">
+        <SectionCard description={t("loginCredentials.selfDescription")} icon={KeyRoundIcon} title={t("loginCredentials.title")}>
+          <CardContent className="p-5 sm:p-6">
+            {props.builtInEmail
+              ? <LoginCredentialsPanel />
+              : <p className="text-sm text-muted-foreground">{t("account.passkeysRequireBuiltIn")} <BuiltInLoginGuideLink /></p>}
+          </CardContent>
+        </SectionCard>
+      </section>
+
       <section className="scroll-mt-6" id="active-sessions">
         <SectionCard description={t("account.activeSessionsDescription")} icon={MonitorSmartphoneIcon} title={t("account.activeSessions")}>
           <CardContent className="p-0">
@@ -365,9 +377,9 @@ export default function AccountSettingsApp(props: Props) {
               <Label htmlFor="account-current-password">{t("account.currentPassword")}</Label>
               <Input autoComplete="current-password" autoFocus id="account-current-password" name="currentPassword" required type="password" />
               <Label htmlFor="account-new-password">{t("account.newPassword")}</Label>
-              <Input autoComplete="new-password" id="account-new-password" minLength={12} name="newPassword" required type="password" />
+              <Input autoComplete="new-password" id="account-new-password" minLength={MIN_ADMIN_PASSWORD_LENGTH} name="newPassword" required type="password" />
               <Label htmlFor="account-confirm-password">{t("account.confirmNewPassword")}</Label>
-              <Input autoComplete="new-password" id="account-confirm-password" minLength={12} name="confirmation" required type="password" />
+              <Input autoComplete="new-password" id="account-confirm-password" minLength={MIN_ADMIN_PASSWORD_LENGTH} name="confirmation" required type="password" />
             </div>
             <DialogFooter>
               <Button disabled={passwordBusy} onClick={() => setCredentialDialog(null)} type="button" variant="outline">{t("common.cancel")}</Button>

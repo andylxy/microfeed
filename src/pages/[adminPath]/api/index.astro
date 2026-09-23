@@ -5,16 +5,22 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import ApiOverviewApp from "@/components/admin/api/ApiOverviewApp";
 import {listApiKeys, readApiAccessSettings} from "@/server/api/api-keys";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 import AdminShell from "../../../layouts/AdminShell.astro";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_API_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 const [apiKeys, settings] = await Promise.all([
   listApiKeys(env.FEED_DB),
@@ -24,7 +30,7 @@ const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.API}
+  activeNavItem={ADMIN_MENU_CODES.API}
   apiActivePage="overview"
   apiNavigation
   documentTitle={translate("pageDocumentTitle.apiOverview", adminLanguage)}

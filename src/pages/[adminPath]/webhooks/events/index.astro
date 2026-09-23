@@ -4,15 +4,21 @@ import {env} from "cloudflare:workers";
 import WebhookEventExplorerApp from "@/components/admin/webhooks/WebhookEventExplorerApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listWebhookEndpoints, webhookOverview} from "@/server/webhooks/store";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {isLocalDevelopmentHostname} from "@/shared/StringUtils";
 import {WEBHOOK_EVENT_TYPE_SET, type WebhookEventType} from "@/shared/Webhooks";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
+}
 const [endpoints, overview] = await Promise.all([
   listWebhookEndpoints(env.FEED_DB),
   webhookOverview(env),
@@ -29,7 +35,7 @@ const localPrintAvailable = isLocalDevelopmentHostname(Astro.url.hostname);
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.WEBHOOKS}
+  activeNavItem={ADMIN_MENU_CODES.WEBHOOKS}
   documentTitle={translate("pageDocumentTitle.webhookEventExplorer", adminLanguage)}
   {feedContent}
   {onboardingResult}

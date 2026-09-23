@@ -12,6 +12,8 @@ import {
   listChannelsByGenre,
 } from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**
  * `GET ?bookId=<id>` returns the book picker plus that book's volume board.
@@ -19,7 +21,9 @@ import type {CategoryDb} from "@/server/feed/extCategory";
  * response always carries the category nav so the board can offer the same
  * filtering the public shelf does. Without `bookId` only the picker is returned.
  */
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_VOLUME_READ, request, env.FEED_DB);
+  if (guard) return guard;
   const url = new URL(request.url);
   const bookId = url.searchParams.get("bookId") ?? "";
   const categoryId = url.searchParams.get("categoryId") ?? "";

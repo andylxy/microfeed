@@ -478,7 +478,7 @@ describe("first-class local instances", () => {
   });
 
   it("changes the local login email and resets its password safely", async () => {
-    const password = "a replacement private password";
+    const password = "A replacement private password";
     const {commands, config} = await freshModules({
       passwordAnswers: [password, password],
     });

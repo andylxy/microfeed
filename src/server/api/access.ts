@@ -7,6 +7,9 @@ import {
 } from "@/shared/ApiVersion";
 import {OAUTH_SCOPES} from "@/shared/OAuth";
 import {verifyOAuthAccessToken} from "@/server/auth/oauth-access";
+import {resolveUserPermissions, RBAC_WILDCARD} from "@/server/rbac/resolve";
+import {verifySignedCall} from "./signed-call";
+import {requiredApiPermission} from "./api-permissions";
 
 const PUBLIC_API_REFERENCE_SUFFIXES = new Set([
   "",
@@ -153,4 +156,103 @@ export async function decideApiRequest(
   return grant.scopes.has(requiredScope)
     ? "allow-integration"
     : "insufficient-scope";
+}
+
+// ---------------------------------------------------------------------------
+// Signed-call path (XiHan BasicApp model). Reached only when `X-Access-Key` is
+// present; the legacy bearer path above is left completely untouched.
+// ---------------------------------------------------------------------------
+
+export interface ApiAttribution {
+  /** `api_keys.id` behind a signed call; `null` on a login-credential call. */
+  apiKeyId: string | null;
+  /** `ext_login_credentials.id` behind a bearer call; `null` elsewhere. */
+  credentialId?: string | null;
+  userId: string;
+  permissionCode: string;
+}
+
+export type SignedApiDecision =
+  | {kind: "allow"; attribution: ApiAttribution}
+  | {kind: "reference"}
+  | {kind: "notFound"}
+  | {kind: "unauthorized"}
+  | {kind: "forbidden"; attribution: ApiAttribution}
+  | {kind: "replay"};
+
+/**
+ * Decide a signature-based API request. Verification establishes *which user*
+ * owns the key; authorization is delegated to RBAC — the resolved user's
+ * permission set must contain the code `requiredApiPermission` returns (or the
+ * `*` wildcard). On success the attribution (key + user + permission) is
+ * returned so the middleware can write the access log.
+ */
+export async function decideSignedApiRequest(
+  database: D1Database,
+  request: Request,
+  pathname: string,
+): Promise<SignedApiDecision> {
+  const details = apiPathDetails(pathname);
+  if (!details) return {kind: "notFound"};
+  if (details.kind === "reference") return {kind: "reference"};
+
+  const verified = await verifySignedCall(database, request);
+  if (!verified.ok) {
+    return verified.reason === "replay"
+      ? {kind: "replay"}
+      : {kind: "unauthorized"};
+  }
+
+  const permissionCode = requiredApiPermission(pathname, request.method)
+    ?? "api:content:read";
+  const permissions = await resolveUserPermissions(
+    database,
+    verified.identity.userId,
+  );
+  const attribution: ApiAttribution = {
+    apiKeyId: verified.identity.apiKeyId,
+    userId: verified.identity.userId,
+    permissionCode,
+  };
+  const granted = permissions.has(RBAC_WILDCARD)
+    || permissions.has(permissionCode);
+  return granted
+    ? {kind: "allow", attribution}
+    : {kind: "forbidden", attribution};
+}
+
+/**
+ * Best-effort, non-blocking audit row linking a call to whoever made it: the API
+ * key behind a signed call, or the login credential behind a sessionless bearer.
+ * Both the allow and the deny paths write one, so denied calls are auditable
+ * too. Swallows errors so logging never fails a request.
+ */
+export async function writeApiAccessLog(
+  database: D1Database,
+  attribution: ApiAttribution,
+  method: string,
+  path: string,
+  granted: boolean,
+  status: number,
+): Promise<void> {
+  try {
+    await database.prepare(
+      "INSERT INTO ext_api_access_log " +
+        "(id, api_key_id, credential_id, user_id, method, path, permission_code, granted, status, created_at_ms) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(
+      crypto.randomUUID(),
+      attribution.apiKeyId,
+      attribution.credentialId ?? null,
+      attribution.userId,
+      method,
+      path,
+      attribution.permissionCode,
+      granted ? 1 : 0,
+      status,
+      Date.now(),
+    ).run();
+  } catch {
+    // audit is best-effort
+  }
 }

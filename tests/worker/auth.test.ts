@@ -383,9 +383,9 @@ describe("Better Auth on Workers with D1", () => {
 
     const request = authRequest("/admin/ajax/account/password/", {
       body: JSON.stringify({
-        confirmation: "new correct horse battery staple",
+        confirmation: "New correct horse battery staple",
         currentPassword: "correct horse battery staple",
-        newPassword: "new correct horse battery staple",
+        newPassword: "New correct horse battery staple",
       }),
       headers: {
         "content-type": "application/json",

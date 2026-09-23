@@ -1,4 +1,4 @@
-import type {AdminNavigationItem} from "@/shared/AdminNavigation";
+import type {AdminMenuItem} from "@/shared/AdminNavigation";
 import type {AdminSettingsSection} from "@/shared/AdminSettingsNavigation";
 import type {AdminApiPageId} from "@/shared/AdminApiNavigation";
 import type {AdminAccountSection} from "@/shared/AdminAccountNavigation";
@@ -38,7 +38,7 @@ export interface AdminDeploymentSummary {
 export interface AdminSidebarData {
   channel: AdminChannelSummary;
   deployment: AdminDeploymentSummary;
-  items: AdminNavigationItem[];
+  items: AdminMenuItem[];
   newItem: {
     disabled: boolean;
     url: string;

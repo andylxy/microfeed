@@ -19,7 +19,7 @@ import {
   adminChannelSummary,
   type AdminSidebarData,
 } from "@/components/admin/admin-shell-types";
-import {NAV_ITEMS, OUR_BRAND} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, OUR_BRAND} from "@/shared/Constants";
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
@@ -34,8 +34,8 @@ function sidebarData(): AdminSidebarData {
     items: [{
       active: true,
       disabled: false,
-      id: NAV_ITEMS.ADMIN_HOME,
-      name: "Home",
+      icon: "home",
+      id: ADMIN_MENU_CODES.ADMIN_HOME,
       url: "/admin/",
     }],
     newItem: {

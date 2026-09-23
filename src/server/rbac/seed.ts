@@ -39,6 +39,25 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "system:permission:manage", name: "权限管理"},
   {code: "content:settings:manage", name: "站点设置管理"},
   {code: "system:webhook:manage", name: "Webhook 管理"},
+  // menu - admin menu visibility (migration 0040). A menu row binds at most one
+  // of these; a menu with no code is public. `system:api:manage` gates opening
+  // the dashboard's API area, which is a different question from what a signed
+  // API call may read or write (that is what the `api:*` codes below decide).
+  {code: "content:channel:manage", name: "频道设置管理"},
+  {code: "content:review:manage", name: "审核管理"},
+  {code: "content:audit:read", name: "审计查看"},
+  {code: "content:page:manage", name: "页面管理"},
+  {code: "content:site_file:manage", name: "站点文件管理"},
+  {code: "system:api:manage", name: "API 管理"},
+  // api - signed-call (XiHan BasicApp model); authorization delegated to RBAC
+  {code: "api:content:read", name: "API 内容读取"},
+  {code: "api:content:write", name: "API 内容写入"},
+  {code: "api:media:read", name: "API 媒体读取"},
+  {code: "api:media:write", name: "API 媒体写入"},
+  {code: "api:page:read", name: "API 页面读取"},
+  {code: "api:page:write", name: "API 页面写入"},
+  {code: "api:site:read", name: "API 站点文件读取"},
+  {code: "api:site:write", name: "API 站点文件写入"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -66,6 +85,23 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "content:category:update",
       "content:volume:read",
       "content:volume:update",
+      // Content menus bind `content:article:read` / `content:article:create`, so
+      // an editor without these cannot even see the item list or the import
+      // page. `content:article:update` was already required by the feed write
+      // path — without it an editor could not edit or add a chapter at all.
+      // `content:article:delete` is deliberately withheld.
+      "content:article:read",
+      "content:article:create",
+      "content:article:update",
+      // Pages and site files are content work; review, audit, channel settings
+      // and the API area stay admin-only.
+      "content:page:manage",
+      "content:site_file:manage",
+      // API signed-call: editors may use content + media via the API.
+      "api:content:read",
+      "api:content:write",
+      "api:media:read",
+      "api:media:write",
     ],
   },
 ];

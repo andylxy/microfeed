@@ -14,8 +14,12 @@ import {
 } from "@/server/media/storage";
 import type {UploadRequest} from "../../../types";
 import type {PublicCachePurger} from "@/server/cache/public-cache";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_ARTICLE_UPDATE, request, env.FEED_DB);
+  if (guard) return guard;
   if (!mediaBucket(env)) {
     return mediaStorageUnavailableResponse();
   }
@@ -67,5 +71,11 @@ export async function deleteAdminImage(
   }
 }
 
-export const DELETE: APIRoute = async ({request}) =>
-  deleteAdminImage(request, env, waitUntil, cache);
+export const DELETE: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_ARTICLE_UPDATE,
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+  return deleteAdminImage(request, env, waitUntil, cache);
+};

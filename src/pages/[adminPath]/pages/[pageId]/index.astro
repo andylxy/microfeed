@@ -6,13 +6,19 @@ import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {activeThemeSupportsPages, getPageById} from "@/server/pages/service";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_PAGE_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 const page = Astro.params.pageId
   ? await getPageById(env.FEED_DB, Astro.request, Astro.params.pageId)
@@ -22,7 +28,7 @@ const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.PAGES}
+  activeNavItem={ADMIN_MENU_CODES.PAGES}
   documentTitle={page
     ? `${translate("pageMessage.editPageTitle", adminLanguage, {title: page.title})} | microfeed.org`
     : translate("pageDocumentTitle.pageNotFound", adminLanguage)}
@@ -31,7 +37,7 @@ const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
   pageTitle={page
     ? translate("pageTitle.editPage", adminLanguage)
     : translate("pageTitle.pageNotFound", adminLanguage)}
-  breadcrumb={{kind: "back", name: translate("nav.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
+  breadcrumb={{kind: "back", name: translate("menu.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
 >
   {page ? <PageEditorApp client:only="react" {page} {themeSupportsPages} /> : <section class="rounded-[14px] border bg-card p-5 shadow-xs"><h1 class="font-semibold">{translate("pageTitle.pageNotFound", adminLanguage)}</h1></section>}
 </AdminShell>

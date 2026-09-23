@@ -5,8 +5,12 @@ import {appErrorResponse, jsonResponse, localizedTextError} from "@/server/http"
 import {AppError} from "@/shared/errors";
 import {mediaBucket} from "@/server/media/storage";
 import ThemeStore from "@/server/themes/ThemeStore";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const GET: APIRoute = async ({params, request}) => {
+export const GET: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const theme = await new ThemeStore(env.FEED_DB).getVersion(
     params.themeId ?? "",
     true,
@@ -16,7 +20,9 @@ export const GET: APIRoute = async ({params, request}) => {
     : localizedTextError(request, "errors.theme.notFound", 404);
 };
 
-export const DELETE: APIRoute = async ({params, request}) => {
+export const DELETE: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   try {
     await new ThemeStore(env.FEED_DB).deleteVersion(
       params.themeId ?? "",

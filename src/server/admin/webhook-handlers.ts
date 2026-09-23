@@ -2,6 +2,7 @@ import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 import {
   jsonResponse,
   localizedError,
@@ -64,9 +65,7 @@ function errorResponse(
  */
 export function withWebhookGuard(handler: APIRoute): APIRoute {
   return async (context) => {
-    const denied = await requireRbac(
-      context.locals,
-      "system:webhook:manage",
+    const denied = await requireRbac(context.locals, PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE,
       context.request,
       env.FEED_DB,
     );

@@ -3,16 +3,22 @@ import SiteFileEditorApp from "@/components/admin/site-files/SiteFileEditorApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_SITE_FILE_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
+}
 ---
 
-<AdminShell activeNavItem={NAV_ITEMS.SITE_FILES} documentTitle={translate("pageDocumentTitle.newSiteFile", adminLanguage)} {feedContent} {onboardingResult} pageTitle={translate("pageTitle.newSiteFile", adminLanguage)} breadcrumb={{kind: "back", name: translate("nav.item.site_files", adminLanguage), url: adminUrl("site-files", Astro.params.adminPath)}}>
+<AdminShell activeNavItem={ADMIN_MENU_CODES.SITE_FILES} documentTitle={translate("pageDocumentTitle.newSiteFile", adminLanguage)} {feedContent} {onboardingResult} pageTitle={translate("pageTitle.newSiteFile", adminLanguage)} breadcrumb={{kind: "back", name: translate("menu.item.site_files", adminLanguage), url: adminUrl("site-files", Astro.params.adminPath)}}>
   <SiteFileEditorApp client:only="react">
     <AdminPageFallback slot="fallback" kind="form" />
   </SiteFileEditorApp>

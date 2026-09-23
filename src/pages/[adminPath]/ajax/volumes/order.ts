@@ -4,10 +4,11 @@ import type {APIRoute} from "astro";
 import {jsonResponse, serviceError} from "@/server/http";
 import {setVolumeOrderHandler} from "@/server/admin/volume-handlers";
 import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /** Give volumes an explicit position (stored as a tag on their chapters). */
 export const POST: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, "content:volume:update", request, env.FEED_DB);
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_VOLUME_UPDATE, request, env.FEED_DB);
   if (guard) return guard;
   const body = await request.json().catch(() => null);
   try {

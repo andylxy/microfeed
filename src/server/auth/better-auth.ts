@@ -1,9 +1,15 @@
 import {oauthProvider} from "@better-auth/oauth-provider";
 import {passkey} from "@better-auth/passkey";
 import {betterAuth} from "better-auth";
-import {admin} from "better-auth/plugins";
+import {admin, username} from "better-auth/plugins";
 
 import {oauthConnectionHandoff} from "@/server/auth/account-security";
+import {
+  MAX_ADMIN_PASSWORD_LENGTH,
+  MAX_ADMIN_USERNAME_LENGTH,
+  MIN_ADMIN_PASSWORD_LENGTH,
+  MIN_ADMIN_USERNAME_LENGTH,
+} from "@/shared/AdminCredentials";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
 import {
   MICROFEED_OAUTH_CLIENT_ID,
@@ -46,8 +52,11 @@ export function createMicrofeedAuth(
     emailAndPassword: {
       disableSignUp: true,
       enabled: true,
-      maxPasswordLength: 128,
-      minPasswordLength: 12,
+      // Length gate only — better-auth has no hook for the composition rule,
+      // which our own validators enforce. Both sides take the bounds from
+      // `@/shared/AdminCredentials` so they cannot drift apart.
+      maxPasswordLength: MAX_ADMIN_PASSWORD_LENGTH,
+      minPasswordLength: MIN_ADMIN_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,
     },
     plugins: [
@@ -59,6 +68,15 @@ export function createMicrofeedAuth(
         schema: {
           passkey: {modelName: "passkey"},
         },
+      }),
+      // Lets an account sign in with a username as well as an address. The
+      // plugin owns the two columns (see migration 0039) and re-validates every
+      // value it stores, including uniqueness; the bounds come from
+      // `@/shared/AdminCredentials` so the admin form cannot accept something
+      // this rejects.
+      username({
+        maxUsernameLength: MAX_ADMIN_USERNAME_LENGTH,
+        minUsernameLength: MIN_ADMIN_USERNAME_LENGTH,
       }),
       oauthProvider({
         accessTokenExpiresIn: OAUTH_ACCESS_TOKEN_SECONDS,

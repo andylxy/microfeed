@@ -41,6 +41,29 @@ export interface RbacResolved {
 }
 
 /**
+ * The first gate of the ADR decision chain, asked by every path that has just
+ * established *which account* is calling (session, signed call, sessionless
+ * credential): an account must exist and must not be flagged `banned` in
+ * `auth_user`.
+ *
+ * Both conditions live here so a newly added authentication path cannot forget
+ * either half. The flag is read from the table rather than off
+ * `locals.authUser`, which is typed as the base Better Auth `User` and does not
+ * carry the admin plugin's fields.
+ */
+export async function accountIsBlocked(
+  db: D1Database,
+  userId: string,
+): Promise<boolean> {
+  const account = await db
+    .prepare("SELECT banned AS flag FROM auth_user WHERE id = ?")
+    .bind(userId)
+    .first<{flag: number | null}>();
+  if (!account) return true;
+  return Number(account.flag) === 1;
+}
+
+/**
  * Resolve the full RBAC context for an authenticated session and, when the
  * caller supplies an `X-Device-Id` header, upsert the device row.
  *
@@ -54,17 +77,7 @@ export async function resolveRbacContext(
 ): Promise<RbacResolved> {
   const permissions = await resolveUserPermissions(db, userId);
 
-  // `auth_user.banned` is the first gate in the ADR decision chain. It is read
-  // here rather than off `locals.authUser` because that is typed as the base
-  // Better Auth `User`, which does not carry the admin plugin's fields.
-  let banned = false;
-  const account = await db
-    .prepare("SELECT banned AS flag FROM auth_user WHERE id = ?")
-    .bind(userId)
-    .first<{flag: number | null}>();
-  if (account && Number(account.flag) === 1) {
-    banned = true;
-  }
+  const banned = await accountIsBlocked(db, userId);
 
   let mustChangePassword = false;
   const security = await db

@@ -4,13 +4,19 @@ import {env} from "cloudflare:workers";
 import WebhookEndpointsApp from "@/components/admin/webhooks/WebhookEndpointsApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listWebhookEndpoints, webhookOverview} from "@/server/webhooks/store";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
+}
 const [initialEndpoints, overview] = await Promise.all([
   listWebhookEndpoints(env.FEED_DB),
   webhookOverview(env),
@@ -19,7 +25,7 @@ const initialQuickstart = Astro.url.searchParams.get("quickstart") === "1";
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.WEBHOOKS}
+  activeNavItem={ADMIN_MENU_CODES.WEBHOOKS}
   documentTitle={translate("pageDocumentTitle.webhookEndpoints", adminLanguage)}
   {feedContent}
   {onboardingResult}

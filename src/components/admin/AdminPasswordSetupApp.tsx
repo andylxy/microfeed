@@ -23,6 +23,7 @@ import {
   adminUrl,
   browserAdminPath,
 } from "@/shared/AdminPath";
+import {MIN_ADMIN_PASSWORD_LENGTH} from "@/shared/AdminCredentials";
 
 interface Props {
   email: string;
@@ -130,7 +131,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
                     className="h-11 px-3 text-base md:text-base"
                     id="microfeed-setup-password"
                     maxLength={128}
-                    minLength={12}
+                    minLength={MIN_ADMIN_PASSWORD_LENGTH}
                     onChange={(event) => setPassword(event.target.value)}
                     required
                     type="password"
@@ -149,7 +150,7 @@ export default function AdminPasswordSetupApp({email, purpose}: Props) {
                     className="h-11 px-3 text-base md:text-base"
                     id="microfeed-setup-password-confirmation"
                     maxLength={128}
-                    minLength={12}
+                    minLength={MIN_ADMIN_PASSWORD_LENGTH}
                     onChange={(event) =>
                       setPasswordConfirmation(event.target.value)
                     }

@@ -1,46 +1,24 @@
-import {NAV_ITEMS, NAV_ITEMS_DICT} from "./Constants";
-import {adminUrl} from "./AdminPath";
-import type {OnboardingResult} from "../types";
+import {ADMIN_MENU_CODES} from "./Constants";
 
-export type AdminNavItemId = typeof NAV_ITEMS[keyof typeof NAV_ITEMS];
+/** A stable menu code, e.g. `all_items`. */
+export type AdminMenuCode = typeof ADMIN_MENU_CODES[keyof typeof ADMIN_MENU_CODES];
 
-export interface AdminNavigationItem {
+/**
+ * One rendered menu entry, as loaded from `ext_menu` (see
+ * `src/server/admin/menu.ts`).
+ *
+ * There is deliberately no list of menu items here. The menu is data — its
+ * path, icon, permission code and order all live in the table — so this module
+ * holds only the shape the renderer consumes, plus the codes pages use to mark
+ * the current item. See `ADR-002-admin-menu-as-data.md`.
+ *
+ * The renderer only ever receives what the account may see; it never sees the
+ * permission set itself. `icon` is a name (e.g. `book`), not a component.
+ */
+export interface AdminMenuItem {
   active: boolean;
   disabled: boolean;
-  id: AdminNavItemId;
-  name: string;
+  icon: string | null;
+  id: string;
   url: string;
-}
-
-const NAVIGATION_PATHS: Array<[AdminNavItemId, string]> = [
-  [NAV_ITEMS.ADMIN_HOME, ""],
-  [NAV_ITEMS.EDIT_CHANNEL, "channels/primary"],
-  [NAV_ITEMS.ALL_ITEMS, "items/list"],
-  [NAV_ITEMS.IMPORT_CHAPTERS, "items/import"],
-  [NAV_ITEMS.REVIEW, "review"],
-  [NAV_ITEMS.AUDIT, "audit"],
-  [NAV_ITEMS.PAGES, "pages"],
-  [NAV_ITEMS.CATEGORIES, "categories"],
-  [NAV_ITEMS.BOOKS, "books"],
-  [NAV_ITEMS.VOLUMES, "volumes"],
-  [NAV_ITEMS.SITE_FILES, "site-files"],
-  [NAV_ITEMS.API, "api"],
-  [NAV_ITEMS.WEBHOOKS, "webhooks"],
-  [NAV_ITEMS.RBAC, "rbac"],
-  [NAV_ITEMS.USERS, "users"],
-  [NAV_ITEMS.SETTINGS, "settings"],
-];
-
-export function getAdminNavigationItems(
-  adminPath: string,
-  activeNavItem: AdminNavItemId | null,
-  onboardingResult: Pick<OnboardingResult, "requiredOk">,
-): AdminNavigationItem[] {
-  return NAVIGATION_PATHS.map(([id, path]) => ({
-    active: id === activeNavItem,
-    disabled: id !== NAV_ITEMS.ADMIN_HOME && !onboardingResult.requiredOk,
-    id,
-    name: NAV_ITEMS_DICT[id].name,
-    url: adminUrl(path, adminPath),
-  }));
 }

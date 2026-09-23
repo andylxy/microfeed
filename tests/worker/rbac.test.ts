@@ -23,16 +23,22 @@ import {
   deleteAdminRbacUser,
   deleteRbacRole,
   getAdminRbacBoard,
+  getAdminRbacUserDevices,
   getAdminRbacUsers,
   readRbacBoard,
+  readRbacUserDevices,
   readRbacUsers,
   renameRbacRole,
   replaceRolePermissions,
   replaceUserRoles,
+  restoreUserDevice,
+  revokeUserDevice,
   updateAdminRbacRole,
   updateAdminRbacRoleName,
   updateAdminRbacUser,
   updateAdminRbacUserBan,
+  updateAdminRbacUserDeviceRestore,
+  updateAdminRbacUserDeviceRevoke,
 } from "@/server/admin/rbac-handlers";
 
 const ORIGIN = "https://feed.example.com";
@@ -107,7 +113,7 @@ describe("requirePermission decision branches", () => {
   it("returns 401 when there is no authenticated user", () => {
     const result = requirePermission(
       {rbacPermissions: new Set(["content:book:create"])},
-      "x",
+      "content:book:delete",
     );
     expect(result?.status).toBe(401);
   });
@@ -332,7 +338,7 @@ describe("RBAC catalog integrity", () => {
     const editorCount = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions WHERE role_id = 'r_editor'",
     ).first<{c: number}>();
-    expect(editorCount?.c).toBe(7);
+    expect(editorCount?.c).toBe(16);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -361,7 +367,7 @@ describe("RBAC administration", () => {
   it("reads the seeded roles with their grants and the catalogue", async () => {
     const board = await readRbacBoard(env.FEED_DB);
     const editor = board.roles.find((role) => role.code === "editor");
-    expect(editor?.permissions).toHaveLength(7);
+    expect(editor?.permissions).toHaveLength(16);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(
@@ -913,22 +919,22 @@ describe("RBAC user CRUD endpoints", () => {
       {
         FEED_DB: env.FEED_DB,
         MICROFEED_SETUP_ADMIN_EMAIL: "admin@example.com",
-        MICROFEED_SETUP_ADMIN_PASSWORD: "correct horse battery staple",
-        MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION: "correct horse battery staple",
+        MICROFEED_SETUP_ADMIN_PASSWORD: "Correct horse battery staple",
+        MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION: "Correct horse battery staple",
       },
       new Request(`${ORIGIN}/.well-known/microfeed/bootstrap-admin/`, {method: "POST"}),
     );
     const signIn = await createMicrofeedAuth(env, new Request(
       `${ORIGIN}/api/auth/sign-in/email`,
       {
-        body: JSON.stringify({email: "admin@example.com", password: "correct horse battery staple"}),
+        body: JSON.stringify({email: "admin@example.com", password: "Correct horse battery staple"}),
         headers: {"content-type": "application/json", origin: ORIGIN},
         method: "POST",
       },
     )).handler(new Request(
       `${ORIGIN}/api/auth/sign-in/email`,
       {
-        body: JSON.stringify({email: "admin@example.com", password: "correct horse battery staple"}),
+        body: JSON.stringify({email: "admin@example.com", password: "Correct horse battery staple"}),
         headers: {"content-type": "application/json", origin: ORIGIN},
         method: "POST",
       },
@@ -950,7 +956,7 @@ describe("RBAC user CRUD endpoints", () => {
       request: withSession("user-create", {
         email: "created@example.com",
         name: "Created",
-        password: "created password",
+        password: "Created password",
       }),
     } as never);
     expect(created.status).toBe(200);
@@ -958,6 +964,13 @@ describe("RBAC user CRUD endpoints", () => {
     const newUser = afterCreate.users.find((entry) => entry.email === "created@example.com");
     expect(newUser).toBeTruthy();
     expect(newUser?.banned).toBe(false);
+
+    // Gap D producer: a freshly created account must carry the forced
+    // password-change flag so the guard's 428 branch is reachable in production.
+    const security = await env.FEED_DB.prepare(
+      "SELECT must_change_password AS flag FROM ext_user_security WHERE user_id = ?",
+    ).bind(newUser?.id).first<{flag: number}>();
+    expect(security?.flag).toBe(1);
 
     const banned = await updateAdminRbacUserBan({
       locals: userManage(["system:user:manage"]),
@@ -974,5 +987,121 @@ describe("RBAC user CRUD endpoints", () => {
     expect(deleted.status).toBe(200);
     const afterDelete = await deleted.json() as Awaited<ReturnType<typeof readRbacUsers>>;
     expect(afterDelete.users.find((entry) => entry.id === newUser?.id)).toBeUndefined();
+  });
+});
+
+describe("RBAC device administration (Gap E)", () => {
+  async function seedDevice(userId: string, deviceId: string, status = "active"): Promise<void> {
+    await env.FEED_DB.prepare(
+      "INSERT INTO ext_user_devices (user_id, device_id, last_seen_at, status) VALUES (?, ?, '2024-01-01', ?)",
+    ).bind(userId, deviceId, status).run();
+  }
+
+  it("revokes and restores a device (pure functions)", async () => {
+    await seedUser("u-dev", "user");
+    await seedDevice("u-dev", "device-a", "active");
+
+    expect(await revokeUserDevice(env.FEED_DB, "u-dev", "device-a")).toEqual({ok: true});
+    const revoked = await env.FEED_DB.prepare(
+      "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
+    ).bind("u-dev", "device-a").first<{status: string}>();
+    expect(revoked?.status).toBe("revoked");
+
+    // The guard reads this flag, so a revoked device now 401s (the gap is closed).
+    expect(await restoreUserDevice(env.FEED_DB, "u-dev", "device-a")).toEqual({ok: true});
+    const restored = await env.FEED_DB.prepare(
+      "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
+    ).bind("u-dev", "device-a").first<{status: string}>();
+    expect(restored?.status).toBe("active");
+  });
+
+  it("refuses an unknown account or device", async () => {
+    await seedUser("u-dev2", "user");
+    await seedDevice("u-dev2", "device-b");
+    expect(await revokeUserDevice(env.FEED_DB, "nope", "device-b"))
+      .toEqual({ok: false, reason: "unknownUser"});
+    expect(await revokeUserDevice(env.FEED_DB, "u-dev2", "nope"))
+      .toEqual({ok: false, reason: "unknownDevice"});
+  });
+
+  it("lists a user's devices", async () => {
+    await seedUser("u-dev3", "user");
+    await seedDevice("u-dev3", "device-c");
+    const devices = await readRbacUserDevices(env.FEED_DB, "u-dev3");
+    expect(devices).toHaveLength(1);
+    expect(devices[0]?.deviceId).toBe("device-c");
+    expect(devices[0]?.status).toBe("active");
+  });
+
+  const userManage = (codes: string[]) => ({
+    authUser: {id: "u9", role: null},
+    rbacPermissions: new Set(codes),
+  });
+
+  it("gates the device endpoints on system:user:manage (401 / 403 / 200)", async () => {
+    await seedUser("u-dev4", "user");
+    await seedDevice("u-dev4", "device-d");
+
+    const listAnonymous = await getAdminRbacUserDevices({
+      locals: {},
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-devices?userId=u-dev4"),
+    } as never);
+    expect(listAnonymous.status).toBe(401);
+
+    const listForbidden = await getAdminRbacUserDevices({
+      locals: userManage(["content:book:read"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-devices?userId=u-dev4"),
+    } as never);
+    expect(listForbidden.status).toBe(403);
+
+    const listAllowed = await getAdminRbacUserDevices({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-devices?userId=u-dev4"),
+    } as never);
+    expect(listAllowed.status).toBe(200);
+
+    const revokeMissing = await updateAdminRbacUserDeviceRevoke({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-device-revoke", {
+        body: JSON.stringify({userId: "u-dev4"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(revokeMissing.status).toBe(400);
+
+    const revokeUnknown = await updateAdminRbacUserDeviceRevoke({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-device-revoke", {
+        body: JSON.stringify({deviceId: "nope", userId: "u-dev4"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(revokeUnknown.status).toBe(404);
+
+    const revokeOk = await updateAdminRbacUserDeviceRevoke({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-device-revoke", {
+        body: JSON.stringify({deviceId: "device-d", userId: "u-dev4"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(revokeOk.status).toBe(200);
+    const afterRevoke = await revokeOk.json() as Awaited<ReturnType<typeof readRbacUserDevices>>;
+    expect(afterRevoke.find((entry) => entry.deviceId === "device-d")?.status).toBe("revoked");
+
+    const restoreOk = await updateAdminRbacUserDeviceRestore({
+      locals: userManage(["system:user:manage"]),
+      request: new Request("https://feed.example.com/admin/ajax/rbac/user-device-restore", {
+        body: JSON.stringify({deviceId: "device-d", userId: "u-dev4"}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(restoreOk.status).toBe(200);
+    const afterRestore = await restoreOk.json() as Awaited<ReturnType<typeof readRbacUserDevices>>;
+    expect(afterRestore.find((entry) => entry.deviceId === "device-d")?.status).toBe("active");
   });
 });

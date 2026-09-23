@@ -1,5 +1,5 @@
 ---
-import {CODE_TYPES, NAV_ITEMS} from "@/shared/Constants";
+import {CODE_TYPES, ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
 import Theme from "@/server/themes/Theme";
 import CustomCodeEditorApp, {
@@ -9,11 +9,17 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "../../../../layouts/AdminShell.astro";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
 if (!feedContent || !feedDb || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 
 const requestedCodeType = Astro.url.searchParams.get("type");
@@ -37,7 +43,7 @@ const themeTemplate: ThemeTemplate = {
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.SETTINGS}
+  activeNavItem={ADMIN_MENU_CODES.SETTINGS}
   documentTitle={translate("pageDocumentTitle.codeEditor", adminLanguage)}
   {feedContent}
   {onboardingResult}

@@ -3,7 +3,7 @@ import {cache, env} from "cloudflare:workers";
 
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import ThemesApp from "@/components/admin/themes/ThemesApp";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
 import ThemeStore from "@/server/themes/ThemeStore";
 import {
@@ -13,11 +13,17 @@ import {
 import AdminShell from "../../../../layouts/AdminShell.astro";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 const store = new ThemeStore(env.FEED_DB, cache);
 await store.ensureThemeMigration(feedContent.settings);
@@ -31,7 +37,7 @@ const siteUrl = new URL(Astro.request.url).origin;
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.SETTINGS}
+  activeNavItem={ADMIN_MENU_CODES.SETTINGS}
   documentTitle={translate("pageDocumentTitle.themes", adminLanguage)}
   {feedContent}
   {onboardingResult}

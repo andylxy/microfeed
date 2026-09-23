@@ -8,8 +8,12 @@ import {
 } from "@/server/api/api-keys";
 import {jsonResponse, localizedError} from "@/server/http";
 import {createApiKeyCommandSchema} from "@/shared/ApiSchemas";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_API_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const parsed = createApiKeyCommandSchema.safeParse(await request.json().catch(
     () => null,
   ));

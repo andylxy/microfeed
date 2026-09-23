@@ -1,0 +1,40 @@
+---
+import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {translate} from "@/shared/i18n";
+import {env} from "cloudflare:workers";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// `requirePagePermission` sends a denied visitor here rather than returning bare
+// text: they keep the dashboard shell and a way back. The status stays 403.
+Astro.response.status = 403;
+const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
+const homeUrl = adminUrl("", adminPath);
+---
+
+<AdminShell
+  activeNavItem={null}
+  documentTitle={translate("forbidden.title", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("forbidden.title", adminLanguage)}
+>
+  <div class="mx-auto max-w-xl py-12 text-center">
+    <h1 class="text-xl font-medium">{translate("forbidden.title", adminLanguage)}</h1>
+    <p class="mt-3 text-sm text-muted-foreground">
+      {translate("forbidden.description", adminLanguage)}
+    </p>
+    <a
+      class="mt-6 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground"
+      href={homeUrl}
+    >
+      {translate("nav.goToHome", adminLanguage)}
+    </a>
+  </div>
+</AdminShell>

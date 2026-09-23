@@ -5,7 +5,7 @@ import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {handleAdminBootstrap} from "@/server/auth/bootstrap";
 
 const ORIGIN = "https://feed.example.com";
-const PASSWORD = "correct horse battery staple";
+const PASSWORD = "Correct horse battery staple";
 
 function bootstrapRequest(
   method = "POST",

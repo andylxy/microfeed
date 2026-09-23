@@ -13,6 +13,19 @@ import {STATUSES} from "@/shared/Constants";
 const ORIGIN = "https://feed.example.com";
 const NOW = "2026-08-14T20:00:00.000Z";
 
+/**
+ * These endpoints are permission-guarded now, so the calls must carry a live
+ * account. A wildcard grant keeps the focus on response shape; the codes each
+ * endpoint demands are asserted in `admin-menu.test.ts` and `rbac.test.ts`.
+ */
+const ADMIN_LOCALS = {
+  authUser: {id: "u_admin_collections", role: null},
+  rbacBanned: false,
+  rbacDeviceRevoked: false,
+  rbacMustChangePassword: false,
+  rbacPermissions: new Set(["*"]),
+};
+
 async function responseFrom(
   handler: APIRoute,
   pathname: string,
@@ -20,7 +33,7 @@ async function responseFrom(
 ) {
   const request = new Request(`${ORIGIN}${pathname}`);
   const response = await handler({
-    locals: {},
+    locals: ADMIN_LOCALS,
     params: {adminPath: "admin", ...params},
     request,
     url: new URL(request.url),

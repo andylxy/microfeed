@@ -35,11 +35,20 @@ import {
   adminDashboardLockedResponse,
   hasAdminOwner,
 } from "@/server/auth/admin-owner";
+import {isAdminCredentialLoginPath} from "@/server/auth/credential-login";
 import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
   decideApiRequest,
+  decideSignedApiRequest,
+  type ApiAttribution,
+  writeApiAccessLog,
 } from "@/server/api/access";
+import {
+  decideLoginCredentialApiRequest,
+  providedLoginCredential,
+} from "@/server/api/credential-bearer";
+import {handleApiPing} from "@/server/api/ping";
 import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
@@ -161,35 +170,147 @@ const handleRequest = defineMiddleware(async (context, next) => {
   }
 
   if (pathname.startsWith("/api/")) {
-    const decision = await decideApiRequest(
-      env.FEED_DB,
-      context.request,
-      pathname,
-      env.MICROFEED_ADMIN_AUTH_MODE,
-    );
-    if (decision === "allow-reference") {
-      return addLegacyApiDeprecationHeaders(
-        await next(),
-        context.url,
+    // Self-test / identity echo (XiHan Ping): anonymous, identity from signature.
+    if (pathname === "/api/ping") {
+      return handleApiPing(env.FEED_DB, context.request);
+    }
+    const db = env.FEED_DB;
+    let attribution: ApiAttribution | null = null;
+    if (providedLoginCredential(context.request)) {
+      // Sessionless login-credential bearer (`Authorization: Bearer mflc_…`):
+      // the token rides on every request and no cookie is written. The token
+      // establishes the user; RBAC decides authorization, exactly like the
+      // signed-call path below — including the audit row on both allow and deny.
+      const result = await decideLoginCredentialApiRequest(
+        db,
+        context.request,
         pathname,
       );
-    }
-    if (decision === "not-found") {
-      return apiNotFoundResponse(context.request);
-    }
-    if (decision === "unauthorized") {
-      return addLegacyApiDeprecationHeaders(
-        apiUnauthorizedResponse(context.request),
-        context.url,
+      if (result.kind === "reference") {
+        return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
+      }
+      if (result.kind === "notFound") {
+        return apiNotFoundResponse(context.request);
+      }
+      if (result.kind === "throttled") {
+        return addLegacyApiDeprecationHeaders(
+          new Response(
+            translate(
+              "errors.api.tooManyAttempts",
+              languageFromAcceptLanguage(
+                context.request.headers.get("accept-language"),
+              ),
+            ),
+            {status: 429},
+          ),
+          context.url,
+          pathname,
+        );
+      }
+      if (result.kind === "unauthorized") {
+        return addLegacyApiDeprecationHeaders(
+          apiUnauthorizedResponse(context.request),
+          context.url,
+          pathname,
+        );
+      }
+      if (result.kind === "forbidden") {
+        await writeApiAccessLog(
+          db,
+          result.attribution,
+          context.request.method,
+          pathname,
+          false,
+          403,
+        );
+        return addLegacyApiDeprecationHeaders(
+          apiInsufficientScopeResponse(),
+          context.url,
+          pathname,
+        );
+      }
+      attribution = result.attribution;
+    } else if (context.request.headers.get("x-access-key")) {
+      // Signed-call path (XiHan BasicApp model). Key is identity only; RBAC
+      // decides authorization. Every decision writes an audit row (attribution
+      // is non-null only on allow, so denies are logged without a key/user).
+      const result = await decideSignedApiRequest(db, context.request, pathname);
+      if (result.kind === "reference") {
+        return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
+      }
+      if (result.kind === "notFound") {
+        return apiNotFoundResponse(context.request);
+      }
+      if (result.kind === "unauthorized") {
+        return addLegacyApiDeprecationHeaders(
+          apiUnauthorizedResponse(context.request),
+          context.url,
+          pathname,
+        );
+      }
+      if (result.kind === "replay") {
+        return addLegacyApiDeprecationHeaders(
+          new Response(
+            translate(
+              "errors.api.replay",
+              languageFromAcceptLanguage(
+                context.request.headers.get("accept-language"),
+              ),
+            ),
+            {status: 400},
+          ),
+          context.url,
+          pathname,
+        );
+      }
+      if (result.kind === "forbidden") {
+        await writeApiAccessLog(
+          db,
+          result.attribution,
+          context.request.method,
+          pathname,
+          false,
+          403,
+        );
+        return addLegacyApiDeprecationHeaders(
+          apiInsufficientScopeResponse(),
+          context.url,
+          pathname,
+        );
+      }
+      attribution = result.attribution;
+    } else {
+      // Legacy bearer path — unchanged.
+      const decision = await decideApiRequest(
+        db,
+        context.request,
         pathname,
+        env.MICROFEED_ADMIN_AUTH_MODE,
       );
-    }
-    if (decision === "insufficient-scope") {
-      return addLegacyApiDeprecationHeaders(
-        apiInsufficientScopeResponse(),
-        context.url,
-        pathname,
-      );
+      if (decision === "allow-reference") {
+        return addLegacyApiDeprecationHeaders(
+          await next(),
+          context.url,
+          pathname,
+        );
+      }
+      if (decision === "not-found") {
+        return apiNotFoundResponse(context.request);
+      }
+      if (decision === "unauthorized") {
+        return addLegacyApiDeprecationHeaders(
+          apiUnauthorizedResponse(context.request),
+          context.url,
+          pathname,
+        );
+      }
+      if (decision === "insufficient-scope") {
+        return addLegacyApiDeprecationHeaders(
+          apiInsufficientScopeResponse(),
+          context.url,
+          pathname,
+        );
+      }
     }
 
     if (isUnsafeMethod(context.request.method)) {
@@ -220,6 +341,18 @@ const handleRequest = defineMiddleware(async (context, next) => {
       webGlobalSettings.publicBucketUrl,
       context.url.hostname,
     );
+
+    if (attribution) {
+      await writeApiAccessLog(
+        db,
+        attribution,
+        context.request.method,
+        pathname,
+        true,
+        200,
+      );
+    }
+
     return addLegacyApiDeprecationHeaders(
       await next(),
       context.url,
@@ -235,12 +368,19 @@ const handleRequest = defineMiddleware(async (context, next) => {
     }
     const loginPath = adminUrl("login", adminPath);
     const passwordSetupPath = isAdminPasswordSetupPath(pathname, adminPath);
-    if (!builtInAuthEnabled && passwordSetupPath) {
+    const credentialLoginPath = isAdminCredentialLoginPath(pathname, adminPath);
+    if (!builtInAuthEnabled && (passwordSetupPath || credentialLoginPath)) {
       return apiNotFoundResponse(context.request);
     }
     let protection = adminProtectionStatus(context.request, false);
     if (builtInAuthEnabled) {
       if (passwordSetupPath) {
+        return next();
+      }
+      // Credential sign-in is reached while signed out, so it needs the same
+      // early pass the password-setup flow gets; the handler enforces its own
+      // same-origin and throttle checks.
+      if (credentialLoginPath) {
         return next();
       }
       const auth = createMicrofeedAuth(env, context.request);

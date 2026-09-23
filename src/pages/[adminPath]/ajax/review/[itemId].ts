@@ -10,6 +10,8 @@ import {
 } from "@/server/admin/review-handlers";
 import type {AuditDb} from "@/server/feed/extContentAudit";
 import type {ReviewAction} from "@/server/feed/extReview";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 const REVIEW_ACTIONS: readonly ReviewAction[] = [
   "submit",
@@ -19,7 +21,9 @@ const REVIEW_ACTIONS: readonly ReviewAction[] = [
 ];
 
 /** One chapter's audit trail. */
-export const GET: APIRoute = async ({params}) => {
+export const GET: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const itemId = params.itemId ?? "";
   try {
     const payload = await listItemAuditHandler(
@@ -43,7 +47,9 @@ interface ActionBody {
 }
 
 /** Move a chapter through the review state machine, or restore a version. */
-export const POST: APIRoute = async ({params, request}) => {
+export const POST: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const itemId = params.itemId ?? "";
   const body = await request.json().catch(() => null) as ActionBody | null;
   if (!body || typeof body !== "object") {

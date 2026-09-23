@@ -62,6 +62,7 @@ describe("API admin pages", () => {
         deployment,
         pageUrls: {
           authentication: "/admin/api/auth/",
+          credentials: "/admin/api/credentials/",
           explorer: "/admin/api/explorer/",
           overview: "/admin/api/",
           settings: "/admin/api/settings/",

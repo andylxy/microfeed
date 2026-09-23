@@ -4,7 +4,7 @@ import {env} from "cloudflare:workers";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import ThemeDraftEditorApp from "@/components/admin/themes/ThemeDraftEditorApp";
 import type {ThemeEditorLinks} from "@/components/admin/code-editor/ThemeBundleEditor";
-import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, STATUSES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
@@ -13,11 +13,17 @@ import {activeThemeSupportsPages, listPages} from "@/server/pages/service";
 import ThemeStore from "@/server/themes/ThemeStore";
 import type {PublicFeed} from "@/types";
 import AdminShell from "../../../../../../layouts/AdminShell.astro";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const {feedContent, feedDb, onboardingResult} = Astro.locals;
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 if (!feedContent || !feedDb || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 const draft = await new ThemeStore(env.FEED_DB).getDraft(
   Astro.params.draftId ?? "",
@@ -67,7 +73,7 @@ if (draft) {
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.SETTINGS}
+  activeNavItem={ADMIN_MENU_CODES.SETTINGS}
   documentTitle={draft
     ? `${translate("pageMessage.editThemeDraftTitle", adminLanguage, {name: draft.name})} | microfeed.org`
     : translate("pageDocumentTitle.themeDraftNotFound", adminLanguage)}

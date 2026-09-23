@@ -12,6 +12,7 @@ import {
   listBooksBoardHandler,
 } from "@/server/admin/book-handlers";
 import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /** `GET` returns every book plus the category picker; `POST` creates a book. */
 export const GET: APIRoute = async () => {
@@ -31,7 +32,7 @@ export const GET: APIRoute = async () => {
 };
 
 export const POST: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, "content:book:create", request, env.FEED_DB);
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_BOOK_CREATE, request, env.FEED_DB);
   if (guard) return guard;
   const body = await request.json().catch(() => null);
   try {

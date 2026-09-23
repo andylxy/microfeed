@@ -11,8 +11,8 @@ import {
 
 const ORIGIN = "https://feed.example.com";
 const EMAIL = "owner@example.com";
-const OLD_PASSWORD = "the original secure password";
-const NEW_PASSWORD = "a newly selected secure password";
+const OLD_PASSWORD = "The original secure password";
+const NEW_PASSWORD = "A newly selected secure password";
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(

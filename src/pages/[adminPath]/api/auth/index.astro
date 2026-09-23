@@ -5,14 +5,20 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import ApiAuthenticationApp from "@/components/admin/api/ApiAuthenticationApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {listApiKeys, readApiAccessSettings} from "@/server/api/api-keys";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_API_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
 }
 const [initialApiKeys, initialSettings] = await Promise.all([
   listApiKeys(env.FEED_DB),
@@ -21,7 +27,7 @@ const [initialApiKeys, initialSettings] = await Promise.all([
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.API}
+  activeNavItem={ADMIN_MENU_CODES.API}
   apiActivePage="authentication"
   apiNavigation
   documentTitle={translate("pageDocumentTitle.apiAuthentication", adminLanguage)}

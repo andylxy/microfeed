@@ -5,26 +5,32 @@ import PageEditorApp from "@/components/admin/pages/PageEditorApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {adminUrl} from "@/shared/AdminPath";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {activeThemeSupportsPages} from "@/server/pages/service";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_PAGE_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
+}
 const themeSupportsPages = await activeThemeSupportsPages(env.FEED_DB);
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.PAGES}
+  activeNavItem={ADMIN_MENU_CODES.PAGES}
   documentTitle={translate("pageDocumentTitle.newPage", adminLanguage)}
   {feedContent}
   {onboardingResult}
   pageTitle={translate("pageTitle.newPage", adminLanguage)}
-  breadcrumb={{kind: "back", name: translate("nav.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
+  breadcrumb={{kind: "back", name: translate("menu.item.pages", adminLanguage), url: adminUrl("pages", Astro.params.adminPath)}}
 >
   <PageEditorApp client:only="react" {themeSupportsPages}>
     <AdminPageFallback slot="fallback" kind="form" />

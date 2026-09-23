@@ -2,19 +2,25 @@
 import BooksApp from "@/components/admin/books/BooksApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_BOOK_READ, adminLanguage);
+if (denied) {
+  return denied;
+}
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.BOOKS}
+  activeNavItem={ADMIN_MENU_CODES.BOOKS}
   documentTitle={translate("pageDocumentTitle.books", adminLanguage)}
   {feedContent}
   {onboardingResult}

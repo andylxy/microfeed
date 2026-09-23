@@ -8,8 +8,12 @@ import {
 } from "@/server/api/api-keys";
 import {jsonResponse, localizedError} from "@/server/http";
 import {renameApiKeyCommandSchema} from "@/shared/ApiSchemas";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const PATCH: APIRoute = async ({params, request}) => {
+export const PATCH: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_API_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const id = params.apiKeyId ?? "";
   const parsed = renameApiKeyCommandSchema.safeParse(
     await request.json().catch(() => null),
@@ -30,7 +34,9 @@ export const PATCH: APIRoute = async ({params, request}) => {
   }
 };
 
-export const DELETE: APIRoute = async ({params, request}) => {
+export const DELETE: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_API_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const id = params.apiKeyId ?? "";
   if (!id) {
     return localizedError(request, "errors.apiKey.invalidId", 400);

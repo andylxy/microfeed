@@ -13,6 +13,7 @@ import {
 } from "@/server/admin/category-handlers";
 import {cache, env} from "cloudflare:workers";
 import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 export const GET: APIRoute = async ({params, request}) => {
   if (!params.categoryId) {
@@ -35,7 +36,7 @@ export const PUT: APIRoute = async ({locals, params, request}) => {
   if (!params.categoryId) {
     return localizedError(request, "errors.category.notFound", 400);
   }
-  const guard = await requireRbac(locals, "content:category:update", request, env.FEED_DB);
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CATEGORY_UPDATE, request, env.FEED_DB);
   if (guard) return guard;
   const parsed = await request.json().catch(() => null);
   try {
@@ -57,7 +58,7 @@ export const DELETE: APIRoute = async ({locals, params, request}) => {
   if (!params.categoryId) {
     return localizedError(request, "errors.category.notFound", 400);
   }
-  const guard = await requireRbac(locals, "content:category:delete", request, env.FEED_DB);
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CATEGORY_DELETE, request, env.FEED_DB);
   if (guard) return guard;
   try {
     await deleteCategoryHandler(

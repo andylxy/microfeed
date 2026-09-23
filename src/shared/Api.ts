@@ -8,12 +8,17 @@ export type ApiKeyScope = typeof API_KEY_SCOPES[number];
 
 export interface ApiKeyRecord {
   apiKey: string;
+  /** Plaintext secret, present only on the response of create/rotate (shown once). */
+  secret?: string;
   createdAtMs: number;
   id: string;
   name: string;
   scopes: ApiKeyScope[];
   updatedAtMs: number;
 }
+
+/** Max credentials a single user may own (matches XiHan BasicApp's per-user cap). */
+export const MAX_API_CREDENTIALS_PER_USER = 5;
 
 export function updateApiAccessEnabled(
   settings: ApiAccessSettings,

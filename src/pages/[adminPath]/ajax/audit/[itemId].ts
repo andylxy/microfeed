@@ -11,9 +11,13 @@ import {
   restoreItemVersionHandler,
   ReviewActionError,
 } from "@/server/admin/review-handlers";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /** `GET` returns one chapter's full audit trail, oldest first. */
-export const GET: APIRoute = async ({params}) => {
+export const GET: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_AUDIT_READ, request, env.FEED_DB);
+  if (guard) return guard;
   const itemId = params.itemId ?? "";
   try {
     const payload = await listAuditTrailHandler(
@@ -43,7 +47,9 @@ interface ActionBody {
  * Restore a version, or archive/unarchive one row. Both are writes, so they
  * live behind POST rather than being folded into the read above.
  */
-export const POST: APIRoute = async ({params, request}) => {
+export const POST: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_AUDIT_READ, request, env.FEED_DB);
+  if (guard) return guard;
   const itemId = params.itemId ?? "";
   const body = await request.json().catch(() => null) as ActionBody | null;
 

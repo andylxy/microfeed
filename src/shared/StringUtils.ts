@@ -451,6 +451,14 @@ export const ADMIN_URLS = {
   ajaxRbacUserCreate: () => adminUrl("ajax/rbac/user-create", browserAdminPath()),
   ajaxRbacUserDelete: () => adminUrl("ajax/rbac/user-delete", browserAdminPath()),
   ajaxRbacUserBan: () => adminUrl("ajax/rbac/user-ban", browserAdminPath()),
+  ajaxRbacUserCredentials: () =>
+    adminUrl("ajax/rbac/user-credentials", browserAdminPath()),
+  ajaxRbacUserCredentialCreate: () =>
+    adminUrl("ajax/rbac/user-credential-create", browserAdminPath()),
+  ajaxRbacUserCredentialRevoke: () =>
+    adminUrl("ajax/rbac/user-credential-revoke", browserAdminPath()),
+  ajaxCredentialLogin: () =>
+    adminUrl("ajax/auth/credential-login", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
   ajaxVolumeAssign: () =>
@@ -494,6 +502,11 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/api/keys/${id}`, browserAdminPath()),
   ajaxRotateApiKey: (id: string) =>
     adminUrl(`ajax/api/keys/${id}/rotate`, browserAdminPath()),
+  ajaxApiCredentials: () => adminUrl("ajax/api/credentials", browserAdminPath()),
+  ajaxApiCredential: (id: string) =>
+    adminUrl(`ajax/api/credentials/${id}`, browserAdminPath()),
+  ajaxRotateApiCredential: (id: string) =>
+    adminUrl(`ajax/api/credentials/${id}/rotate`, browserAdminPath()),
   ajaxThemes: () => adminUrl("ajax/themes", browserAdminPath()),
   ajaxTheme: (id: string) =>
     adminUrl(`ajax/themes/${id}`, browserAdminPath()),

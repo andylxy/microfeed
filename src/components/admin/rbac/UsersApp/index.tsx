@@ -4,7 +4,15 @@ import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
 import {cn} from "@/lib/utils";
+import {
+  adminAccountKind,
+  MIN_ADMIN_PASSWORD_LENGTH,
+  validateAdminEmail,
+  validateAdminPassword,
+  validateAdminUsername,
+} from "@/shared/AdminCredentials";
 import type {RbacUserBoard} from "@/shared/Rbac";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
@@ -41,7 +49,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
+  const [newAccount, setNewAccount] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
   const user = board.users.find((entry) => entry.id === selectedId);
@@ -79,16 +87,32 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   const createUser = async () => {
     const name = newName.trim();
-    const email = newEmail.trim();
+    const account = newAccount.trim();
     const password = newPassword;
-    if (!name || !email || password.length < 8) {
+    if (!name || !account) {
       showToast(t("errors.rbac.invalidNewUser"), "error");
+      return;
+    }
+    // Mirrors the endpoint's checks so the visitor gets the verdict before a
+    // round trip; the server re-checks regardless.
+    const accountProblem = adminAccountKind(account) === "email"
+      ? validateAdminEmail(account) && t("errors.rbac.invalidEmail")
+      : validateAdminUsername(account) && t("errors.rbac.invalidUsername");
+    if (accountProblem) {
+      showToast(accountProblem, "error");
+      return;
+    }
+    if (validateAdminPassword(password)) {
+      showToast(
+        t("errors.password.policy", {min: MIN_ADMIN_PASSWORD_LENGTH}),
+        "error",
+      );
       return;
     }
     setSaving(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxRbacUserCreate(), {
-        body: JSON.stringify({email, name, password}),
+        body: JSON.stringify({account, name, password}),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -101,7 +125,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
       setSelectedId(next.users[0]?.id ?? "");
       setCreating(false);
       setNewName("");
-      setNewEmail("");
+      setNewAccount("");
       setNewPassword("");
       showToast(t("rbac.userRolesSaved"), "success");
     } catch {
@@ -197,13 +221,16 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 value={newName}
               />
               <Input
-                aria-label={t("rbac.accountEmail")}
+                aria-label={t("rbac.accountIdentifier")}
                 disabled={saving}
-                onChange={(event) => setNewEmail(event.target.value)}
-                placeholder={t("rbac.accountEmail")}
-                type="email"
-                value={newEmail}
+                onChange={(event) => setNewAccount(event.target.value)}
+                placeholder={t("rbac.accountIdentifier")}
+                type="text"
+                value={newAccount}
               />
+              <p className="text-xs text-muted-foreground">
+                {t("rbac.accountIdentifierHint")}
+              </p>
               <Input
                 aria-label={t("rbac.accountPassword")}
                 disabled={saving}
@@ -212,7 +239,9 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 type="password"
                 value={newPassword}
               />
-              <p className="text-xs text-muted-foreground">{t("rbac.passwordHint")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("rbac.passwordHint", {min: MIN_ADMIN_PASSWORD_LENGTH})}
+              </p>
               <div className="flex gap-2">
                 <Button
                   disabled={saving}
@@ -227,7 +256,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                   onClick={() => {
                     setCreating(false);
                     setNewName("");
-                    setNewEmail("");
+                    setNewAccount("");
                     setNewPassword("");
                   }}
                   size="xs"
@@ -244,7 +273,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               disabled={saving}
               onClick={() => {
                 setNewName("");
-                setNewEmail("");
+                setNewAccount("");
                 setNewPassword("");
                 setCreating(true);
               }}
@@ -341,6 +370,16 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 </li>
               ))}
             </ul>
+
+            <div className="mt-6 border-t pt-5">
+              <h3 className="text-sm font-medium text-foreground">
+                {t("loginCredentials.title")}
+              </h3>
+              <p className="mt-1 mb-3 text-xs text-muted-foreground">
+                {t("loginCredentials.adminDescription")}
+              </p>
+              <LoginCredentialsPanel key={user.id} userId={user.id} />
+            </div>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">{t("rbac.noUsers")}</p>

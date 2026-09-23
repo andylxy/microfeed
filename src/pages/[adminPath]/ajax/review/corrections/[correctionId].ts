@@ -9,6 +9,8 @@ import {
   approveCorrection,
   rejectCorrection,
 } from "@/server/feed/extContentCorrection";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 interface DecisionBody {
   action?: string;
@@ -20,7 +22,9 @@ interface DecisionBody {
  * writes it back to the chapter's original storage location.
  * `POST {action: "reject"}` discards it; the chapter is left untouched.
  */
-export const POST: APIRoute = async ({params, request}) => {
+export const POST: APIRoute = async ({locals, params, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const correctionId = params.correctionId ?? "";
   const body = await request.json().catch(() => null) as DecisionBody | null;
   try {

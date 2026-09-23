@@ -59,6 +59,21 @@ export const SNAPSHOT_TABLES = {
     "ext_role_permissions",
     "ext_user_security",
     "ext_user_devices",
+    // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
+    // map links each API key to its user and is credential identity data, so a
+    // restored site must keep it or the keys come back orphaned. The access log
+    // is a durable audit trail (no expiry, unlike ext_replay_nonces) mirroring
+    // the other ext_content_* audit tables above, so "who called what" survives
+    // a snapshot boundary.
+    "ext_api_key_owners",
+    "ext_api_access_log",
+    // Login credentials (migration 0036). A credential *is* the login secret a
+    // user was handed, so a restore that dropped them would silently break every
+    // issued token; durable for the same reason as the API-key owner map.
+    "ext_login_credentials",
+    // Admin menu (migration 0041). The menu is data, not code: a restore that
+    // dropped these rows would leave the dashboard with an empty sidebar.
+    "ext_menu",
   ],
   ephemeral: [
     "item_create_idempotency",
@@ -68,6 +83,9 @@ export const SNAPSHOT_TABLES = {
     // Anti-replay nonce ledger (migration 0030). Rows expire within minutes, so
     // there is nothing worth carrying across a snapshot boundary.
     "ext_replay_nonces",
+    // Credential sign-in throttle (migration 0037). A fixed 60s window; nothing
+    // worth carrying across a snapshot boundary.
+    "ext_login_credential_attempts",
     "oauth_access_token",
     "oauth_refresh_token",
     "oauth_consent",

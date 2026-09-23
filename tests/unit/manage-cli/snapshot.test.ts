@@ -415,7 +415,10 @@ describe("migration upgrades from historical snapshot positions", () => {
       source.close();
       restored.close();
     }
-  }, 15_000);
+    // The loop runs once per migration and each pass replays the whole history,
+    // so its runtime scales with the schema history; raise the cap as the
+    // migration list grows rather than let a busy full-suite run time it out.
+  }, 120_000);
 
   it("covers column, data, index, and authentication transformations in fixture history", async () => {
     const fixtureDirectory = path.join(

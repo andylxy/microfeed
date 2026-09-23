@@ -177,7 +177,7 @@ export const SUPPORTED_ENCLOSURE_CATEGORIES = [
   ENCLOSURE_CATEGORIES.EXTERNAL_URL,
 ];
 
-export const NAV_ITEMS = {
+export const ADMIN_MENU_CODES = {
   ADMIN_HOME: 'admin_home',
   EDIT_CHANNEL: 'edit_channel',
   ALL_ITEMS: 'all_items',
@@ -196,56 +196,57 @@ export const NAV_ITEMS = {
   SETTINGS: 'settings',
 } as const;
 
-export const NAV_ITEMS_DICT = {
-  [NAV_ITEMS.ADMIN_HOME]: {
-    name: 'Home',
-  },
-  [NAV_ITEMS.EDIT_CHANNEL]: {
-    name: 'Edit channel',
-  },
-  [NAV_ITEMS.ALL_ITEMS]: {
-    name: 'See all items',
-  },
-  [NAV_ITEMS.PAGES]: {
-    name: 'Pages',
-  },
-  [NAV_ITEMS.REVIEW]: {
-    name: 'Review queue',
-  },
-  [NAV_ITEMS.AUDIT]: {
-    name: 'Audit',
-  },
-  [NAV_ITEMS.IMPORT_CHAPTERS]: {
-    name: 'Import chapters',
-  },
-  [NAV_ITEMS.CATEGORIES]: {
-    name: 'Categories',
-  },
-  [NAV_ITEMS.BOOKS]: {
-    name: 'Books',
-  },
-  [NAV_ITEMS.VOLUMES]: {
-    name: 'Volume board',
-  },
-  [NAV_ITEMS.SITE_FILES]: {
-    name: 'Site files',
-  },
-  [NAV_ITEMS.API]: {
-    name: 'API',
-  },
-  [NAV_ITEMS.WEBHOOKS]: {
-    name: 'Webhooks',
-  },
-  [NAV_ITEMS.RBAC]: {
-    name: 'Roles & permissions',
-  },
-  [NAV_ITEMS.USERS]: {
-    name: 'Users',
-  },
-  [NAV_ITEMS.SETTINGS]: {
-    name: 'Settings',
-  },
-};
+/**
+ * The full RBAC permission catalog, mirrored from `RBAC_PERMISSIONS` in
+ * `src/server/rbac/seed.ts` (which mirrors the SQL seeds). The two are kept
+ * equal by `tests/unit/admin-endpoint-guards.test.ts`.
+ *
+ * A guarded page or endpoint passes its code as a {@link PermissionCode}, so a
+ * typo or a code that no catalog row defines becomes a compile error instead of
+ * a silently-always-403 guard. The wildcard `"*"` is included so a guard may
+ * still express "full access" where that is intended.
+ */
+export const PERMISSION_CODES = {
+  CONTENT_BOOK_CREATE: 'content:book:create',
+  CONTENT_BOOK_READ: 'content:book:read',
+  CONTENT_BOOK_UPDATE: 'content:book:update',
+  CONTENT_BOOK_DELETE: 'content:book:delete',
+  CONTENT_CATEGORY_CREATE: 'content:category:create',
+  CONTENT_CATEGORY_READ: 'content:category:read',
+  CONTENT_CATEGORY_UPDATE: 'content:category:update',
+  CONTENT_CATEGORY_DELETE: 'content:category:delete',
+  CONTENT_CATEGORY_ORDER: 'content:category:order',
+  CONTENT_VOLUME_UPDATE: 'content:volume:update',
+  CONTENT_VOLUME_READ: 'content:volume:read',
+  CONTENT_ARTICLE_CREATE: 'content:article:create',
+  CONTENT_ARTICLE_READ: 'content:article:read',
+  CONTENT_ARTICLE_UPDATE: 'content:article:update',
+  CONTENT_ARTICLE_DELETE: 'content:article:delete',
+  SYSTEM_USER_MANAGE: 'system:user:manage',
+  SYSTEM_ROLE_MANAGE: 'system:role:manage',
+  SYSTEM_PERMISSION_MANAGE: 'system:permission:manage',
+  CONTENT_SETTINGS_MANAGE: 'content:settings:manage',
+  SYSTEM_WEBHOOK_MANAGE: 'system:webhook:manage',
+  CONTENT_CHANNEL_MANAGE: 'content:channel:manage',
+  CONTENT_REVIEW_MANAGE: 'content:review:manage',
+  CONTENT_AUDIT_READ: 'content:audit:read',
+  CONTENT_PAGE_MANAGE: 'content:page:manage',
+  CONTENT_SITE_FILE_MANAGE: 'content:site_file:manage',
+  SYSTEM_API_MANAGE: 'system:api:manage',
+  API_CONTENT_READ: 'api:content:read',
+  API_CONTENT_WRITE: 'api:content:write',
+  API_MEDIA_READ: 'api:media:read',
+  API_MEDIA_WRITE: 'api:media:write',
+  API_PAGE_READ: 'api:page:read',
+  API_PAGE_WRITE: 'api:page:write',
+  API_SITE_READ: 'api:site:read',
+  API_SITE_WRITE: 'api:site:write',
+  WILDCARD: '*',
+} as const;
+
+/** A valid RBAC permission code, drawn from {@link PERMISSION_CODES}. */
+export type PermissionCode =
+  (typeof PERMISSION_CODES)[keyof typeof PERMISSION_CODES];
 
 export const CHANNEL_STATUSES = {
   PUBLIC: 'public',

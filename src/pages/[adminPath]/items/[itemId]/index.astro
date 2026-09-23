@@ -1,7 +1,7 @@
 ---
 import {env} from "cloudflare:workers";
 
-import {NAV_ITEMS, STATUSES} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, STATUSES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
@@ -9,9 +9,14 @@ import EditItemApp from "@/components/admin/items/EditItemApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "../../../../layouts/AdminShell.astro";
 import {loadFeed} from "@/server/feed/feed";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const itemId = Astro.params.itemId ?? "";
 const adminLanguage = adminLanguageFromRequest(Astro.request);
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_ARTICLE_READ, adminLanguage);
+if (denied) {
+  return denied;
+}
 const loaded = await loadFeed(env, Astro.request, {
   adminProtection: Astro.locals.adminProtection,
   limit: 1,
@@ -27,7 +32,7 @@ if (missing) {
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.ALL_ITEMS}
+  activeNavItem={ADMIN_MENU_CODES.ALL_ITEMS}
   documentTitle={missing
     ? translate("pageDocumentTitle.itemNotFound", adminLanguage)
     : `${translate("pageMessage.editItemTitle", adminLanguage, {id: itemId})} | microfeed.org`}
@@ -38,7 +43,7 @@ if (missing) {
     : translate("pageTitle.editItem", adminLanguage)}
   breadcrumb={{
     kind: "back",
-    name: translate("nav.item.all_items", adminLanguage),
+    name: translate("menu.item.all_items", adminLanguage),
     url: adminUrl("items/list", Astro.params.adminPath),
   }}
 >

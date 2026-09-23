@@ -10,9 +10,13 @@ import {
 import type {AuditDb} from "@/server/feed/extContentAudit";
 import FeedDb from "@/server/feed/FeedDb";
 import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /** The review queue: chapters with unconfirmed content versions. */
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   try {
     const payload = await listReviewQueueHandler(
       env.FEED_DB as unknown as AuditDb,
@@ -42,7 +46,9 @@ interface ReviewBody {
  * Every failure answers with a readable message: an unrecognised exception used
  * to escape as an opaque 500 with no clue about the cause.
  */
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   let body: ReviewBody | null = null;
   try {
     body = await request.json().catch(() => null) as ReviewBody | null;

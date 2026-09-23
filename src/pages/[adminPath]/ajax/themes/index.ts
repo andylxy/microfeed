@@ -13,6 +13,8 @@ import {
   parseThemeListOptions,
 } from "@/shared/themes/ThemeListing";
 import {webhookThemeSnapshot} from "@/shared/WebhookExamples";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 function errorResponse(request: Request, error: unknown): Response {
   if (error instanceof AppError) return appErrorResponse(request, error);
@@ -21,7 +23,9 @@ function errorResponse(request: Request, error: unknown): Response {
   }, {status: 400});
 }
 
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   try {
     const searchParams = new URL(request.url).searchParams;
     const tab = parseThemeAdminTab(searchParams);
@@ -34,7 +38,9 @@ export const GET: APIRoute = async ({request}) => {
   }
 };
 
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const input = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!input || typeof input.action !== "string") {
     return localizedError(request, "errors.theme.actionRequired", 400);

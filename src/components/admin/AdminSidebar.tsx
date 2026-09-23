@@ -28,8 +28,6 @@ import {
 import {buttonVariants} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
-import {NAV_ITEMS} from "@/shared/Constants";
-import type {AdminNavItemId} from "@/shared/AdminNavigation";
 import AdminAboutDialog from "./AdminAboutDialog";
 import AdminPublicAccess from "./shared/AdminPublicAccess";
 import type {AdminSidebarData} from "./admin-shell-types";
@@ -40,24 +38,30 @@ interface Props {
   onNavigate?: () => void;
 }
 
-const navigationIcons: Record<AdminNavItemId, typeof HomeIcon> = {
-  [NAV_ITEMS.ADMIN_HOME]: HomeIcon,
-  [NAV_ITEMS.EDIT_CHANNEL]: PencilIcon,
-  [NAV_ITEMS.ALL_ITEMS]: ListIcon,
-  [NAV_ITEMS.IMPORT_CHAPTERS]: UploadIcon,
-  [NAV_ITEMS.REVIEW]: ShieldCheckIcon,
-  [NAV_ITEMS.AUDIT]: HistoryIcon,
-  [NAV_ITEMS.PAGES]: FileTextIcon,
-  [NAV_ITEMS.CATEGORIES]: TagsIcon,
-  [NAV_ITEMS.BOOKS]: BookIcon,
-  [NAV_ITEMS.VOLUMES]: LayersIcon,
-  [NAV_ITEMS.SITE_FILES]: FileCode2Icon,
-  [NAV_ITEMS.API]: Code2Icon,
-  [NAV_ITEMS.WEBHOOKS]: WebhookIcon,
-  [NAV_ITEMS.RBAC]: ShieldCheckIcon,
-  [NAV_ITEMS.USERS]: UsersIcon,
-  [NAV_ITEMS.SETTINGS]: SettingsIcon,
+/**
+ * Menu icons are named in the data (`ext_menu.icon`, e.g. "book"), so the
+ * sidebar resolves a name to a component here instead of keying off a menu id.
+ * An unknown name falls back rather than rendering an empty slot.
+ */
+const MENU_ICONS: Record<string, typeof HomeIcon> = {
+  book: BookIcon,
+  "code-2": Code2Icon,
+  "file-code-2": FileCode2Icon,
+  "file-text": FileTextIcon,
+  history: HistoryIcon,
+  home: HomeIcon,
+  layers: LayersIcon,
+  list: ListIcon,
+  pencil: PencilIcon,
+  "shield-check": ShieldCheckIcon,
+  settings: SettingsIcon,
+  tags: TagsIcon,
+  upload: UploadIcon,
+  users: UsersIcon,
+  webhook: WebhookIcon,
 };
+
+const FALLBACK_MENU_ICON = ListIcon;
 
 export default function AdminSidebar({data, onNavigate}: Props) {
   const {t} = useTranslation();
@@ -140,7 +144,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label={t("nav.adminNavigation")}>
         <ul className="grid gap-1">
           {data.items.map((item) => {
-            const Icon = navigationIcons[item.id];
+            const Icon = (item.icon && MENU_ICONS[item.icon]) || FALLBACK_MENU_ICON;
             const classes = [
               "relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-base font-medium outline-none transition-colors",
               item.active
@@ -154,7 +158,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
                 {item.disabled ? (
                   <span aria-disabled="true" className={classes}>
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {t(`nav.item.${item.id}`)}
+                    {t(`menu.item.${item.id}`)}
                   </span>
                 ) : (
                   <a
@@ -165,7 +169,7 @@ export default function AdminSidebar({data, onNavigate}: Props) {
                     onClick={onNavigate}
                   >
                     <Icon aria-hidden="true" className="size-[18px]" />
-                    {t(`nav.item.${item.id}`)}
+                    {t(`menu.item.${item.id}`)}
                   </a>
                 )}
               </li>

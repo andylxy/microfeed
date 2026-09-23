@@ -92,7 +92,8 @@ export const OPENAPI_DOCUMENT = createDocument({
     version: MICROFEED_VERSION,
     description:
       "Create, read, update, and delete content in this microfeed instance. " +
-      "Send an API key using Bearer authentication. A protected dashboard " +
+      "Send an API key or a login credential using Bearer authentication. A " +
+      "protected dashboard " +
       "can separately expose experimental, draft-only WebMCP site tools to " +
       "compatible browser agents after the signed-in dashboard is opened; " +
       "WebMCP is not a remote API or MCP server.",
@@ -595,8 +596,12 @@ export const OPENAPI_DOCUMENT = createDocument({
         type: "http",
         scheme: "bearer",
         description:
-          "A named mf_ integration credential sent using Bearer authentication. " +
-          "The credential must have the read or write permission required by the operation.",
+          "A named mf_ integration credential or an mflc_ login credential, " +
+          "sent using Bearer authentication. A login credential is accepted " +
+          "on these API operations only — it identifies the account it was " +
+          "issued to, and authorization follows that account's permissions. " +
+          "The credential must have the read or write permission required by " +
+          "the operation.",
       },
     },
   },

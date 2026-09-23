@@ -15,7 +15,7 @@ describe("Better Auth owner provisioning", () => {
       "owner@example.com",
     );
     expect(validateOwnerPassword("short")).toContain("at least");
-    expect(validateOwnerPassword("long enough password")).toBeUndefined();
+    expect(validateOwnerPassword("Long enough password")).toBeUndefined();
   });
 
   it("stores Better Auth's hash without writing the plaintext password", async () => {

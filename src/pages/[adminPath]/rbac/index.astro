@@ -5,27 +5,27 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import RbacApp from "@/components/admin/rbac/RbacApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {readRbacBoard} from "@/server/admin/rbac-handlers";
-import {requirePermission} from "@/server/rbac/guard";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
-import {NAV_ITEMS} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
-// The board endpoint is guarded, but the page itself must be too (T-10): without
-// this an account that is merely signed in could read the whole permission model.
-const denied = requirePermission(Astro.locals, "system:role:manage");
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE, adminLanguage);
 if (denied) {
-  return new Response(translate("errors.rbac.forbidden", adminLanguage), {status: 403});
+  return denied;
 }
+// The board endpoint is guarded, but the page itself must be too (T-10): without
 const board = await readRbacBoard(env.FEED_DB);
 ---
 
 <AdminShell
-  activeNavItem={NAV_ITEMS.RBAC}
+  activeNavItem={ADMIN_MENU_CODES.RBAC}
   documentTitle={translate("pageDocumentTitle.rbac", adminLanguage)}
   {feedContent}
   {onboardingResult}

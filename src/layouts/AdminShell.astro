@@ -29,10 +29,8 @@ import {
   adminLanguageFromRequest,
   type AdminLanguage,
 } from "@/shared/AdminLanguage";
-import {
-  getAdminNavigationItems,
-  type AdminNavItemId,
-} from "@/shared/AdminNavigation";
+import type {AdminMenuCode} from "@/shared/AdminNavigation";
+import {readAdminMenu} from "@/server/admin/menu";
 import type {AdminSettingsSection} from "@/shared/AdminSettingsNavigation";
 import type {AdminAccountSection} from "@/shared/AdminAccountNavigation";
 import {
@@ -59,7 +57,7 @@ export type {AdminBreadcrumb};
 interface Props {
   accountActiveSection?: AdminAccountSection["id"];
   accountNavigation?: boolean;
-  activeNavItem: AdminNavItemId | null;
+  activeNavItem: AdminMenuCode | null;
   apiActivePage?: AdminApiPageId;
   apiNavigation?: boolean;
   breadcrumb?: AdminBreadcrumb;
@@ -130,10 +128,12 @@ const channelImageUrl = channelImage
 const sidebar: AdminSidebarData = {
   channel: adminChannelSummary(channel.title, channelImageUrl),
   deployment,
-  items: getAdminNavigationItems(
+  items: await readAdminMenu(
+    env.FEED_DB,
+    Astro.locals,
     adminPath,
     activeNavItem,
-    onboardingResult,
+    onboardingResult.requiredOk,
   ),
   newItem: {
     disabled: !onboardingResult.requiredOk,

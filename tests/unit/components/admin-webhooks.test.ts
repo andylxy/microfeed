@@ -13,8 +13,6 @@ import WebhookEventExplorerApp, {
   eventGroupKeys,
 } from "@/components/admin/webhooks/WebhookEventExplorerApp";
 import WebhookOverviewApp from "@/components/admin/webhooks/WebhookOverviewApp";
-import {getAdminNavigationItems} from "@/shared/AdminNavigation";
-import {NAV_ITEMS} from "@/shared/Constants";
 import {ADMIN_WEBHOOK_PAGES} from "@/shared/AdminWebhookNavigation";
 import {WEBHOOK_EVENT_DEFINITIONS} from "@/shared/WebhookExamples";
 import {WEBHOOK_QUICKSTARTS} from "@/shared/WebhookQuickstarts";
@@ -36,34 +34,6 @@ const endpoint = {
 };
 
 describe("Webhook Admin", () => {
-  it("places Webhooks after API in the top-level navigation", () => {
-    const items = getAdminNavigationItems("admin", NAV_ITEMS.WEBHOOKS, {
-      requiredOk: true,
-    });
-    expect(items.map(({name}) => name)).toEqual([
-      "Home",
-      "Edit channel",
-      "See all items",
-      "Import chapters",
-      "Review queue",
-      "Audit",
-      "Pages",
-      "Categories",
-      "Books",
-      "Volume board",
-      "Site files",
-      "API",
-      "Webhooks",
-      "Roles & permissions",
-      "Users",
-      "Settings",
-    ]);
-    expect(items.find(({id}) => id === NAV_ITEMS.WEBHOOKS)).toMatchObject({
-      active: true,
-      url: "/admin/webhooks/",
-    });
-  });
-
   it("renders the standalone overview, endpoint, and delivery navigation", () => {
     expect(ADMIN_WEBHOOK_PAGES.map(({name}) => name)).toEqual([
       "Overview",

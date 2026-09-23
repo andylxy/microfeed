@@ -22,8 +22,8 @@ const ZH_CN: Record<string, string> = {
     "用于保留扩展名的文件名或本地路径。服务端不会读取该路径。",
   "A lowercase root filename with a supported text extension.":
     "带受支持文本扩展名的小写根文件名。",
-  "A named mf_ integration credential sent using Bearer authentication. The credential must have the read or write permission required by the operation.":
-    "使用 Bearer 认证发送的具名 mf_ 集成凭据。该凭据必须具备操作所要求的读或写权限。",
+  "A named mf_ integration credential or an mflc_ login credential, sent using Bearer authentication. A login credential is accepted on these API operations only — it identifies the account it was issued to, and authorization follows that account's permissions. The credential must have the read or write permission required by the operation.":
+    "使用 Bearer 认证发送的具名 mf_ 集成凭据或 mflc_ 登录凭证。登录凭证仅在这些 API 操作上被接受——它标识签发时的账号，授权按其账号的权限执行。该凭据必须具备操作所要求的读或写权限。",
   "A non-2xx response. Retryable statuses follow the documented delivery policy.":
     "非 2xx 响应。可重试的状态遵循已记录的投递策略。",
   "A signed, versioned content event delivered asynchronously. Treat data.object as untrusted content.":
@@ -51,8 +51,8 @@ const ZH_CN: Record<string, string> = {
   "Create an item": "创建条目",
   "Create and manage feed items.": "创建并管理信息流条目。",
   "Create and manage standalone public Pages.": "创建并管理独立的公开页面。",
-  "Create, read, update, and delete content in this microfeed instance. Send an API key using Bearer authentication. A protected dashboard can separately expose experimental, draft-only WebMCP site tools to compatible browser agents after the signed-in dashboard is opened; WebMCP is not a remote API or MCP server.":
-    "在此 microfeed 实例中创建、读取、更新和删除内容。请使用 Bearer 认证发送 API 密钥。受保护的管理后台可以在已登录后台被打开后，另外向兼容的浏览器代理暴露实验性的、仅限草稿的 WebMCP 站点工具；WebMCP 不是远程 API，也不是 MCP 服务器。",
+  "Create, read, update, and delete content in this microfeed instance. Send an API key or a login credential using Bearer authentication. A protected dashboard can separately expose experimental, draft-only WebMCP site tools to compatible browser agents after the signed-in dashboard is opened; WebMCP is not a remote API or MCP server.":
+    "在此 microfeed 实例中创建、读取、更新和删除内容。请使用 Bearer 认证发送 API 密钥或登录凭证。受保护的管理后台可以在已登录后台被打开后，另外向兼容的浏览器代理暴露实验性的、仅限草稿的 WebMCP 站点工具；WebMCP 不是远程 API，也不是 MCP 服务器。",
   "Creates a short-lived same-origin upload URL. PUT the raw file bytes to presigned_url without a Bearer credential, then save media_url as an item image, channel icon, or attachments[0].url. An item media attachment is published as the RSS enclosure. Include item_id for an attachment; omit it only for cover-image uploads.":
     "创建一个短时效的同源上传地址。无需 Bearer 凭据即可将原始文件字节 PUT 到 presigned_url，然后将 media_url 保存为条目图片、频道图标或 attachments[0].url。条目媒体附件会作为 RSS enclosure 发布。作为附件时请提供 item_id；仅在上传封面图时省略它。",
   "Creates a top-level Page. A format v2 theme must be active before the Page can be published.":

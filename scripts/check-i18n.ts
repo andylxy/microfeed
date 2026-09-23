@@ -18,7 +18,7 @@ import {readdirSync, readFileSync, statSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
-import {NAV_ITEMS} from "../src/shared/Constants";
+import {ADMIN_MENU_CODES} from "../src/shared/Constants";
 import {en} from "../src/shared/i18n/en";
 import {flatten, translate} from "../src/shared/i18n/index";
 import {zhCN} from "../src/shared/i18n/zh-CN";
@@ -87,12 +87,12 @@ const selfReferential = Object.entries(flatEnglish)
   .filter(([, value]) => value.startsWith("errors."))
   .map(([key]) => key);
 
-// The sidebar renders its labels through a dynamic key (`nav.item.${id}`), so
+// The sidebar renders its labels through a dynamic key (`menu.item.${id}`), so
 // the literal scan above cannot see them: a missing one would render the raw
 // key name in the dashboard. Enumerate the ids instead - this is the gap that
 // let three novel-cms navigation labels ship untranslated.
-const missingNavLabels = Object.values(NAV_ITEMS)
-  .map((id) => `nav.item.${id}`)
+const missingNavLabels = Object.values(ADMIN_MENU_CODES)
+  .map((id) => `menu.item.${id}`)
   .filter((key) => translate(key) === key);
 
 // The review pages render labels through dynamic keys that the literal scan

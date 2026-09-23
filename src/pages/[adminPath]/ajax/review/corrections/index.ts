@@ -4,6 +4,8 @@ import type {APIRoute} from "astro";
 import {jsonResponse, serviceError} from "@/server/http";
 import type {CorrectionDb} from "@/server/feed/extContentCorrection";
 import {listCorrections, submitCorrection} from "@/server/feed/extContentCorrection";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 interface SubmitBody {
   actorId?: string | null;
@@ -14,7 +16,9 @@ interface SubmitBody {
 
 /** `GET ?itemId=<id>` lists that chapter's correction proposals and returns the
  *  chapter's current content so the proposal form can start from it. */
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const itemId = new URL(request.url).searchParams.get("itemId") ?? "";
   try {
     const db = env.FEED_DB as unknown as CorrectionDb;
@@ -42,7 +46,9 @@ export const GET: APIRoute = async ({request}) => {
 };
 
 /** `POST` proposes a fix. The chapter itself is not modified here. */
-export const POST: APIRoute = async ({request}) => {
+export const POST: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_REVIEW_MANAGE, request, env.FEED_DB);
+  if (guard) return guard;
   const body = await request.json().catch(() => null) as SubmitBody | null;
   try {
     if (!body?.itemId || !body.proposedData) {
