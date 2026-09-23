@@ -371,6 +371,10 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               </div>
             </dl>
 
+            <p className="mb-4 text-xs text-muted-foreground">
+              {t("rbac.legacyRoleHint")}
+            </p>
+
             {user.id === currentUserId && (
               <p className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 {t("rbac.editingSelfNotice")}

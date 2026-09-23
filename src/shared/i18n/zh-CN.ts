@@ -1736,6 +1736,7 @@ export const zhCN: TranslationKey = {
     userRolesSaveFailed: "角色保存失败",
     userRolesDescription: "勾选该账号应拥有的角色。改动在下次请求即刻生效，无需重新登录。",
     legacyRole: "Better Auth 角色",
+    legacyRoleHint: "这个字段本身不参与授权：访问权限只看上面的角色。",
     legacyRoleNone: "无",
     accountState: "账号状态",
     accountActive: "正常",

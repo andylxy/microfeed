@@ -20,6 +20,7 @@ import {
   OAUTH_REFRESH_TOKEN_SECONDS,
   OAUTH_SCOPES,
 } from "@/shared/OAuth";
+import {BETTER_AUTH_ADMIN_ROLE} from "@/shared/Rbac";
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
@@ -60,7 +61,12 @@ export function createMicrofeedAuth(
       revokeSessionsOnPasswordReset: true,
     },
     plugins: [
-      admin(),
+      // The admin plugin gates its own endpoints (set-role, ban-user,
+      // remove-user, impersonate-user, …) on `auth_user.role`, not on RBAC.
+      // Left implicit it defaults to ["admin"] silently — exactly the second
+      // authorization source the RBAC work is closing. Name it, and treat the
+      // field as a derived mirror of the RBAC `super_admin` role.
+      admin({adminRoles: [BETTER_AUTH_ADMIN_ROLE]}),
       passkey({
         origin,
         rpID: new URL(origin).hostname,

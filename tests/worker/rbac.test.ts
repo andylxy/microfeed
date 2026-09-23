@@ -101,7 +101,7 @@ describe("requirePermission decision branches", () => {
   // `authUser` is part of the base on purpose: the ADR chain checks the session
   // first, so a wildcard grant without a session is a 401, not an ALLOW.
   const base = {
-    authUser: {id: "u1", role: null},
+    authUser: {id: "u1"},
     rbacPermissions: new Set(["content:book:create"]),
   };
 
@@ -149,15 +149,30 @@ describe("requirePermission decision branches", () => {
 
   it("kicks out a revoked legacy admin (role='admin')", () => {
     const result = requirePermission(
-      {...base, authUser: {id: "a1", role: "admin"}, rbacDeviceRevoked: true},
+      {...base, authUser: {id: "a1"}, rbacDeviceRevoked: true},
       "content:book:create",
     );
     expect(result?.status).toBe(401);
   });
 
-  it("allows legacy Better Auth admins regardless of grants (upgrade safety)", () => {
+  it("no longer lets auth_user.role='admin' authorise anything by itself", () => {
+    // RBAC is the only authority: the legacy bypass is gone. An administrator
+    // keeps its access through the super_admin role (migration 0053 backfills
+    // it, and password-setup grants it at creation), not through this string.
     const result = requirePermission(
-      {...base, authUser: {id: "a1", role: "admin"}},
+      {...base, authUser: {id: "a1"}},
+      "content:book:delete",
+    );
+    expect(result?.status).toBe(403);
+  });
+
+  it("lets an adopted administrator through the super_admin grant", () => {
+    const result = requirePermission(
+      {
+        ...base,
+        authUser: {id: "a1"},
+        rbacPermissions: new Set(["*"]),
+      },
       "content:book:delete",
     );
     expect(result).toBeNull();
@@ -226,7 +241,7 @@ describe("requireRbac combined gate", () => {
   it("allows a wildcard admin request (web, no headers)", async () => {
     const request = new Request("https://x/ajax", {method: "POST"});
     const result = await requireRbac(
-      {authUser: {id: "u1", role: null}, rbacPermissions: new Set(["*"])},
+      {authUser: {id: "u1"}, rbacPermissions: new Set(["*"])},
       "content:book:delete",
       request,
       env.FEED_DB,
@@ -243,7 +258,7 @@ describe("requireRbac combined gate", () => {
     };
     const first = new Request("https://x/ajax", {headers, method: "POST"});
     expect(await requireRbac(
-      {authUser: {id: "u1", role: null}, rbacPermissions: new Set(["*"])},
+      {authUser: {id: "u1"}, rbacPermissions: new Set(["*"])},
       "content:book:delete",
       first,
       env.FEED_DB,
@@ -251,7 +266,7 @@ describe("requireRbac combined gate", () => {
 
     const second = new Request("https://x/ajax", {headers, method: "POST"});
     const replayed = await requireRbac(
-      {authUser: {id: "u1", role: null}, rbacPermissions: new Set(["*"])},
+      {authUser: {id: "u1"}, rbacPermissions: new Set(["*"])},
       "content:book:delete",
       second,
       env.FEED_DB,
@@ -487,7 +502,7 @@ describe("RBAC administration", () => {
 
     const withoutGrant = await getAdminRbacBoard({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["content:book:read"]),
       },
       request,
@@ -496,7 +511,7 @@ describe("RBAC administration", () => {
 
     const allowed = await getAdminRbacBoard({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request,
@@ -509,7 +524,7 @@ describe("RBAC administration", () => {
 
     const withoutGrant = await updateAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
@@ -521,7 +536,7 @@ describe("RBAC administration", () => {
 
     const allowed = await updateAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:permission:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
@@ -614,7 +629,7 @@ describe("RBAC user administration", () => {
 
     const withoutGrant = await getAdminRbacUsers({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: get,
@@ -623,7 +638,7 @@ describe("RBAC user administration", () => {
 
     const allowed = await getAdminRbacUsers({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:user:manage"]),
       },
       request: get,
@@ -640,7 +655,7 @@ describe("RBAC user administration", () => {
     );
     const writeWithoutGrant = await updateAdminRbacUser({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: post(),
@@ -649,7 +664,7 @@ describe("RBAC user administration", () => {
 
     const writeAllowed = await updateAdminRbacUser({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:user:manage"]),
       },
       request: post(),
@@ -680,7 +695,7 @@ describe("chapter deletion permission", () => {
   const withPermissions = (codes: string[]) =>
     feedPost({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(codes),
       },
       request: deletion(),
@@ -699,7 +714,7 @@ describe("chapter deletion permission", () => {
   it("still guards ordinary edits with content:article:update", async () => {
     const response = await feedPost({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["content:book:update"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/feed", {
@@ -802,7 +817,7 @@ describe("RBAC role code rename (Feature A)", () => {
 
 describe("RBAC role code rename endpoints (Feature A)", () => {
   const roleManage = () => ({
-    authUser: {id: "u9", role: null},
+    authUser: {id: "u9"},
     rbacPermissions: new Set(["system:role:manage"]),
   });
 
@@ -859,7 +874,7 @@ describe("RBAC role CRUD endpoints", () => {
 
     const forbidden = await createAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["content:book:read"]),
       },
       request: roleRequest("x", "X"),
@@ -868,7 +883,7 @@ describe("RBAC role CRUD endpoints", () => {
 
     const allowed = await createAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: roleRequest("endpoint_role", "Endpoint"),
@@ -882,7 +897,7 @@ describe("RBAC role CRUD endpoints", () => {
   it("rejects an invalid role code with 400", async () => {
     const response = await createAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: roleRequest("Bad Code!", "Bad"),
@@ -894,7 +909,7 @@ describe("RBAC role CRUD endpoints", () => {
     await createRbacRole(env.FEED_DB, "rename_ep", "Start");
     const ok = await updateAdminRbacRoleName({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-name", {
@@ -909,7 +924,7 @@ describe("RBAC role CRUD endpoints", () => {
 
     const reserved = await updateAdminRbacRoleName({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-name", {
@@ -926,7 +941,7 @@ describe("RBAC role CRUD endpoints", () => {
     await createRbacRole(env.FEED_DB, "delete_ep", "To go");
     const ok = await deleteAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-delete", {
@@ -941,7 +956,7 @@ describe("RBAC role CRUD endpoints", () => {
 
     const reserved = await deleteAdminRbacRole({
       locals: {
-        authUser: {id: "u9", role: null},
+        authUser: {id: "u9"},
         rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-delete", {
@@ -956,7 +971,7 @@ describe("RBAC role CRUD endpoints", () => {
 
 describe("RBAC user CRUD endpoints", () => {
   const userManage = (codes: string[]) => ({
-    authUser: {id: "u9", role: null},
+    authUser: {id: "u9"},
     rbacPermissions: new Set(codes),
   });
 
@@ -1171,7 +1186,7 @@ describe("RBAC device administration (Gap E)", () => {
   });
 
   const userManage = (codes: string[]) => ({
-    authUser: {id: "u9", role: null},
+    authUser: {id: "u9"},
     rbacPermissions: new Set(codes),
   });
 
@@ -1240,5 +1255,52 @@ describe("RBAC device administration (Gap E)", () => {
     expect(restoreOk.status).toBe(200);
     const afterRestore = await restoreOk.json() as Awaited<ReturnType<typeof readRbacUserDevices>>;
     expect(afterRestore.find((entry) => entry.deviceId === "device-d")?.status).toBe("active");
+  });
+});
+
+describe("RBAC audit trail", () => {
+  it("records who changed a role's permissions", async () => {
+    await createRbacRole(env.FEED_DB, "audit_probe", "Audit probe");
+
+    const response = await updateAdminRbacRole({
+      locals: {
+        authUser: {email: "owner@example.com", id: "u9"},
+        rbacPermissions: new Set(["system:permission:manage"]),
+      },
+      request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
+        body: JSON.stringify({
+          permissions: ["content:book:read"],
+          role: "audit_probe",
+        }),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      }),
+    } as never);
+    expect(response.status).toBe(200);
+
+    // Role and permission changes used to leave no trace at all; this is the
+    // row that answers "who gave that role this permission?".
+    const row = await env.FEED_DB.prepare(
+      "SELECT action, actor_label, before_detail, detail, target " +
+        "FROM ext_rbac_audit ORDER BY created_at_ms DESC LIMIT 1",
+    ).first<{
+      action: string;
+      actor_label: string | null;
+      before_detail: string | null;
+      detail: string | null;
+      target: string | null;
+    }>();
+    expect(row).toMatchObject({
+      action: "role.permissions",
+      actor_label: "owner@example.com",
+      // The role was freshly created, so it had no grants — and the row still
+      // answers "what did it change from?", which is the whole point.
+      before_detail: "",
+      detail: "content:book:read",
+      target: "audit_probe",
+    });
+
+    await deleteRbacRole(env.FEED_DB, "audit_probe");
+    await env.FEED_DB.prepare("DELETE FROM ext_rbac_audit").run();
   });
 });

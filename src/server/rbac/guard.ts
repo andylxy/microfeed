@@ -8,16 +8,19 @@
  *   3. device revoked                          -> 401
  *   4. must_change_password & not exempt       -> 428
  *   5. wildcard permission set (`*`)           -> ALLOW
- *   6. legacy Better Auth admin (role='admin') -> ALLOW
- *      (upgrade safety: never lock out existing admins, or admins created later
- *       via the Better Auth admin plugin — fine-grained RBAC applies to non-admin
- *       accounts). Migration 0031 also backfills existing admins explicitly.)
- *   7. code in permission set                  -> ALLOW
- *   8. otherwise                               -> 403
+ *   6. code in permission set                  -> ALLOW
+ *   7. otherwise                               -> 403
  *
  * Steps 2-4 come before 5-6 on purpose: a super_admin whose device was revoked
  * must be kicked out, and one who must change their password must be stopped,
  * exactly like any other account.
+ *
+ * There is deliberately no legacy `auth_user.role = 'admin'` bypass any more:
+ * RBAC is the only authority. Every administrator that used to depend on that
+ * bypass holds the `super_admin` role instead — migration 0031 backfilled the
+ * historical ones, 0053 closes the remaining gap, and `password-setup` grants
+ * it at creation. `auth_user.role` stays a Better Auth field that authorises
+ * nothing.
  *
  * Status code spectrum (DESIGN.md §7): 401 unauthorized, 403 forbidden,
  * 400 replay, 428 must-change-password, 426 app-version-too-low.
@@ -31,7 +34,12 @@ import {checkReplay} from "./replay";
 import {type PermissionCode} from "@/shared/Constants";
 
 export interface RbacLocals {
-  authUser?: {id?: string; role?: string | null} | null;
+  /**
+   * The signed-in account. Only `id` is read here: `auth_user.role` used to feed
+   * a legacy bypass and now authorises nothing in this module — it only gates
+   * Better Auth's own admin plugin (see `BETTER_AUTH_ADMIN_ROLE`).
+   */
+  authUser?: {id?: string} | null;
   rbacPermissions?: Set<string> | null;
   rbacMustChangePassword?: boolean;
   rbacDeviceRevoked?: boolean;
@@ -73,10 +81,7 @@ export function requireAccountAccess(
   locals: RbacLocals,
   options: {exemptFromMustChange?: boolean} = {},
 ): Response | null {
-  const user = locals.authUser as
-    | {id?: string; role?: string | null}
-    | null
-    | undefined;
+  const user = locals.authUser;
   if (!user || !user.id) {
     return new Response("Unauthorized", {status: 401});
   }
@@ -98,11 +103,11 @@ export function requireAccountAccess(
 
 /**
  * The permission half of the decision chain, in one place: a full-access grant
- * (`*`), a legacy Better Auth admin (`role = 'admin'`), or a hit on `code` all
- * resolve to *allowed*. Both {@link requirePermission} (which layers the
- * account gates on top) and {@link rbacAllows} (the menu's yes/no view) call
- * this, so the rule can never drift between "what the menu shows" and "what an
- * endpoint allows" — the exact failure the menu/page split was built to avoid.
+ * (`*`) or a hit on `code` resolves to *allowed*. Both {@link requirePermission}
+ * (which layers the account gates on top) and {@link rbacAllows} (the menu's
+ * yes/no view) call this, so the rule can never drift between "what the menu
+ * shows" and "what an endpoint allows" — the exact failure the menu/page split
+ * was built to avoid.
  *
  * Callers must have already established a live user: {@link requirePermission}
  * via {@link requireAccountAccess}, and {@link rbacAllows} via its own
@@ -111,15 +116,6 @@ export function requireAccountAccess(
 export function hasPermission(locals: RbacLocals, code: string): boolean {
   const permissions = locals.rbacPermissions;
   if (permissions?.has(RBAC_WILDCARD)) {
-    return true;
-  }
-
-  const user = locals.authUser as
-    | {id?: string; role?: string | null}
-    | null
-    | undefined;
-  if (user?.role === "admin") {
-    // Legacy Better Auth administrator: preserve pre-RBAC full access.
     return true;
   }
 

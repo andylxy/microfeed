@@ -314,6 +314,19 @@ export async function completeAdminPasswordSetup(
         410,
       );
     }
+    // Grant the RBAC role *after* the batch, not inside it: `INSERT OR IGNORE`
+    // reports 0 changes when the grant already exists, and the check above reads
+    // 0 as "this link was already used" — which would delete the token and report
+    // a replay for an account it had just created. The owner used to get its
+    // access from the guard's legacy bypass, which is gone, so this grant is what
+    // keeps the deployment reachable.
+    await database
+      .prepare(
+        "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) " +
+          "SELECT id, 'r_super_admin' FROM auth_user WHERE id = ?",
+      )
+      .bind(userId)
+      .run();
   } else {
     results = await database.batch([
       database.prepare(

@@ -3,6 +3,15 @@ export interface ApiAccessSettings {
   publicDocsEnabled: boolean;
 }
 
+/**
+ * Scopes of a legacy bearer API key.
+ *
+ * These govern the original `Authorization: Bearer <api_key>` path only. The
+ * newer signed-call and login-credential paths authorise through RBAC instead
+ * (`api:*` permission codes — see `src/server/api/api-permissions.ts`) and never
+ * read this list, so a key's scopes say nothing about what those paths allow.
+ * Unifying the two is an open decision, not a settled one.
+ */
 export const API_KEY_SCOPES = ["content:read", "content:write"] as const;
 export type ApiKeyScope = typeof API_KEY_SCOPES[number];
 

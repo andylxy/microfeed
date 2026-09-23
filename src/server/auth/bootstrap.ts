@@ -95,8 +95,9 @@ export async function bootstrapAdmin(
         timestamp,
       ),
       // Assign the bootstrap admin to super_admin so a fresh install is fully
-      // provisioned (migration 0031 also backfills any pre-existing
-      // role='admin' users, and the guard keeps a legacy-admin bypass).
+      // provisioned. This grant *is* the access: the guard's legacy
+      // `role='admin'` bypass is gone, and `auth_user.role` is only a derived
+      // mirror of this role (see BETTER_AUTH_ADMIN_ROLE).
       runtimeEnv.FEED_DB.prepare(
         "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, 'r_super_admin')",
       ).bind(userId),

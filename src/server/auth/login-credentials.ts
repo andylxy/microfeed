@@ -13,6 +13,7 @@
  * the primary control and why the sign-in endpoint is rate limited.
  */
 
+import {auditStatement, type PendingAudit} from "@/server/rbac/audit";
 import {sha256Hex} from "@/shared/crypto";
 import {
   LOGIN_CREDENTIAL_PREFIX,
@@ -116,6 +117,7 @@ export async function findLoginCredential(
 export async function createLoginCredential(
   database: D1Database,
   input: {userId: string; name: string; expiresAtMs?: number | null},
+  audit?: PendingAudit,
 ): Promise<LoginCredentialRecord> {
   const count = await countLoginCredentialsForUser(database, input.userId);
   if (count >= MAX_LOGIN_CREDENTIALS_PER_USER) {
@@ -133,19 +135,24 @@ export async function createLoginCredential(
     secret,
     userId: input.userId,
   };
-  await database.prepare(
-    "INSERT INTO ext_login_credentials " +
-      "(id, user_id, name, secret, secret_hash, created_at_ms, expires_at_ms, revoked, last_used_at_ms) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)",
-  ).bind(
-    record.id,
-    record.userId,
-    record.name,
-    record.secret,
-    await sha256Hex(record.secret),
-    record.createdAtMs,
-    record.expiresAtMs,
-  ).run();
+  // The insertion and the audit row ride the same batch, so the credential and
+  // the record of who issued it land or fail together.
+  await database.batch([
+    database.prepare(
+      "INSERT INTO ext_login_credentials " +
+        "(id, user_id, name, secret, secret_hash, created_at_ms, expires_at_ms, revoked, last_used_at_ms) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)",
+    ).bind(
+      record.id,
+      record.userId,
+      record.name,
+      record.secret,
+      await sha256Hex(record.secret),
+      record.createdAtMs,
+      record.expiresAtMs,
+    ),
+    ...(audit ? [auditStatement(database, audit)] : []),
+  ]);
   return record;
 }
 
@@ -153,12 +160,17 @@ export async function revokeLoginCredential(
   database: D1Database,
   userId: string,
   id: string,
+  audit?: PendingAudit,
 ): Promise<boolean> {
   const existing = await findLoginCredential(database, userId, id);
   if (!existing) return false;
-  await database.prepare(
-    "UPDATE ext_login_credentials SET revoked = 1 WHERE id = ? AND user_id = ?",
-  ).bind(id, userId).run();
+  // The revocation and the audit row ride the same batch.
+  await database.batch([
+    database.prepare(
+      "UPDATE ext_login_credentials SET revoked = 1 WHERE id = ? AND user_id = ?",
+    ).bind(id, userId),
+    ...(audit ? [auditStatement(database, audit)] : []),
+  ]);
   return true;
 }
 

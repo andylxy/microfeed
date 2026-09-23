@@ -14,6 +14,20 @@
  */
 export const DEFAULT_USER_ROLE = "readonly";
 
+/**
+ * The `auth_user.role` value that lets an account call Better Auth's own admin
+ * plugin endpoints (set-role, ban-user, remove-user, impersonate-user, …).
+ *
+ * Those endpoints gate on `auth_user.role`, not on RBAC, so this field is the
+ * second authorization source. It is therefore treated as a **derived mirror**
+ * of holding the RBAC `super_admin` role — `replaceUserRoles` and migration
+ * 0053 keep the two in step — and never as an independent grant.
+ */
+export const BETTER_AUTH_ADMIN_ROLE = "admin";
+
+/** The `auth_user.role` value of an account that may not call the admin plugin. */
+export const BETTER_AUTH_USER_ROLE = "user";
+
 export interface RbacBoardRole {
   code: string;
   name: string;

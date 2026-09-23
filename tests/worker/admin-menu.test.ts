@@ -185,7 +185,7 @@ describe("readAdminMenu", () => {
     expect(codes).not.toContain(ADMIN_MENU_CODES.SETTINGS);
   });
 
-  it("shows a wildcard holder and a legacy admin every entry", async () => {
+  it("shows a wildcard holder everything, and a legacy admin only its grants", async () => {
     const pageCount = Object.values(ADMIN_MENU_CODES).length;
     const groupCount = (await groupCodes()).size;
 
@@ -199,8 +199,9 @@ describe("readAdminMenu", () => {
     );
     expect(menuIds(superMenu)).toHaveLength(pageCount + groupCount);
 
-    // A legacy Better Auth admin carries no RBAC rows at all; the guard still
-    // lets it through, so the menu must agree.
+    // `auth_user.role = 'admin'` no longer authorises anything by itself: the
+    // guard's legacy bypass is gone, and migration 0053 hands every
+    // administrator the super_admin role instead. Without grants, home only.
     const legacyMenu = await readAdminMenu(
       env.FEED_DB,
       locals(LEGACY, "admin", new Set<string>()),
@@ -208,7 +209,18 @@ describe("readAdminMenu", () => {
       null,
       true,
     );
-    expect(menuIds(legacyMenu)).toHaveLength(pageCount + groupCount);
+    expect(menuIds(legacyMenu)).toEqual([ADMIN_MENU_CODES.ADMIN_HOME]);
+
+    // Once adopted (the backfill's state) it sees everything, as before.
+    const adopted = await seedAccount(LEGACY, "r_super_admin", "admin");
+    const adoptedMenu = await readAdminMenu(
+      env.FEED_DB,
+      locals(LEGACY, "admin", adopted),
+      ADMIN_PATH,
+      null,
+      true,
+    );
+    expect(menuIds(adoptedMenu)).toHaveLength(pageCount + groupCount);
   });
 
   it("falls back to the home entry when nothing is granted", async () => {

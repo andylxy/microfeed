@@ -23,6 +23,11 @@ import {
   requireRbac,
   type RbacLocals,
 } from "@/server/rbac/guard";
+import {
+  auditStatement,
+  type PendingAudit,
+  recordRbacAudit,
+} from "@/server/rbac/audit";
 import {PERMISSION_CODES} from "@/shared/Constants";
 import {permissionId, roleId} from "@/server/rbac/seed";
 import {RBAC_WILDCARD} from "@/server/rbac/resolve";
@@ -41,6 +46,8 @@ import {
   type LoginCredentialBoard,
 } from "@/shared/LoginCredential";
 import {
+  BETTER_AUTH_ADMIN_ROLE,
+  BETTER_AUTH_USER_ROLE,
   buildPermissionTree,
   DEFAULT_USER_ROLE,
   type RbacBoard,
@@ -142,6 +149,7 @@ export async function replaceRolePermissions(
   db: D1Database,
   roleCode: string,
   codes: string[],
+  audit?: PendingAudit,
 ): Promise<ReplaceRoleResult> {
   if (roleCode === "super_admin") {
     return {ok: false, reason: "wildcardRole"};
@@ -178,6 +186,8 @@ export async function replaceRolePermissions(
         )
         .bind(role.id, permissionId(code)),
     ),
+    // Same batch: the grants and the record of who changed them are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
   ]);
   return {ok: true};
 }
@@ -268,6 +278,7 @@ export async function revokeUserDevice(
   db: D1Database,
   userId: string,
   deviceId: string,
+  audit?: PendingAudit,
 ): Promise<DeviceMutationResult> {
   const account = await db
     .prepare("SELECT id FROM auth_user WHERE id = ?")
@@ -279,10 +290,16 @@ export async function revokeUserDevice(
     .bind(userId, deviceId)
     .first<{user_id: string}>();
   if (!device) return {ok: false, reason: "unknownDevice"};
-  await db
-    .prepare("UPDATE ext_user_devices SET status = 'revoked' WHERE user_id = ? AND device_id = ?")
-    .bind(userId, deviceId)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE ext_user_devices SET status = 'revoked' " +
+          "WHERE user_id = ? AND device_id = ?",
+      )
+      .bind(userId, deviceId),
+    // Same batch: the revocation and the record of who did it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
   return {ok: true};
 }
 
@@ -291,6 +308,7 @@ export async function restoreUserDevice(
   db: D1Database,
   userId: string,
   deviceId: string,
+  audit?: PendingAudit,
 ): Promise<DeviceMutationResult> {
   const account = await db
     .prepare("SELECT id FROM auth_user WHERE id = ?")
@@ -302,10 +320,16 @@ export async function restoreUserDevice(
     .bind(userId, deviceId)
     .first<{user_id: string}>();
   if (!device) return {ok: false, reason: "unknownDevice"};
-  await db
-    .prepare("UPDATE ext_user_devices SET status = 'active' WHERE user_id = ? AND device_id = ?")
-    .bind(userId, deviceId)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE ext_user_devices SET status = 'active' " +
+          "WHERE user_id = ? AND device_id = ?",
+      )
+      .bind(userId, deviceId),
+    // Same batch: the restoration and the record of who did it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
   return {ok: true};
 }
 
@@ -326,6 +350,7 @@ export async function replaceUserRoles(
   db: D1Database,
   userId: string,
   roleCodes: string[],
+  audit?: PendingAudit,
 ): Promise<ReplaceUserRolesResult> {
   const account = await db
     .prepare("SELECT id FROM auth_user WHERE id = ?")
@@ -379,6 +404,21 @@ export async function replaceUserRoles(
         )
         .bind(userId, byCode.get(code)),
     ),
+    // Keep `auth_user.role` a *derived mirror* of the RBAC role: Better Auth's
+    // admin plugin gates its own endpoints on that field, so leaving a stale
+    // value behind would be a second, invisible way to authorize
+    // (see BETTER_AUTH_ADMIN_ROLE).
+    db
+      .prepare("UPDATE auth_user SET role = ? WHERE id = ?")
+      .bind(
+        roleCodes.includes(SUPER_ADMIN)
+          ? BETTER_AUTH_ADMIN_ROLE
+          : BETTER_AUTH_USER_ROLE,
+        userId,
+      ),
+    // The audit row rides the same batch, so the change and its record are
+    // atomic: either both land or neither does.
+    ...(audit ? [auditStatement(db, audit)] : []),
   ]);
   return {ok: true};
 }
@@ -414,6 +454,7 @@ export async function createRbacRole(
   db: D1Database,
   code: string,
   name: string,
+  audit?: PendingAudit,
 ): Promise<RoleMutationResult> {
   if (RESERVED_ROLES.has(code)) {
     return {ok: false, reason: "reservedRole"};
@@ -425,10 +466,13 @@ export async function createRbacRole(
   if (existing) {
     return {ok: false, reason: "duplicateRole"};
   }
-  await db
-    .prepare("INSERT INTO ext_roles (id, code, name) VALUES (?, ?, ?)")
-    .bind(roleId(code), code, name)
-    .run();
+  await db.batch([
+    db
+      .prepare("INSERT INTO ext_roles (id, code, name) VALUES (?, ?, ?)")
+      .bind(roleId(code), code, name),
+    // Same batch: the role and the record of who created it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
   return {ok: true};
 }
 
@@ -437,17 +481,26 @@ export async function renameRbacRole(
   db: D1Database,
   code: string,
   name: string,
+  audit?: PendingAudit,
 ): Promise<RoleMutationResult> {
   if (RESERVED_ROLES.has(code)) {
     return {ok: false, reason: "reservedRole"};
   }
-  const result = await db
-    .prepare("UPDATE ext_roles SET name = ? WHERE code = ?")
-    .bind(name, code)
-    .run();
-  if (!result.success || result.meta?.changes === 0) {
+  // Existence is checked *before* the write because the audit row rides the same
+  // batch — there is no `changes === 0` to inspect afterwards, and a row
+  // describing a rename that never happened would be worse than no row.
+  const role = await db
+    .prepare("SELECT id FROM ext_roles WHERE code = ?")
+    .bind(code)
+    .first<{id: string}>();
+  if (!role) {
     return {ok: false, reason: "unknownRole"};
   }
+  await db.batch([
+    db.prepare("UPDATE ext_roles SET name = ? WHERE code = ?").bind(name, code),
+    // Same batch: the rename and the record of who did it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
   return {ok: true};
 }
 
@@ -472,6 +525,7 @@ export async function renameRbacRoleCode(
   db: D1Database,
   oldCode: string,
   newCode: string,
+  audit?: PendingAudit,
 ): Promise<RoleMutationResult> {
   if (CODE_LOCKED_ROLES.has(oldCode)) {
     return {ok: false, reason: "reservedRole"};
@@ -509,6 +563,8 @@ export async function renameRbacRoleCode(
       "UPDATE OR REPLACE ext_user_roles SET role_id = ? WHERE role_id = ?",
     ).bind(newId, oldId),
     db.prepare("DELETE FROM ext_roles WHERE id = ?").bind(oldId),
+    // Same batch: the rebuild and the record of who did it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
   ]);
   const moved = await db
     .prepare("SELECT id FROM ext_roles WHERE id = ?")
@@ -530,6 +586,7 @@ export async function renameRbacRoleCode(
 export async function deleteRbacRole(
   db: D1Database,
   code: string,
+  audit?: PendingAudit,
 ): Promise<RoleMutationResult> {
   if (CODE_LOCKED_ROLES.has(code)) {
     return {ok: false, reason: "reservedRole"};
@@ -545,13 +602,21 @@ export async function deleteRbacRole(
   if ((holders?.total ?? 0) > 0) {
     return {ok: false, reason: "roleInUse"};
   }
-  const result = await db
-    .prepare("DELETE FROM ext_roles WHERE code = ?")
+  // Existence is checked *before* the write because the audit row rides the same
+  // batch — there is no `changes === 0` to inspect afterwards, and a row
+  // describing a delete that never happened would be worse than no row.
+  const role = await db
+    .prepare("SELECT id FROM ext_roles WHERE code = ?")
     .bind(code)
-    .run();
-  if (!result.success || result.meta?.changes === 0) {
+    .first<{id: string}>();
+  if (!role) {
     return {ok: false, reason: "unknownRole"};
   }
+  await db.batch([
+    db.prepare("DELETE FROM ext_roles WHERE code = ?").bind(code),
+    // Same batch: the deletion and the record of who did it are atomic.
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
   return {ok: true};
 }
 
@@ -571,7 +636,12 @@ export const createAdminRbacRole: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.invalidRole", 400);
   }
 
-  const result = await createRbacRole(env.FEED_DB, code, name);
+  const result = await createRbacRole(env.FEED_DB, code, name, {
+    action: "role.create",
+    actor: locals.authUser,
+    detail: name,
+    target: code,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -597,7 +667,12 @@ export const updateAdminRbacRoleName: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.invalidRole", 400);
   }
 
-  const result = await renameRbacRole(env.FEED_DB, code, name);
+  const result = await renameRbacRole(env.FEED_DB, code, name, {
+    action: "role.rename",
+    actor: locals.authUser,
+    detail: name,
+    target: code,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -627,7 +702,12 @@ export const updateAdminRbacRoleCode: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.invalidRole", 400);
   }
 
-  const result = await renameRbacRoleCode(env.FEED_DB, code, newCode);
+  const result = await renameRbacRoleCode(env.FEED_DB, code, newCode, {
+    action: "role.renameCode",
+    actor: locals.authUser,
+    detail: newCode,
+    target: code,
+  });
   if (!result.ok) {
     const status = result.reason === "unknownRole"
       ? 404
@@ -652,7 +732,11 @@ export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.invalidRole", 400);
   }
 
-  const result = await deleteRbacRole(env.FEED_DB, code);
+  const result = await deleteRbacRole(env.FEED_DB, code, {
+    action: "role.delete",
+    actor: locals.authUser,
+    target: code,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -779,12 +863,22 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     ).bind(email).first<{id: string}>();
     newUserId = row?.id ?? null;
   }
+  const createAudit: PendingAudit = {
+    action: "user.create",
+    actor: locals.authUser,
+    detail: roleCodes.join(","),
+    target: newUserId ?? email,
+  };
   if (newUserId) {
     // Local policy — this deployment does not force a password change on first
     // sign-in (see the upstream-divergence note in .workbuddy memory; migration
     // 0042 clears the flag for accounts created under the old behaviour). The
     // account starts with the roles the operator ticked, defaulting to
     // `readonly`, so a fresh account is never permission-less.
+    // The role assignments and the record of who created the account ride the
+    // same batch, so the change and its trail are atomic. The Better Auth account
+    // creation above is the one part we cannot batch with — it is a separate,
+    // idempotent write elsewhere.
     await env.FEED_DB.batch([
       env.FEED_DB.prepare("DELETE FROM ext_user_roles WHERE user_id = ?")
         .bind(newUserId),
@@ -793,9 +887,14 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
           "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
         ).bind(newUserId, roleId(code)),
       ),
+      auditStatement(env.FEED_DB, createAudit),
     ]);
+  } else {
+    // No user id was ever resolved, so the row can't be tied to the account —
+    // write it on its own; the account creation itself is the Better Auth part we
+    // can't batch with.
+    await recordRbacAudit(createAudit);
   }
-
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -836,6 +935,14 @@ export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
   } catch {
     return localizedError(request, "errors.rbac.deleteUserFailed", 400);
   }
+  // The account removal goes through Better Auth's admin plugin, so it cannot
+  // share a batch with our trail — written on its own. The removal itself is
+  // idempotent: a retry after a failed audit write does not un-delete anything.
+  await recordRbacAudit({
+    action: "user.delete",
+    actor: locals.authUser,
+    target: userId,
+  });
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -877,6 +984,14 @@ export const updateAdminRbacUserBan: APIRoute = async ({locals, request}) => {
   } catch {
     return localizedError(request, "errors.rbac.banUserFailed", 400);
   }
+  // The ban/unban goes through Better Auth's admin plugin, so it cannot share a
+  // batch with our trail — written on its own. The toggle is idempotent: retries
+  // are harmless.
+  await recordRbacAudit({
+    action: body.banned ? "user.ban" : "user.unban",
+    actor: locals.authUser,
+    target: userId,
+  });
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -906,7 +1021,19 @@ export const updateAdminRbacUser: APIRoute = async ({locals, request}) => {
     (code): code is string => typeof code === "string",
   );
 
-  const result = await replaceUserRoles(env.FEED_DB, body.userId, codes);
+  const previous = await env.FEED_DB.prepare(
+    "SELECT r.code AS code FROM ext_user_roles ur " +
+      "JOIN ext_roles r ON r.id = ur.role_id " +
+      "WHERE ur.user_id = ? ORDER BY r.code",
+  ).bind(body.userId).all<{code: string}>();
+
+  const result = await replaceUserRoles(env.FEED_DB, body.userId, codes, {
+    action: "user.roles",
+    actor: locals.authUser,
+    before: (previous.results ?? []).map((row) => row.code).join(","),
+    detail: codes.join(","),
+    target: body.userId,
+  });
   if (!result.ok) {
     const status = result.reason === "unknownUser" ? 404 : 400;
     return localizedError(request, `errors.rbac.${result.reason}`, status);
@@ -940,7 +1067,22 @@ export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
     (code): code is string => typeof code === "string",
   );
 
-  const result = await replaceRolePermissions(env.FEED_DB, body.role, codes);
+  // Read the current grants first: an audit row is only useful if it says what
+  // the value changed *from*, not just what it changed to.
+  const previous = await env.FEED_DB.prepare(
+    "SELECT p.code AS code FROM ext_role_permissions rp " +
+      "JOIN ext_roles r ON r.id = rp.role_id " +
+      "JOIN ext_permissions p ON p.id = rp.permission_id " +
+      "WHERE r.code = ? ORDER BY p.code",
+  ).bind(body.role).all<{code: string}>();
+
+  const result = await replaceRolePermissions(env.FEED_DB, body.role, codes, {
+    action: "role.permissions",
+    actor: locals.authUser,
+    before: (previous.results ?? []).map((row) => row.code).join(","),
+    detail: codes.join(","),
+    target: body.role,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -983,7 +1125,12 @@ export const updateAdminRbacUserDeviceRevoke: APIRoute = async ({
   if (!userId || !deviceId) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
-  const result = await revokeUserDevice(env.FEED_DB, userId, deviceId);
+  const result = await revokeUserDevice(env.FEED_DB, userId, deviceId, {
+    action: "device.revoke",
+    actor: locals.authUser,
+    detail: deviceId,
+    target: userId,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -1014,7 +1161,12 @@ export const updateAdminRbacUserDeviceRestore: APIRoute = async ({
   if (!userId || !deviceId) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
-  const result = await restoreUserDevice(env.FEED_DB, userId, deviceId);
+  const result = await restoreUserDevice(env.FEED_DB, userId, deviceId, {
+    action: "device.restore",
+    actor: locals.authUser,
+    detail: deviceId,
+    target: userId,
+  });
   if (!result.ok) {
     return localizedError(
       request,
@@ -1123,6 +1275,11 @@ export const createAdminRbacUserCredential: APIRoute = async ({
       expiresAtMs,
       name,
       userId: targetUserId,
+    }, {
+      action: "credential.create",
+      actor: locals.authUser,
+      detail: name,
+      target: targetUserId,
     });
   } catch (error) {
     if (error instanceof LoginCredentialLimitError) {
@@ -1172,6 +1329,11 @@ export const revokeAdminRbacUserCredential: APIRoute = async ({
     env.FEED_DB,
     targetUserId,
     credentialId,
+    {
+      action: "credential.revoke",
+      actor: locals.authUser,
+      target: targetUserId,
+    },
   );
   if (!revoked) {
     return localizedError(request, "errors.loginCredential.unknown", 404);

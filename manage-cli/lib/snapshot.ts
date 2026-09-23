@@ -78,6 +78,9 @@ export const SNAPSHOT_TABLES = {
     // role editor's permission tree would drop every code into the "other
     // permissions" bucket.
     "ext_menu_permissions",
+    // RBAC audit trail (migration 0054). The only record of who changed which
+    // role or grant; a restore that dropped it would erase that history.
+    "ext_rbac_audit",
   ],
   ephemeral: [
     "item_create_idempotency",
