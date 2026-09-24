@@ -13,6 +13,15 @@ export interface FeedSettings {
     enabled?: boolean;
     publicDocsEnabled?: boolean;
   };
+  /**
+   * Whether dashboard content changes open a pending review version that must
+   * be approved before the change reaches the live content. Off by default:
+   * a save takes effect immediately and any versions left pending when the
+   * switch flips off are rejected.
+   */
+  contentReview?: {
+    enabled?: boolean;
+  };
   subscribeMethods?: {
     methods?: Array<{
       editable?: boolean;

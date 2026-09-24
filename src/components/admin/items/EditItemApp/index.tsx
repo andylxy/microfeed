@@ -565,6 +565,10 @@ export default class EditItemApp extends React.Component<Props, any> {
                 labelComponent={<AdminHelpLabel help={CONTROLS_TEXTS_DICT[ITEM_CONTROLS.DESCRIPTION]}/>}
                 bodyFormat={item.content_format}
                 value={item.description}
+                enableWangEditor={true}
+                bodyEditor={item._microfeed?.body_editor}
+                onBodyEditorChange={(value: string) =>
+                  this.onUpdateItemMicrofeedMeta('body_editor', value)}
                 onChange={(value: any) => this.onUpdateItemMeta({'description': value})}
                 onFormatChange={(value: string) =>
                   this.onUpdateItemMeta({'content_format': value})}

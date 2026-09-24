@@ -5,6 +5,7 @@ import AccessSettingsApp from "./AccessSettingsApp";
 import SubscribeSettingsApp from "./SubscribeSettingsApp";
 import CustomCodeSettingsApp from "./CustomCodeSettingsApp";
 import FaviconSettingsApp from "./FaviconSettingsApp";
+import ContentReviewSettingsApp from "./ContentReviewSettingsApp";
 import ItemsSettingsApp, {
   ITEMS_PER_PAGE_SUBMIT_KEY,
 } from "./ItemsSettingsApp";
@@ -164,6 +165,15 @@ export default class SettingsApp extends React.Component<Props, any> {
             feed={feed}
             onSubmit={this.onSubmit}
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.ACCESS)}
+          />
+        </section>
+        <section className="scroll-mt-6" id="content-review">
+          <ContentReviewSettingsApp
+            submitting={submitting}
+            submitForType={submitForType}
+            feed={feed}
+            onSubmit={this.onSubmit}
+            setChanged={() => this.setChanged(SETTINGS_CATEGORIES.CONTENT_REVIEW)}
           />
         </section>
         <section className="scroll-mt-6" id="subscribe-methods">

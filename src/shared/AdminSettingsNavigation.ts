@@ -17,6 +17,11 @@ export const ADMIN_SETTINGS_SECTIONS = [
     nameKey: "settings.accessControl",
   },
   {
+    icon: "list-checks",
+    id: "content-review",
+    nameKey: "settings.contentReview",
+  },
+  {
     icon: "rss",
     id: "subscribe-methods",
     nameKey: "settings.subscribeMethods",

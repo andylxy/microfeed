@@ -13,6 +13,78 @@ export interface AuditChapterRow {
   lastChangedAt: number | null;
 }
 
+/** One review version of one chapter, as the audit page displays it (read-only). */
+export interface ReviewRecordRow {
+  id: string;
+  action: string;
+  /** `pending` | `approved` | `rejected`. */
+  status: string;
+  submittedAt: number | null;
+  reviewedAt: number | null;
+  /** From the proposed content; falls back to the snapshot when absent. */
+  title: string;
+  chapterNo: string | number | null;
+  volume: string | null;
+  /** The body the version proposed — rendered read-only on the page. */
+  contentHtml: string;
+}
+
+/**
+ * Every review version of one chapter, newest first, flattened into display
+ * objects. Purely for showing: approving and rejecting live on `/admin/review/`,
+ * and nothing here offers either.
+ */
+export async function listReviewRecordsHandler(
+  db: AuditDb,
+  itemId: string,
+): Promise<{records: ReviewRecordRow[]}> {
+  assertD1Handle(db);
+  const result = await db.prepare(
+    "SELECT id, action, status, submitted_at, reviewed_at, proposed_data, snapshot_data " +
+      "FROM ext_content_review WHERE item_id = ? " +
+      "ORDER BY submitted_at DESC, rowid DESC",
+  ).bind(itemId).all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  const records = rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    // The proposed content is what the version wanted the chapter to become;
+    // a creation's proposal doubles as its snapshot, so either source shows
+    // the same thing. Parse leniently: a malformed JSON row must not take the
+    // whole page down.
+    const source = (String(record["proposed_data"] ?? "").trim() ||
+      String(record["snapshot_data"] ?? "").trim());
+    let data: Record<string, unknown> = {};
+    if (source) {
+      try {
+        data = JSON.parse(source) as Record<string, unknown>;
+      } catch {
+        data = {};
+      }
+    }
+    const microfeed = (data["_microfeed"] ?? {}) as Record<string, unknown>;
+    const rawChapterNo = microfeed["chapterNo"];
+    const submittedAt = Number(record["submitted_at"] ?? 0);
+    const reviewedAt = Number(record["reviewed_at"] ?? 0);
+    return {
+      action: String(record["action"] ?? "edit"),
+      chapterNo: typeof rawChapterNo === "string" || typeof rawChapterNo === "number"
+        ? rawChapterNo
+        : null,
+      contentHtml: typeof data["description"] === "string"
+        ? data["description"]
+        : "",
+      id: String(record["id"] ?? ""),
+      reviewedAt: Number.isFinite(reviewedAt) && reviewedAt > 0 ? reviewedAt : null,
+      status: String(record["status"] ?? "pending"),
+      submittedAt:
+        Number.isFinite(submittedAt) && submittedAt > 0 ? submittedAt : null,
+      title: typeof data["title"] === "string" ? data["title"] : "",
+      volume: typeof microfeed["volume"] === "string" ? microfeed["volume"] : null,
+    };
+  });
+  return {records: records.filter((record) => record.id !== "")};
+}
+
 /**
  * Hide a row from the dashboard (or bring it back), without touching the row
  * itself.

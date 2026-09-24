@@ -3,12 +3,13 @@ import {env} from "cloudflare:workers";
 
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AuditTrail from "@/components/admin/audit/AuditTrail";
+import ReviewRecords from "@/components/admin/audit/ReviewRecords";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import type {AuditDb} from "@/server/feed/extContentAudit";
-import {listAuditTrailHandler} from "@/server/admin/audit-handlers";
+import {listAuditTrailHandler, listReviewRecordsHandler} from "@/server/admin/audit-handlers";
 import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
@@ -34,10 +35,18 @@ const database = env.FEED_DB as unknown as AuditDb;
 let loadError: string | null = null;
 let item: Record<string, unknown> | null = null;
 let rows: Awaited<ReturnType<typeof listAuditTrailHandler>>["rows"] = [];
+// Review versions are display-only here; a read failure must not take the
+// trail down with it, same as the trail read above.
+let reviewRecords: Awaited<ReturnType<typeof listReviewRecordsHandler>>["records"] = [];
 try {
   ({item, rows} = await listAuditTrailHandler(database, itemId));
 } catch (error) {
   loadError = error instanceof Error ? error.message : String(error);
+}
+try {
+  ({records: reviewRecords} = await listReviewRecordsHandler(database, itemId));
+} catch {
+  reviewRecords = [];
 }
 const itemTitle = typeof item?.title === "string" && item.title.trim()
   ? item.title
@@ -59,4 +68,11 @@ const itemTitle = typeof item?.title === "string" && item.title.trim()
   >
     <AdminPageFallback slot="fallback" kind="list" />
   </AuditTrail>
+  {reviewRecords.length > 0 && (
+    <div class="mt-8">
+      <ReviewRecords client:only="react" records={reviewRecords}>
+        <AdminPageFallback slot="fallback" kind="list" />
+      </ReviewRecords>
+    </div>
+  )}
 </AdminShell>

@@ -522,6 +522,23 @@ export default class FeedDb {
     return row ? getItemJson(row) : null;
   }
 
+  /**
+   * One settings category, read straight from the `settings` table. `getContent`
+   * assembles the whole feed for a read this small; callers that only need a
+   * single flag (like the content-review switch) take this cheaper path.
+   */
+  async getSettingsCategory<T>(category: string): Promise<T | null> {
+    const row = await this.FEED_DB.prepare(
+      "SELECT data FROM settings WHERE category = ? LIMIT 1",
+    ).bind(category).first() as Record<string, unknown> | null;
+    if (!row) return null;
+    try {
+      return JSON.parse(String(row["data"] ?? "")) as T;
+    } catch {
+      return null;
+    }
+  }
+
   _putChannelToContentStatement(channel: any) {
     const {id, status, is_primary, ...data} = channel;
     const keyValuePairs: any = {

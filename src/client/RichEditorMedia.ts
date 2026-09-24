@@ -1,3 +1,12 @@
+import i18n from "@/client/i18n";
+import Requests from "@/client/requests";
+import {showToast} from "@/client/ToastUtils";
+import {
+  randomHex,
+  resolvePublicBucketUrl,
+  urlJoinWithRelative,
+} from "@/shared/StringUtils";
+
 export const RICH_EDITOR_MEDIA_STYLE_FORMAT = "mediaStyle";
 export const RICH_EDITOR_MEDIA_TITLE_FORMAT = "mediaTitle";
 export const RICH_EDITOR_LEGACY_VIDEO_FORMAT = "legacyVideo";
@@ -224,4 +233,64 @@ export function richEditorMediaType(
   element: HTMLElement,
 ): RichEditorMediaType {
   return element.tagName === "IMG" ? "image" : "video";
+}
+
+/**
+ * Upload a file for a rich-text editor's own media menu.
+ *
+ * Both editors put media in the same place, so the R2 path and the public URL
+ * are built here: a file inserted from wangEditor lands beside one inserted
+ * from the Quill media dialog instead of in a second, parallel tree.
+ */
+export function uploadRichEditorMedia(
+  file: File,
+  mediaType: RichEditorMediaType,
+  extra: {
+    publicBucketUrl?: string;
+    folderName?: string;
+    mediaStorageReady?: boolean;
+  } | undefined,
+  onUrl: (url: string) => void,
+  onProgress?: (percentage: number) => void,
+): void {
+  if (extra?.mediaStorageReady === false) {
+    showToast(i18n.t("shared.r2UnavailableUseUrl"), "error");
+    return;
+  }
+  const name = file?.name || "";
+  const extension = name.slice((name.lastIndexOf(".") - 1 >>> 0) + 2);
+  let newFilename = `${mediaType}-${randomHex(32)}`;
+  if (extension && extension.length > 0) {
+    newFilename += `.${extension}`;
+  }
+  const publicBucketUrl = resolvePublicBucketUrl(
+    extra?.publicBucketUrl,
+    window.location.hostname,
+  );
+  const folderName = extra?.folderName || "unknown";
+  const cdnFilename = `media/rich-editor/${folderName}/${newFilename}`;
+
+  Requests.upload(
+    file,
+    cdnFilename,
+    (percentage: any) => {
+      if (onProgress) {
+        onProgress(percentage);
+      }
+    },
+    (cdnUrl: any) => {
+      onUrl(urlJoinWithRelative(publicBucketUrl, cdnUrl));
+    },
+    () => {
+      showToast(i18n.t("common.failed"), "error");
+    },
+    (error: any) => {
+      showToast(
+        error?.response
+          ? i18n.t("common.failed")
+          : i18n.t("common.networkError"),
+        "error",
+      );
+    },
+  );
 }
