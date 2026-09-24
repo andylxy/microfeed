@@ -28,11 +28,13 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // content - volumes
   {code: "content:volume:update", name: "卷结构编辑"},
   {code: "content:volume:read", name: "查看卷"},
-  // content - articles (chapters/sections; edited through `feed.ts` POST)
-  {code: "content:article:create", name: "新建章节"},
-  {code: "content:article:read", name: "查看章节"},
-  {code: "content:article:update", name: "编辑章节"},
-  {code: "content:article:delete", name: "删除章节"},
+  // content - chapters (renamed from `article` in migration 0057 so the codes
+  // match the `chapters` path segment of the content read API, ADR-0006;
+  // `items` in upstream endpoints is the same entity and stays as upstream has it)
+  {code: "content:chapter:create", name: "新建章节"},
+  {code: "content:chapter:read", name: "查看章节"},
+  {code: "content:chapter:update", name: "编辑章节"},
+  {code: "content:chapter:delete", name: "删除章节"},
   // system
   {code: "system:user:manage", name: "用户管理"},
   {code: "system:role:manage", name: "角色管理"},
@@ -76,14 +78,14 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "content:category:update",
       "content:volume:read",
       "content:volume:update",
-      // Content menus bind `content:article:read` / `content:article:create`, so
+      // Content menus bind `content:chapter:read` / `content:chapter:create`, so
       // an editor without these cannot even see the item list or the import
-      // page. `content:article:update` was already required by the feed write
+      // page. `content:chapter:update` was already required by the feed write
       // path — without it an editor could not edit or add a chapter at all.
-      // `content:article:delete` is deliberately withheld.
-      "content:article:read",
-      "content:article:create",
-      "content:article:update",
+      // `content:chapter:delete` is deliberately withheld.
+      "content:chapter:read",
+      "content:chapter:create",
+      "content:chapter:update",
       // Pages and site files are content work; review, audit, channel settings
       // and the API area stay admin-only.
       "content:page:manage",
@@ -97,7 +99,7 @@ export const RBAC_ROLES: RbacRoleDef[] = [
     code: "readonly",
     name: "只读",
     permissions: [
-      "content:article:read",
+      "content:chapter:read",
       "content:book:read",
       "content:category:read",
       "content:volume:read",

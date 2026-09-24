@@ -378,9 +378,10 @@ describe("RBAC catalog integrity", () => {
         "WHERE rp.role_id = 'r_readonly' ORDER BY p.code",
     ).all<{code: string}>();
     expect((grants.results ?? []).map((row) => row.code)).toEqual([
-      "content:article:read",
+      // Alphabetical by code (the query orders by code).
       "content:book:read",
       "content:category:read",
+      "content:chapter:read",
       "content:volume:read",
     ]);
   });
@@ -675,7 +676,7 @@ describe("RBAC user administration", () => {
 
 describe("chapter deletion permission", () => {
   // A delete arrives as a POST whose item status is DELETED, and §8.1 maps it to
-  // `content:article:delete` — an editor who may only edit must not be able to
+  // `content:chapter:delete` — an editor who may only edit must not be able to
   // remove a chapter.
   const deletion = () => new Request(
     "https://feed.example.com/admin/ajax/feed",
@@ -702,16 +703,16 @@ describe("chapter deletion permission", () => {
     } as never);
 
   it("refuses a delete for an account that may only edit", async () => {
-    const response = await withPermissions(["content:article:update"]);
+    const response = await withPermissions(["content:chapter:update"]);
     expect(response.status).toBe(403);
   });
 
   it("lets the delete through once the delete permission is held", async () => {
-    const response = await withPermissions(["content:article:delete"]);
+    const response = await withPermissions(["content:chapter:delete"]);
     expect(response.status).not.toBe(403);
   });
 
-  it("still guards ordinary edits with content:article:update", async () => {
+  it("still guards ordinary edits with content:chapter:update", async () => {
     const response = await feedPost({
       locals: {
         authUser: {id: "u9"},

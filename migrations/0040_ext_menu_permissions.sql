@@ -17,7 +17,7 @@
 --
 -- The editor role also gains the content-domain codes it needs to reach the
 -- pages its menus now bind to (articles, pages, site files). It deliberately
--- does not gain `content:article:delete`, nor the governance codes above.
+-- does not gain `content:chapter:delete`, nor the governance codes above.
 --
 -- Idempotent (`INSERT OR IGNORE`) so re-applying migrations is safe. The code
 -- catalog in `src/server/rbac/seed.ts` mirrors these exactly; a worker test
@@ -35,8 +35,8 @@ INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES
 -- admin-only (not granted here). super_admin covers everything via the `*`
 -- wildcard already seeded in 0031.
 INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES
-  ('r_editor', 'p_content_article_read'),
-  ('r_editor', 'p_content_article_create'),
-  ('r_editor', 'p_content_article_update'),
+  ('r_editor', 'p_content_chapter_read'),
+  ('r_editor', 'p_content_chapter_create'),
+  ('r_editor', 'p_content_chapter_update'),
   ('r_editor', 'p_content_page_manage'),
   ('r_editor', 'p_content_site_file_manage');

@@ -170,8 +170,8 @@ const ZH_CN: Record<string, string> = {
     "该凭据所属账号缺少 content:category:read 权限。",
   "The chapter body exactly as stored. No rendering, conversion or sanitization has been applied.":
     "数据库中原样存储的章节正文。未做任何渲染、转换或净化处理。",
-  "The credential's account lacks the content:article:read permission.":
-    "该凭据所属账号缺少 content:article:read 权限。",
+  "The credential's account lacks the content:chapter:read permission.":
+    "该凭据所属账号缺少 content:chapter:read 权限。",
   "The credential's account lacks the content:book:read permission.":
     "该凭据所属账号缺少 content:book:read 权限。",
   "The published books in one category. The category is identified by its id or its slug; an unknown or hidden category is a 404.":

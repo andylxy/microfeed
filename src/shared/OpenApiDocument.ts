@@ -237,7 +237,7 @@ export const OPENAPI_DOCUMENT = createDocument({
         responses: {
           "200": success(apiContentChapterSchema),
           "401": error("The Bearer credential is missing or invalid."),
-          "403": error("The credential's account lacks the content:article:read permission."),
+          "403": error("The credential's account lacks the content:chapter:read permission."),
           "404": error("No such published chapter."),
         },
       },

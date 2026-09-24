@@ -381,8 +381,8 @@ describe("sessionless API bearer", () => {
   });
 
   it("forbids a write the account's role withholds", async () => {
-    // The editor role holds content:article:create / update but deliberately not
-    // content:article:delete, so the per-method split must keep the delete
+    // The editor role holds content:chapter:create / update but deliberately not
+    // content:chapter:delete, so the per-method split must keep the delete
     // denied instead of letting any write through (ADR-0009).
     await seedUser("u_editor_delete");
     await grantRole("u_editor_delete", "r_editor");
@@ -596,7 +596,7 @@ describe("api access audit", () => {
       {
         apiKeyId: null,
         credentialId: credential.id,
-        permissionCode: "content:article:read",
+        permissionCode: "content:chapter:read",
         userId: "u_audit",
       },
       "GET",
@@ -625,7 +625,7 @@ describe("api access audit", () => {
       env.FEED_DB,
       {
         apiKeyId: "key_1",
-        permissionCode: "content:article:read",
+        permissionCode: "content:chapter:read",
         userId: "u_audit_key",
       },
       "POST",

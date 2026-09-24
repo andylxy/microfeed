@@ -112,11 +112,13 @@
 - `{bookId}` / `{chapterId}` → `getIdFromSlug()`：解析 `{slug}-{11 位 id}` 并接受裸 11 位 id。
 
 **术语**：路径一律用 **`chapters`**，不沿用既有 API 的 `items`。
-权限码**不重命名**，仍用既有的 `content:article:read`（seed 里 `article` 即章节）——
-该码已授予 `editor` 并被菜单绑定，重命名要动 seed + 迁移 + 全部 ajax guard + 菜单绑定 + i18n，
-与 ADR-0009「零新建、最小改动」的取向冲突。
-⇒ **遗留一处命名不一致**：路径 `chapters` / 权限码 `article` / 上游端点 `items` 指同一实体，
-记录在「影响」末尾，作为后续可选的独立改动。
+权限码已随跟进改动（2026-09-24，迁移 `0057`）**重命名**为 **`content:chapter:*`**：
+初始实现沿用既有的 `content:article:*`（seed 里 `article` 即章节），并评估过不重命名
+（要动 seed + 迁移 + ajax guard + 菜单绑定 + i18n）；用户最终决定**统一**——
+改码不改行为，迁移只做 REPLACE（`ext_permissions.code` + 派生 `id`、
+`ext_menu_permissions.permission_code`、`ext_role_permissions.permission_id` 因引用 id 同步）。
+⇒ **残留一处命名不一致**：路径/权限码 `chapters` 与上游端点 `items` 指同一实体
+（上游的，不动），记录在「影响」末尾。
 
 **章节详情不复用既有端点**：上游 `/api/v1/items/{itemId}/` 有两条硬冲突 ——
 ① 传 `[PUBLISHED, UNLISTED, UNPUBLISHED]` ⇒ **含草稿**；
@@ -285,9 +287,8 @@ suffix === "content/categories/" ||
 
 **遗留（不阻塞本次）**
 
-- **命名不一致**：路径 `chapters` / 权限码 `content:article:read` / 上游端点 `items` 指同一实体。
-  本次不重命名（理由见决策 1）；若要统一，是一次独立改动，范围是 `rbac/seed.ts` + 迁移 +
-  全部 ajax guard + `ext_menu_permissions` 绑定 + i18n。
+- **命名不一致**：权限码已随迁移 `0057` 统一为 `content:chapter:*`，与路径 `chapters` 一致；
+  与上游端点 `items` 的差异是**上游的**，不动。
 - `getBookChapters` 会为每章算 `wordCount`（`chapterWordCount`），端点 3 的目录不需要这份开销；
   若成为热点再考虑给该函数加"免算字数"的开关。
 - 后续可评估是否把 `volume` / `chapter_no` 也落列（ADR-0004 已预留此口子）。

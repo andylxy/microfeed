@@ -2,14 +2,18 @@ import {cache, env, waitUntil} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import FeedDb from "@/server/feed/FeedDb";
-import {recordContentChange} from "@/server/feed/extContentReview";
+import {
+  listPendingChapters,
+  recordContentChange,
+  rejectChapterVersions,
+} from "@/server/feed/extContentReview";
 import type {AuditDb} from "@/server/feed/extContentAudit";
 import {scheduleBestEffortMediaDeletion} from "@/server/media/deletions";
 import {mediaBucket} from "@/server/media/storage";
 import {jsonResponse, localizedError} from "../../../server/http";
 import type {FeedContent} from "../../../types";
 import type {PublicCachePurger} from "@/server/cache/public-cache";
-import {STATUSES} from "@/shared/Constants";
+import {SETTINGS_CATEGORIES, STATUSES} from "@/shared/Constants";
 import {webhookChannelSnapshot} from "@/shared/WebhookExamples";
 import {
   changedWebhookFields,
@@ -53,6 +57,14 @@ export async function updateAdminFeed(
     ? updatedFeed.deleteImageUrls
     : [];
   const database = new FeedDb(runtimeEnv, request, publicCachePurger);
+  // The content-review switch, read BEFORE anything is written. This same
+  // request may itself flip the switch (a settings save), so the pre-write
+  // value is both the gate for item saves landing in this request and the
+  // "was enabled" side of the on→off transition below.
+  const contentReviewBefore = await database.getSettingsCategory<{
+    enabled?: boolean;
+  }>(SETTINGS_CATEGORIES.CONTENT_REVIEW);
+  const reviewWasEnabled = contentReviewBefore?.enabled === true;
   const [beforeItem, beforeChannelContent] = await Promise.all([
     updatedItemId ? database.getItemById(updatedItemId) : null,
     updatedFeed.channel ? database.getContent(null) : null,
@@ -125,7 +137,25 @@ export async function updateAdminFeed(
         after: afterItem as Record<string, unknown>,
         before: (beforeItem ?? {}) as Record<string, unknown>,
         itemId: updatedItemId,
+        // Review off: the audit trail still records the change, but no pending
+        // version opens and the pin-to-approved gate never runs — a save takes
+        // effect immediately (openReview === false skips exactly those).
+        openReview: reviewWasEnabled ? undefined : false,
       });
+    }
+  }
+  // Turning review OFF is the moment queued changes die: every still-pending
+  // version is rejected (its content never reaches the live body — the pin
+  // already held it back), and the reject actions land in the audit trail.
+  // Turning it ON needs no migration: saves start opening versions again.
+  const contentReviewUpdate = updatedFeed.settings?.contentReview;
+  if (contentReviewUpdate && reviewWasEnabled &&
+    contentReviewUpdate.enabled !== true
+  ) {
+    const reviewDb = runtimeEnv.FEED_DB as unknown as AuditDb;
+    const pending = await listPendingChapters(reviewDb);
+    for (const chapter of pending) {
+      await rejectChapterVersions(reviewDb, chapter.itemId, null);
     }
   }
   scheduleBestEffortMediaDeletion(
@@ -137,7 +167,7 @@ export async function updateAdminFeed(
 }
 
 export const POST: APIRoute = async ({locals, request}) => {
-  // Deleting a chapter is its own permission (§8.1 `content:article:delete`),
+  // Deleting a chapter is its own permission (§8.1 `content:chapter:delete`),
   // separate from editing one. The delete arrives as a POST whose item status is
   // DELETED, so the code depends on the body. Peek through a clone: the handler
   // below still has to read the original request body.
@@ -147,7 +177,7 @@ export const POST: APIRoute = async ({locals, request}) => {
   const isDeleting = preview?.item?.status === STATUSES.DELETED;
   const guard = await requireRbac(
     locals,
-    isDeleting ? "content:article:delete" : "content:article:update",
+    isDeleting ? "content:chapter:delete" : "content:chapter:update",
     request,
     env.FEED_DB,
   );

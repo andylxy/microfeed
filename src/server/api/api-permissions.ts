@@ -33,9 +33,9 @@ interface DomainRule {
 }
 
 const ARTICLE_WRITE_CODES = {
-  create: "content:article:create",
-  update: "content:article:update",
-  delete: "content:article:delete",
+  create: "content:chapter:create",
+  update: "content:chapter:update",
+  delete: "content:chapter:delete",
 } as const;
 
 const DOMAIN_RULES: DomainRule[] = [
@@ -53,25 +53,25 @@ const DOMAIN_RULES: DomainRule[] = [
   },
   {
     prefix: "content/chapters",
-    read: "content:article:read",
-    write: "content:article:read",
+    read: "content:chapter:read",
+    write: "content:chapter:read",
   },
   // The article (chapter) domain: `/items/` creates, `/items/{id}/` reads,
   // updates and deletes, `/items/validate/` validates a would-be create.
   {
     prefix: "items",
-    read: "content:article:read",
-    write: "content:article:update",
+    read: "content:chapter:read",
+    write: "content:chapter:update",
     ...ARTICLE_WRITE_CODES,
   },
   // Read-only endpoints. They export no write handler, so a write method is a
   // 405 further down; requiring the read code keeps the rule total without
   // inventing a write code nobody can hold.
-  {prefix: "feed", read: "content:article:read", write: "content:article:read"},
+  {prefix: "feed", read: "content:chapter:read", write: "content:chapter:read"},
   {
     prefix: "search",
-    read: "content:article:read",
-    write: "content:article:read",
+    read: "content:chapter:read",
+    write: "content:chapter:read",
   },
   // The primary channel is managed as a whole, so one code covers every method.
   {
@@ -93,8 +93,8 @@ const DOMAIN_RULES: DomainRule[] = [
   },
   {
     prefix: "content/chapters",
-    read: "content:article:read",
-    write: "content:article:read",
+    read: "content:chapter:read",
+    write: "content:chapter:read",
   },
 ];
 

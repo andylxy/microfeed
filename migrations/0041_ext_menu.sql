@@ -41,8 +41,8 @@ INSERT OR IGNORE INTO ext_menu
 VALUES
   ('m_admin_home',      'admin_home',      NULL, '',                  'menu.item.admin_home',      'home',         NULL,                        10, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   ('m_edit_channel',    'edit_channel',    NULL, 'channels/primary',  'menu.item.edit_channel',    'pencil',       'content:channel:manage',    20, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
-  ('m_all_items',       'all_items',       NULL, 'items/list',        'menu.item.all_items',       'list',         'content:article:read',      30, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
-  ('m_import_chapters', 'import_chapters', NULL, 'items/import',      'menu.item.import_chapters', 'upload',       'content:article:create',    40, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
+  ('m_all_items',       'all_items',       NULL, 'items/list',        'menu.item.all_items',       'list',         'content:chapter:read',      30, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
+  ('m_import_chapters', 'import_chapters', NULL, 'items/import',      'menu.item.import_chapters', 'upload',       'content:chapter:create',    40, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   ('m_review',          'review',          NULL, 'review',            'menu.item.review',          'shield-check', 'content:review:manage',     50, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   ('m_audit',           'audit',           NULL, 'audit',             'menu.item.audit',           'history',      'content:audit:read',        60, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   ('m_pages',           'pages',           NULL, 'pages',             'menu.item.pages',           'file-text',    'content:page:manage',       70, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000),

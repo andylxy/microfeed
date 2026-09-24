@@ -17,25 +17,25 @@ import {requiredApiPermission} from "@/server/api/api-permissions";
 describe("requiredApiPermission mapping", () => {
   it("maps the article domain by HTTP method", () => {
     expect(requiredApiPermission("/api/v1/items/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
     expect(requiredApiPermission("/api/v1/items/", "POST")).toBe(
-      "content:article:create",
+      "content:chapter:create",
     );
     expect(requiredApiPermission("/api/v1/items/abc123/", "PUT")).toBe(
-      "content:article:update",
+      "content:chapter:update",
     );
     expect(requiredApiPermission("/api/v1/items/abc123/", "PATCH")).toBe(
-      "content:article:update",
+      "content:chapter:update",
     );
     expect(requiredApiPermission("/api/v1/items/abc123/", "DELETE")).toBe(
-      "content:article:delete",
+      "content:chapter:delete",
     );
   });
 
   it("treats HEAD as a read", () => {
     expect(requiredApiPermission("/api/v1/items/", "HEAD")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
   });
 
@@ -44,28 +44,28 @@ describe("requiredApiPermission mapping", () => {
     // required": that would let a credential read or delete content with no
     // content permission at all.
     expect(requiredApiPermission("/api/items/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
     expect(requiredApiPermission("/api/items/abc123/", "DELETE")).toBe(
-      "content:article:delete",
+      "content:chapter:delete",
     );
     expect(requiredApiPermission("/api/feed/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
   });
 
   it("maps the item validation endpoint as a create", () => {
     expect(requiredApiPermission("/api/v1/items/validate/", "POST")).toBe(
-      "content:article:create",
+      "content:chapter:create",
     );
   });
 
   it("maps the read-only content endpoints to the article read code", () => {
     expect(requiredApiPermission("/api/v1/feed/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
     expect(requiredApiPermission("/api/v1/search/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
   });
 
@@ -118,7 +118,7 @@ describe("requiredApiPermission mapping", () => {
       requiredApiPermission("/api/v1/content/books/abc/chapters/", "GET"),
     ).toBe("content:book:read");
     expect(requiredApiPermission("/api/v1/content/chapters/abc/", "GET")).toBe(
-      "content:article:read",
+      "content:chapter:read",
     );
   });
 

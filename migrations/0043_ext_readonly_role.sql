@@ -15,7 +15,7 @@ INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES
   ('r_readonly', 'readonly', '只读');
 
 INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES
-  ('r_readonly', 'p_content_article_read'),
+  ('r_readonly', 'p_content_chapter_read'),
   ('r_readonly', 'p_content_book_read'),
   ('r_readonly', 'p_content_category_read'),
   ('r_readonly', 'p_content_volume_read');

@@ -26,10 +26,10 @@ CREATE INDEX IF NOT EXISTS ix_ext_menu_permissions_permission
 
 INSERT OR IGNORE INTO ext_menu_permissions (menu_code, permission_code) VALUES
   -- 内容
-  ('all_items',       'content:article:read'),
-  ('all_items',       'content:article:update'),
-  ('all_items',       'content:article:delete'),
-  ('import_chapters', 'content:article:create'),
+  ('all_items',       'content:chapter:read'),
+  ('all_items',       'content:chapter:update'),
+  ('all_items',       'content:chapter:delete'),
+  ('import_chapters', 'content:chapter:create'),
   ('books',           'content:book:read'),
   ('books',           'content:book:create'),
   ('books',           'content:book:update'),
