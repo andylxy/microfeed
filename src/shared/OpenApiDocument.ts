@@ -118,7 +118,80 @@ export const OPENAPI_DOCUMENT = createDocument({
       "protected dashboard " +
       "can separately expose experimental, draft-only WebMCP site tools to " +
       "compatible browser agents after the signed-in dashboard is opened; " +
-      "WebMCP is not a remote API or MCP server.",
+      "WebMCP is not a remote API or MCP server.\n\n" +
+      "## Content read API\n\n" +
+      "The `Content` tag exposes published novel content through four read-only " +
+      "endpoints that walk 标签 → 书 → 卷章 → 正文 (category → book → " +
+      "volume/chapter → body). Every endpoint requires a Bearer credential " +
+      "whose account holds the matching `content:*:read` permission. A legacy " +
+      "API key is rejected with 404, and a missing credential with 401.\n\n" +
+      "All examples below use the live instance `https://feed.881019.xyz` and a " +
+      "login credential `mflc_…`. Replace `$MF_TOKEN` with your own credential.\n\n" +
+      "### 1. List content categories — `GET /api/v1/content/categories/`\n\n" +
+      "Returns every visible category with its published book count.\n\n" +
+      "```bash\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/categories/\n" +
+      "```\n\n" +
+      "```json\n" +
+      "{\n" +
+      "  \"categories\": [\n" +
+      "    {\"id\": \"cat_x1\", \"name\": \"东方玄幻\", \"slug\": \"eastern-fantasy\", \"bookCount\": 4},\n" +
+      "    {\"id\": \"OteD-aXHV_d\", \"name\": \"本草\", \"slug\": \"本草\", \"bookCount\": 1}\n" +
+      "  ]\n" +
+      "}\n" +
+      "```\n\n" +
+      "### 2. List a category's books — `GET /api/v1/content/categories/{categoryId}/books/`\n\n" +
+      "Returns the published books in one category. `{categoryId}` is the " +
+      "category id or its slug.\n\n" +
+      "```bash\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/categories/cat_x1/books/\n" +
+      "```\n\n" +
+      "```json\n" +
+      "{\n" +
+      "  \"books\": [\n" +
+      "    {\"id\": \"J1jGJjUWeCz\", \"title\": \"星河剑歌\", \"author\": \"墨青\", \"serialStatus\": \"serializing\", \"serialStatusLabel\": \"连载中\", \"wordCount\": \"799\", \"wordCountLabel\": \"799字\"},\n" +
+      "    {\"id\": \"BkA1x9pQ2Lm\", \"title\": \"夜航风暴\", \"author\": \"潮汐\", \"serialStatus\": \"serializing\", \"serialStatusLabel\": \"连载中\", \"wordCount\": \"130\", \"wordCountLabel\": \"130字\"}\n" +
+      "  ]\n" +
+      "}\n" +
+      "```\n\n" +
+      "### 3. List a book's chapters — `GET /api/v1/content/books/{bookId}/chapters/`\n\n" +
+      "Returns one book's published chapters as a two-level volume then chapter " +
+      "catalogue. `{bookId}` is the book id or a slug ending in the " +
+      "11-character book id. `truncated` is true when the book has more than " +
+      "5000 chapters.\n\n" +
+      "```bash\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/books/BkA1x9pQ2Lm/chapters/\n" +
+      "```\n\n" +
+      "```json\n" +
+      "{\n" +
+      "  \"truncated\": false,\n" +
+      "  \"volumes\": [\n" +
+      "    {\"name\": \"第一卷 远帆\", \"chapters\": [\n" +
+      "      {\"chapterNo\": 1, \"id\": \"Bh01YhStmX0\", \"pubDate\": \"2026-03-01T09:00:00.000Z\", \"title\": \"第一章 起锚\"},\n" +
+      "      {\"chapterNo\": 2, \"id\": \"Bh02YhStmX0\", \"title\": \"第二章 暗流\"},\n" +
+      "      {\"chapterNo\": 3, \"id\": \"Bh03YhStmX0\", \"title\": \"第三章 风暴眼\"}\n" +
+      "    ]}\n" +
+      "  ],\n" +
+      "  \"book\": {\"id\": \"BkA1x9pQ2Lm\", \"title\": \"夜航风暴\"}\n" +
+      "}\n" +
+      "```\n\n" +
+      "### 4. Get a chapter — `GET /api/v1/content/chapters/{chapterId}/`\n\n" +
+      "`contentHtml` is the chapter body exactly as stored, and `contentFormat` " +
+      "says how to render it. `{chapterId}` is the chapter id or a slug ending " +
+      "in the 11-character chapter id.\n\n" +
+      "```bash\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/chapters/Bh01YhStmX0/\n" +
+      "```\n\n" +
+      "```json\n" +
+      "{\n" +
+      "  \"chapterNo\": 1,\n" +
+      "  \"contentFormat\": \"html\",\n" +
+      "  \"contentHtml\": \"<p>灯塔熄灭的那夜，阿潮偷了父亲的罗盘，登上那艘<span style=\\\"color: rgb(235, 144, 58);\\\">锈迹斑斑的旧船</span>。海风咸得发苦，他却觉得自由。</p><p>Test</p>\",\n" +
+      "  \"id\": \"Bh01YhStmX0\",\n" +
+      "  \"title\": \"第一章 起锚\",\n" +
+      "  \"volume\": \"第一卷 远帆\"\n" +
+      "}\n" +
+      "```",
     license: {
       name: "GNU Affero General Public License v3.0",
       identifier: "AGPL-3.0-only",
