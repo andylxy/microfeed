@@ -311,19 +311,16 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
 2. **部署命令**（在仓库克隆内，部署本地源码）：
 
    ```console
-   CODEBUDDY_SAFE_DELETE_ENABLED=0 env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy ./node_modules/.bin/yarn manage deploy --instance ctwh-881019-xyz --yes
+   CODEBUDDY_SAFE_DELETE_ENABLED=0 ./node_modules/.bin/yarn manage deploy --instance ctwh-881019-xyz --yes
    ```
 
-   > ⚠️ **本沙箱必须加两个前缀，否则必失败（2026-09-23 实测）**：
-   > - `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy`：沙箱出口代理会改写发往
-   >   `api.cloudflare.com` 的 `Authorization` 头（换成代理自身服务 token，其 scope 形如
-   >   `websearch.run`/`agent-memory:write`，**不是 Cloudflare scope**），使 D1 迁移/`query` 返回
-   >   `Authentication error [code: 10000]`。清掉这四个标准代理变量后**直连 Cloudflare** 即正常
-   >   （`wrangler whoami` 可自检）。**所有** `manage`/`wrangler` 触达 Cloudflare API 的命令都需此前缀。
+   > ⚠️ **本沙箱部署要点（2026-09-24 实测更正）**：
    > - `CODEBUDDY_SAFE_DELETE_ENABLED=0`：`astro build` 清理 `dist/` 触发批量删除闸
-   >   （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`），加此前缀放行。
-   >
-   > 另：本沙箱 `corepack` 已损坏，**不要**用 `corepack yarn`，改用 `./node_modules/.bin/yarn`
+   >   （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`），加此前缀放行。**必须保留**。
+   > - **不要**在命令前加 `env -u HTTPS_PROXY …`：该前缀会让 `manage deploy` 在约 0.5 秒内
+   >   **静默退出（exit 0、零输出）**——部署实际没有发生（2026-09-24 实测；先前 09-23 误以为它能
+   >   修 `code: 10000`，现已证伪）。`manage deploy` 走默认出口代理即可正常触达 Cloudflare。
+   > - 另：本沙箱 `corepack` 已损坏，**不要**用 `corepack yarn`，改用 `./node_modules/.bin/yarn`
    > （仓库锁定 `yarn@4.18.0` 本地 shim）。实例 `wrangler.jsonc` 已含 `accountId`，
    > 故省略 `--account-id`；若显式传入须是 `77f8238a6f20e707f2ed94d3a27a31ce`。
 
@@ -379,12 +376,13 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
   `CODEBUDDY_SAFE_DELETE_ENABLED=0`。
 - **Cloudflare 鉴权失败 `Authentication error [code: 10000]`**：`manage deploy` 在
   `d1 migrations apply --remote` 阶段报此错（`/accounts/.../d1/database/.../query` 被拒）。
-  根因是沙箱出口代理（`HTTPS_PROXY`/`CODEBUDDY_SERVICE_PROXY_URL`）改写发往 `api.cloudflare.com`
-  的 `Authorization` 头为**代理自身 token**（wrangler 错误日志里列出的 scope 形如 `websearch.run`/
-  `agent-memory:write`，**非 Cloudflare scope**），GET（whoami/memberships）被放过、D1 POST 被换头 → 10000。
-  修复：命令前加 `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy`（清掉四个标准代理变量，
-  **直连 Cloudflare**），并保留 `CODEBUDDY_SAFE_DELETE_ENABLED=0`（见"部署命令"警告框）。
-  `wrangler whoami` 可自检凭证在直连下是否可用；`manage deploy`/`wrangler d1 … --remote` **都需**此前缀。
+  根因通常是沙箱出口代理改写发往 `api.cloudflare.com` 的 `Authorization` 头（09-23 曾实测：
+  代理换成自身 token，scope 形如 `websearch.run`/`agent-memory:write`，**非 Cloudflare scope**）。
+  **注意**：此前记录的「命令前加 `env -u HTTPS_PROXY …` 直连」已被证伪——该前缀会让
+  `manage deploy` **静默早退（exit 0、零输出，部署没发生，09-24 实测）**。当前可用命令就是
+  默认出口代理下的 `CODEBUDDY_SAFE_DELETE_ENABLED=0 ./node_modules/.bin/yarn manage deploy …`
+  （09-24 以此正常跑完，约 4 分钟、`Deployed and verified`、无 10000）。若再遇 10000，先确认
+  凭证（`wrangler whoami`）与代理状态，**不要**盲目加 `env -u`，重试普通命令即可。
 - **挂死在 `Building the Worker`**：残留 `dist` 所致 → 先
   `mkdir -p node_modules/.stale && mv dist node_modules/.stale/dist-<ts>` 再部署。
 - **后台部署会在回合结束时被杀**：日志停在 banner 且无 `EXIT:` 行；要么前台阻塞等
@@ -404,8 +402,8 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
   `connect --worker ctwh-881019-xyz --instance ctwh-881019-xyz` 挂接；本机
   Wrangler 浏览器回调 OAuth 必超时，使用 `--device` 设备码流程（操作步骤
   见上文"已部署实例的部署流程"）。保存的凭证被后续命令复用。
-  - 只能通过 `CODEBUDDY_SAFE_DELETE_ENABLED=0 env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy ./node_modules/.bin/yarn manage deploy --instance ctwh-881019-xyz --yes`
-    部署本地源码更改（前缀含义见上文"部署命令"警告框）。`npx` 前缀部署的是捆绑 release 源码，无法发布本地提交。
+  - 只能通过 `CODEBUDDY_SAFE_DELETE_ENABLED=0 ./node_modules/.bin/yarn manage deploy --instance ctwh-881019-xyz --yes`
+    部署本地源码更改（前缀含义见上文"部署命令"警告框；**不要**加 `env -u HTTPS_PROXY …`，会让部署静默早退）。`npx` 前缀部署的是捆绑 release 源码，无法发布本地提交。
 - 公开站点运行激活的自定义主题 `local.feed-zh`
   （`microfeed.default@1.1.15` 的简体中文 fork），在检出之外的独立 Git
   仓库 `D:\git\AiCode\microfeed-themes\feed-zh` 中开发。捆绑主题更新以
