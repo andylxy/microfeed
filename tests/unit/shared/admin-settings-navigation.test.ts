@@ -19,6 +19,7 @@ describe("admin settings navigation", () => {
       ["custom-code", "settings.websiteAppearance", "code"],
       ["tracking-urls", "settings.trackingUrls", "activity"],
       ["access-control", "settings.accessControl", "shield"],
+      ["content-review", "settings.contentReview", "list-checks"],
       ["subscribe-methods", "settings.subscribeMethods", "rss"],
       ["media-file-storage", "settings.mediaFileStorage", "storage"],
       ["items-settings", "settings.itemsSettings", "list"],

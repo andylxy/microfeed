@@ -2,7 +2,6 @@ import {
   ArrowLeftIcon,
   BlocksIcon,
   Code2Icon,
-  IdCardIcon,
   KeyRoundIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -21,7 +20,6 @@ interface Props {
 }
 
 const pageIcons: Record<AdminApiPage["icon"], typeof BlocksIcon> = {
-  credentials: IdCardIcon,
   explorer: Code2Icon,
   key: KeyRoundIcon,
   overview: BlocksIcon,
@@ -31,7 +29,6 @@ const pageIcons: Record<AdminApiPage["icon"], typeof BlocksIcon> = {
 const pageNameKeys: Record<AdminApiPage["id"], string> = {
   overview: "api.overview",
   authentication: "api.authentication",
-  credentials: "api.credentialsTitle",
   explorer: "api.explorer",
   settings: "api.settings",
 };

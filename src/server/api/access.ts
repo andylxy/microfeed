@@ -7,9 +7,6 @@ import {
 } from "@/shared/ApiVersion";
 import {OAUTH_SCOPES} from "@/shared/OAuth";
 import {verifyOAuthAccessToken} from "@/server/auth/oauth-access";
-import {resolveUserPermissions, RBAC_WILDCARD} from "@/server/rbac/resolve";
-import {verifySignedCall} from "./signed-call";
-import {requiredApiPermission} from "./api-permissions";
 
 const PUBLIC_API_REFERENCE_SUFFIXES = new Set([
   "",
@@ -159,66 +156,21 @@ export async function decideApiRequest(
 }
 
 // ---------------------------------------------------------------------------
-// Signed-call path (XiHan BasicApp model). Reached only when `X-Access-Key` is
-// present; the legacy bearer path above is left completely untouched.
+// Shared by the login-credential bearer path (`credential-bearer.ts`) and the
+// middleware: the attribution of a decided API request, plus the access-log
+// writer. The legacy bearer path above is left completely untouched.
 // ---------------------------------------------------------------------------
 
 export interface ApiAttribution {
-  /** `api_keys.id` behind a signed call; `null` on a login-credential call. */
+  /** `api_keys.id` of a signed call. Always `null` since the signed-call path
+   *  was removed (ADR-0008); kept so the access-log column stays populated. */
   apiKeyId: string | null;
   /** `ext_login_credentials.id` behind a bearer call; `null` elsewhere. */
   credentialId?: string | null;
   userId: string;
-  permissionCode: string;
-}
-
-export type SignedApiDecision =
-  | {kind: "allow"; attribution: ApiAttribution}
-  | {kind: "reference"}
-  | {kind: "notFound"}
-  | {kind: "unauthorized"}
-  | {kind: "forbidden"; attribution: ApiAttribution}
-  | {kind: "replay"};
-
-/**
- * Decide a signature-based API request. Verification establishes *which user*
- * owns the key; authorization is delegated to RBAC — the resolved user's
- * permission set must contain the code `requiredApiPermission` returns (or the
- * `*` wildcard). On success the attribution (key + user + permission) is
- * returned so the middleware can write the access log.
- */
-export async function decideSignedApiRequest(
-  database: D1Database,
-  request: Request,
-  pathname: string,
-): Promise<SignedApiDecision> {
-  const details = apiPathDetails(pathname);
-  if (!details) return {kind: "notFound"};
-  if (details.kind === "reference") return {kind: "reference"};
-
-  const verified = await verifySignedCall(database, request);
-  if (!verified.ok) {
-    return verified.reason === "replay"
-      ? {kind: "replay"}
-      : {kind: "unauthorized"};
-  }
-
-  const permissionCode = requiredApiPermission(pathname, request.method)
-    ?? "api:content:read";
-  const permissions = await resolveUserPermissions(
-    database,
-    verified.identity.userId,
-  );
-  const attribution: ApiAttribution = {
-    apiKeyId: verified.identity.apiKeyId,
-    userId: verified.identity.userId,
-    permissionCode,
-  };
-  const granted = permissions.has(RBAC_WILDCARD)
-    || permissions.has(permissionCode);
-  return granted
-    ? {kind: "allow", attribution}
-    : {kind: "forbidden", attribution};
+  /** The RBAC code the request was checked against, or `null` when the path
+   *  requires no code (an upstream-owned domain — see `api-permissions.ts`). */
+  permissionCode: string | null;
 }
 
 /**

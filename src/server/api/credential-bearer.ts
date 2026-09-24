@@ -1,14 +1,13 @@
 /**
  * Sessionless bearer authentication for the public API, using a login
- * credential (`mflc_…`) instead of an HMAC-signed call.
+ * credential (`mflc_…`).
  *
  * This is the "no session, token on every request" half of the credential
  * feature: an API client that holds a credential can call `/api/*` directly
- * without first trading it for a cookie. Authorization is delegated to RBAC
- * exactly like the signed-call path — the token only establishes *which user*
- * is calling.
+ * without first trading it for a cookie. Authorization is delegated to RBAC —
+ * the token only establishes *which user* is calling.
  *
- * Two deliberate differences from the signed path are worth naming:
+ * Two properties are worth naming:
  *  - the credential signs nothing, so the bearer rides on every request and the
  *    only anti-replay control is revocation plus the sign-in throttle;
  *  - failed attempts are throttled per client address, because the token is a
@@ -88,8 +87,10 @@ export async function decideLoginCredentialApiRequest(
     return {kind: "unauthorized"};
   }
 
-  const permissionCode = requiredApiPermission(pathname, request.method) ??
-    "api:content:read";
+  // A `null` code means the path needs no RBAC code here (an upstream-owned
+  // domain such as pages / site-files / media, or a path outside the mapped
+  // set): the credential is authenticated, which is all that is required.
+  const permissionCode = requiredApiPermission(pathname, request.method);
   const permissions = await resolveUserPermissions(database, verified.userId);
   const attribution: ApiAttribution = {
     apiKeyId: null,
@@ -97,7 +98,8 @@ export async function decideLoginCredentialApiRequest(
     permissionCode,
     userId: verified.userId,
   };
-  const granted = permissions.has(RBAC_WILDCARD) ||
+  const granted = permissionCode === null ||
+    permissions.has(RBAC_WILDCARD) ||
     permissions.has(permissionCode);
   if (!granted) {
     return {kind: "forbidden", attribution};

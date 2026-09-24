@@ -15,7 +15,7 @@ const PERMISSIONS = [
   {code: "content:book:create", name: "Create books"},
   {code: "content:category:read", name: "Read categories"},
   {code: "system:user:manage", name: "Manage users"},
-  {code: "api:media:write", name: "Write media via API"},
+  {code: "content:article:read", name: "Read articles"},
 ];
 
 const MENU = [
@@ -66,7 +66,7 @@ describe("buildPermissionTree", () => {
   it("collects codes no page maps to into the catch-all group", () => {
     const other = build().find((group) => group.code === RBAC_OTHER_GROUP);
     expect(other?.pages).toEqual([
-      {code: RBAC_OTHER_PAGE, codes: ["api:media:write"]},
+      {code: RBAC_OTHER_PAGE, codes: ["content:article:read"]},
     ]);
   });
 

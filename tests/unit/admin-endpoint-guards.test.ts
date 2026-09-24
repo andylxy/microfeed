@@ -26,12 +26,35 @@ const MIGRATIONS = "migrations";
 const AJAX = join("src", "pages", "[adminPath]", "ajax");
 const SERVER_ADMIN = join("src", "server", "admin");
 
-/** Every permission code seeded into `ext_permissions` across all migrations. */
+/** Every permission code present in `ext_permissions` after all migrations run. */
 function readCatalogCodes(): Set<string> {
   const codes = new Set<string>();
-  for (const file of readdirSync(MIGRATIONS)) {
-    if (!file.endsWith(".sql")) continue;
+  const files = readdirSync(MIGRATIONS)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS, file), "utf8");
+    // A later migration may retire codes an earlier one seeded, e.g.
+    // `DELETE FROM ext_permissions WHERE code IN (…)` or `… code LIKE 'api:%'`
+    // (ADR-0009 dropped the `api:*` family). Migrations run in filename order,
+    // so apply removals before additions for each file.
+    for (const match of sql.matchAll(
+      /DELETE\s+FROM\s+ext_permissions[\s\S]*?code\s+(?:IN\s*\((?<list>[^)]*)\)|LIKE\s*'(?<prefix>[^']+)')/giu,
+    )) {
+      const list = match.groups?.list;
+      if (list) {
+        for (const literal of list.matchAll(/'([^']+)'/gu)) {
+          codes.delete(literal[1]!);
+        }
+      }
+      const prefix = match.groups?.prefix;
+      if (prefix?.endsWith("%")) {
+        const stem = prefix.slice(0, -1);
+        for (const code of [...codes]) {
+          if (code.startsWith(stem)) codes.delete(code);
+        }
+      }
+    }
     // Matches `('p_<id>', '<code>', '<name>')` tuples in the permission seed.
     for (const match of sql.matchAll(
       /\(\s*'p_[^']*'\s*,\s*'(?<code>[^']+)'\s*,\s*'[^']*'\s*\)/gu,
@@ -86,8 +109,13 @@ describe("admin endpoint guards", () => {
   const catalog = readCatalogCodes();
 
   it("seeds a non-empty permission catalog from the migrations", () => {
-    expect(catalog.size).toBeGreaterThanOrEqual(35);
-    expect(catalog.has("*")).toBe(true);
+    // Pins a few long-lived codes so a parser that silently matched nothing
+    // (leaving just the wildcard) fails here instead of passing vacuously; the
+    // exact set is pinned by the equality test below.
+    expect(catalog.size).toBeGreaterThanOrEqual(20);
+    for (const code of ["*", "content:book:read", "system:role:manage"]) {
+      expect(catalog.has(code)).toBe(true);
+    }
   });
 
   it("keeps PERMISSION_CODES equal to the SQL permission catalog", () => {

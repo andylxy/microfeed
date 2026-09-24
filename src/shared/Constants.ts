@@ -14,6 +14,7 @@ export const SETTINGS_CATEGORIES = {
   ANALYTICS: 'analytics',
   ACCESS: 'access',
   API_SETTINGS: 'apiSettings',
+  CONTENT_REVIEW: 'contentReview',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -233,14 +234,6 @@ export const PERMISSION_CODES = {
   CONTENT_PAGE_MANAGE: 'content:page:manage',
   CONTENT_SITE_FILE_MANAGE: 'content:site_file:manage',
   SYSTEM_API_MANAGE: 'system:api:manage',
-  API_CONTENT_READ: 'api:content:read',
-  API_CONTENT_WRITE: 'api:content:write',
-  API_MEDIA_READ: 'api:media:read',
-  API_MEDIA_WRITE: 'api:media:write',
-  API_PAGE_READ: 'api:page:read',
-  API_PAGE_WRITE: 'api:page:write',
-  API_SITE_READ: 'api:site:read',
-  API_SITE_WRITE: 'api:site:write',
   WILDCARD: '*',
 } as const;
 

@@ -503,11 +503,6 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/api/keys/${id}`, browserAdminPath()),
   ajaxRotateApiKey: (id: string) =>
     adminUrl(`ajax/api/keys/${id}/rotate`, browserAdminPath()),
-  ajaxApiCredentials: () => adminUrl("ajax/api/credentials", browserAdminPath()),
-  ajaxApiCredential: (id: string) =>
-    adminUrl(`ajax/api/credentials/${id}`, browserAdminPath()),
-  ajaxRotateApiCredential: (id: string) =>
-    adminUrl(`ajax/api/credentials/${id}/rotate`, browserAdminPath()),
   ajaxThemes: () => adminUrl("ajax/themes", browserAdminPath()),
   ajaxTheme: (id: string) =>
     adminUrl(`ajax/themes/${id}`, browserAdminPath()),

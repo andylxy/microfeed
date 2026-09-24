@@ -380,6 +380,45 @@ describe("sessionless API bearer", () => {
     expect(result.kind).toBe("allow");
   });
 
+  it("forbids a write the account's role withholds", async () => {
+    // The editor role holds content:article:create / update but deliberately not
+    // content:article:delete, so the per-method split must keep the delete
+    // denied instead of letting any write through (ADR-0009).
+    await seedUser("u_editor_delete");
+    await grantRole("u_editor_delete", "r_editor");
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_editor_delete",
+    });
+    const result = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/items/abc123/`, {
+        method: "DELETE",
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/items/abc123/",
+    );
+    expect(result.kind).toBe("forbidden");
+  });
+
+  it("requires no RBAC code for upstream-owned domains", async () => {
+    // pages / site-files / media keep the upstream OAuth-scope model, so a
+    // credential whose account holds no content grants is still allowed here.
+    await seedUser("u_no_grants");
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_no_grants",
+    });
+    const result = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/pages/`, {
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/pages/",
+    );
+    expect(result.kind).toBe("allow");
+  });
+
   it("forbids a resource the account has no grant for", async () => {
     await seedUser("u_plain");
     const credential = await createLoginCredential(env.FEED_DB, {
@@ -557,7 +596,7 @@ describe("api access audit", () => {
       {
         apiKeyId: null,
         credentialId: credential.id,
-        permissionCode: "api:content:read",
+        permissionCode: "content:article:read",
         userId: "u_audit",
       },
       "GET",
@@ -586,7 +625,7 @@ describe("api access audit", () => {
       env.FEED_DB,
       {
         apiKeyId: "key_1",
-        permissionCode: "api:content:read",
+        permissionCode: "content:article:read",
         userId: "u_audit_key",
       },
       "POST",

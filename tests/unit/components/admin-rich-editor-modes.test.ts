@@ -12,6 +12,19 @@ vi.mock("quill", () => {
   return {default: Quill, Delta: class {}};
 });
 
+// `AdminRichEditor` also mounts the wangEditor-backed block, and the real
+// `@wangeditor/editor` package touches `navigator` at import time — which the
+// node test environment exposes as a getter-only property, so importing it
+// throws before any test runs. Same mocks as `rich-editor-wangeditor.test.ts`;
+// only the mode list is under test here.
+vi.mock("@wangeditor/editor", () => ({
+  i18nChangeLanguage: () => {},
+}));
+vi.mock("@wangeditor/editor-for-react", () => ({
+  Editor: () => null,
+  Toolbar: () => null,
+}));
+
 import AdminRichEditor from "@/components/admin/shared/AdminRichEditor";
 import RichEditorQuill from "@/components/admin/shared/AdminRichEditor/component/RichEditorQuill";
 import AdminRadioGroup from "@/components/admin/shared/AdminRadioGroup";

@@ -356,7 +356,7 @@ describe("RBAC catalog integrity", () => {
     const editorCount = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions WHERE role_id = 'r_editor'",
     ).first<{c: number}>();
-    expect(editorCount?.c).toBe(16);
+    expect(editorCount?.c).toBe(12);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -404,7 +404,7 @@ describe("RBAC administration", () => {
   it("reads the seeded roles with their grants and the catalogue", async () => {
     const board = await readRbacBoard(env.FEED_DB);
     const editor = board.roles.find((role) => role.code === "editor");
-    expect(editor?.permissions).toHaveLength(16);
+    expect(editor?.permissions).toHaveLength(12);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

@@ -15,6 +15,7 @@
 | **Category（分类/题材）** | 新建表 | `ext_category` | 命名空间隔离 |
 | **Audit Record（留痕）** | 新建表 | `ext_content_audit` | 存修改前后 `data` JSON 快照 |
 | **Report（举报）** | 新建表 | `ext_content_report` | 读者举报落库 |
+| **Tag / 标签** | **同 Category** | `ext_category` | 只是 Category 的**对外叫法**（如 内经类 / 本草 / 伤寒 / 东方玄幻），**不是独立实体**，勿新建 tags 表 |
 
 ## 扩展口袋
 
@@ -38,7 +39,12 @@
    - 拿 `content:write` 即可写任意 book/chapter。
    - → 决策点 3「每作者一把 key 限自己书」**当前代码下不可行**，需重新决策（见首轮 grilling Q1）。
 
-4. **账户模型是单管理员。**
+4. **章节正文在 DB 里存 `items.data.description`（HTML 原样）。**
+   - `content_html` 只是**对外渲染时的别名**：`item-handlers.ts` 做 `content_html: String(item.description ?? "")`。
+   - 主题 `web-item.mustache` 优先读 `content_html`，回退 `content_text`。
+   - → API 返回正文时取 `data.description` **原样**，不做 markdown 转换、不重新渲染。
+
+5. **账户模型是单管理员。**
    - `auth_account` 为单条管理员登录（密码/Cloudflare Access）。
    - 无原生"多作者 / 多角色"概念。
    - → "作者隔离"不是 microfeed 免费给的，要么接受单管理员，要么自建角色层。

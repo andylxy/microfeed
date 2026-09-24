@@ -40,7 +40,6 @@ import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
   decideApiRequest,
-  decideSignedApiRequest,
   type ApiAttribution,
   writeApiAccessLog,
 } from "@/server/api/access";
@@ -48,7 +47,6 @@ import {
   decideLoginCredentialApiRequest,
   providedLoginCredential,
 } from "@/server/api/credential-bearer";
-import {handleApiPing} from "@/server/api/ping";
 import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
@@ -170,17 +168,13 @@ const handleRequest = defineMiddleware(async (context, next) => {
   }
 
   if (pathname.startsWith("/api/")) {
-    // Self-test / identity echo (XiHan Ping): anonymous, identity from signature.
-    if (pathname === "/api/ping") {
-      return handleApiPing(env.FEED_DB, context.request);
-    }
     const db = env.FEED_DB;
     let attribution: ApiAttribution | null = null;
     if (providedLoginCredential(context.request)) {
       // Sessionless login-credential bearer (`Authorization: Bearer mflc_…`):
       // the token rides on every request and no cookie is written. The token
-      // establishes the user; RBAC decides authorization, exactly like the
-      // signed-call path below — including the audit row on both allow and deny.
+      // establishes the user; RBAC decides authorization, including the audit
+      // row on both allow and deny.
       const result = await decideLoginCredentialApiRequest(
         db,
         context.request,
@@ -210,55 +204,6 @@ const handleRequest = defineMiddleware(async (context, next) => {
       if (result.kind === "unauthorized") {
         return addLegacyApiDeprecationHeaders(
           apiUnauthorizedResponse(context.request),
-          context.url,
-          pathname,
-        );
-      }
-      if (result.kind === "forbidden") {
-        await writeApiAccessLog(
-          db,
-          result.attribution,
-          context.request.method,
-          pathname,
-          false,
-          403,
-        );
-        return addLegacyApiDeprecationHeaders(
-          apiInsufficientScopeResponse(),
-          context.url,
-          pathname,
-        );
-      }
-      attribution = result.attribution;
-    } else if (context.request.headers.get("x-access-key")) {
-      // Signed-call path (XiHan BasicApp model). Key is identity only; RBAC
-      // decides authorization. Every decision writes an audit row (attribution
-      // is non-null only on allow, so denies are logged without a key/user).
-      const result = await decideSignedApiRequest(db, context.request, pathname);
-      if (result.kind === "reference") {
-        return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
-      }
-      if (result.kind === "notFound") {
-        return apiNotFoundResponse(context.request);
-      }
-      if (result.kind === "unauthorized") {
-        return addLegacyApiDeprecationHeaders(
-          apiUnauthorizedResponse(context.request),
-          context.url,
-          pathname,
-        );
-      }
-      if (result.kind === "replay") {
-        return addLegacyApiDeprecationHeaders(
-          new Response(
-            translate(
-              "errors.api.replay",
-              languageFromAcceptLanguage(
-                context.request.headers.get("accept-language"),
-              ),
-            ),
-            {status: 400},
-          ),
           context.url,
           pathname,
         );

@@ -20,12 +20,6 @@ export const ADMIN_API_PAGES = [
     icon: "settings",
     path: "api/settings",
   },
-  {
-    id: "credentials",
-    name: "API Credentials",
-    icon: "credentials",
-    path: "api/credentials",
-  },
 ] as const;
 
 export type AdminApiPage = typeof ADMIN_API_PAGES[number];
