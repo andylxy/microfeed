@@ -187,6 +187,10 @@ describe("generated API reference", () => {
   it("documents only current routes and Bearer authentication", () => {
     const specification = JSON.stringify(OPENAPI_DOCUMENT);
     expect(Object.keys(OPENAPI_DOCUMENT.paths ?? {})).toEqual([
+      "/content/categories/",
+      "/content/categories/{categoryId}/books/",
+      "/content/books/{bookId}/chapters/",
+      "/content/chapters/{chapterId}/",
       "/feed/",
       "/items/",
       "/items/validate/",

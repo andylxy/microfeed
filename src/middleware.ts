@@ -40,9 +40,11 @@ import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
   decideApiRequest,
+  providedApiKey,
   type ApiAttribution,
   writeApiAccessLog,
 } from "@/server/api/access";
+import {API_BASE_PATH} from "@/shared/ApiVersion";
 import {
   decideLoginCredentialApiRequest,
   providedLoginCredential,
@@ -225,7 +227,21 @@ const handleRequest = defineMiddleware(async (context, next) => {
       }
       attribution = result.attribution;
     } else {
-      // Legacy bearer path — unchanged.
+      // Legacy bearer path — unchanged, except that the novel content read API
+      // (ADR-0006) is login-credential-only: a legacy bearer key carries just
+      // the coarse OAuth `content:read` scope, which would read every category,
+      // book and chapter at once. `integrationSuffix` keeps the legacy *base*
+      // (`/api/content/...`) out; this closes the versioned base too, where a
+      // scoped legacy key would otherwise sail through `decideApiRequest`.
+      // Only an actual legacy credential is rejected with 404 (so the
+      // endpoint's existence stays hidden). A request with no credential at
+      // all falls through and gets the usual 401 from `decideApiRequest`.
+      if (
+        pathname.startsWith(`${API_BASE_PATH}content/`) &&
+        providedApiKey(context.request)
+      ) {
+        return apiNotFoundResponse(context.request);
+      }
       const decision = await decideApiRequest(
         db,
         context.request,

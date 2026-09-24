@@ -36,6 +36,22 @@ const ZH_CN: Record<string, string> = {
     "可选的纯文本摘要，用于页面的 HTML meta description。最多 155 个字符。",
   "Attachment size in bytes. RSS uses this as the enclosure length.":
     "附件大小（字节）。RSS 会将其作为 enclosure 长度。",
+  "Book id, as accepted by `/content/books/{bookId}/chapters/`.":
+    "书籍 id，可用于 `/content/books/{bookId}/chapters/`。",
+  "Book id, or a slug ending in the 11-character book id.":
+    "书籍 id，或以 11 位书籍 id 结尾的 slug。",
+  "Category id or slug.": "分类 id 或 slug。",
+  "Category id, as accepted by `/content/categories/{categoryId}/books/`.":
+    "分类 id，可用于 `/content/categories/{categoryId}/books/`。",
+  "Category slug. Also accepted in place of the id; may be non-ASCII.":
+    "分类 slug。也可用于替代 id；可能是非 ASCII 字符。",
+  "Chapter id, as accepted by `/content/chapters/{chapterId}/`.":
+    "章节 id，可用于 `/content/chapters/{chapterId}/`。",
+  "Chapter id, or a slug ending in the 11-character chapter id.":
+    "章节 id，或以 11 位章节 id 结尾的 slug。",
+  "Chapter id.": "章节 id。",
+  "Chapter number within its volume. Restarts at 1 in every volume.":
+    "章节在其所属卷内的序号。每卷从 1 重新开始。",
   "Channel copyright text. Use the allowlisted {{current_year}} variable to publish the current UTC year automatically; the expression is saved literally and resolved in public output.":
     "频道版权文本。可使用白名单变量 {{current_year}} 自动发布当前 UTC 年份；该表达式会原样保存，并在公开输出中解析。",
   "Comma-separated content statuses. Deleted content is never searched.":
@@ -64,6 +80,9 @@ const ZH_CN: Record<string, string> = {
   "Delete an item": "删除条目",
   "Deprecated singular spelling. Use size_in_bytes.":
     "已废弃的单数拼写。请改用 size_in_bytes。",
+  "Display name.": "显示名称。",
+  "Every visible category with the number of its published books. The id (or the slug) feeds /content/categories/{categoryId}/books/.":
+    "每个可见分类及其已发布书籍数量。其 id（或 slug）用于 /content/categories/{categoryId}/books/。",
   "Expected media type, such as audio/mpeg.": "预期的媒体类型，例如 audio/mpeg。",
   "Expected upload size in bytes.": "预期的上传大小（字节）。",
   "Find items and Pages by title or plain-text content.":
@@ -71,20 +90,38 @@ const ZH_CN: Record<string, string> = {
   "Generated Site Files cannot be deleted.": "生成的站点文件无法删除。",
   "Get a Page": "获取页面",
   "Get a Site File": "获取站点文件",
+  "Get a chapter": "获取章节",
   "Get an item": "获取条目",
   "Get the feed": "获取信息流",
   "How the main media attachment should be presented. Use external_url only for a linked web page rather than an uploaded file.":
     "主媒体附件的呈现方式。external_url 仅用于外链网页，不用于已上传的文件。",
   "How to read content_html: leave unset for HTML, set to markdown when the body is Markdown that the site renders for display.":
     "如何解读 content_html：留空表示 HTML；若正文是 Markdown（由站点渲染后展示），请设为 markdown。",
+  "How to read contentHtml: html for markup to render directly, markdown for text to convert first.":
+    "如何解读 contentHtml：html 表示可直接渲染的标记；markdown 表示需先转换的文本。",
+  "Human label for serialStatus, for card display.":
+    "serialStatus 的展示用标签，供卡片显示。",
+  "Human label for the word count, for card display.":
+    "字数的展示用标签，供卡片显示。",
   "Item-specific cover art or thumbnail. This is not the main media attachment or RSS enclosure.":
     "条目专属的封面图或缩略图。它不是主媒体附件，也不是 RSS enclosure。",
   "List Pages": "列出页面",
   "List Site Files": "列出站点文件",
+  "List a book's chapters": "列出某本书的章节",
+  "List a category's books": "列出某分类下的书籍",
+  "List content categories": "列出内容分类",
   "Manage editable root-level text files.": "管理可编辑的顶级文本文件。",
   "Media storage is unavailable.": "媒体存储不可用。",
   "Media type of the attachment, such as audio/mpeg or image/png.":
     "附件的媒体类型，例如 audio/mpeg 或 image/png。",
+  "No such published book.": "不存在该已发布书籍。",
+  "No such published chapter.": "不存在该已发布章节。",
+  "No such visible category.": "不存在该可见分类。",
+  "Number of published books in this category.": "该分类下已发布书籍的数量。",
+  "One book's published chapters as a two-level volume then chapter catalogue. An unknown or unpublished book is a 404.":
+    "某本书的已发布章节，按「卷 → 章」两级目录返回。未知或未发布的书籍返回 404。",
+  "One published chapter. contentHtml is the body exactly as stored and contentFormat says how to read it. A chapter of an unpublished book is a 404.":
+    "单个已发布章节。contentHtml 是数据库中原文，contentFormat 说明如何解读它。所属书籍未发布的章节返回 404。",
   "One-based delivery attempt number.": "从 1 开始计数的投递尝试次数。",
   "Only generated Site Files can be reset.": "只有生成的站点文件可以重置。",
   "Only provided fields are changed; omitted attachments, GUIDs, dates, and other fields are preserved. Supplying attachments replaces the one main media attachment/RSS enclosure. The image field remains separate cover art.":
@@ -100,6 +137,8 @@ const ZH_CN: Record<string, string> = {
   "Present with value true when an earlier request reserved this idempotency key.":
     "当更早的请求已占用该幂等键时，该字段为 true。",
   "Publish a Site File draft": "发布站点文件草稿",
+  "Read published novel content by category, book and chapter.":
+    "按分类、书籍与章节读取已发布的小说内容。",
   "Read the complete feed.": "读取完整的信息流。",
   "Receive a microfeed webhook event": "接收 microfeed webhook 事件",
   "Render a Site File preview": "渲染站点文件预览",
@@ -127,6 +166,18 @@ const ZH_CN: Record<string, string> = {
   "The Idempotency-Key was already used with a different item payload.":
     "该 Idempotency-Key 已被用于另一份不同的条目内容。",
   "The Page ID.": "页面 ID。",
+  "The credential's account lacks the content:category:read permission.":
+    "该凭据所属账号缺少 content:category:read 权限。",
+  "The chapter body exactly as stored. No rendering, conversion or sanitization has been applied.":
+    "数据库中原样存储的章节正文。未做任何渲染、转换或净化处理。",
+  "The credential's account lacks the content:article:read permission.":
+    "该凭据所属账号缺少 content:article:read 权限。",
+  "The credential's account lacks the content:book:read permission.":
+    "该凭据所属账号缺少 content:book:read 权限。",
+  "The published books in one category. The category is identified by its id or its slug; an unknown or hidden category is a 404.":
+    "某分类下的已发布书籍。分类用其 id 或 slug 指定；未知或隐藏的分类返回 404。",
+  "True when the book has more chapters than this response carries; the last volume may then be incomplete.":
+    "当书籍的章节数超过本响应的承载量时为 true；此时最后一卷可能不完整。",
   "The Page body as sanitized rich-text HTML.":
     "页面正文，为经过清洗的富文本 HTML。",
   "The Page does not exist.": "该页面不存在。",
@@ -195,6 +246,8 @@ const ZH_CN: Record<string, string> = {
   "Validate an item": "校验条目",
   "Validates the request with the same schema as item creation without creating content, uploading media, or invalidating caches.":
     "使用与创建条目相同的 schema 校验请求，但不会创建内容、上传媒体或使缓存失效。",
+  "Volume name, or empty for chapters filed under no volume.":
+    "卷名；未归入任何卷的章节此处为空字符串。",
   "Where item results in public Search link. Use web for the local microfeed item page (JSON Feed items[]._microfeed.web_url and the RSS item link fallback), url for JSON Feed items[].url and the RSS item link, or attachment for JSON Feed items[].attachments[0].url and the RSS enclosure URL. Missing selected values fall back to the local item page.":
     "条目结果在公开搜索中链接到何处。web 表示本地 microfeed 条目页（JSON Feed 的 items[]._microfeed.web_url 及 RSS item link 的回退），url 表示 JSON Feed 的 items[].url 与 RSS item link，attachment 表示 JSON Feed 的 items[].attachments[0].url 与 RSS enclosure 地址。所选值缺失时回退到本地条目页。",
   "Whether the Page is eligible for website navigation. This setting is only active when status is published. For an unpublished Draft, it is stored but ignored until the Page is published. For an unlisted Page, it is always forced to false.":

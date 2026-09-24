@@ -115,9 +115,9 @@ export async function listPublishedBookSamples(
  * public search. Chapter/page search never covered books, so a visitor typing a
  * book title got nothing even though the search box promises "书名或作者名".
  *
- * Matching runs over the parsed `data` in JS rather than SQL: D1 rejects nested
- * `json_extract` paths, the channel table is small by design, and this keeps the
- * match case-insensitive across the title and every `authors[].name`.
+ * Matching runs over the parsed `data` in JS rather than SQL: it keeps the match
+ * case-insensitive across the title and every `authors[].name`, and the channel
+ * table is small by design.
  */
 export async function searchPublishedBooks(
   db: CategoryDb,
@@ -511,15 +511,14 @@ export async function getBookChapters(
   bookId: string,
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
-  // D1's SQL engine rejects the nested `json_extract(data, '$._microfeed.bookId')`
-  // path form (it returns SQLITE_ERROR 7500 over the wrangler CLI, and the same
-  // shape is risky on the worker edge too), so we load the published items and
-  // resolve the `_microfeed.bookId` membership + `chapterNo` ordering in
-  // JavaScript. A novel-cms site's item table is bounded by design (chapters),
-  // so the full scan is both safe and portable across sqlite builds.
+  // `book_id` is the denormalized, indexable copy of `_microfeed.bookId`
+  // (ADR-0006). Rows whose mirror is still NULL — anything written before the
+  // backfill — are picked up by the `IS NULL` arm and confirmed against the JSON
+  // below, so no chapter is lost to a missing mirror.
   const result = await db.prepare(
-    "SELECT id, status, data, pub_date, updated_at FROM items WHERE status = ?",
-  ).bind(STATUSES.PUBLISHED).all();
+    "SELECT id, status, data, pub_date, updated_at FROM items " +
+      "WHERE status = ? AND (book_id = ? OR book_id IS NULL)",
+  ).bind(STATUSES.PUBLISHED, bookId).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   const tagged: Array<{
     row: Record<string, unknown>;

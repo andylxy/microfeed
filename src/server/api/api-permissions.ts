@@ -39,6 +39,23 @@ const ARTICLE_WRITE_CODES = {
 } as const;
 
 const DOMAIN_RULES: DomainRule[] = [
+  // Novel content read API (ADR-0006). Read-only, so `read` and `write` carry the
+  // same code; a write method against these paths is a 405 further down.
+  {
+    prefix: "content/categories",
+    read: "content:category:read",
+    write: "content:category:read",
+  },
+  {
+    prefix: "content/books",
+    read: "content:book:read",
+    write: "content:book:read",
+  },
+  {
+    prefix: "content/chapters",
+    read: "content:article:read",
+    write: "content:article:read",
+  },
   // The article (chapter) domain: `/items/` creates, `/items/{id}/` reads,
   // updates and deletes, `/items/validate/` validates a would-be create.
   {
@@ -61,6 +78,23 @@ const DOMAIN_RULES: DomainRule[] = [
     prefix: "channels",
     read: "content:channel:manage",
     write: "content:channel:manage",
+  },
+  // Novel content read API (ADR-0006). Three distinct prefixes, none a prefix of
+  // another, so the first-match lookup has no ordering trap.
+  {
+    prefix: "content/categories",
+    read: "content:category:read",
+    write: "content:category:read",
+  },
+  {
+    prefix: "content/books",
+    read: "content:book:read",
+    write: "content:book:read",
+  },
+  {
+    prefix: "content/chapters",
+    read: "content:article:read",
+    write: "content:article:read",
   },
 ];
 

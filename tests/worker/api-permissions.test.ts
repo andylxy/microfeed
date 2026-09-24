@@ -78,6 +78,24 @@ describe("requiredApiPermission mapping", () => {
     );
   });
 
+  it("maps the content read API to the dashboard codes", () => {
+    expect(requiredApiPermission("/api/v1/content/categories/", "GET")).toBe(
+      "content:category:read",
+    );
+    expect(
+      requiredApiPermission("/api/v1/content/categories/abc/books/", "GET"),
+    ).toBe("content:category:read");
+    expect(
+      requiredApiPermission("/api/v1/content/books/abc/chapters/", "GET"),
+    ).toBe("content:book:read");
+  });
+
+  it("requires no code for the legacy content base", () => {
+    // The content paths are registered v1-only, so a legacy caller is reported as
+    // not-found by `apiPathDetails` before the RBAC mapping is consulted.
+    expect(requiredApiPermission("/api/content/categories/", "GET")).toBeNull();
+  });
+
   it("requires no code for upstream-owned domains", () => {
     // pages / site-files / media keep the upstream OAuth-scope model, so the
     // RBAC mapping deliberately has no rule for them.
@@ -87,6 +105,21 @@ describe("requiredApiPermission mapping", () => {
     expect(
       requiredApiPermission("/api/v1/media_files/presigned_urls/", "POST"),
     ).toBeNull();
+  });
+
+  it("maps the novel content read endpoints by resource", () => {
+    expect(requiredApiPermission("/api/v1/content/categories/", "GET")).toBe(
+      "content:category:read",
+    );
+    expect(
+      requiredApiPermission("/api/v1/content/categories/abc/books/", "GET"),
+    ).toBe("content:category:read");
+    expect(
+      requiredApiPermission("/api/v1/content/books/abc/chapters/", "GET"),
+    ).toBe("content:book:read");
+    expect(requiredApiPermission("/api/v1/content/chapters/abc/", "GET")).toBe(
+      "content:article:read",
+    );
   });
 
   it("requires no code for non-integration paths", () => {

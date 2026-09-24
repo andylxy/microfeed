@@ -1,6 +1,10 @@
 import {createDocument} from "zod-openapi";
 import {
   apiChannelInputSchema,
+  apiContentBookChaptersResponseSchema,
+  apiContentCategoriesResponseSchema,
+  apiContentCategoryBooksResponseSchema,
+  apiContentChapterSchema,
   apiErrorSchema,
   apiFeedSchema,
   apiIdempotencyKeySchema,
@@ -78,6 +82,24 @@ const pageListQuery = z.object({
 const siteFilePath = z.object({
   siteFileId: z.string().min(1).meta({description: "The Site File ID."}),
 });
+const contentCategoryPath = z.object({
+  categoryId: z.string().min(1).meta({
+    description: "Category id or slug.",
+    example: "OteD-aXHV_d",
+  }),
+});
+const contentBookPath = z.object({
+  bookId: z.string().min(1).meta({
+    description: "Book id, or a slug ending in the 11-character book id.",
+    example: "BkA1x9pQ2Lm",
+  }),
+});
+const contentChapterPath = z.object({
+  chapterId: z.string().min(1).meta({
+    description: "Chapter id, or a slug ending in the 11-character chapter id.",
+    example: "XhJgCh1Aaaa",
+  }),
+});
 
 const apiKeySecurity = {bearerAuth: [] as string[]};
 const readSecurity = [apiKeySecurity];
@@ -147,8 +169,79 @@ export const OPENAPI_DOCUMENT = createDocument({
     {name: "Search", description: "Find items and Pages by title or plain-text content."},
     {name: "Channel", description: "Update the primary channel."},
     {name: "Media", description: "Prepare same-origin media uploads."},
+    {name: "Content", description: "Read published novel content by category, book and chapter."},
   ],
   paths: {
+    "/content/categories/": {
+      get: {
+        security: readSecurity,
+        operationId: "getContentCategories",
+        summary: "List content categories",
+        description:
+          "Every visible category with the number of its published books. The id " +
+          "(or the slug) feeds /content/categories/{categoryId}/books/.",
+        tags: ["Content"],
+        responses: {
+          "200": success(apiContentCategoriesResponseSchema),
+          "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:category:read permission."),
+        },
+      },
+    },
+    "/content/categories/{categoryId}/books/": {
+      get: {
+        security: readSecurity,
+        operationId: "getContentCategoryBooks",
+        summary: "List a category's books",
+        description:
+          "The published books in one category. The category is identified by its id " +
+          "or its slug; an unknown or hidden category is a 404.",
+        tags: ["Content"],
+        requestParams: {path: contentCategoryPath},
+        responses: {
+          "200": success(apiContentCategoryBooksResponseSchema),
+          "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:category:read permission."),
+          "404": error("No such visible category."),
+        },
+      },
+    },
+    "/content/books/{bookId}/chapters/": {
+      get: {
+        security: readSecurity,
+        operationId: "getContentBookChapters",
+        summary: "List a book's chapters",
+        description:
+          "One book's published chapters as a two-level volume then chapter catalogue. " +
+          "An unknown or unpublished book is a 404.",
+        tags: ["Content"],
+        requestParams: {path: contentBookPath},
+        responses: {
+          "200": success(apiContentBookChaptersResponseSchema),
+          "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:book:read permission."),
+          "404": error("No such published book."),
+        },
+      },
+    },
+    "/content/chapters/{chapterId}/": {
+      get: {
+        security: readSecurity,
+        operationId: "getContentChapter",
+        summary: "Get a chapter",
+        description:
+          "One published chapter. contentHtml is the body exactly as stored and " +
+          "contentFormat says how to read it. A chapter of an unpublished book is a 404.",
+        tags: ["Content"],
+        requestParams: {path: contentChapterPath},
+        responses: {
+          "200": success(apiContentChapterSchema),
+          "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:article:read permission."),
+          "404": error("No such published chapter."),
+        },
+      },
+    },
     "/feed/": {
       get: {
         security: readSecurity,

@@ -590,11 +590,18 @@ export default class FeedDb {
     const reviewStatus = typeof microfeed?.reviewStatus === "string"
       ? microfeed.reviewStatus
       : null;
+    // Same treatment for "which book does this chapter belong to". A condition
+    // on a JSON path cannot use an index, so a book's chapters were necessarily
+    // a full scan. `data._microfeed.bookId` stays the source of truth (ADR-0006).
+    const bookId = typeof microfeed?.bookId === "string"
+      ? microfeed.bookId
+      : null;
     const keyValuePairs = {
       'content_text': contentText,
       'content_text_revision': ITEM_CONTENT_TEXT_REVISION,
       'content_text_updated_at': timestamp,
       'review_status': reviewStatus,
+      'book_id': bookId,
       status,
       'pub_date': msToRFC3339(pubDateMs),
       data: JSON.stringify(data),

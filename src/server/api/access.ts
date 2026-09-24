@@ -37,6 +37,14 @@ function integrationSuffix(suffix: string, legacy: boolean): boolean {
     /^channels\/[^/]+\/$/u.test(suffix) ||
     suffix === "media_files/presigned_urls/" ||
     (!legacy && (
+      // Novel content read API (ADR-0006). Registered inside this guard on
+      // purpose: a legacy `/api/content/*` caller then falls through to
+      // not-found (404) instead of reaching the OAuth-scope path, where any key
+      // holding `content:read` would read every category, book and chapter.
+      suffix === "content/categories/" ||
+      /^content\/categories\/[^/]+\/books\/$/u.test(suffix) ||
+      /^content\/books\/[^/]+\/chapters\/$/u.test(suffix) ||
+      /^content\/chapters\/[^/]+\/$/u.test(suffix) ||
       suffix === "search/" ||
       suffix === "pages/" ||
       suffix === "pages/validate/" ||

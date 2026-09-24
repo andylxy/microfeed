@@ -715,3 +715,113 @@ export const createApiKeyCommandSchema = z.object({
 export const renameApiKeyCommandSchema = z.object({
   name: z.string().trim().min(1).max(80),
 });
+
+/**
+ * Novel content read API (ADR-0006).
+ *
+ * The shapes are deliberately flat and explicit: the read functions behind them
+ * carry internal fields (`parentId`, `sort`, `web_url`, the raw `data` JSON, …)
+ * that must not leak, so each response is a whitelist rather than a passthrough.
+ */
+
+export const apiContentCategorySchema = z.object({
+  bookCount: z.number().meta({
+    description: "Number of published books in this category.",
+    example: 4,
+  }),
+  id: z.string().meta({
+    description: "Category id, as accepted by `/content/categories/{categoryId}/books/`.",
+    example: "cat_x1",
+  }),
+  name: z.string().meta({description: "Display name.", example: "东方玄幻"}),
+  slug: z.string().meta({
+    description: "Category slug. Also accepted in place of the id; may be non-ASCII.",
+    example: "eastern-fantasy",
+  }),
+}).meta({id: "ContentCategory"});
+
+export const apiContentCategoriesResponseSchema = z.object({
+  categories: z.array(apiContentCategorySchema),
+}).meta({id: "ContentCategoriesResponse"});
+
+/** The book card the public category page renders (`ChannelBookSummary`). */
+export const apiContentBookSchema = z.object({
+  author: z.string().optional(),
+  description: z.string().optional(),
+  id: z.string().meta({
+    description: "Book id, as accepted by `/content/books/{bookId}/chapters/`.",
+    example: "BkA1x9pQ2Lm",
+  }),
+  image: z.string(),
+  link: z.string(),
+  serialStatus: z.string().optional(),
+  serialStatusLabel: z.string().optional().meta({
+    description: "Human label for serialStatus, for card display.",
+    example: "连载中",
+  }),
+  title: z.string(),
+  wordCount: z.string().optional(),
+  wordCountLabel: z.string().optional().meta({
+    description: "Human label for the word count, for card display.",
+    example: "86万字",
+  }),
+}).meta({id: "ContentBook"});
+
+export const apiContentCategoryBooksResponseSchema = z.object({
+  books: z.array(apiContentBookSchema),
+}).meta({id: "ContentCategoryBooksResponse"});
+
+export const apiContentChapterSummarySchema = z.object({
+  chapterNo: z.number().meta({
+    description: "Chapter number within its volume. Restarts at 1 in every volume.",
+    example: 3,
+  }),
+  id: z.string().meta({
+    description: "Chapter id, as accepted by `/content/chapters/{chapterId}/`.",
+    example: "XhJgCh1Aaaa",
+  }),
+  pubDate: z.string().optional(),
+  title: z.string(),
+}).meta({id: "ContentChapterSummary"});
+
+export const apiContentVolumeSchema = z.object({
+  chapters: z.array(apiContentChapterSummarySchema),
+  name: z.string().meta({
+    description: "Volume name, or empty for chapters filed under no volume.",
+    example: "第一卷",
+  }),
+}).meta({id: "ContentVolume"});
+
+export const apiContentBookChaptersResponseSchema = z.object({
+  book: z.object({
+    id: z.string(),
+    title: z.string(),
+  }),
+  truncated: z.boolean().meta({
+    description: "True when the book has more chapters than this response carries; the last volume may then be incomplete.",
+  }),
+  volumes: z.array(apiContentVolumeSchema),
+}).meta({id: "ContentBookChaptersResponse"});
+
+export const apiContentChapterSchema = z.object({
+  chapterNo: z.number().meta({
+    description: "Chapter number within its volume. Restarts at 1 in every volume.",
+    example: 3,
+  }),
+  contentFormat: z.enum(["html", "markdown"]).meta({
+    description: "How to read contentHtml: html for markup to render directly, markdown for text to convert first.",
+    example: "html",
+  }),
+  contentHtml: z.string().meta({
+    description: "The chapter body exactly as stored. No rendering, conversion or sanitization has been applied.",
+  }),
+  id: z.string().meta({
+    description: "Chapter id.",
+    example: "XhJgCh1Aaaa",
+  }),
+  title: z.string(),
+  volume: z.string().meta({
+    description: "Volume name, or empty for chapters filed under no volume.",
+    example: "第一卷",
+  }),
+}).meta({id: "ContentChapter"});
