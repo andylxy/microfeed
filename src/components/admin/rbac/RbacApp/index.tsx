@@ -545,7 +545,7 @@ export default function RbacApp({initialBoard}: Props) {
                                     </div>
 
                                     {isOpen(page.code) && (
-                                      <ul className="mt-1 grid gap-2 sm:grid-cols-2">
+                                      <ul className="mt-1 flex flex-col gap-2 pl-7">
                                         {page.codes.map((code) => (
                                           <li key={code}>
                                             <label className="flex items-start gap-2 text-sm">
