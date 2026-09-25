@@ -33,7 +33,7 @@
   `corepack yarn typecheck` 与 `corepack yarn test`，涉及构建改动时运行
   `corepack yarn build`）。检查未通过时禁止提交。
 - 只提交与当前任务相关的文件；绝不提交无关变更、临时目录（如 `.zcode/`、
-  `.workbuddy/`）或任何凭证类文件。
+  `.workbuddy/`）或任何凭证类文件（凭证的可读范围与禁令见"内容管理 CLI"一节）。
 - 提交信息使用简洁的祈使句标题（例如 "Add admin dashboard i18n"）。
 - 不得直接提交到 `main`；在按规范命名的任务分支上提交（见"开发工作流"）。
 
@@ -184,8 +184,14 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
   插入 `content_html`。用户要求附加或内封媒体文件时用
   `--attachment-file <path>`，条目封面艺术用 `--image-file <path>`。绝不
   构造、读取或打印短期上传 URL；`--image <url>` 仅用于已托管的封面图。
-- 绝不索取、读取、打印、记录或复制 API key、OAuth 访问 token、刷新 token、
-  client secret 或加密凭证文件。环境凭证由操作者提供，对代理保持不透明。
+- 凭证**可以读取**（2026-09-25 起）：API key、OAuth 访问 token、刷新 token、
+  client secret、加密凭证文件与管理员登录口令，都可以由代理从本机配置、环境变量
+  或凭证文件读出，用于执行 `yarn microfeed` 等本机操作。读取到的值只许留在进程内：
+  **绝不**打印到对话、**绝不**写入任何文件或日志（含 `.microfeed/` 下的日志、
+  脚本与测试夹具）、**绝不**复制到别处、**绝不**提交。凭证始终属于操作者，
+  代理只是使用者。
+- 凭证的**来源**只能是本机已有配置：代理仍**不得在对话中向用户索取凭证**
+  （与下文"Cloudflare 部署"一节的措辞一致）。
 - `yarn microfeed login <site-url>` 需要管理员在浏览器登录并批准范围。需要
   时启动该命令，明确请用户完成浏览器步骤，绝不要代替用户批准同意页面。
 - 删除条目前，确认确切的已保存实例名与条目 ID，解释影响并获得确认。仅在
@@ -268,9 +274,11 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
   绕过身份不匹配检查或擅自使用更底层的删除命令。不要检查或更改 Zero Trust
   或 SSL 设置。报告最终的 Workers & Pages、D1、R2 仪表盘链接、确切的资源
   名称，以及每个资源应当消失还是保留。
-- 绝不在聊天中索取或接受 Cloudflare token 或 microfeed 密码。编码代理绝不
-  得使用 `--admin-password`；该不安全选项仅供接受命令历史与进程列表暴露的
-  无人值守自动化使用。
+- 绝不在聊天中索取或接受 Cloudflare token 或 microfeed 密码：代理**不得**主动
+  向用户索要凭证。但代理**可以读取**本机已保存的 Wrangler 凭证与实例配置
+  （2026-09-25 起，见"内容管理 CLI"一节的凭证条款），读取值同样不得打印到对话、
+  不得写入文件或日志、不得提交。编码代理仍绝不得使用 `--admin-password`；
+  该不安全选项仅供接受命令历史与进程列表暴露的无人值守自动化使用。
 - 先用 `yarn manage accounts --json` 发现授权与账户。当用户想要单独的命名
   登录时，使用 `yarn manage accounts --profile <name> --reauthorize`，不要
   替换其他 Wrangler 配置文件。需要时让 Wrangler 打开浏览器授权。若只返回
@@ -430,6 +438,13 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
   本机失败但在 Linux CI 通过。
 - 更改 UI 文案（i18n）时，既有测试可能断言旧英文文案；运行测试并把断言
   更新为对应的 i18n 键调用或新的渲染文本。
+- GitHub 的 git 推送（receive-pack）必须走本机出口代理：系统 IE/WinINET 代理为
+  `127.0.0.1:10808`（浏览器也走它，所以浏览器能访问 GitHub 而 git 直推会卡住）。
+  Git for Windows 默认不读取 IE 代理、直连出口；直连时 fetch/pull 可用、push 会
+  长时间无响应。修复：`git config --global http.proxy http://127.0.0.1:10808`
+  （撤销：`git config --global --unset http.proxy`）。SSH 到 `github.com:22` 与
+  `ssh.github.com:443` 亦可连通（仅缺密钥），可作为备选路径。该代理由本机
+  VPN/代理客户端提供，客户端未启动时间接推送会失败。
 
 ## 语言
 
