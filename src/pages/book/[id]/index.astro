@@ -2,6 +2,8 @@
 import {env} from "cloudflare:workers";
 
 import {CODE_TYPES} from "@/shared/Constants";
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
@@ -16,6 +18,10 @@ import type {CategoryDb} from "@/server/feed/extCategory";
 import {loadSiteNav} from "@/server/feed/siteNav";
 
 const bookId = Astro.params.id ?? "";
+// B23: the theme-context fallback copy resolves in the site language.
+const bookLanguage = languageFromAcceptLanguage(
+  Astro.request.headers.get("accept-language"),
+);
 
 const loaded = await loadPublishedFeed(env, Astro.request, {
   includeActiveTheme: true,
@@ -108,9 +114,11 @@ const extraContext = book
       items: bookItems,
       book_samples: bookSamples,
       novel_detail: {
-        author: book.author ?? "未知作者",
+        // B23: the fallback copy follows the site language instead of being
+        // hardcoded Chinese — the zh-CN strings are unchanged for zh readers.
+        author: book.author ?? translate("publicBook.unknownAuthor", bookLanguage),
         firstChapterUrl: String(firstChapter?._microfeed?.web_url ?? "#"),
-        latestChapterTitle: String(latestChapter?.title ?? "暂无更新"),
+        latestChapterTitle: String(latestChapter?.title ?? translate("publicBook.noUpdatesYet", bookLanguage)),
         latestChapterUrl: String(latestChapter?._microfeed?.web_url ?? "#"),
         latestDate: String(latestChapter?._microfeed?.date_published_short ?? ""),
         totalChapterCount: bookItems.length,

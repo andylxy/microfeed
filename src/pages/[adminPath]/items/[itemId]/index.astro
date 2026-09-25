@@ -13,7 +13,7 @@ import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const itemId = Astro.params.itemId ?? "";
 const adminLanguage = adminLanguageFromRequest(Astro.request);
-const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_ARTICLE_READ, adminLanguage);
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_CHAPTER_READ, adminLanguage);
 if (denied) {
   return denied;
 }

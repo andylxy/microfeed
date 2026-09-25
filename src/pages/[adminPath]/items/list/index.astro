@@ -15,7 +15,7 @@ if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 
-const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_ARTICLE_READ, adminLanguage);
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_CHAPTER_READ, adminLanguage);
 if (denied) {
   return denied;
 }

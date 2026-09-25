@@ -41,14 +41,14 @@ if (adminRequest) {
 {adminRequest && AdminShell ? (
   <AdminShell
     activeNavItem={null}
-    documentTitle="Admin page not found | microfeed.org"
+    documentTitle={translate("pageDocumentTitle.adminNotFound", adminLanguage)}
     feedContent={Astro.locals.feedContent!}
     onboardingResult={Astro.locals.onboardingResult!}
-    pageTitle="Page not found"
+    pageTitle={translate("errors.general.adminPageNotFound", adminLanguage)}
   >
     <section class="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs" aria-labelledby="not-found-title">
-      <h1 class="mb-4 text-lg font-semibold tracking-tight" id="not-found-title">Admin page not found</h1>
-      <p>The requested admin page does not exist.</p>
+      <h1 class="mb-4 text-lg font-semibold tracking-tight" id="not-found-title">{translate("errors.general.adminPageNotFound", adminLanguage)}</h1>
+      <p>{translate("errors.general.adminPageNotFoundBody", adminLanguage)}</p>
     </section>
   </AdminShell>
 ) : publicPage?.kind !== "page" ? (

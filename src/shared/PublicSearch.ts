@@ -23,22 +23,57 @@ export const PUBLIC_SEARCH_PREVIEW_WARNING =
 
 interface PublicSearchOptions {
   previewResults?: PublicSearchResult[];
+  /** Localized strings; omitted keys fall back to the English defaults. */
+  strings?: Partial<PublicSearchStrings>;
 }
 
-const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-public-search" data-microfeed-search-dialog data-search-endpoint="/search.json">
+/** Every user-visible string the search dialog renders (B23). The server
+ * resolves them in the site language; the English defaults keep the template
+ * usable without any i18n wiring (the theme-kit preview does exactly that).
+ * This module stays runtime-neutral on purpose: theme-kit imports it. */
+export interface PublicSearchStrings {
+  button: string;
+  closeSearch: string;
+  noResults: string;
+  placeholder: string;
+  previewWarning: string;
+  searching: string;
+  startTyping: string;
+  title: string;
+  typeMore: string;
+  unavailable: string;
+}
+
+export const PUBLIC_SEARCH_STRINGS: PublicSearchStrings = {
+  button: "Search",
+  closeSearch: "Close search",
+  noResults: "No results found.",
+  placeholder: "Search items and pages",
+  previewWarning: PUBLIC_SEARCH_PREVIEW_WARNING,
+  searching: "Searching…",
+  startTyping: "Start typing to search.",
+  title: "Search this site",
+  typeMore: "Type one more character to search.",
+  unavailable: "Search is temporarily unavailable.",
+};
+
+const publicSearchTemplate = (
+  s: PublicSearchStrings,
+  stringsJson: string,
+) => `<dialog id="microfeed-search-dialog" class="mf-public-search" data-microfeed-search-dialog data-search-endpoint="/search.json">
   <form action="/search/" method="get" class="mf-public-search__panel">
     <div class="mf-public-search__header">
-      <label for="microfeed-search-dialog-input">Search this site</label>
-      <button type="button" class="mf-public-search__close" aria-label="Close search" data-microfeed-search-close>
+      <label for="microfeed-search-dialog-input">${s.title}</label>
+      <button type="button" class="mf-public-search__close" aria-label="${s.closeSearch}" data-microfeed-search-close>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
       </button>
     </div>
     {{PREVIEW_NOTICE}}
     <div class="mf-public-search__input-row">
-      <input id="microfeed-search-dialog-input" name="q" type="search" placeholder="Search items and pages" autocomplete="off" data-microfeed-search-input data-microfeed-search-preview-initial />
+      <input id="microfeed-search-dialog-input" name="q" type="search" placeholder="${s.placeholder}" autocomplete="off" data-microfeed-search-input data-microfeed-search-preview-initial />
       <button type="submit">
         <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2" /><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-        <span>Search</span>
+        <span>${s.button}</span>
       </button>
     </div>
     <div class="mf-public-search__results" aria-live="polite" data-microfeed-search-results data-microfeed-search-results-context="popup"></div>
@@ -222,6 +257,7 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
 </style>
 
 <script>
+  const MF_SEARCH_I18N = ${stringsJson};
   const dialog = document.querySelector("[data-microfeed-search-dialog]");
   const endpoint = dialog?.dataset.searchEndpoint ?? "/search.json";
   const previewData = document.querySelector(
@@ -382,7 +418,7 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
   function showResults(container, items) {
     container.replaceChildren();
     if (items.length === 0) {
-      message(container, "No results found.");
+      message(container, MF_SEARCH_I18N.noResults);
       return;
     }
     for (const item of items) {
@@ -423,7 +459,7 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
     const query = input.value.trim();
     if (previewResults !== null) {
       if (query.length === 1) {
-        message(container, "Type one more character to search.");
+        message(container, MF_SEARCH_I18N.typeMore);
         return;
       }
       const normalized = query.toLocaleLowerCase();
@@ -438,12 +474,12 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
       return;
     }
     if (query.length < 2) {
-      message(container, query ? "Type one more character to search." : "Start typing to search.");
+      message(container, query ? MF_SEARCH_I18N.typeMore : MF_SEARCH_I18N.startTyping);
       return;
     }
     controller?.abort();
     controller = new AbortController();
-    message(container, "Searching…");
+    message(container, MF_SEARCH_I18N.searching);
     try {
       const url = new URL(endpoint, window.location.origin);
       url.searchParams.set("q", query);
@@ -456,7 +492,7 @@ const PUBLIC_SEARCH_TEMPLATE = `<dialog id="microfeed-search-dialog" class="mf-p
       showResults(container, data.items ?? []);
     } catch (error) {
       if (!(error instanceof Error) || error.name !== "AbortError") {
-        message(container, "Search is temporarily unavailable.");
+        message(container, MF_SEARCH_I18N.unavailable);
       }
     }
   }
@@ -549,15 +585,24 @@ function serializedPreviewResults(results: PublicSearchResult[]): string {
 }
 
 export function publicSearchHtml(
-  {previewResults}: PublicSearchOptions = {},
+  {previewResults, strings}: PublicSearchOptions = {},
 ): string {
+  const s: PublicSearchStrings = {...PUBLIC_SEARCH_STRINGS, ...strings};
+  // Script-safe JSON: escape `<` so a translated string cannot close the tag.
+  const stringsJson = JSON.stringify({
+    noResults: s.noResults,
+    searching: s.searching,
+    startTyping: s.startTyping,
+    typeMore: s.typeMore,
+    unavailable: s.unavailable,
+  }).replace(/</gu, "\\u003c");
   const preview = previewResults === undefined
     ? {data: "", notice: ""}
     : {
         data: `<script type="application/json" data-microfeed-search-preview-results>${serializedPreviewResults(previewResults)}</script>`,
-        notice: `<p class="mf-public-search-preview-note" role="note">${PUBLIC_SEARCH_PREVIEW_WARNING}</p>`,
+        notice: `<p class="mf-public-search-preview-note" role="note">${s.previewWarning}</p>`,
       };
-  return PUBLIC_SEARCH_TEMPLATE
+  return publicSearchTemplate(s, stringsJson)
     .replace("{{PREVIEW_NOTICE}}", preview.notice)
     .replace("{{PREVIEW_DATA}}", preview.data);
 }

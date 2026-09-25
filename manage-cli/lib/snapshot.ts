@@ -67,6 +67,12 @@ export const SNAPSHOT_TABLES = {
     // a snapshot boundary.
     "ext_api_key_owners",
     "ext_api_access_log",
+    // Credential access log v2 (migration 0038) — same durable audit-trail
+    // nature as ext_api_access_log above, keyed by login credential.
+    "ext_api_access_log_v2",
+    // NOTE: `microfeed_installation` is deliberately NOT listed here — it is
+    // `targetSpecific` below (restore rewrites it per target), and listing it
+    // twice makes `assertClassifiedTables` refuse the snapshot.
     // Login credentials (migration 0036). A credential *is* the login secret a
     // user was handed, so a restore that dropped them would silently break every
     // issued token; durable for the same reason as the API-key owner map.
@@ -93,6 +99,9 @@ export const SNAPSHOT_TABLES = {
     // Credential sign-in throttle (migration 0037). A fixed 60s window; nothing
     // worth carrying across a snapshot boundary.
     "ext_login_credential_attempts",
+    // Auth-endpoint throttle (migration 0059). Fixed-window counters like the
+    // one above; nothing worth carrying across a snapshot boundary.
+    "ext_auth_throttle",
     "oauth_access_token",
     "oauth_refresh_token",
     "oauth_consent",

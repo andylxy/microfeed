@@ -29,12 +29,6 @@ const ADMIN_USERNAME_PATTERN = /^[a-zA-Z0-9_.]+$/u;
  */
 export const ADMIN_USERNAME_EMAIL_DOMAIN = "users.microfeed.local";
 
-export const ADMIN_SETUP_SECRET_NAMES = [
-  "MICROFEED_SETUP_ADMIN_EMAIL",
-  "MICROFEED_SETUP_ADMIN_PASSWORD",
-  "MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION",
-] as const;
-
 export interface AdminSetupCredentials {
   email: string;
   password: string;
@@ -101,10 +95,14 @@ export function normalizeAdminUsername(value: string): string {
 
 export function validateAdminUsername(value: string): string | undefined {
   const username = normalizeAdminUsername(value);
-  if (username.length < MIN_ADMIN_USERNAME_LENGTH) {
+  // C1: count code points like validateAdminPassword does (Array.from), not
+  // UTF-16 code units, so both credential rules measure "characters" the same
+  // way.
+  const usernameLength = Array.from(username).length;
+  if (usernameLength < MIN_ADMIN_USERNAME_LENGTH) {
     return `Use at least ${MIN_ADMIN_USERNAME_LENGTH} characters.`;
   }
-  if (username.length > MAX_ADMIN_USERNAME_LENGTH) {
+  if (usernameLength > MAX_ADMIN_USERNAME_LENGTH) {
     return `Use no more than ${MAX_ADMIN_USERNAME_LENGTH} characters.`;
   }
   if (!ADMIN_USERNAME_PATTERN.test(username)) {

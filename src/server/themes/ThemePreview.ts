@@ -13,6 +13,7 @@ import {
   publicSearchHtml,
   type PublicSearchResult,
 } from "@/shared/PublicSearch";
+import {publicSearchStrings} from "@/shared/PublicSearchI18n";
 import {
   manifestSearchItemDestination,
   resolveThemeSearchItemUrl,
@@ -268,7 +269,11 @@ export async function themePreviewResponse(
     ? theme.getWebSearch("", previewSearchResults).html
     : theme.getWebFeed().html;
   const publicSearch = supportsPagesAndSearch
-    ? publicSearchHtml({previewResults: previewSearchResults})
+    ? publicSearchHtml({
+        previewResults: previewSearchResults,
+        // B23: the admin preview renders the dialog in the viewer's language.
+        strings: publicSearchStrings(adminLanguageFromRequest(request)),
+      })
     : "";
   return new Response(
     `<!doctype html><html lang="${String(publicFeed.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${shared.getWebHeader().html}${theme.getWebHeader().html}</head><body>${shared.getWebBodyStart().html}${theme.getWebBodyStart().html}${body}${shared.getWebBodyEnd().html}${theme.getWebBodyEnd().html}${publicSearch}</body></html>`,

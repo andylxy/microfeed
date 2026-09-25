@@ -1,5 +1,7 @@
 ---
+import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
 import {publicSearchHtml} from "@/shared/PublicSearch";
+import {publicSearchStrings} from "@/shared/PublicSearchI18n";
 ---
 
-<Fragment set:html={publicSearchHtml()} />
+<Fragment set:html={publicSearchHtml({strings: publicSearchStrings(languageFromAcceptLanguage(Astro.request.headers.get("accept-language")))})} />

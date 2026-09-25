@@ -3,6 +3,7 @@ import {
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   truncate,
@@ -37,8 +38,8 @@ import {
   validateSnapshotMigrations,
   writeSnapshotManifest,
   } from "../../../manage-cli/lib/snapshot";
-import {repositoryRoot} from "../../../manage-cli/lib/process";
 import {ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES} from "../../../src/shared/ItemSearchSql";
+import {repositoryRoot} from "../../../manage-cli/lib/process";
 import {
 } from "../../../manage-cli/commands";
 import {
@@ -142,6 +143,39 @@ describe("snapshot migration history", () => {
     expect(SNAPSHOT_TABLES.ephemeral).toContain("webhook_settings");
     expect(SNAPSHOT_TABLES.durable).toContain("pages");
     expect(SNAPSHOT_TABLES.durable).toContain("site_files");
+  });
+
+  it("classifies every table the repository migrations create (C7')", async () => {
+    // The production pipeline refuses a snapshot when a table it finds in the
+    // live database is missing from SNAPSHOT_TABLES. This test closes the loop
+    // on the other side: every CREATE TABLE in the checked-in migrations must
+    // already be classified, so a future ext_ table cannot ship unclassified
+    // and only blow up at snapshot time on a live deployment.
+    const migrationsDirectory = path.join(repositoryRoot, "migrations");
+    const filenames = (await readdir(migrationsDirectory))
+      .filter((filename) => filename.endsWith(".sql"));
+    expect(filenames.length).toBeGreaterThan(0);
+    const tables = new Set<string>();
+    for (const filename of filenames) {
+      const sql = await readFile(path.join(migrationsDirectory, filename), "utf8");
+      // Strip line comments so a documented-out CREATE TABLE never counts.
+      const code = sql.replace(/^\s*--.*$/gmu, "");
+      for (const match of code.matchAll(
+        /CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`\[\]]?([A-Za-z0-9_]+)/giu,
+      )) {
+        tables.add(match[1] ?? "");
+      }
+    }
+    // FTS5 virtual tables and their shadow tables are filtered by prefix in
+    // production (applicationTablesFromSqlite); mirror that here.
+    const application = [...tables].filter((table) =>
+      table &&
+      !ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES.some((prefix) =>
+        table === prefix || table.startsWith(`${prefix}_`)
+      ),
+    );
+    expect(application.length).toBeGreaterThan(0);
+    expect(() => assertClassifiedTables(application)).not.toThrow();
   });
 
   it("extracts explicit index definitions without matching comments or data", () => {

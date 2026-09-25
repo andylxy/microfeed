@@ -4,14 +4,14 @@ import type {
   ThemeDraftSummary,
   ThemeState,
   ThemeVersionSummary,
-} from "@/shared/themes/ThemeContract";
+} from "./ThemeContract";
 import {AppError} from "../errors";
 import {
   storedThemeVersionSchema,
   storedThemeManifestV1Schema,
   themeDraftSchema,
   themeSourceKindSchema,
-} from "@/shared/themes/ThemeContract";
+} from "./ThemeContract";
 
 type DatabaseRow = Record<string, unknown>;
 
