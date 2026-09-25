@@ -8,17 +8,16 @@
  *
  * Rows self-prune: once `reset_at_ms` has passed the window restarts, so the
  * table stays bounded without a cleanup job.
+ *
+ * The window helpers here (`loginThrottleAllows` / `recordLoginFailure`) are
+ * deliberately NOT shared with `auth-endpoint-throttle.ts`, which counts
+ * *pre-checked attempts in seconds* and answers 429 itself; this one counts
+ * *failures in ms* and is cleared on success. They share the address resolution
+ * (`client-address.ts`) and the shape, not the semantics.
  */
 
 export const LOGIN_THROTTLE_MAX_ATTEMPTS = 10;
 export const LOGIN_THROTTLE_WINDOW_MS = 60_000;
-
-/** Best-effort client address; Cloudflare sets `cf-connecting-ip` in production. */
-export function clientAddress(request: Request): string {
-  return request.headers.get("cf-connecting-ip")?.trim() ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    "unknown";
-}
 
 /** `false` once the caller has exhausted its attempts for the current window. */
 export async function loginThrottleAllows(

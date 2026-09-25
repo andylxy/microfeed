@@ -119,10 +119,6 @@ export async function createLoginCredential(
   input: {userId: string; name: string; expiresAtMs?: number | null},
   audit?: PendingAudit,
 ): Promise<LoginCredentialRecord> {
-  const count = await countLoginCredentialsForUser(database, input.userId);
-  if (count >= MAX_LOGIN_CREDENTIALS_PER_USER) {
-    throw new LoginCredentialLimitError();
-  }
   const now = Date.now();
   const secret = generateLoginCredentialToken();
   const record: LoginCredentialRecord = {
@@ -135,13 +131,17 @@ export async function createLoginCredential(
     secret,
     userId: input.userId,
   };
-  // The insertion and the audit row ride the same batch, so the credential and
-  // the record of who issued it land or fail together.
-  await database.batch([
+  // B14: the per-user cap is enforced inside the same transaction as the
+  // insert — the old separate count-then-check had a window where two
+  // concurrent creates both passed it and breached the cap together. The
+  // credential row is only inserted while the count stays below the cap, and
+  // the audit row — riding the same batch — only lands if the credential did.
+  const results = await database.batch([
     database.prepare(
       "INSERT INTO ext_login_credentials " +
         "(id, user_id, name, secret, secret_hash, created_at_ms, expires_at_ms, revoked, last_used_at_ms) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)",
+        "SELECT ?, ?, ?, ?, ?, ?, ?, 0, NULL " +
+        "WHERE (SELECT COUNT(*) FROM ext_login_credentials WHERE user_id = ?) < ?",
     ).bind(
       record.id,
       record.userId,
@@ -150,9 +150,17 @@ export async function createLoginCredential(
       await sha256Hex(record.secret),
       record.createdAtMs,
       record.expiresAtMs,
+      record.userId,
+      MAX_LOGIN_CREDENTIALS_PER_USER,
     ),
-    ...(audit ? [auditStatement(database, audit)] : []),
+    ...(audit ? [auditStatement(database, audit, {
+      sql: "SELECT 1 FROM ext_login_credentials WHERE id = ?",
+      binds: [record.id],
+    })] : []),
   ]);
+  if ((results[0]?.meta.changes ?? 0) !== 1) {
+    throw new LoginCredentialLimitError();
+  }
   return record;
 }
 

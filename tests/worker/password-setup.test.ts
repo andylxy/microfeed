@@ -3,11 +3,13 @@ import {beforeEach, describe, expect, it} from "vitest";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {handleAdminBootstrap} from "@/server/auth/bootstrap";
+import {createLoginCredential, verifyLoginCredentialToken} from "@/server/auth/login-credentials";
 import {
   completeAdminPasswordSetup,
   currentAdminPasswordSetup,
   handleAdminPasswordSetupEntry,
 } from "@/server/auth/password-setup";
+import {decideLoginCredentialApiRequest} from "@/server/api/credential-bearer";
 
 const ORIGIN = "https://feed.example.com";
 const EMAIL = "owner@example.com";
@@ -26,6 +28,7 @@ async function sha256Hex(value: string): Promise<string> {
 
 async function clearAuth(): Promise<void> {
   await env.FEED_DB.batch([
+    env.FEED_DB.prepare("DELETE FROM ext_login_credentials"),
     env.FEED_DB.prepare('DELETE FROM "auth_password_setup"'),
     env.FEED_DB.prepare('DELETE FROM "auth_rate_limit"'),
     env.FEED_DB.prepare('DELETE FROM "auth_session"'),
@@ -241,6 +244,13 @@ describe("browser-based admin password setup", () => {
 
   it("atomically resets the password, revokes sessions, and consumes one concurrent use", async () => {
     const ownerId = await createOwner();
+    // A5: a login credential issued before the reset must be revoked by it.
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "ci",
+      userId: ownerId,
+    });
+    expect(await verifyLoginCredentialToken(env.FEED_DB, credential.secret))
+      .toMatchObject({userId: ownerId});
     const firstSignIn = await signIn(OLD_PASSWORD);
     expect(firstSignIn.status).toBe(200);
     const sessionBefore = await env.FEED_DB.prepare(
@@ -324,5 +334,17 @@ describe("browser-based admin password setup", () => {
     }
     expect((await signIn(OLD_PASSWORD)).status).toBe(401);
     expect((await signIn(NEW_PASSWORD)).status).toBe(200);
+
+    // A5: the reset must have revoked the previously issued login credential.
+    expect(await verifyLoginCredentialToken(env.FEED_DB, credential.secret))
+      .toBeNull();
+    const bearer = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/items/`, {
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/items/",
+    );
+    expect(bearer.kind).toBe("unauthorized");
   });
 });

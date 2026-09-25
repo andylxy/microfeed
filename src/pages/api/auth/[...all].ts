@@ -11,6 +11,7 @@ import {
   validPasskeyStepUp,
 } from "@/server/auth/account-security";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
+import {enforceAuthEndpointThrottle} from "@/server/auth/auth-endpoint-throttle";
 import {
   revokeOAuthConnectionTokens,
   touchOAuthConnection,
@@ -280,6 +281,9 @@ export const ALL: APIRoute = async ({request: originalRequest}) => {
       return oauthError("The CLI connection ID belongs to another authorization.");
     }
   }
+
+  const throttled = await enforceAuthEndpointThrottle(env.FEED_DB, request);
+  if (throttled) return throttled;
 
   let response = await auth.handler(request);
   if (connectionRevocation && response.ok) {

@@ -46,7 +46,16 @@ export const POST: APIRoute = async ({locals, request}) => {
       jsonResponse({changed: true}),
       changed.headers,
     );
-  } catch {
-    return localizedError(request, "errors.account.currentPasswordIncorrect", 400);
+  } catch (error) {
+    // B25: only a *business* rejection of the change (better-auth answers with
+    // a 4xx APIError, e.g. the current password is wrong) maps to the friendly
+    // 400. Anything else — a database outage, a session write failure — is a
+    // 5xx and must surface as one instead of masquerading as a wrong password.
+    const status = (error as {status?: unknown} | null)?.status;
+    if (typeof status === "number" && status >= 400 && status < 500) {
+      return localizedError(request, "errors.account.currentPasswordIncorrect", 400);
+    }
+    console.error("change-password failed", error);
+    return localizedError(request, "errors.account.changeUnavailable", 500);
   }
 };

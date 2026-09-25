@@ -731,3 +731,50 @@ describe("Better Auth on Workers with D1", () => {
     expect(await createdResponse.text()).not.toContain("client_secret");
   });
 });
+
+describe("auth endpoint throttle (A6)", () => {
+  beforeEach(async () => {
+    await env.FEED_DB.prepare("DELETE FROM ext_auth_throttle").run();
+  });
+
+  it("rate limits the username sign-in endpoint after 5 attempts", async () => {
+    const ip = "203.0.113.99";
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await authRoute(authRequest("/api/auth/sign-in/username", {
+        body: JSON.stringify({password: "wrong", username: "owner"}),
+        headers: {"cf-connecting-ip": ip, "content-type": "application/json"},
+        method: "POST",
+      }));
+      lastStatus = response.status;
+    }
+    expect(lastStatus).toBe(429);
+  });
+
+  it("rate limits change-password after 5 attempts", async () => {
+    const ip = "203.0.113.100";
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await authRoute(authRequest("/api/auth/change-password", {
+        body: JSON.stringify({currentPassword: "wrong", newPassword: "new"}),
+        headers: {"cf-connecting-ip": ip, "content-type": "application/json"},
+        method: "POST",
+      }));
+      lastStatus = response.status;
+    }
+    expect(lastStatus).toBe(429);
+  });
+
+  it("skips the IP dimension when cf-connecting-ip is absent", async () => {
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const response = await authRoute(authRequest("/api/auth/sign-in/username", {
+        body: JSON.stringify({password: "wrong", username: "owner"}),
+        headers: {"cf-connecting-ip": "", "content-type": "application/json"},
+        method: "POST",
+      }));
+      lastStatus = response.status;
+    }
+    expect(lastStatus).toBe(429);
+  });
+});

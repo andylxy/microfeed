@@ -17,13 +17,13 @@ import {
   markLoginCredentialUsed,
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
+import {clientAddress} from "@/server/auth/client-address";
 import {
   clearLoginThrottle,
-  clientAddress,
   loginThrottleAllows,
   recordLoginFailure,
 } from "@/server/auth/login-throttle";
-import {jsonResponse, localizedError} from "@/server/http";
+import {jsonResponse, publicLocalizedError} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
 import {adminUrl} from "@/shared/AdminPath";
 
@@ -53,7 +53,7 @@ export async function handleCredentialLogin(
   request: Request,
 ): Promise<Response> {
   if (request.method !== "POST") {
-    return localizedError(request, "errors.general.notFound", 404);
+    return publicLocalizedError(request, "errors.general.notFound", 404);
   }
 
   const headerToken = providedLoginCredentialBearer(request);
@@ -61,7 +61,7 @@ export async function handleCredentialLogin(
     !headerToken &&
     request.headers.get("origin") !== new URL(request.url).origin
   ) {
-    return localizedError(request, "errors.loginCredential.crossOrigin", 403);
+    return publicLocalizedError(request, "errors.loginCredential.crossOrigin", 403);
   }
 
   const body = await request.json().catch(() => null) as
@@ -71,12 +71,15 @@ export async function handleCredentialLogin(
     headerToken ||
     "";
   if (!token) {
-    return localizedError(request, "errors.loginCredential.tokenRequired", 400);
+    return publicLocalizedError(request, "errors.loginCredential.tokenRequired", 400);
   }
 
-  const throttleKey = `${clientAddress(request)}:/ajax/auth/credential-login`;
-  if (!await loginThrottleAllows(env.FEED_DB, throttleKey)) {
-    return localizedError(request, "errors.loginCredential.tooManyAttempts", 429);
+  // B13: with no client address, skip the IP dimension of throttling instead of
+  // sharing a global "unknown" bucket that would lock out every addressless caller.
+  const ip = clientAddress(request);
+  const throttleKey = ip ? `${ip}:/ajax/auth/credential-login` : null;
+  if (throttleKey && !await loginThrottleAllows(env.FEED_DB, throttleKey)) {
+    return publicLocalizedError(request, "errors.loginCredential.tooManyAttempts", 429);
   }
 
   const verified = await verifyLoginCredentialToken(env.FEED_DB, token);
@@ -84,8 +87,8 @@ export async function handleCredentialLogin(
     ? await accountIsBlocked(env.FEED_DB, verified.userId)
     : false;
   if (!verified || blocked) {
-    await recordLoginFailure(env.FEED_DB, throttleKey);
-    return localizedError(request, "errors.loginCredential.invalid", 401);
+    if (throttleKey) await recordLoginFailure(env.FEED_DB, throttleKey);
+    return publicLocalizedError(request, "errors.loginCredential.invalid", 401);
   }
 
   let cookies: string[];
@@ -96,9 +99,9 @@ export async function handleCredentialLogin(
     // not something a caller can act on), so the cause has to survive in the log
     // or it is lost entirely.
     console.error("credential-login: session creation failed", error);
-    return localizedError(request, "errors.loginCredential.unavailable", 500);
+    return publicLocalizedError(request, "errors.loginCredential.unavailable", 500);
   }
-  await clearLoginThrottle(env.FEED_DB, throttleKey);
+  if (throttleKey) await clearLoginThrottle(env.FEED_DB, throttleKey);
   await markLoginCredentialUsed(env.FEED_DB, verified.credentialId);
 
   const headers = new Headers();
