@@ -275,7 +275,19 @@ export default class FeedDb {
             op = kwargKeyComponents[1];
           }
           if (op === 'in') {
-            whereList.push(`${key} ${op} (${thing.queryKwargs[kwargKey].join(',')})`);
+            // C8: values are bound as placeholders, never interpolated — this
+            // is a query-builder, so the value list is caller-supplied data.
+            // An empty list short-circuits to a constant false condition
+            // (SQLite has no valid `IN ()` syntax).
+            const inValues = Array.isArray(thing.queryKwargs[kwargKey])
+              ? thing.queryKwargs[kwargKey]
+              : [];
+            if (inValues.length === 0) {
+              whereList.push('1 == 0');
+            } else {
+              bindList.push(...inValues);
+              whereList.push(`${key} ${op} (${inValues.map(() => '?').join(',')})`);
+            }
           } else {
             bindList.push(thing.queryKwargs[kwargKey]);
             whereList.push(`${key} ${op} ?`);

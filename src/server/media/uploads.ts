@@ -1,5 +1,9 @@
 import {mediaPrefix} from "@/server/media/R2Utils";
 import {AppError} from "@/shared/errors";
+import {
+  ALLOWED_MEDIA_UPLOAD_TYPES,
+  MAX_MEDIA_UPLOAD_BYTES,
+} from "@/shared/MediaFileUtils";
 import type {SignedUpload, UploadRequest} from "@/types";
 
 export const UPLOAD_TTL_SECONDS = 15 * 60;
@@ -93,6 +97,13 @@ export async function createSignedUpload(
     )
   ) {
     throw new AppError("errors.media.invalidObjectSize");
+  }
+  // A4: reject oversized or disallowed content types before signing a URL.
+  if (input.size !== undefined && input.size > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new AppError("errors.media.fileTooLarge", 413);
+  }
+  if (contentType && !ALLOWED_MEDIA_UPLOAD_TYPES.has(contentType.toLowerCase())) {
+    throw new AppError("errors.media.unsupportedContentType", 415);
   }
   const signingKey = await importSigningKey(runtimeEnv.UPLOAD_SIGNING_KEY);
   const signature = new Uint8Array(

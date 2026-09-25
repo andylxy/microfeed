@@ -344,10 +344,15 @@ export async function processWebhookMessage(
     return;
   }
   const retryable = !response || retryableStatus(response.status);
-  if (retryable && attempt < 6) {
+  // B11: bind the retry ceiling to the backoff table (single source of truth)
+  // instead of a magic 6, and jitter the delay ±20% so endpoints behind a
+  // shared failure don't receive a synchronized thundering herd. The daily
+  // budget is reserved per *event* (delivery_count at insert, migrations/0019);
+  // retries re-deliver that same event and deliberately do not re-reserve budget.
+  if (retryable && attempt <= WEBHOOK_RETRY_DELAYS_SECONDS.length) {
     const configuredDelay = WEBHOOK_RETRY_DELAYS_SECONDS[attempt - 1] ??
       WEBHOOK_RETRY_DELAYS_SECONDS.at(-1)!;
-    const delaySeconds = configuredDelay;
+    const delaySeconds = Math.round(configuredDelay * (0.8 + Math.random() * 0.4));
     await markForRetry(runtimeEnv.FEED_DB, record, {
       attempt,
       delaySeconds,

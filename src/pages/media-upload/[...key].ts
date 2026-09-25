@@ -8,6 +8,7 @@ import {
 } from "@/server/media/storage";
 import {normalizeObjectKey, verifySignedUpload} from "@/server/media/uploads";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {ALLOWED_MEDIA_UPLOAD_TYPES} from "@/shared/MediaFileUtils";
 import {translate} from "@/shared/i18n";
 
 const corsHeaders = {
@@ -51,6 +52,17 @@ export const PUT: APIRoute = async ({params, request, url}) => {
       {status: 403},
     );
   }
+  // A4: the signed `contentType` is authentic; reject anything outside the
+  // upload allowlist before any bytes are stored.
+  if (contentType && !ALLOWED_MEDIA_UPLOAD_TYPES.has(contentType.toLowerCase())) {
+    return new Response(
+      translate(
+        "errors.media.unsupportedContentType",
+        adminLanguageFromRequest(request),
+      ),
+      {status: 415},
+    );
+  }
   if (!request.body) {
     return new Response(
       translate(
@@ -69,7 +81,10 @@ export const PUT: APIRoute = async ({params, request, url}) => {
     body = fixedLength.readable;
   }
   const put = bucket.put(objectKey, body, {
-    httpMetadata: contentType ? {contentType} : request.headers,
+    // A4: only trust the authenticated (signed) content-type. When it is absent,
+    // do not fall back to request.headers, which a caller could spoof; the
+    // object is then served with `content-disposition: attachment`.
+    httpMetadata: contentType ? {contentType} : undefined,
   });
   const [object] = await Promise.all([put, piping]);
   return jsonResponse(

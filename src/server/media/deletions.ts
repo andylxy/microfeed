@@ -75,6 +75,50 @@ export function managedMediaObjectKey(value: unknown): string | null {
   return key;
 }
 
+/** Extract every `<img src="…">` URL from an HTML string (B20): deleting an
+ * item must also reclaim the R2 objects its body embeds. Best-effort regex —
+ * every URL is re-validated by {@link managedMediaObjectKey} before a delete. */
+export function imageUrlsFromHtml(html: unknown): string[] {
+  if (typeof html !== "string" || !html) {
+    return [];
+  }
+  const urls: string[] = [];
+  const imgPattern = /<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/giu;
+  for (const match of html.matchAll(imgPattern)) {
+    const url = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (url) {
+      urls.push(url);
+    }
+  }
+  return urls;
+}
+
+/** Every media URL an item references (B20): the main media attachments, the
+ * cover image, and the images embedded in its HTML body. */
+export function itemMediaUrls(
+  item: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!item) {
+    return [];
+  }
+  const urls: string[] = [];
+  const attachments = item.attachments;
+  if (Array.isArray(attachments)) {
+    for (const attachment of attachments) {
+      if (attachment && typeof attachment === "object" &&
+        typeof (attachment as Record<string, unknown>).url === "string") {
+        urls.push((attachment as Record<string, unknown>).url as string);
+      }
+    }
+  }
+  if (typeof item.image === "string") {
+    urls.push(item.image);
+  }
+  urls.push(...imageUrlsFromHtml(item.description));
+  urls.push(...imageUrlsFromHtml(item.content_html));
+  return urls;
+}
+
 export function scheduleBestEffortMediaDeletion(
   bucket: Pick<R2Bucket, "delete"> | null,
   imageUrls: unknown[],

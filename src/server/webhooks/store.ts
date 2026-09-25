@@ -449,7 +449,7 @@ export async function webhookOverview(
     `).first<{total: number}>(),
     runtimeEnv.FEED_DB.prepare(`
       SELECT id, kind, message, created_at FROM webhook_alerts
-      WHERE resolved_at IS NULL ORDER BY created_at DESC LIMIT 10
+      ORDER BY created_at DESC LIMIT 10
     `).all<Record<string, unknown>>(),
   ]);
   const deliveriesToday = Number(usage?.deliveries ?? 0);

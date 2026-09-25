@@ -142,3 +142,36 @@ export function splitChapters(text: string): ChapterDraft[] {
 
   return chapters;
 }
+
+/**
+ * Build the dashboard `ajax/feed` item payload for one imported chapter.
+ *
+ * A3 fix: the previous caller sent `content`, which `FeedCrudManager` ignores
+ * (it only reads `content_html`), so the chapter body was silently dropped; and
+ * it sent no `date_published_ms`, which made `FeedDb` call
+ * `msToRFC3339(undefined)` and 500 the whole create. This helper sends the body
+ * as `content_html` with an explicit `content_format: "html"`, plus a numeric
+ * `date_published_ms` so the chapter gets a valid, sortable `pub_date`.
+ *
+ * `datePublishedMs` is supplied by the caller so an entire import can share one
+ * base timestamp and space chapters by index — the book chapter list orders by
+ * `pub_date` ascending (see `extCategory.ts`), so chapter 1 must be the earliest.
+ */
+export function buildChapterImportItem(
+  draft: ChapterDraft,
+  datePublishedMs: number,
+  status: number,
+): Record<string, unknown> {
+  const microfeed: Record<string, unknown> = {};
+  if (draft.volume) microfeed.volume = draft.volume;
+  if (draft.chapterNo != null) microfeed.chapterNo = draft.chapterNo;
+  return {
+    _microfeed: microfeed,
+    content_html: draft.content,
+    content_format: "html",
+    date_published_ms: datePublishedMs,
+    status,
+    title: draft.title,
+    type: "text",
+  };
+}

@@ -765,6 +765,9 @@ describe("webhook delivery policy", () => {
     await insertEndpoint("retry");
     const deliveryId = await insertDelivery("retry", "retry");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("later", {status: 503})));
+    // B11 jitter is ±20%; pin Math.random to 0.5 so the exact-delay assertions
+    // below hold (0.8 + 0.4 × 0.5 = 1.0 × the configured delay).
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
     for (let attempt = 1; attempt <= 6; attempt += 1) {
       const queued = message(deliveryId);
       await processWebhookMessage(runtime(), queued);
@@ -789,6 +792,7 @@ describe("webhook delivery policy", () => {
     expect(await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS count FROM webhook_delivery_attempts WHERE delivery_id = ?",
     ).bind(deliveryId).first()).toEqual({count: 6});
+    randomSpy.mockRestore();
   });
 
   it("auto-pauses exactly at 10 terminal failures and cancels pending work", async () => {

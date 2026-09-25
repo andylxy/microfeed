@@ -31,6 +31,10 @@ interface MediaType {
   contentType: string;
 }
 
+// NOTE: This allowlist is the CLI-side mirror of ALLOWED_MEDIA_UPLOAD_TYPES in
+// src/shared/MediaFileUtils.ts. The Worker rejects any upload whose content-type
+// is not in that set (see A4 media hardening). When you add or remove an entry
+// here, update the shared constant too so the CLI and the server stay in sync.
 const MEDIA_TYPES: Readonly<Record<string, MediaType>> = {
   ".avif": {category: "image", contentType: "image/avif"},
   ".cr2": {category: "image", contentType: "image/x-canon-cr2"},

@@ -4,8 +4,9 @@ import i18n from "@/client/i18n";
 import {showToast} from "@/client/ToastUtils";
 import {Button} from "@/components/ui/button";
 import {ADMIN_URLS} from "@/shared/StringUtils";
-import {STATUSES} from "@/shared/Constants";
+import {MAX_ITEMS_PER_PAGE, STATUSES} from "@/shared/Constants";
 import {
+  buildChapterImportItem,
   splitChapters,
   type ChapterDraft,
 } from "@/shared/novelChapterImport";
@@ -37,6 +38,45 @@ interface State {
 }
 
 const MAX_PREVIEW = 8;
+
+// C12: a rerun after a partial failure used to create every chapter again —
+// the import had no dedup at all. Imported chapters carry no server-side
+// identity beyond their title, so the dedup key is the normalized title:
+// existing non-deleted items are paged through the admin list once before the
+// run, and every created chapter joins the set, which also makes duplicates
+// within a single run impossible.
+const chapterKey = (title: string) => title.trim().toLowerCase();
+
+async function fetchExistingChapterKeys(): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let cursor: string | number | undefined;
+  // Hard page cap: 20 × 300 items covers any single novel; beyond that the
+  // loop stops deduplicating rather than spinning forever. Any fetch failure
+  // degrades to an empty set — dedup is best-effort and must never block the
+  // import itself.
+  for (let page = 0; page < 20; page += 1) {
+    try {
+      const url = new URL(ADMIN_URLS.ajaxItems(), window.location.origin);
+      url.searchParams.set("status", "all");
+      url.searchParams.set("limit", String(MAX_ITEMS_PER_PAGE));
+      if (cursor !== undefined) url.searchParams.set("next_cursor", String(cursor));
+      const response = await fetch(url.toString(), {headers: {accept: "application/json"}});
+      if (!response.ok) break;
+      const data = await response.json() as {
+        items?: Array<{title?: unknown}>;
+        nextCursor?: string | number;
+      };
+      for (const item of data.items ?? []) {
+        if (typeof item.title === "string") keys.add(chapterKey(item.title));
+      }
+      cursor = data.nextCursor;
+      if (cursor === undefined) break;
+    } catch {
+      break;
+    }
+  }
+  return keys;
+}
 
 export default class ImportChaptersApp extends React.Component<Props, State> {
   constructor(props: Props) {
@@ -85,42 +125,54 @@ export default class ImportChaptersApp extends React.Component<Props, State> {
     if (drafts.length === 0 || this.state.importing) return;
     this.setState({importing: true, progress: 0});
 
+    // One base timestamp for the whole import; chapters get strictly increasing
+    // offsets so they sort in serial order (the book chapter list orders by
+    // `pub_date` ascending — chapter 1 must be the earliest). Spacing by index
+    // instead of `Date.now()` per chapter avoids same-millisecond ties that
+    // would otherwise make the order non-deterministic (A3).
+    const publishBase = Date.now();
+    const existingKeys = await fetchExistingChapterKeys();
     let created = 0;
     let failed = 0;
-    for (const draft of drafts) {
-      const microfeed: Record<string, unknown> = {};
-      if (draft.volume) microfeed.volume = draft.volume;
-      if (draft.chapterNo != null) microfeed.chapterNo = draft.chapterNo;
+    let skipped = 0;
+    for (let index = 0; index < drafts.length; index++) {
+      const draft = drafts[index]!;
+      const key = chapterKey(draft.title);
+      if (existingKeys.has(key)) {
+        skipped += 1;
+        this.setState({progress: created + failed + skipped});
+        continue;
+      }
       try {
         const response = await fetch(ADMIN_URLS.ajaxFeed(), {
           body: JSON.stringify({
-            item: {
-              _microfeed: microfeed,
-              content: draft.content,
-              status: STATUSES.PUBLISHED,
-              title: draft.title,
-              type: "text",
-            },
+            item: buildChapterImportItem(
+              draft,
+              publishBase + index * 1000,
+              STATUSES.PUBLISHED,
+            ),
           }),
           headers: {"Content-Type": "application/json"},
           method: "POST",
         });
         if (!response.ok) throw new Error(String(response.status));
+        existingKeys.add(key);
         created += 1;
       } catch {
         // Keep going: a single bad chapter should not abandon the rest of a
         // several-hundred-chapter import. The counters report what happened.
         failed += 1;
       }
-      this.setState({progress: created + failed});
+      this.setState({progress: created + failed + skipped});
     }
 
     this.setState({importing: false});
+    const allClean = failed === 0 && skipped === 0;
     showToast(
-      failed === 0
+      allClean
         ? i18n.t("importChapters.importDone", {count: created})
-        : i18n.t("importChapters.importPartial", {created, failed}),
-      failed === 0 ? "success" : "error",
+        : i18n.t("importChapters.importMixed", {created, failed, skipped}),
+      allClean ? "success" : "error",
     );
   }
 

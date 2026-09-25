@@ -112,9 +112,12 @@ export async function listVolumeBoard(
     })(),
   };
 
+  // B18: `items.book_id` is the denormalized, indexed copy of
+  // `_microfeed.bookId` (migration 0056) — filtering in SQL turns the volume
+  // board's full table scan into an index seek.
   const result = await db.prepare(
-    "SELECT id, status, data, pub_date FROM items WHERE status != ?",
-  ).bind(STATUSES.DELETED).all();
+    "SELECT id, status, data, pub_date FROM items WHERE book_id = ? AND status != ?",
+  ).bind(bookId, STATUSES.DELETED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
 
   const chapters: VolumeChapter[] = [];
@@ -123,7 +126,6 @@ export async function listVolumeBoard(
     const microfeed = data._microfeed && typeof data._microfeed === "object"
       ? data._microfeed as Record<string, unknown>
       : {};
-    if (asText(microfeed.bookId) !== bookId) continue;
     chapters.push({
       chapterNo: asNumber(microfeed.chapterNo) ?? 0,
       id: asText(row.id),

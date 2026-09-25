@@ -178,7 +178,10 @@ describe("webhook contract", () => {
         {MICROFEED_INSTANCE_ID: "site"} as Env,
         new Request("https://feed.example.com/admin/"),
         webhookGeneratedEventInput(type),
-        {origin: "system"},
+        // C4: `system` is a storage-only origin — no code emits it, so the
+        // emitter-side type (and this test) use a real one. The payload
+        // assertions below hold for any origin.
+        {origin: "api"},
       ).payload);
       expect(runtimePayload.test, type).toBe(false);
       expect(apiWebhookEventSchema.safeParse(runtimePayload).success, type)

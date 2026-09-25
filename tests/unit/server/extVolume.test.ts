@@ -59,7 +59,7 @@ function chapter(
     pubDate?: string;
     status?: number;
   } = {},
-): [string, number, string, string] {
+): [string, number, string, string, string] {
   return [
     id,
     extra.status ?? 1,
@@ -68,10 +68,14 @@ function chapter(
       _microfeed: {bookId, chapterNo, volume, ...(extra.microfeed ?? {})},
     }),
     extra.pubDate ?? "2026-01-01T00:00:00Z",
+    // B18: `items.book_id` is the denormalized, indexable copy of
+    // `_microfeed.bookId` (migration 0056) and the board now queries it, so the
+    // fixture carries both like the real row does.
+    bookId,
   ];
 }
 
-function databaseWithBook(chapters: Array<[string, number, string, string]>): VolumeDb {
+function databaseWithBook(chapters: Array<[string, number, string, string, string]>): VolumeDb {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     CREATE TABLE channels (
@@ -84,7 +88,8 @@ function databaseWithBook(chapters: Array<[string, number, string, string]>): Vo
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
       status INTEGER NOT NULL,
-      pub_date TEXT
+      pub_date TEXT,
+      book_id TEXT
     );
     INSERT INTO channels (id, data, status, created_at) VALUES
       ('bk1', '{"title":"星河剑歌"}', 1, 1),
@@ -92,7 +97,7 @@ function databaseWithBook(chapters: Array<[string, number, string, string]>): Vo
       ('bk_gone', '{"title":"已删除"}', 3, 3);
   `);
   const insert = database.prepare(
-    "INSERT INTO items (id, status, data, pub_date) VALUES (?, ?, ?, ?)",
+    "INSERT INTO items (id, status, data, pub_date, book_id) VALUES (?, ?, ?, ?, ?)",
   );
   for (const row of chapters) insert.run(...row);
   return new SqliteVolumeDb(database);

@@ -37,23 +37,6 @@ export interface CategoryDb {
   prepare(query: string): CategoryDbPreparedStatement;
 }
 
-/** Lightweight `{id, title}` list of published books (channels) for use in
- *  admin dropdowns that let a chapter be assigned to a book. */
-export async function listBookOptions(
-  db: CategoryDb,
-): Promise<Array<{id: string; title: string}>> {
-  const result = await db.prepare(
-    "SELECT id, data FROM channels WHERE status = ? ORDER BY created_at ASC",
-  ).bind(STATUSES.PUBLISHED).all();
-  return result.results.map((row) => {
-    const data = safeParseJson(row.data);
-    return {
-      id: String(row.id),
-      title: typeof data.title === "string" ? data.title : "未命名作品",
-    };
-  });
-}
-
 /** Public book cards for the shelf/home page. A microfeed site has one primary
  * feed, but novel samples and future multi-book channels can still be listed
  * from the published channels table without changing the feed contract. */
@@ -319,6 +302,16 @@ export async function deleteCategory(
 ): Promise<boolean> {
   const result = await db.prepare(
     "DELETE FROM ext_category WHERE id = ?",
+  ).bind(id).run();
+  // B19: deleting a category used to leave dangling references — child
+  // categories kept a parent_id that no longer resolved, and channels kept a
+  // `genre` pointing at the deleted row. Detach both so nothing references a
+  // category that no longer exists.
+  await db.prepare(
+    "UPDATE ext_category SET parent_id = NULL WHERE parent_id = ?",
+  ).bind(id).run();
+  await db.prepare(
+    "UPDATE channels SET genre = NULL WHERE genre = ?",
   ).bind(id).run();
   return result.success;
 }

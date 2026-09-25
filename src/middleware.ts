@@ -303,6 +303,11 @@ const handleRequest = defineMiddleware(async (context, next) => {
       context.url.hostname,
     );
 
+    const response = await next();
+
+    // B21: the access log used to be written before the route ran with a fixed
+    // status=200, so an authenticated call that failed was still recorded as a
+    // success. Log after `next()` with the real response status instead.
     if (attribution) {
       await writeApiAccessLog(
         db,
@@ -310,12 +315,12 @@ const handleRequest = defineMiddleware(async (context, next) => {
         context.request.method,
         pathname,
         true,
-        200,
+        response.status,
       );
     }
 
     return addLegacyApiDeprecationHeaders(
-      await next(),
+      response,
       context.url,
       pathname,
     );

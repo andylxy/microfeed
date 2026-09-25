@@ -7,7 +7,12 @@ import {
 import {managementCommand} from "@/shared/ManagementCli";
 import {WebhookRequestError, WebhookUnavailableError} from "./validation";
 
-export type WebhookOrigin = "api" | "dashboard" | "system" | "webmcp";
+// C4: no code path emits `system` today — scheduled maintenance never emits
+// webhook events, so the variant is dead on the emitter side. The storage
+// CHECK (migration 0022) and the public context schema still accept the value
+// as a storage superset, so re-introducing a system emitter later is purely
+// additive: no migration, no contract change.
+export type WebhookOrigin = "api" | "dashboard" | "webmcp";
 
 export interface WebhookEventContext {
   causationId?: string;
@@ -803,10 +808,12 @@ export async function pruneWebhookHistory(database: D1Database): Promise<void> {
       DELETE FROM webhook_budget_reservations
       WHERE created_at < datetime('now', '-35 days')
     `),
+    // B12: alerts are one-time notices (kind='fanout_limit') with no lifecycle
+    // owner, so `resolved_at` was never written and open rows were never pruned.
+    // Prune by age regardless of resolution state (column dropped in 0060).
     database.prepare(`
       DELETE FROM webhook_alerts
-      WHERE resolved_at IS NOT NULL
-        AND resolved_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
+      WHERE created_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
     `),
     database.prepare(`
       DELETE FROM webhook_endpoints

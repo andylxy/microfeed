@@ -4,6 +4,7 @@ import {
   mediaBucket,
   mediaStorageUnavailableResponse,
 } from "./storage";
+import {mediaContentDisposition} from "@/shared/MediaFileUtils";
 
 function objectHeaders(object: R2Object): Headers {
   const headers = new Headers();
@@ -12,6 +13,12 @@ function objectHeaders(object: R2Object): Headers {
   headers.set("accept-ranges", "bytes");
   headers.set("etag", object.httpEtag);
   headers.set("last-modified", object.uploaded.toUTCString());
+  headers.set("x-content-type-options", "nosniff");
+  const contentType = object.httpMetadata?.contentType ?? headers.get("content-type") ?? "";
+  const disposition = mediaContentDisposition(contentType);
+  if (disposition) {
+    headers.set("content-disposition", disposition);
+  }
   if (!headers.has("cache-control")) {
     headers.set("cache-control", "public, max-age=3600");
   }
