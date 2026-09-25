@@ -285,7 +285,9 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.WEBHOOKS,
       "group_account",
       ADMIN_MENU_CODES.RBAC,
+      ADMIN_MENU_CODES.RBAC_PERMISSIONS,
       ADMIN_MENU_CODES.USERS,
+      ADMIN_MENU_CODES.RBAC_AUDIT,
     ]);
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});

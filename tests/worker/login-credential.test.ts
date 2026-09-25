@@ -401,22 +401,39 @@ describe("sessionless API bearer", () => {
     expect(result.kind).toBe("forbidden");
   });
 
-  it("requires no RBAC code for upstream-owned domains", async () => {
-    // pages / site-files / media keep the upstream OAuth-scope model, so a
-    // credential whose account holds no content grants is still allowed here.
+  it("gates the formerly-open domains on their manage code (A1)", async () => {
+    // A1: pages / site-files / media_files used to fall through to the upstream
+    // OAuth-scope model, which this path read as "no code required" — any
+    // credential could call them. They now map to their manage code, so an
+    // account with no grants is forbidden and a wildcard holder is allowed.
     await seedUser("u_no_grants");
     const credential = await createLoginCredential(env.FEED_DB, {
       name: "api",
       userId: "u_no_grants",
     });
-    const result = await decideLoginCredentialApiRequest(
+    const denied = await decideLoginCredentialApiRequest(
       env.FEED_DB,
       new Request(`${ORIGIN}/api/v1/pages/`, {
         headers: {authorization: `Bearer ${credential.secret}`},
       }),
       "/api/v1/pages/",
     );
-    expect(result.kind).toBe("allow");
+    expect(denied.kind).toBe("forbidden");
+
+    await seedUser("u_page_admin");
+    await grantRole("u_page_admin", "r_super_admin");
+    const adminCredential = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_page_admin",
+    });
+    const allowed = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/pages/`, {
+        headers: {authorization: `Bearer ${adminCredential.secret}`},
+      }),
+      "/api/v1/pages/",
+    );
+    expect(allowed.kind).toBe("allow");
   });
 
   it("forbids a resource the account has no grant for", async () => {

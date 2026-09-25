@@ -136,12 +136,15 @@ export async function createLoginCredential(
   // concurrent creates both passed it and breached the cap together. The
   // credential row is only inserted while the count stays below the cap, and
   // the audit row — riding the same batch — only lands if the credential did.
+  // The count takes live rows only (`revoked = 0`), exactly like
+  // `countLoginCredentialsForUser`, so revoking frees a slot immediately.
   const results = await database.batch([
     database.prepare(
       "INSERT INTO ext_login_credentials " +
         "(id, user_id, name, secret, secret_hash, created_at_ms, expires_at_ms, revoked, last_used_at_ms) " +
         "SELECT ?, ?, ?, ?, ?, ?, ?, 0, NULL " +
-        "WHERE (SELECT COUNT(*) FROM ext_login_credentials WHERE user_id = ?) < ?",
+        "WHERE (SELECT COUNT(*) FROM ext_login_credentials " +
+        "WHERE user_id = ? AND revoked = 0) < ?",
     ).bind(
       record.id,
       record.userId,
