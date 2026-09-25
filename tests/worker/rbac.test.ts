@@ -23,7 +23,6 @@ import {
   deleteAdminRbacRole,
   deleteAdminRbacUser,
   deleteRbacRole,
-  getAdminRbacBoard,
   getAdminRbacUserDevices,
   getAdminRbacUsers,
   readRbacBoard,
@@ -479,8 +478,8 @@ describe("RBAC administration", () => {
   });
 
   it("refuses to grant the wildcard to an ordinary role", async () => {
-    // Holding `system:permission:manage` must not be an escalation path to
-    // full access, so the server rejects `*` even though the dashboard hides it.
+    // Holding `system:role:manage` must not be an escalation path to full
+    // access, so the server rejects `*` even though the dashboard hides it.
     expect(await replaceRolePermissions(env.FEED_DB, "editor", ["*"]))
       .toEqual({ok: false, reason: "wildcardPermission"});
 
@@ -496,41 +495,13 @@ describe("RBAC administration", () => {
       .toEqual({ok: false, reason: "unknownPermission"});
   });
 
-  it("gates the board on system:role:manage", async () => {
-    const request = new Request("https://feed.example.com/admin/ajax/rbac");
-
-    const anonymous = await getAdminRbacBoard({
-      locals: {},
-      request,
-    } as never);
-    expect(anonymous.status).toBe(401);
-
-    const withoutGrant = await getAdminRbacBoard({
-      locals: {
-        authUser: {id: "u9"},
-        rbacPermissions: new Set(["content:book:read"]),
-      },
-      request,
-    } as never);
-    expect(withoutGrant.status).toBe(403);
-
-    const allowed = await getAdminRbacBoard({
-      locals: {
-        authUser: {id: "u9"},
-        rbacPermissions: new Set(["system:role:manage"]),
-      },
-      request,
-    } as never);
-    expect(allowed.status).toBe(200);
-  });
-
-  it("gates the assignment write on system:permission:manage", async () => {
+  it("gates the assignment write on system:role:manage", async () => {
     const body = JSON.stringify({permissions: [], role: "editor"});
 
     const withoutGrant = await updateAdminRbacRole({
       locals: {
         authUser: {id: "u9"},
-        rbacPermissions: new Set(["system:role:manage"]),
+        rbacPermissions: new Set(["content:book:read"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
         body,
@@ -542,7 +513,7 @@ describe("RBAC administration", () => {
     const allowed = await updateAdminRbacRole({
       locals: {
         authUser: {id: "u9"},
-        rbacPermissions: new Set(["system:permission:manage"]),
+        rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
         body,
@@ -1297,7 +1268,7 @@ describe("RBAC audit trail", () => {
     const response = await updateAdminRbacRole({
       locals: {
         authUser: {email: "owner@example.com", id: "u9"},
-        rbacPermissions: new Set(["system:permission:manage"]),
+        rbacPermissions: new Set(["system:role:manage"]),
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
         body: JSON.stringify({

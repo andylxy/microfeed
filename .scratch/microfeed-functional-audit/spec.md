@@ -377,9 +377,23 @@ DELETE FROM ext_login_credentials WHERE user_id = (SELECT "userId" FROM "auth_pa
 | `0058_ext_media_file_permission.sql` | 插入 `ext_permissions('p_media_file_manage','media:file:manage','媒体文件管理')`；把该码授予所有持有 `content:site_file:manage` 的角色 | `INSERT OR IGNORE` + `NOT EXISTS` |
 | `0059_ext_auth_throttle.sql` | 新建 `ext_auth_throttle(key, window_start_ms, count)`（A6 限流存储，本地表） | `CREATE TABLE IF NOT EXISTS` + 写入时清旧窗口 |
 | `0060_ext_audit_manage_permission.sql`（仅当 B2 选新码方案） | 插入 `content:audit:manage` 并授予持有 `content:audit:read` 的角色 | 同上 |
+| `0061_ext_menu_rbac_permissions.sql`（B27，**已被 0065 反做**） | 插入 `ext_menu` 行 `rbac_permissions`（`parent_code='group_account'`、`path='rbac/permissions'`、绑 `system:permission:manage`、sort 502）；`users` 顺延到 503 | `INSERT OR IGNORE` + 绝对 `UPDATE` |
+| `0062_ext_menu_rbac_audit.sql`（C3） | 插入 `ext_menu` 行 `rbac_audit`（`path='rbac/audit'`、绑 `system:role:manage`、sort 504），让 `ext_rbac_audit`（0054）的只读审计页可达 | `INSERT OR IGNORE` |
+| `0063_ext_menu_rbac_permission_map.sql`（**部分被 0064 反做**） | 给 `ext_menu_permissions` 补 3 行树映射：`rbac_permissions→system:permission:manage`、`rbac_audit→system:role:manage`、`rbac→system:permission:manage`（第 3 行本就是 `INSERT OR IGNORE` 空操作） | `INSERT OR IGNORE` |
+| `0064_ext_menu_permissions_dedupe.sql` | 删除 0063 引入的 2 行**重复树映射**（`rbac_permissions`/`rbac_audit` 那两行，0052 第 64/65 行早已把两码映射到 `rbac` 页），修复「每个码在权限树中恰好出现一次」不变量 | 绝对 `DELETE` |
+| `0065_ext_drop_rbac_permissions_page.sql`（§17.4） | 删除 `ext_role_permissions` 里 `p_system_permission_manage` 的授权行、`ext_menu_permissions` 里带退休码的行与 `('rbac_audit','system:role:manage')`、`ext_permissions` 的 `system:permission:manage`、`ext_menu` 的 `rbac_permissions` 行；`users` sort 从 503 还原到 502 | 全部为绝对 `DELETE` / 绝对 `UPDATE` |
+
+> **0061 → 0065 的净效果为零**：B27 当初选择「新增菜单行 + 新页」来让只持
+> `system:permission:manage` 的账号有落点，但两页是同一块屏幕、拆分后任一单码持有者
+> 仍会在另一半按钮上 403（线上该码授权行数为 0）。最终收敛为一个页面一个码，
+> 0065 把 0061 加的行与码全部收回。0061/0062/0063/0064 保留为过程记录，不再代表当前状态。
+> 因此当前**实际生效**的 RBAC 菜单为 3 行：`rbac`（`system:role:manage`）、
+> `rbac_audit`（`system:role:manage`）、`users`（`system:user:manage`，sort 502）。
 
 > 迁移命名纪律（§2.5.2）：全部 `ext_` 前缀 + 语义名；**绝不**修改已部署迁移文件；
 > 与上游同号不同名仅排序难读，按文件名去重即可。
+> 测试侧约定（§17.4）：`admin-page-guards.test.ts` 会按文件名顺序应用迁移里的
+> `DELETE FROM ext_menu WHERE code = '…'`，所以删页面**不必**改动已落库的迁移文件。
 
 约束（已核实，见 `migrations/0057` 注释）：
 - `ext_permissions.code` UNIQUE，`id` 由 code 派生（`permissionId()`：`p_<code 的 ':'→'_'>`）；
@@ -800,3 +814,25 @@ password-setup），**不包含** admin-menu、rbac、login-credential、webhook
 三次部署「通过」都没覆盖上述 4 处失败。规程补充：**声明复核通过前，必须跑
 `vitest run --config vitest.worker.config.ts tests/worker/` 全量**（25 文件 293 例），
 而非只跑门禁子集。
+
+### 17.4 B27 的最终收敛：0065 删除 `/rbac/permissions` 并合码
+
+§13 的 B27 落地（0061 新增菜单行 + 新页）在复核中被判定为**只复制了页面、没有复制能力**：
+两页渲染同一个 `RbacApp`（后抽为 `RbacBoardPage.astro`），差异只有守卫码、`activeNavItem`
+与标题；而角色 CRUD 端点要 `system:role:manage`、保存授权要 `system:permission:manage`，
+于是任一单码持有者都能进页面却在另一半操作上 403。线上实测两码的
+`ext_role_permissions` 行数均为 **0**（§17.2），"权限专管员"从未存在。
+
+最终收敛为**一个页面一个码**：`system:permission:manage` 合并回 `system:role:manage`。
+迁移 **0065**（删 `ext_menu` 的 `rbac_permissions` 行、`ext_permissions` 的退休码、
+相关 `ext_menu_permissions` 行、`users` sort 还原）承接 0064 已做的树映射去重。
+代码侧删除 `PERMISSION_CODES.SYSTEM_PERMISSION_MANAGE`、`ADMIN_MENU_CODES.RBAC_PERMISSIONS`、
+三个 i18n 键，以及死代码 `GET /ajax/rbac`（`getAdminRbacBoard`）与 `ADMIN_URLS.ajaxRbacBoard`。
+
+决策与取舍见 `.scratch/microfeed-rbac/adr/0002-one-rbac-board.md`。**§13 B27 与 §17.1/§17.2 中
+关于"两页并存"的描述至此作废**，保留为过程记录。
+
+测试侧新增一条可复用约定：`tests/unit/admin-page-guards.test.ts` 现在会按文件名顺序应用
+迁移里的 `DELETE FROM ext_menu WHERE code = '…'`，因此**删除页面不必再改动已落库的迁移文件**。
+另注：`tests/unit/admin-endpoint-guards.test.ts` 解析 `ext_permissions` 的删除只认
+`code IN (…)` 与 `code LIKE '…%'` 两种写法，迁移里写 `code = '…'` 会被它忽略。

@@ -60,8 +60,10 @@ async function parseError(response: Response, fallback: string): Promise<string>
 /**
  * Roles and the permissions granted to them.
  *
- * The board is read from `GET /ajax/rbac` (`system:role:manage`) and written
- * back with `POST /ajax/rbac/role-permissions` (`system:permission:manage`).
+ * The board is rendered server-side into the page (`/rbac/`) and written back
+ * with `POST /ajax/rbac/role-permissions`. Every RBAC endpoint is gated by
+ * `system:role:manage`, so anything this screen offers is either allowed or
+ * invisible to the signed-in account — there is no partial board.
  * `super_admin` is read-only here: its access comes from the `*` wildcard, so
  * an assignment that stripped it would lock every administrator out. Roles can
  * also be created, renamed and deleted through the sibling endpoints.

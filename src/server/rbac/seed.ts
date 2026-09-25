@@ -38,7 +38,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // system
   {code: "system:user:manage", name: "用户管理"},
   {code: "system:role:manage", name: "角色管理"},
-  {code: "system:permission:manage", name: "权限管理"},
   {code: "content:settings:manage", name: "站点设置管理"},
   {code: "system:webhook:manage", name: "Webhook 管理"},
   // menu - admin menu visibility (migration 0040). A menu row binds at most one

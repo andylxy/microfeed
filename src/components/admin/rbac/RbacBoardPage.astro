@@ -7,15 +7,19 @@ import type {RbacBoard} from "@/shared/Rbac";
 import type {FeedContent, OnboardingResult} from "@/types";
 
 /**
- * The shell every RBAC board page shares: the admin chrome around `RbacApp`.
+ * The shell the RBAC board page uses: the admin chrome around `RbacApp`.
  *
- * Both the roles board (`/rbac/`) and the permission-grants page
- * (`/rbac/permissions/`) render the same board behind different guards, so the
- * chrome lives here once instead of being copied per page. The page keeps its
- * own `requirePagePermission` call — the guard code is what ties a page to its
- * menu row, and `tests/unit/admin-page-guards.test.ts` reads it from the page
- * file — and it narrows `Astro.locals` before handing the context in, which is
- * why the context arrives here as required props.
+ * Roles and their grants are one indivisible screen, so there is exactly one
+ * page for them (`/rbac/`). It used to have a twin at `/rbac/permissions/`
+ * guarded by a second code (`system:permission:manage`); the two were byte-for-
+ * byte the same board, and migration 0065 merged the codes and dropped the
+ * twin. This component keeps the chrome in one place in case a second board
+ * page ever earns its keep again.
+ *
+ * The page keeps its own `requirePagePermission` call — the guard code is what
+ * ties a page to its menu row, and `tests/unit/admin-page-guards.test.ts` reads
+ * it from the page file — and it narrows `Astro.locals` before handing the
+ * context in, which is why the context arrives here as required props.
  */
 interface Props {
   activeNavItem: AdminMenuCode | null;

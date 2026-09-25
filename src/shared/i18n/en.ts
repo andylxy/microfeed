@@ -133,7 +133,6 @@ export const en = {
       api: "API",
       webhooks: "Webhooks",
       rbac: "Roles & permissions",
-      rbac_permissions: "Permission grants",
       rbac_audit: "RBAC audit",
       users: "Users",
       settings: "Settings",
@@ -1785,7 +1784,6 @@ export const en = {
     review: "Review queue",
     reviewDetail: "Chapter corrections",
     rbac: "Roles & permissions",
-    rbacPermissions: "Permission grants",
     rbacAudit: "RBAC audit trail",
     users: "Users",
     audit: "Audit trail",
@@ -1840,7 +1838,6 @@ export const en = {
   pageDocumentTitle: {
     admin: "Admin | microfeed.org",
     rbac: "Roles & permissions | microfeed.org",
-    rbacPermissions: "Permission grants | microfeed.org",
     rbacAudit: "RBAC audit trail | microfeed.org",
     users: "Users | microfeed.org",
     accountSettings: "Account settings | microfeed.org",

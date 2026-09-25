@@ -12,9 +12,9 @@ import {PERMISSION_CODES} from "../../src/shared/Constants";
  * would show a link that 403s, or hide a page the account may open.
  *
  * The menu rows live in migrations (0041 seeded them; 0050 groups them, and
- * later feature migrations add rows), so this reads every migration that
- * inserts menu rows rather than from a second list — or a single file — that
- * could go stale.
+ * later feature migrations add rows and delete them again), so this reads every
+ * migration that touches `ext_menu` — inserts and deletes — rather than from a
+ * second list — or a single file — that could go stale.
  */
 
 const PAGES = join("src", "pages", "[adminPath]");
@@ -25,8 +25,17 @@ interface MenuRow {
   permissionCode: string | null;
 }
 
-/** Menu-row inserts from every migration, oldest first. The precise table
- *  pattern keeps `ext_menu_permissions` inserts out of the match. */
+/** Every migration file, oldest first. */
+function migrationSql(): string {
+  return readdirSync("migrations")
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(join("migrations", name), "utf8"))
+    .join("\n");
+}
+
+/** Menu-row inserts, oldest first. The precise table pattern keeps
+ *  `ext_menu_permissions` inserts out of the match. */
 function menuMigrationSql(): string {
   const insertsMenuRow = /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+ext_menu\s*\(/u;
   return readdirSync("migrations")
@@ -37,13 +46,31 @@ function menuMigrationSql(): string {
     .join("\n");
 }
 
+/**
+ * Menu codes a later migration deletes (migration 0064 dropped the duplicate
+ * RBAC board page). A row that is gone must stop being required to have a page,
+ * and its code must stop being treated as "bound" — otherwise removing a page
+ * would fail this file instead of the menu's own consistency check.
+ */
+function deletedMenuCodes(): Set<string> {
+  const codes = new Set<string>();
+  const byCode = /DELETE\s+FROM\s+ext_menu\s+WHERE\s+code\s*=\s*'(?<code>[^']+)'/gu;
+  for (const match of migrationSql().matchAll(byCode)) {
+    if (match.groups?.code) codes.add(match.groups.code);
+  }
+  return codes;
+}
+
 function readMenuRows(): MenuRow[] {
   const sql = menuMigrationSql();
+  const deleted = deletedMenuCodes();
   const rows: MenuRow[] = [];
   const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?:NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
   for (const match of sql.matchAll(tuple)) {
+    const code = match.groups?.code ?? "";
+    if (deleted.has(code)) continue;
     rows.push({
-      code: match.groups?.code ?? "",
+      code,
       path: match.groups?.path ?? "",
       permissionCode: match.groups?.permCode ?? null,
     });

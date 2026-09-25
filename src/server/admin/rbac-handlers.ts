@@ -2,9 +2,13 @@
  * RBAC administration handlers (roles <-> permissions).
  *
  * This is the system-domain surface required by the plan §8.1 row
- * "RBAC 管理页（新建） -> system:role:manage / system:permission:manage":
- * reading the board needs `system:role:manage`, changing a role's grants needs
- * `system:permission:manage`.
+ * "RBAC 管理页（新建） -> system:role:manage": reading the board and changing a
+ * role's grants are both gated by `system:role:manage`.
+ *
+ * Grant writes used to require a second code, `system:permission:manage`. It was
+ * merged back into `system:role:manage` by migration 0065: the board is one
+ * indivisible screen, so a holder of only one of the two codes could reach it
+ * but never finish an edit. There is no "grants-only administrator" shape left.
  */
 
 import {env} from "cloudflare:workers";
@@ -141,9 +145,9 @@ export type ReplaceRoleResult =
  * - `super_admin` may not be edited at all: its access comes from `*`, so an
  *   assignment that stripped it would lock every administrator out.
  * - `*` may not be granted to any other role: that would turn the grant into a
- *   second super administrator and make `system:permission:manage` an
- *   escalation path. The dashboard hides the row, but the server has to refuse
- *   too — a crafted request would otherwise bypass the UI.
+ *   second super administrator and make `system:role:manage` an escalation
+ *   path. The dashboard hides the row, but the server has to refuse too — a
+ *   crafted request would otherwise bypass the UI.
  */
 export async function replaceRolePermissions(
   db: D1Database,
@@ -1059,17 +1063,8 @@ export const updateAdminRbacUser: APIRoute = async ({locals, request}) => {
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
-export const getAdminRbacBoard: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
-    request,
-    env.FEED_DB,
-  );
-  if (guard) return guard;
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
-};
-
 export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_PERMISSION_MANAGE,
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
     request,
     env.FEED_DB,
   );

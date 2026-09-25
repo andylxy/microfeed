@@ -135,7 +135,6 @@ export const zhCN: TranslationKey = {
       api: "API",
       webhooks: "Webhook",
       rbac: "角色与权限",
-      rbac_permissions: "权限配置",
       rbac_audit: "RBAC 修改留痕",
       users: "用户",
       settings: "设置",
@@ -1782,7 +1781,6 @@ export const zhCN: TranslationKey = {
     review: "审核队列",
     reviewDetail: "章节纠错",
     rbac: "角色与权限",
-    rbacPermissions: "权限配置",
     rbacAudit: "RBAC 修改留痕",
     users: "用户",
     audit: "修改留痕",
@@ -1837,7 +1835,6 @@ export const zhCN: TranslationKey = {
   pageDocumentTitle: {
     admin: "管理后台 | microfeed.org",
     rbac: "角色与权限 | microfeed.org",
-    rbacPermissions: "权限配置 | microfeed.org",
     rbacAudit: "RBAC 修改留痕 | microfeed.org",
     users: "用户 | microfeed.org",
     accountSettings: "账户设置 | microfeed.org",
