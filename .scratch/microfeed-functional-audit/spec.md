@@ -754,3 +754,49 @@ deploy8 在 test:deploy 门禁失败（api-item-service 6 例），二分定位�
   「搜索查询长度需在 2 到 200 个字符之间。」，带 `en` 返回英文 —— 无管理端 cookie 也生效，
   证明公开 API 走的是 Accept-Language 而非 cookie。
 - `/search.json` 的 400 是记录的「2–200 字符」校验（探针 1 字符导致），非回归。
+
+## 17. 提交后回修：worker 套件（门禁子集之外）暴露的 4 处红
+
+推送后跑**全部** `tests/worker/**`（25 文件，此前只跑门禁子集 7 文件）暴露 4 处失败，其中
+**1 处是我引入的真实功能回归**，3 处是旧测试期望未随处方更新：
+
+1. **真回归（已修）**：B14 把凭证上限改成批内条件 INSERT 时，内联子查询漏了
+   `revoked = 0` —— 原 `countLoginCredentialsForUser` 的注释明写「只计未吊销行，
+   吊销即释放配额」，我却按 `user_id` 全量计数 → 吊销后无法再建凭证。
+   修复：子查询补 `AND revoked = 0`。
+2. `tests/worker/admin-menu.test.ts`（写死菜单顺序）：0061/0062 新增两行后 23 vs 21 红
+   → 期望数组补 `RBAC_PERMISSIONS`(sort 502)/`USERS`(503)/`RBAC_AUDIT`(504)。
+3. `tests/worker/rbac.test.ts` ×2：editor 授权数 12 → **13**（0058 给 site_file 管理角色
+   多授了 `media:file:manage`，即 A1 的预期行为）→ 期望更新并注明来源。
+4. `tests/worker/login-credential.test.ts`：旧用例「upstream-owned 域无需 RBAC 码」断言
+   `/api/v1/pages/` 返回 allow —— 那正是 A1 要修的**漏洞**。改写为断言新契约：
+   无授权账号 forbidden、`r_super_admin` allow。
+
+### 17.1 0063 的补偿迁移 0064（权限树重复映射）
+
+`tests/worker/rbac.test.ts` 的不变量「每个可分配码在权限树中**恰好出现一次**」在修改
+期望值后仍红：我 0063 加的两行与 0052 **已有映射重复**（0052 第 64/65 行早把
+`system:role:manage` 与 `system:permission:manage` 都挂在 `rbac` 页上）。
+
+结论：`ext_menu_permissions` 是**权限树**映射（码 → 唯一承载页），菜单**可见性**由
+`ext_menu.permission_code` 决定 —— 0061/0062 已足够，树映射本不需要动。0063 已落库
+（一字不动红线），故写 **0064** 删除那两行重复映射；0063 的第三行本就是
+`INSERT OR IGNORE` 空转，保留无害。
+
+### 17.2 运维观察（线上授权现状，非缺陷）
+
+线上 `ext_permissions` 中 **5 个 `system:*` 码全部 granted_to = 0** —— 系统/账户区
+（用户、角色与权限、Webhook、API 设置）实际只有 `super_admin`（通配 `*`）可达。
+这不是本次改动引入的（`system:role:manage` 历来无人被授予），但意味着**新增的
+`/rbac/permissions` 页当前也只对 super_admin 可见**。若希望某非超管角色管理权限授予，
+需在角色编辑器里把 `system:permission:manage` 授予该角色（码已在目录与权限树中，
+UI 可直接勾选）；是否授予属运维决策，未擅自代改。
+
+### 17.3 门禁口径教训（再次）
+
+`test:deploy:worker` 只跑 7 个文件（api-item-service / bootstrap-admin /
+installation-identity / item-idempotency / item-search / pages-site-files /
+password-setup），**不包含** admin-menu、rbac、login-credential、webhooks、auth 等。
+三次部署「通过」都没覆盖上述 4 处失败。规程补充：**声明复核通过前，必须跑
+`vitest run --config vitest.worker.config.ts tests/worker/` 全量**（25 文件 293 例），
+而非只跑门禁子集。

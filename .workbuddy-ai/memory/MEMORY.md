@@ -40,9 +40,11 @@
 ## 新增/删除 `ext_menu` 菜单行必须同步的 5 处（2026-09-25 实测）
 - 加一行菜单 = 改迁移后，还要同步：`ADMIN_MENU_CODES`（Constants.ts）、`ext_menu_permissions`（0052 建的映射表）、
   `src/shared/i18n/{en,zh-CN}.ts` 的 `menu.item.<code>` + `pageTitle`/`pageDocumentTitle`、以及**两个测试的期望数组**。
-- ⚠️ 两处测试会红且互不相同：`tests/unit/admin-page-guards.test.ts`（只从 **0041** 读菜单行 → 新行在 0061 它看不见，
-  "never guards a page with a code no menu binds" 红）与 `tests/worker/admin-menu.test.ts:267`（写死了完整菜单顺序
-  → 0061/0062 加行后 expected 21 vs received 23 红）。
+- ⚠️ 两处测试互不相同：`tests/unit/admin-page-guards.test.ts`（**891287c 起改为读 migrations 目录下全部文件**，
+  不再只读 0041；且它对每行**无条件** `readFileSync(<path>/index.astro)`，所以**删页面文件而迁移里还留着 INSERT 会直接 ENOENT 抛错**
+  ——删页必须同时让测试不再看到那行，或改测试识别后续迁移的 DELETE）
+  与 `tests/worker/admin-menu.test.ts:267`（写死完整菜单顺序，0061/0062 后 expected 21 vs received 23 红；
+  只删 rbac_permissions 也仍是 22 vs 21，因为期望数组连 `rbac_audit` 都没有，必须手动补）。
 - ⛔ 删行与删码必须**原子**：`admin-menu.test.ts:71` 要求每个 ADMIN_MENU_CODES 都有 ext_menu 行（删 DB 行留常量=红，
   反之=红）；`:92-118` 要求每行绑的码在 `ext_permissions` 存在（删码留行=红）。
 - 判据：`admin-page-guards.test.ts` 的红说明"页守卫用了没菜单绑的码"，`admin-menu.test.ts` 的红说明"菜单变了但测试没跟"。
