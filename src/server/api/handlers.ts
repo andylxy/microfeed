@@ -15,6 +15,7 @@ import {
   apiUploadInputSchema,
 } from "@/shared/ApiSchemas";
 import {STATUSES} from "@/shared/Constants";
+import {AppError} from "@/shared/errors";
 import {
   getIdFromSlug,
   randomHex,
@@ -22,7 +23,7 @@ import {
   urlJoinWithRelative,
 } from "@/shared/StringUtils";
 import {jsonFeedResponse, publicFeedHead} from "@/server/feed/responses";
-import {jsonResponse, localizedError, localizedTextError} from "@/server/http";
+import {jsonResponse, publicLocalizedError, publicLocalizedTextError} from "@/server/http";
 import {
   createItem as createItemRecord,
   deleteItem as deleteItemRecord,
@@ -131,13 +132,13 @@ function publicSearchResponse(response: ContentSearchResponse) {
 
 export const searchApiItems: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiSearchQuerySchema.safeParse(
     Object.fromEntries(new URL(request.url).searchParams),
   );
   if (!parsed.success) {
-    return localizedError(request, "errors.api.invalidSearchQuery", 400);
+    return publicLocalizedError(request, "errors.api.invalidSearchQuery", 400);
   }
   try {
     const fields = [...new Set(parsed.data.fields.split(","))] as ItemSearchField[];
@@ -185,7 +186,7 @@ function pageServiceError(error: unknown): Response | undefined {
 
 export const listApiPages: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const query = new URL(request.url).searchParams;
   const limit = Number(query.get("limit") ?? 20);
@@ -198,7 +199,7 @@ export const listApiPages: APIRoute = async ({locals, request}) => {
       status !== "unpublished"
     )
   ) {
-    return localizedError(request, "errors.api.invalidPageListQuery", 400);
+    return publicLocalizedError(request, "errors.api.invalidPageListQuery", 400);
   }
   try {
     return jsonResponse(await listPages(locals.feedDb, request, {
@@ -215,13 +216,13 @@ export const listApiPages: APIRoute = async ({locals, request}) => {
 
 export const createApiPage: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiPageCreateInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(
+    return publicLocalizedError(
       request,
       pageInputErrorMessage(parsed.error),
       400,
@@ -251,7 +252,7 @@ export const validateApiPage: APIRoute = async ({request}) => {
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(
+    return publicLocalizedError(
       request,
       pageInputErrorMessage(parsed.error),
       400,
@@ -270,23 +271,23 @@ export const validateApiPage: APIRoute = async ({request}) => {
 
 export const getApiPage: APIRoute = async ({locals, params, request}) => {
   if (!locals.feedDb || !params.pageId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const page = await getPageById(locals.feedDb.FEED_DB, request, params.pageId);
   return page
     ? jsonResponse(page)
-    : localizedError(request, "errors.page.notFound", 404);
+    : publicLocalizedError(request, "errors.page.notFound", 404);
 };
 
 export const updateApiPage: APIRoute = async ({locals, params, request}) => {
   if (!locals.feedDb || !params.pageId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiPageInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(
+    return publicLocalizedError(
       request,
       pageInputErrorMessage(parsed.error),
       400,
@@ -315,7 +316,7 @@ export const updateApiPage: APIRoute = async ({locals, params, request}) => {
         }),
       },
     );
-    if (!page) return localizedError(request, "errors.page.notFound", 404);
+    if (!page) return publicLocalizedError(request, "errors.page.notFound", 404);
     return jsonResponse(page);
   } catch (error) {
     const response = pageServiceError(error);
@@ -326,7 +327,7 @@ export const updateApiPage: APIRoute = async ({locals, params, request}) => {
 
 export const deleteApiPage: APIRoute = async ({locals, params, request}) => {
   if (!locals.feedDb || !params.pageId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   try {
     const before = await getPageById(
@@ -345,7 +346,7 @@ export const deleteApiPage: APIRoute = async ({locals, params, request}) => {
         mutation: "deleted",
       }),
     )) {
-      return localizedError(request, "errors.page.notFound", 404);
+      return publicLocalizedError(request, "errors.page.notFound", 404);
     }
     return jsonResponse({});
   } catch (error) {
@@ -367,7 +368,7 @@ function siteFileServiceError(error: unknown): Response | undefined {
 
 export const listApiSiteFiles: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   return jsonResponse({
     items: await listSiteFiles(locals.feedDb.FEED_DB, request),
@@ -376,13 +377,13 @@ export const listApiSiteFiles: APIRoute = async ({locals, request}) => {
 
 export const createApiSiteFile: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiSiteFileInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success || !parsed.data.filename) {
-    return localizedError(request, "errors.siteFile.invalid", 400);
+    return publicLocalizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const siteFile = await createSiteFile(
@@ -406,18 +407,18 @@ export const createApiSiteFile: APIRoute = async ({locals, request}) => {
 
 export const validateApiSiteFile: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiSiteFileInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success || !parsed.data.filename) {
-    return localizedError(request, "errors.siteFile.invalid", 400);
+    return publicLocalizedError(request, "errors.siteFile.invalid", 400);
   }
   const contentType = parsed.data.content_type ??
     siteFileMediaTypeForName(parsed.data.filename);
   if (validateSiteFilename(parsed.data.filename) || !contentType) {
-    return localizedError(request, "errors.siteFile.invalid", 400);
+    return publicLocalizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     await previewSiteFile(locals.feedDb, request, {
@@ -435,13 +436,13 @@ export const validateApiSiteFile: APIRoute = async ({locals, request}) => {
 
 export const previewApiSiteFile: APIRoute = async ({locals, request}) => {
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiSiteFilePreviewInputSchema.safeParse(
     await request.json().catch(() => null),
   );
   if (!parsed.success || (!parsed.data.filename && !parsed.data.site_file_id)) {
-    return localizedError(request, "errors.siteFile.invalid", 400);
+    return publicLocalizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const preview = await previewSiteFile(
@@ -453,7 +454,7 @@ export const previewApiSiteFile: APIRoute = async ({locals, request}) => {
       ? jsonResponse(preview, {
           headers: {"cache-control": "private, no-store"},
         })
-      : localizedError(request, "errors.siteFile.notFound", 404);
+      : publicLocalizedError(request, "errors.siteFile.notFound", 404);
   } catch (error) {
     const response = siteFileServiceError(error);
     if (response) return response;
@@ -463,7 +464,7 @@ export const previewApiSiteFile: APIRoute = async ({locals, request}) => {
 
 export const getApiSiteFile: APIRoute = async ({locals, params, request}) => {
   if (!locals.feedDb || !params.siteFileId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const siteFile = await getSiteFileById(
     locals.feedDb.FEED_DB,
@@ -472,7 +473,7 @@ export const getApiSiteFile: APIRoute = async ({locals, params, request}) => {
   );
   return siteFile
     ? jsonResponse(siteFile)
-    : localizedError(request, "errors.siteFile.notFound", 404);
+    : publicLocalizedError(request, "errors.siteFile.notFound", 404);
 };
 
 export const updateApiSiteFile: APIRoute = async ({
@@ -481,13 +482,13 @@ export const updateApiSiteFile: APIRoute = async ({
   request,
 }) => {
   if (!locals.feedDb || !params.siteFileId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiSiteFileInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(request, "errors.siteFile.invalid", 400);
+    return publicLocalizedError(request, "errors.siteFile.invalid", 400);
   }
   try {
     const before = await getSiteFileById(
@@ -509,7 +510,7 @@ export const updateApiSiteFile: APIRoute = async ({
       }),
     );
     if (!siteFile) {
-      return localizedError(request, "errors.siteFile.notFound", 404);
+      return publicLocalizedError(request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse(siteFile);
   } catch (error) {
@@ -521,7 +522,7 @@ export const updateApiSiteFile: APIRoute = async ({
 
 export const deleteApiSiteFile: APIRoute = async ({locals, params, request}) => {
   if (!locals.feedDb || !params.siteFileId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   try {
     const before = await getSiteFileById(
@@ -540,7 +541,7 @@ export const deleteApiSiteFile: APIRoute = async ({locals, params, request}) => 
         mutation: "deleted",
       }),
     )) {
-      return localizedError(request, "errors.siteFile.notFound", 404);
+      return publicLocalizedError(request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse({});
   } catch (error) {
@@ -556,7 +557,7 @@ async function mutateApiSiteFile(
 ): Promise<Response> {
   const {locals, params, request} = context;
   if (!locals.feedDb || !params.siteFileId) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   try {
     const siteFile = await action(
@@ -573,7 +574,7 @@ async function mutateApiSiteFile(
       }), {origin: "api"}),
     );
     if (!siteFile) {
-      return localizedError(request, "errors.siteFile.notFound", 404);
+      return publicLocalizedError(request, "errors.siteFile.notFound", 404);
     }
     return jsonResponse(siteFile);
   } catch (error) {
@@ -591,13 +592,13 @@ export const resetApiSiteFile: APIRoute = (context) =>
 
 export const createApiItem: APIRoute = async ({locals, request}) => {
   if (!locals.feedCrud || !locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiItemInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(request, "errors.item.invalid", 400);
+    return publicLocalizedError(request, "errors.item.invalid", 400);
   }
   const rawIdempotencyKey = request.headers.get("idempotency-key");
   if (rawIdempotencyKey === null) {
@@ -619,10 +620,10 @@ export const createApiItem: APIRoute = async ({locals, request}) => {
     rawIdempotencyKey,
   );
   if (!idempotencyKey.success) {
-    return localizedError(request, "errors.api.invalidIdempotencyKey", 400);
+    return publicLocalizedError(request, "errors.api.invalidIdempotencyKey", 400);
   }
   if (!locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
 
   let claim;
@@ -671,7 +672,7 @@ export const validateApiItem: APIRoute = async ({request}) => {
   ));
   return parsed.success
     ? jsonResponse({valid: true})
-    : localizedError(request, "errors.item.invalid", 400);
+    : publicLocalizedError(request, "errors.item.invalid", 400);
 };
 
 export const getApiItem: APIRoute = ({params, request}) =>
@@ -686,10 +687,10 @@ export const getApiItem: APIRoute = ({params, request}) =>
 export const deleteApiItem: APIRoute = async ({locals, params, request}) => {
   const itemId = getIdFromSlug(params.itemId ?? "");
   if (!itemId) {
-    return localizedError(request, "errors.item.invalidId", 400);
+    return publicLocalizedError(request, "errors.item.invalidId", 400);
   }
   if (!locals.feedCrud || !locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const before = await locals.feedDb.getItemById(itemId);
   if (!await deleteItemRecord(
@@ -705,7 +706,7 @@ export const deleteApiItem: APIRoute = async ({locals, params, request}) => {
       mutation: "deleted",
     }),
   )) {
-    return localizedError(request, "errors.item.notFound", 404);
+    return publicLocalizedError(request, "errors.item.notFound", 404);
   }
   return jsonResponse({});
 };
@@ -713,16 +714,16 @@ export const deleteApiItem: APIRoute = async ({locals, params, request}) => {
 export const updateApiItem: APIRoute = async ({locals, params, request}) => {
   const itemId = getIdFromSlug(params.itemId ?? "");
   if (!itemId) {
-    return localizedError(request, "errors.item.invalidId", 400);
+    return publicLocalizedError(request, "errors.item.invalidId", 400);
   }
   if (!locals.feedCrud || !locals.feedDb) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiItemInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(request, "errors.item.invalid", 400);
+    return publicLocalizedError(request, "errors.item.invalid", 400);
   }
   const before = await locals.feedDb.getItemById(itemId);
   const item = await updateItemRecord(
@@ -740,7 +741,7 @@ export const updateApiItem: APIRoute = async ({locals, params, request}) => {
     }),
   );
   if (!item) {
-    return localizedError(request, "errors.item.notFound", 404);
+    return publicLocalizedError(request, "errors.item.notFound", 404);
   }
   const publicFeed = await locals.feedDb.getPublicJsonData({
     ...locals.feedCrud.feedContent,
@@ -756,16 +757,16 @@ export const updateApiPrimaryChannel: APIRoute = async ({
   request,
 }) => {
   if (params.channelId !== "primary") {
-    return localizedError(request, "errors.channel.invalidId", 400);
+    return publicLocalizedError(request, "errors.channel.invalidId", 400);
   }
   if (!locals.feedCrud) {
-    return localizedTextError(request, "errors.general.feedContextUnavailable", 500);
+    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
   }
   const parsed = apiChannelInputSchema.safeParse(await request.json().catch(
     () => null,
   ));
   if (!parsed.success) {
-    return localizedError(request, "errors.channel.invalid", 400);
+    return publicLocalizedError(request, "errors.channel.invalid", 400);
   }
   const before = webhookChannelSnapshot(structuredClone(
     (locals.feedCrud.feedContent.channel ?? {}) as Record<string, unknown>,
@@ -797,9 +798,7 @@ export const prepareApiMediaUpload: APIRoute = async ({locals, request}) => {
     () => null,
   ));
   if (!parsed.success) {
-    return jsonResponse({
-      error: "Provide a valid media upload request.",
-    }, {status: 400});
+    return publicLocalizedError(request, "errors.api.invalidMediaUpload", 400);
   }
   const input = parsed.data;
   const {
@@ -808,9 +807,7 @@ export const prepareApiMediaUpload: APIRoute = async ({locals, request}) => {
     item_id: itemId,
   } = input;
   if (category !== "image" && !itemId) {
-    return jsonResponse({
-      error: "You have to provide item_id for non-image categories.",
-    }, {status: 400});
+    return publicLocalizedError(request, "errors.api.mediaItemIdRequired", 400);
   }
 
   const extension = localPath.slice(
@@ -821,11 +818,19 @@ export const prepareApiMediaUpload: APIRoute = async ({locals, request}) => {
   const filename = `${filenamePrefix}-${randomHex(32)}` +
     (extension ? `.${extension}` : "");
   const key = `${folderPrefix}/${filename}`;
-  const signed = await createSignedUpload(request, env, {
-    key,
-    size: input.size,
-    type: input.type,
-  });
+  let signed: Awaited<ReturnType<typeof createSignedUpload>>;
+  try {
+    signed = await createSignedUpload(request, env, {
+      key,
+      size: input.size,
+      type: input.type,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return publicLocalizedError(request, error.i18nKey, error.status, error.params);
+    }
+    throw error;
+  }
   const relativeMediaPath = `${signed.mediaBaseUrl}/${key}`;
   const configuredBase = resolvePublicBucketUrl(
     locals.publicBucketUrl,

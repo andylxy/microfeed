@@ -195,6 +195,10 @@ export async function writeApiAccessLog(
   granted: boolean,
   status: number,
 ): Promise<void> {
+  // B6: `permission_code` is NOT NULL, so a null attribution would make the
+  // insert fail and be silently swallowed by the catch below. Write an explicit
+  // sentinel for "no code was mapped" instead of null, so the row always lands.
+  const permissionCode = attribution.permissionCode ?? "__unmapped__";
   try {
     await database.prepare(
       "INSERT INTO ext_api_access_log " +
@@ -207,12 +211,14 @@ export async function writeApiAccessLog(
       attribution.userId,
       method,
       path,
-      attribution.permissionCode,
+      permissionCode,
       granted ? 1 : 0,
       status,
       Date.now(),
     ).run();
-  } catch {
-    // audit is best-effort
+  } catch (error) {
+    // Audit is best-effort, but a failure here is a real signal (schema drift,
+    // quota, …) and must not be invisible — surface it instead of swallowing.
+    console.error("api access log write failed", {path, method, status, granted, error});
   }
 }

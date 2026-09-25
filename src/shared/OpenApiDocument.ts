@@ -125,12 +125,12 @@ export const OPENAPI_DOCUMENT = createDocument({
       "volume/chapter → body). Every endpoint requires a Bearer credential " +
       "whose account holds the matching `content:*:read` permission. A legacy " +
       "API key is rejected with 404, and a missing credential with 401.\n\n" +
-      "All examples below use the live instance `https://feed.881019.xyz` and a " +
-      "login credential `mflc_…`. Replace `$MF_TOKEN` with your own credential.\n\n" +
+      "All examples below use the placeholder origin `$MF_ORIGIN` and a " +
+      "login credential `mflc_…`. Replace `$MF_ORIGIN` with your instance origin and `$MF_TOKEN` with your own credential.\n\n" +
       "### 1. List content categories — `GET /api/v1/content/categories/`\n\n" +
       "Returns every visible category with its published book count.\n\n" +
       "```bash\n" +
-      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/categories/\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" $MF_ORIGIN/api/v1/content/categories/\n" +
       "```\n\n" +
       "```json\n" +
       "{\n" +
@@ -144,7 +144,7 @@ export const OPENAPI_DOCUMENT = createDocument({
       "Returns the published books in one category. `{categoryId}` is the " +
       "category id or its slug.\n\n" +
       "```bash\n" +
-      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/categories/cat_x1/books/\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" $MF_ORIGIN/api/v1/content/categories/cat_x1/books/\n" +
       "```\n\n" +
       "```json\n" +
       "{\n" +
@@ -160,7 +160,7 @@ export const OPENAPI_DOCUMENT = createDocument({
       "11-character book id. `truncated` is true when the book has more than " +
       "5000 chapters.\n\n" +
       "```bash\n" +
-      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/books/BkA1x9pQ2Lm/chapters/\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" $MF_ORIGIN/api/v1/content/books/BkA1x9pQ2Lm/chapters/\n" +
       "```\n\n" +
       "```json\n" +
       "{\n" +
@@ -180,7 +180,7 @@ export const OPENAPI_DOCUMENT = createDocument({
       "says how to render it. `{chapterId}` is the chapter id or a slug ending " +
       "in the 11-character chapter id.\n\n" +
       "```bash\n" +
-      "curl -H \"Authorization: Bearer $MF_TOKEN\" https://feed.881019.xyz/api/v1/content/chapters/Bh01YhStmX0/\n" +
+      "curl -H \"Authorization: Bearer $MF_TOKEN\" $MF_ORIGIN/api/v1/content/chapters/Bh01YhStmX0/\n" +
       "```\n\n" +
       "```json\n" +
       "{\n" +
@@ -355,6 +355,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           },
           "400": error("The request body is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:chapter:create permission."),
+          "429": error("The credential's account is rate limited."),
           "409": error("The Idempotency-Key was already used with a different item payload."),
         },
       },
@@ -374,6 +376,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiItemValidationResponseSchema),
           "400": error("The request body is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:chapter:create permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
     },
@@ -387,6 +391,8 @@ export const OPENAPI_DOCUMENT = createDocument({
         responses: {
           "200": success(apiFeedSchema),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:chapter:read permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The item does not exist."),
         },
       },
@@ -412,6 +418,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiItemOutputSchema),
           "400": error("The request body or item ID is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:chapter:update permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The item does not exist."),
         },
       },
@@ -428,6 +436,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(z.object({})),
           "400": error("The item ID is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:chapter:delete permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The item does not exist."),
         },
       },
@@ -443,6 +453,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiPageListResponseSchema),
           "400": error("The list query or cursor is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
       post: {
@@ -460,6 +472,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "201": success(apiPageCreateResponseSchema),
           "400": error("The Page input or path is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "409": error("The Page path is already reserved."),
           "422": error("The active theme does not support Pages."),
         },
@@ -479,6 +493,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiItemValidationResponseSchema),
           "400": error("The Page input is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
     },
@@ -492,6 +508,8 @@ export const OPENAPI_DOCUMENT = createDocument({
         responses: {
           "200": success(apiPageOutputSchema),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Page does not exist."),
         },
       },
@@ -513,6 +531,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiPageOutputSchema),
           "400": error("The Page input or path is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Page does not exist."),
           "409": error("The Page path is already reserved."),
           "422": error("The active theme does not support Pages."),
@@ -531,6 +551,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(z.object({})),
           "400": error("The built-in 404 Page cannot be deleted."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:page:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Page does not exist."),
         },
       },
@@ -544,6 +566,8 @@ export const OPENAPI_DOCUMENT = createDocument({
         responses: {
           "200": success(apiSiteFileListResponseSchema),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
       post: {
@@ -560,6 +584,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "201": success(apiSiteFileCreateResponseSchema),
           "400": error("The Site File input is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "409": error("The root filename already exists."),
         },
       },
@@ -578,6 +604,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiItemValidationResponseSchema),
           "400": error("The Site File input is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
     },
@@ -597,6 +625,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiSiteFilePreviewResponseSchema),
           "400": error("The template or rendered output is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -611,6 +641,8 @@ export const OPENAPI_DOCUMENT = createDocument({
         responses: {
           "200": success(apiSiteFileOutputSchema),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -631,6 +663,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiSiteFileOutputSchema),
           "400": error("The Site File draft is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -647,6 +681,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(z.object({})),
           "400": error("Generated Site Files cannot be deleted."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -665,6 +701,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiSiteFileOutputSchema),
           "400": error("The Site File content is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -683,6 +721,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(apiSiteFileOutputSchema),
           "400": error("Only generated Site Files can be reset."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:site_file:manage permission."),
+          "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
         },
       },
@@ -727,6 +767,8 @@ export const OPENAPI_DOCUMENT = createDocument({
           "200": success(z.object({})),
           "400": error("The request body or channel ID is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the content:channel:manage permission."),
+          "429": error("The credential's account is rate limited."),
         },
       },
     },
@@ -751,6 +793,10 @@ export const OPENAPI_DOCUMENT = createDocument({
           "201": success(apiUploadOutputSchema),
           "400": error("The upload request is invalid."),
           "401": error("The Bearer credential is missing or invalid."),
+          "403": error("The credential's account lacks the media:file:manage permission."),
+          "413": error("The file exceeds the 100 MiB per-object upload limit."),
+          "415": error("The file type is not on the upload allowlist."),
+          "429": error("The credential's account is rate limited."),
           "503": error("Media storage is unavailable."),
         },
       },

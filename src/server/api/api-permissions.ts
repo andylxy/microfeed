@@ -10,9 +10,11 @@
  * than a parallel `api:*` family, so a role's permissions mean the same thing on
  * the API as they do in the admin UI (ADR-0009).
  *
- * The upstream-owned `pages` / `site-files` / `media_files` domains are
- * deliberately **not** listed: they keep the upstream OAuth-scope model, and a
- * path with no rule here requires no RBAC code.
+ * The upstream-owned `pages` / `site-files` / `media_files` domains are listed
+ * below (A1): previously unmapped, they let any login credential call them with
+ * no RBAC code. Every integration path now maps to a `content:*:*` (or
+ * `media:*:*`) code, and an integration path with no matching rule is denied
+ * (fail-closed) rather than silently allowed.
  */
 
 import {API_BASE_PATH} from "@/shared/ApiVersion";
@@ -79,23 +81,18 @@ const DOMAIN_RULES: DomainRule[] = [
     read: "content:channel:manage",
     write: "content:channel:manage",
   },
-  // Novel content read API (ADR-0006). Three distinct prefixes, none a prefix of
-  // another, so the first-match lookup has no ordering trap.
+  // Upstream-owned domains (A1): previously unmapped, so any login credential
+  // could call them with no RBAC code. Each is managed as a whole, so one code
+  // covers every method. `media_files` uses the new `media:file:manage` code
+  // (migration 0058); `pages` / `site-files` reuse the dashboard's existing
+  // manage codes so the operator audience matches the admin UI.
+  {prefix: "pages", read: "content:page:manage", write: "content:page:manage"},
   {
-    prefix: "content/categories",
-    read: "content:category:read",
-    write: "content:category:read",
+    prefix: "site-files",
+    read: "content:site_file:manage",
+    write: "content:site_file:manage",
   },
-  {
-    prefix: "content/books",
-    read: "content:book:read",
-    write: "content:book:read",
-  },
-  {
-    prefix: "content/chapters",
-    read: "content:chapter:read",
-    write: "content:chapter:read",
-  },
+  {prefix: "media_files", read: "media:file:manage", write: "media:file:manage"},
 ];
 
 function requiredCode(rule: DomainRule, method: string): string {
@@ -116,9 +113,11 @@ function requiredCode(rule: DomainRule, method: string): string {
 }
 
 /**
- * The RBAC code an integration request must hold, or `null` when the path needs
- * no RBAC code here — a non-integration path, or an upstream-owned domain that
- * keeps the OAuth-scope model. Callers treat `null` as "no code required".
+ * The RBAC code an integration request must hold, or `null` when the path is
+ * outside the mapped set (a non-integration path, which the caller has already
+ * turned into notFound/reference before reaching here). An integration path that
+ * matches no rule returns `null` too — callers treat that as **denied**
+ * (fail-closed, A1), so a forgotten mapping cannot silently open a domain.
  */
 export function requiredApiPermission(
   pathname: string,

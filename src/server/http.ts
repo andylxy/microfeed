@@ -130,6 +130,28 @@ export function localizedTextError(
 }
 
 /**
+ * Plain-text counterpart of {@link publicLocalizedError}: same Accept-Language
+ * lookup, plain-text body. Use it on public routes whose original response was
+ * a plain-text `new Response(...)` so localizing does not change the format.
+ */
+export function publicLocalizedTextError(
+  request: Request,
+  key: string,
+  status = 400,
+  params?: Record<string, string>,
+  init: ResponseInit = {},
+): Response {
+  return new Response(
+    translate(
+      key,
+      languageFromAcceptLanguage(request.headers.get("accept-language")),
+      params,
+    ),
+    {...init, status},
+  );
+}
+
+/**
  * Localized plain-text 404 response for public routes. The body is translated
  * with the request's language; the status and reason phrase stay the
  * conventional `404` / `Not Found` so clients are unaffected.
@@ -138,10 +160,12 @@ export function notFoundResponse(
   request?: Request,
   init: ResponseInit = {},
 ): Response {
+  // B7: this helper serves PUBLIC routes, so the body must follow Accept-Language
+  // rather than the admin language cookie (which anonymous readers don't have).
   return new Response(
     translate(
       "errors.general.notFound",
-      adminLanguageFromRequest(request),
+      languageFromAcceptLanguage(request?.headers.get("accept-language") ?? null),
     ),
     {...init, status: 404},
   );

@@ -22,8 +22,8 @@ import {
   markLoginCredentialUsed,
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
+import {clientAddress} from "@/server/auth/client-address";
 import {
-  clientAddress,
   loginThrottleAllows,
   recordLoginFailure,
 } from "@/server/auth/login-throttle";
@@ -70,14 +70,17 @@ export async function decideLoginCredentialApiRequest(
 
   // Throttle before the lookup runs: the token is a bearer secret, so this path
   // is guessable material in exactly the way the sign-in endpoint already is.
-  const throttleKey = `${clientAddress(request)}${THROTTLE_KEY_SUFFIX}`;
-  if (!await loginThrottleAllows(database, throttleKey)) {
+  // B13: with no client address, skip the IP dimension instead of falling back
+  // to a shared "unknown" bucket that would lock out every addressless caller.
+  const ip = clientAddress(request);
+  const throttleKey = ip ? `${ip}${THROTTLE_KEY_SUFFIX}` : null;
+  if (throttleKey && !await loginThrottleAllows(database, throttleKey)) {
     return {kind: "throttled"};
   }
 
   const verified = await verifyLoginCredentialToken(database, token);
   if (!verified) {
-    await recordLoginFailure(database, throttleKey);
+    if (throttleKey) await recordLoginFailure(database, throttleKey);
     return {kind: "unauthorized"};
   }
 
@@ -87,9 +90,10 @@ export async function decideLoginCredentialApiRequest(
     return {kind: "unauthorized"};
   }
 
-  // A `null` code means the path needs no RBAC code here (an upstream-owned
-  // domain such as pages / site-files / media, or a path outside the mapped
-  // set): the credential is authenticated, which is all that is required.
+  // The credential authenticates the user; `requiredApiPermission` decides what
+  // the user may do. After A1 every integration path maps to a code, so a `null`
+  // here means the path is outside the mapped set — deny it (fail-closed) rather
+  // than silently allowing it.
   const permissionCode = requiredApiPermission(pathname, request.method);
   const permissions = await resolveUserPermissions(database, verified.userId);
   const attribution: ApiAttribution = {
@@ -98,9 +102,9 @@ export async function decideLoginCredentialApiRequest(
     permissionCode,
     userId: verified.userId,
   };
-  const granted = permissionCode === null ||
-    permissions.has(RBAC_WILDCARD) ||
-    permissions.has(permissionCode);
+  const granted =
+    permissionCode !== null &&
+    (permissions.has(RBAC_WILDCARD) || permissions.has(permissionCode));
   if (!granted) {
     return {kind: "forbidden", attribution};
   }

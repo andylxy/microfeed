@@ -293,6 +293,10 @@ export async function revokeApiKey(
   }
   await database.batch([
     database.prepare("DELETE FROM api_keys WHERE id = ?").bind(id),
+    // C2: migration 0032 leaves owner-row deletion to application code (no
+    // ON DELETE CASCADE). Nothing writes ext_api_key_owners today, but this
+    // keeps the revoke contract true if a writer ever lands — no orphan rows.
+    database.prepare("DELETE FROM ext_api_key_owners WHERE api_key_id = ?").bind(id),
     removeLegacyApiKeyStatement(database, id, existing.apiKey),
   ]);
   return true;

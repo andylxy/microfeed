@@ -1,7 +1,7 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {jsonResponse, localizedError} from "@/server/http";
+import {jsonResponse, publicLocalizedError} from "@/server/http";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {
   ItemSearchRequestError,
@@ -23,7 +23,7 @@ export const GET: APIRoute = async ({request}) => {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
   if (query.length < 2 || query.length > 200) {
-    return localizedError(
+    return publicLocalizedError(
       request,
       "errors.search.queryLength",
       400,
@@ -39,7 +39,7 @@ export const GET: APIRoute = async ({request}) => {
     shouldHidePublicWeb(loaded.content) ||
     !themeSupportsPagesAndSearch(loaded.content.activeTheme)
   ) {
-    return localizedError(request, "errors.search.notFound", 404);
+    return publicLocalizedError(request, "errors.search.notFound", 404);
   }
   try {
     const searchItemDestination = activeThemeSearchItemDestination(

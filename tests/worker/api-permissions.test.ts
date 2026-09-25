@@ -3,8 +3,9 @@
  *
  * `requiredApiPermission` maps an integration request to the RBAC permission
  * code it requires. Since ADR-0009 the codes are the dashboard's own
- * `content:*:*` codes, split by HTTP method, and a path with no rule requires no
- * code at all (`null`).
+ * `content:*:*` codes, split by HTTP method. A path with no matching rule
+ * returns `null`, which the caller treats as **denied** (fail-closed, A1) — so
+ * a forgotten mapping cannot silently open a domain to any credential.
  *
  * (Formerly part of `api-credentials.test.ts`; the signed-call half of that
  * suite was removed with the signed-call path — see ADR-0008.)
@@ -96,15 +97,21 @@ describe("requiredApiPermission mapping", () => {
     expect(requiredApiPermission("/api/content/categories/", "GET")).toBeNull();
   });
 
-  it("requires no code for upstream-owned domains", () => {
-    // pages / site-files / media keep the upstream OAuth-scope model, so the
-    // RBAC mapping deliberately has no rule for them.
-    expect(requiredApiPermission("/api/v1/pages/", "GET")).toBeNull();
-    expect(requiredApiPermission("/api/v1/pages/", "POST")).toBeNull();
-    expect(requiredApiPermission("/api/v1/site-files/", "POST")).toBeNull();
+  it("requires the manage code for the formerly-unmapped domains (A1)", () => {
+    // pages / site-files / media_files now map to a RBAC code instead of being
+    // open to any login credential.
+    expect(requiredApiPermission("/api/v1/pages/", "GET")).toBe(
+      "content:page:manage",
+    );
+    expect(requiredApiPermission("/api/v1/pages/", "POST")).toBe(
+      "content:page:manage",
+    );
+    expect(requiredApiPermission("/api/v1/site-files/", "POST")).toBe(
+      "content:site_file:manage",
+    );
     expect(
       requiredApiPermission("/api/v1/media_files/presigned_urls/", "POST"),
-    ).toBeNull();
+    ).toBe("media:file:manage");
   });
 
   it("maps the novel content read endpoints by resource", () => {

@@ -27,7 +27,7 @@ import {
   listCategoryNav,
   listChannelsByGenre,
 } from "@/server/feed/extCategory";
-import {jsonResponse, notFoundResponse} from "@/server/http";
+import {jsonResponse, publicLocalizedError} from "@/server/http";
 
 /** A catalog never returns more than this many chapters in one response. */
 const MAX_CHAPTERS = 5000;
@@ -50,7 +50,9 @@ export const getContentCategoryBooks: APIRoute = async ({params, request}) => {
   const category = await getCategoryBySlugOrId(env.FEED_DB, params.categoryId ?? "");
   // A category the public site would not render is not addressable here either:
   // `!category || !category.visible` is exactly the public page's own test.
-  if (!category || !category.visible) return notFoundResponse(request);
+  if (!category || !category.visible) {
+    return publicLocalizedError(request, "errors.category.notFound", 404);
+  }
   // `channels.genre` holds the category *id*, so pass the resolved id — not the
   // slug or id the caller happened to use.
   const books = await listChannelsByGenre(env.FEED_DB, category.id);
@@ -63,7 +65,9 @@ export const getContentBookChapters: APIRoute = async ({params, request}) => {
   // `getBookById` only returns published channels, so this doubles as the
   // "is the book available at all" check.
   const book = bookId ? await getBookById(env.FEED_DB, bookId) : null;
-  if (!bookId || !book) return notFoundResponse(request);
+  if (!bookId || !book) {
+    return publicLocalizedError(request, "errors.books.notFound", 404);
+  }
 
   const all = (await getBookChapters(
     env.FEED_DB,
@@ -80,10 +84,14 @@ export const getContentBookChapters: APIRoute = async ({params, request}) => {
 /** `GET /api/v1/content/chapters/{chapterId}/` — one chapter, body verbatim. */
 export const getContentChapter: APIRoute = async ({locals, params, request}) => {
   const chapterId = getIdFromSlug(params.chapterId ?? "");
-  if (!chapterId || !locals.feedDb) return notFoundResponse(request);
+  if (!chapterId || !locals.feedDb) {
+    return publicLocalizedError(request, "errors.item.notFound", 404);
+  }
   // Published chapters only — drafts and deleted items are not addressable.
   const item = await locals.feedDb.getItemById(chapterId, [STATUSES.PUBLISHED]);
-  if (!item || typeof item !== "object") return notFoundResponse(request);
+  if (!item || typeof item !== "object") {
+    return publicLocalizedError(request, "errors.item.notFound", 404);
+  }
 
   const microfeed = (item._microfeed && typeof item._microfeed === "object"
     ? item._microfeed as Record<string, unknown>
@@ -92,7 +100,9 @@ export const getContentChapter: APIRoute = async ({locals, params, request}) => 
   // A chapter of an unpublished book must not be readable on its own, so the
   // book is re-checked even though the chapter itself is published.
   const book = bookId ? await getBookById(env.FEED_DB, bookId) : null;
-  if (!book) return notFoundResponse(request);
+  if (!book) {
+    return publicLocalizedError(request, "errors.books.notFound", 404);
+  }
 
   const volume = typeof microfeed.volume === "string" ? microfeed.volume.trim() : "";
   const chapterNo = Number(microfeed.chapterNo ?? 0);
