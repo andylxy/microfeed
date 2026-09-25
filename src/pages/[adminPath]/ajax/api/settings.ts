@@ -10,8 +10,11 @@ import {PERMISSION_CODES} from "@/shared/Constants";
 import {apiSettingsCommandSchema} from "@/shared/ApiSchemas";
 
 export const POST: APIRoute = async ({locals, request}) => {
-  // Site settings are a system-domain write (plan §8.1).
-  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_SETTINGS_MANAGE,
+  // B4: the API settings page guards with SYSTEM_API_MANAGE, so the endpoint
+  // that writes those settings must use the same code — otherwise the page is
+  // reachable but every save is 403. Site settings are a system-domain write
+  // (plan §8.1), matching SYSTEM_API_MANAGE.
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_API_MANAGE,
     request,
     env.FEED_DB,
   );

@@ -15,7 +15,11 @@ import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /** `GET` returns every book plus the category picker; `POST` creates a book. */
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({locals, request}) => {
+  // B26: the board lists book content, so the read code guards it — the POST
+  // below was already guarded, but this side was wide open.
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_BOOK_READ, request, env.FEED_DB);
+  if (guard) return guard;
   try {
     const board = await listBooksBoardHandler(
       env.FEED_DB as unknown as BookDb,

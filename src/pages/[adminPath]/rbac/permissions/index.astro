@@ -14,9 +14,11 @@ if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 
-// The board endpoint is guarded, but the page itself must be too (T-10): without
-// this an account could open the board URL directly and read every role's grants.
-const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE, adminLanguage);
+// B27: the permission-grant endpoints require `system:permission:manage`, and
+// the menu row that leads here binds that same code — one menu row, one guard,
+// no loosened validation. Role CRUD inside the board stays gated by
+// `system:role:manage` at the endpoint layer, exactly as before.
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_PERMISSION_MANAGE, adminLanguage);
 if (denied) {
   return denied;
 }
@@ -24,10 +26,10 @@ const board = await readRbacBoard(env.FEED_DB);
 ---
 
 <RbacBoardPage
-  activeNavItem={ADMIN_MENU_CODES.RBAC}
+  activeNavItem={ADMIN_MENU_CODES.RBAC_PERMISSIONS}
   board={board}
-  documentTitle={translate("pageDocumentTitle.rbac", adminLanguage)}
+  documentTitle={translate("pageDocumentTitle.rbacPermissions", adminLanguage)}
   {feedContent}
   {onboardingResult}
-  pageTitle={translate("pageTitle.rbac", adminLanguage)}
+  pageTitle={translate("pageTitle.rbacPermissions", adminLanguage)}
 />

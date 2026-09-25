@@ -11,11 +11,12 @@ import {PERMISSION_CODES} from "../../src/shared/Constants";
  * either direction is a bad experience that no other test catches — the menu
  * would show a link that 403s, or hide a page the account may open.
  *
- * The menu rows live in migration 0041, so this reads them from there rather
- * than from a second list that could go stale.
+ * The menu rows live in migrations (0041 seeded them; 0050 groups them, and
+ * later feature migrations add rows), so this reads every migration that
+ * inserts menu rows rather than from a second list — or a single file — that
+ * could go stale.
  */
 
-const MENU_SQL = "migrations/0041_ext_menu.sql";
 const PAGES = join("src", "pages", "[adminPath]");
 
 interface MenuRow {
@@ -24,8 +25,20 @@ interface MenuRow {
   permissionCode: string | null;
 }
 
+/** Menu-row inserts from every migration, oldest first. The precise table
+ *  pattern keeps `ext_menu_permissions` inserts out of the match. */
+function menuMigrationSql(): string {
+  const insertsMenuRow = /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+ext_menu\s*\(/u;
+  return readdirSync("migrations")
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(join("migrations", name), "utf8"))
+    .filter((sql) => insertsMenuRow.test(sql))
+    .join("\n");
+}
+
 function readMenuRows(): MenuRow[] {
-  const sql = readFileSync(MENU_SQL, "utf8");
+  const sql = menuMigrationSql();
   const rows: MenuRow[] = [];
   const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?:NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
   for (const match of sql.matchAll(tuple)) {

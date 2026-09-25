@@ -18,15 +18,21 @@ import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 export const POST: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_ARTICLE_UPDATE, request, env.FEED_DB);
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CHAPTER_UPDATE, request, env.FEED_DB);
   if (guard) return guard;
   if (!mediaBucket(env)) {
     return mediaStorageUnavailableResponse();
   }
-  const input = await request.json() as UploadRequest;
+  // C10: the parse used to sit outside the try, so a malformed body surfaced as
+  // an unhandled 500 instead of the friendly 400 the deletion path already had.
+  let input: UploadRequest;
   try {
+    input = await request.json() as UploadRequest;
     return jsonResponse(await createSignedUpload(request, env, input));
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return localizedError(request, "errors.r2.invalidUpload", 400);
+    }
     return jsonResponse(
       {error: error instanceof Error ? error.message : "Invalid upload request."},
       {status: 400},
@@ -72,7 +78,7 @@ export async function deleteAdminImage(
 }
 
 export const DELETE: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_ARTICLE_UPDATE,
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CHAPTER_UPDATE,
     request,
     env.FEED_DB,
   );

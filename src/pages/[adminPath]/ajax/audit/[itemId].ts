@@ -48,7 +48,13 @@ interface ActionBody {
  * live behind POST rather than being folded into the read above.
  */
 export const POST: APIRoute = async ({locals, params, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_AUDIT_READ, request, env.FEED_DB);
+  // B2: these are writes, so they must be guarded by a write code — not the
+  // read-only `CONTENT_AUDIT_READ` the GET handler uses. Restore rewrites the
+  // chapter and archive toggles an audit row; both are chapter-content writes.
+  // Until a dedicated `content:audit:manage` code exists, both resolve to the
+  // existing chapter-update write code (no new code is added per the agreed
+  // default).
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CHAPTER_UPDATE, request, env.FEED_DB);
   if (guard) return guard;
   const itemId = params.itemId ?? "";
   const body = await request.json().catch(() => null) as ActionBody | null;

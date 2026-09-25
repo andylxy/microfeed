@@ -1,1 +1,3 @@
-export {getWebhookOverview as GET} from "@/server/admin/webhook-handlers";
+import {getWebhookOverview, withWebhookGuard} from "@/server/admin/webhook-handlers";
+
+export const GET = withWebhookGuard(getWebhookOverview);

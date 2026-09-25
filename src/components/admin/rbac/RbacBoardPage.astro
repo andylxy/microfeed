@@ -1,0 +1,48 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import RbacApp from "@/components/admin/rbac/RbacApp";
+import AdminShell from "@/layouts/AdminShell.astro";
+import type {AdminMenuCode} from "@/shared/AdminNavigation";
+import type {RbacBoard} from "@/shared/Rbac";
+import type {FeedContent, OnboardingResult} from "@/types";
+
+/**
+ * The shell every RBAC board page shares: the admin chrome around `RbacApp`.
+ *
+ * Both the roles board (`/rbac/`) and the permission-grants page
+ * (`/rbac/permissions/`) render the same board behind different guards, so the
+ * chrome lives here once instead of being copied per page. The page keeps its
+ * own `requirePagePermission` call — the guard code is what ties a page to its
+ * menu row, and `tests/unit/admin-page-guards.test.ts` reads it from the page
+ * file — and it narrows `Astro.locals` before handing the context in, which is
+ * why the context arrives here as required props.
+ */
+interface Props {
+  activeNavItem: AdminMenuCode | null;
+  board: RbacBoard;
+  documentTitle: string;
+  feedContent: FeedContent;
+  onboardingResult: OnboardingResult;
+  pageTitle: string;
+}
+
+const {
+  activeNavItem,
+  board,
+  documentTitle,
+  feedContent,
+  onboardingResult,
+  pageTitle,
+} = Astro.props;
+---
+
+<AdminShell
+  {activeNavItem}
+  {documentTitle}
+  {feedContent}
+  {onboardingResult}
+  {pageTitle}
+>  <RbacApp client:only="react" initialBoard={board}>
+    <AdminPageFallback slot="fallback" kind="list" />
+  </RbacApp>
+</AdminShell>

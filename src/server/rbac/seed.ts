@@ -50,6 +50,7 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:audit:read", name: "审计查看"},
   {code: "content:page:manage", name: "页面管理"},
   {code: "content:site_file:manage", name: "站点文件管理"},
+  {code: "media:file:manage", name: "媒体文件管理"},
   {code: "system:api:manage", name: "API 管理"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},

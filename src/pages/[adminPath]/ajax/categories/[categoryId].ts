@@ -15,7 +15,10 @@ import {cache, env} from "cloudflare:workers";
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const GET: APIRoute = async ({params, request}) => {
+export const GET: APIRoute = async ({locals, params, request}) => {
+  // B26: reading one category is a read; the PUT/DELETE below were guarded.
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CATEGORY_READ, request, env.FEED_DB);
+  if (guard) return guard;
   if (!params.categoryId) {
     return localizedError(request, "errors.category.notFound", 400);
   }

@@ -11,6 +11,8 @@ import {
   searchItems,
 } from "@/server/items/search";
 import {jsonResponse} from "@/server/http";
+import {requireRbac} from "@/server/rbac/guard";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 const ALL_STATUSES: ItemSearchStatus[] = [
   "published",
@@ -59,5 +61,9 @@ export async function getAdminItemSearch(
   }
 }
 
-export const GET: APIRoute = ({params, request}) =>
-  getAdminItemSearch(request, env, params.adminPath ?? "admin");
+export const GET: APIRoute = async ({locals, params, request}) => {
+  // B26: admin search reads item content, so the chapter-read code guards it.
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CHAPTER_READ, request, env.FEED_DB);
+  if (guard) return guard;
+  return getAdminItemSearch(request, env, params.adminPath ?? "admin");
+};

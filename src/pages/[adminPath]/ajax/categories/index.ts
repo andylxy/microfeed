@@ -14,7 +14,11 @@ import {
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({locals, request}) => {
+  // B26: category listing is a read — guard it with the read code like the
+  // neighbouring resources; only the POST below was guarded before.
+  const guard = await requireRbac(locals, PERMISSION_CODES.CONTENT_CATEGORY_READ, request, env.FEED_DB);
+  if (guard) return guard;
   try {
     const items = await listCategoriesHandler(
       env.FEED_DB as unknown as CategoryDb,

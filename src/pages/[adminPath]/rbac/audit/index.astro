@@ -1,0 +1,66 @@
+---
+import {env} from "cloudflare:workers";
+
+import AdminShell from "@/layouts/AdminShell.astro";
+import {readRecentRbacAudit} from "@/server/rbac/audit";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {translate} from "@/shared/i18n";
+import {msToRFC3339} from "@/shared/TimeUtils";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// C3: the RBAC audit trail (ext_rbac_audit, migration 0054) was write-only —
+// no page ever showed it. This read-only view closes that loop. The trail
+// records role and grant mutations, and the guard is `system:role:manage` —
+// the same code the menu row (migration 0062) binds, one menu row one guard.
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE, adminLanguage);
+if (denied) {
+  return denied;
+}
+const rows = await readRecentRbacAudit(env.FEED_DB);
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.RBAC_AUDIT}
+  documentTitle={translate("pageDocumentTitle.rbacAudit", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.rbacAudit", adminLanguage)}
+>
+  <section class="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+    {rows.length === 0 ? (
+      <p class="text-sm text-muted-foreground">{translate("rbacAudit.empty", adminLanguage)}</p>
+    ) : (
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th class="py-2 pr-4">{translate("rbacAudit.time", adminLanguage)}</th>
+              <th class="py-2 pr-4">{translate("rbacAudit.actor", adminLanguage)}</th>
+              <th class="py-2 pr-4">{translate("rbacAudit.action", adminLanguage)}</th>
+              <th class="py-2 pr-4">{translate("rbacAudit.target", adminLanguage)}</th>
+              <th class="py-2">{translate("rbacAudit.detail", adminLanguage)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr class="border-b last:border-0">
+                <td class="py-2 pr-4 whitespace-nowrap tabular-nums">{msToRFC3339(row.createdAtMs)}</td>
+                <td class="py-2 pr-4">{row.actorLabel ?? "—"}</td>
+                <td class="py-2 pr-4 font-mono text-xs">{row.action}</td>
+                <td class="py-2 pr-4 font-mono text-xs">{row.target}</td>
+                <td class="py-2">{row.beforeDetail ? `${row.beforeDetail} → ` : ""}{row.detail ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </section>
+</AdminShell>

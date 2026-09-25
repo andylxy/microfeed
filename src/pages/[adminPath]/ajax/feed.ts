@@ -8,12 +8,12 @@ import {
   rejectChapterVersions,
 } from "@/server/feed/extContentReview";
 import type {AuditDb} from "@/server/feed/extContentAudit";
-import {scheduleBestEffortMediaDeletion} from "@/server/media/deletions";
+import {itemMediaUrls, scheduleBestEffortMediaDeletion} from "@/server/media/deletions";
 import {mediaBucket} from "@/server/media/storage";
 import {jsonResponse, localizedError} from "../../../server/http";
 import type {FeedContent} from "../../../types";
 import type {PublicCachePurger} from "@/server/cache/public-cache";
-import {SETTINGS_CATEGORIES, STATUSES} from "@/shared/Constants";
+import {PERMISSION_CODES, SETTINGS_CATEGORIES, STATUSES} from "@/shared/Constants";
 import {webhookChannelSnapshot} from "@/shared/WebhookExamples";
 import {
   changedWebhookFields,
@@ -158,9 +158,16 @@ export async function updateAdminFeed(
       await rejectChapterVersions(reviewDb, chapter.itemId, null);
     }
   }
+  // B20: the client only sends `deleteImageUrls` (cover art) when deleting an
+  // item, so the body's embedded images and the main media attachment used to
+  // stay in R2 forever. Gather them from the pre-delete snapshot; every URL is
+  // re-validated by managedMediaObjectKey before any delete happens.
+  const deletedItemMedia = updatedFeed.item?.status === STATUSES.DELETED
+    ? itemMediaUrls(beforeItem)
+    : [];
   scheduleBestEffortMediaDeletion(
     mediaBucket(runtimeEnv),
-    deleteImageUrls,
+    [...deleteImageUrls, ...deletedItemMedia],
     schedule,
   );
   return jsonResponse({});
@@ -172,12 +179,22 @@ export const POST: APIRoute = async ({locals, request}) => {
   // DELETED, so the code depends on the body. Peek through a clone: the handler
   // below still has to read the original request body.
   const preview = await request.clone().json().catch(() => null) as
-    | {item?: {status?: unknown}}
+    | {item?: {id?: unknown; status?: unknown}}
     | null;
   const isDeleting = preview?.item?.status === STATUSES.DELETED;
+  // B3: a save that carries no item id is a *create* (the new/import pages guard
+  // with `content:chapter:create`), so it must be authorised with the create
+  // code rather than update — otherwise a user who can open the new-chapter page
+  // is 403'd on save. A save with an id is an update; a delete status is a delete.
+  const isCreating = preview?.item?.id == null;
+  const guardCode = isDeleting
+    ? PERMISSION_CODES.CONTENT_CHAPTER_DELETE
+    : isCreating
+      ? PERMISSION_CODES.CONTENT_CHAPTER_CREATE
+      : PERMISSION_CODES.CONTENT_CHAPTER_UPDATE;
   const guard = await requireRbac(
     locals,
-    isDeleting ? "content:chapter:delete" : "content:chapter:update",
+    guardCode,
     request,
     env.FEED_DB,
   );

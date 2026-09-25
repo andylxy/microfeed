@@ -887,6 +887,18 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
           "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
         ).bind(newUserId, roleId(code)),
       ),
+      // B1: mirror the chosen RBAC role onto `auth_user.role` so Better Auth's
+      // admin plugin gates its own endpoints on the same source of truth. Without
+      // this, a freshly created super-admin keeps `role = "user"` and a second,
+      // invisible authorization path splits from RBAC. Shape mirrors
+      // `replaceUserRoles` so the two code paths cannot drift apart.
+      env.FEED_DB.prepare("UPDATE auth_user SET role = ? WHERE id = ?")
+        .bind(
+          roleCodes.includes(SUPER_ADMIN)
+            ? BETTER_AUTH_ADMIN_ROLE
+            : BETTER_AUTH_USER_ROLE,
+          newUserId,
+        ),
       auditStatement(env.FEED_DB, createAudit),
     ]);
   } else {
@@ -935,6 +947,12 @@ export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
   } catch {
     return localizedError(request, "errors.rbac.deleteUserFailed", 400);
   }
+  // B16: login credentials carry no ON DELETE CASCADE (migrations/0036 leaves
+  // cleanup to application code), so removing the account here would otherwise
+  // orphan its mflc_ tokens. The account is gone, so drop its credentials too.
+  await env.FEED_DB.prepare(
+    "DELETE FROM ext_login_credentials WHERE user_id = ?",
+  ).bind(userId).run();
   // The account removal goes through Better Auth's admin plugin, so it cannot
   // share a batch with our trail — written on its own. The removal itself is
   // idempotent: a retry after a failed audit write does not un-delete anything.

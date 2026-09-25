@@ -91,7 +91,16 @@ export async function resolveRbacContext(
   }
 
   let deviceRevoked = false;
-  const deviceId = request.headers.get("x-device-id");
+  // B15: the header is attacker-controlled, so validate it before it reaches
+  // the device table — an unbounded or exotic value must not be upserted as a
+  // device identity. An invalid header is treated as absent (the web admin
+  // sends no device header at all, so this only affects API clients).
+  const headerDeviceId = request.headers.get("x-device-id");
+  const deviceId = headerDeviceId !== null &&
+      headerDeviceId.length <= 64 &&
+      /^[A-Za-z0-9_-]+$/.test(headerDeviceId)
+    ? headerDeviceId
+    : null;
   if (deviceId) {
     const device = await db
       .prepare(

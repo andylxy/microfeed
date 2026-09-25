@@ -1,1 +1,3 @@
-export {getAdminWebhookDelivery as GET} from "@/server/admin/webhook-handlers";
+import {getAdminWebhookDelivery, withWebhookGuard} from "@/server/admin/webhook-handlers";
+
+export const GET = withWebhookGuard(getAdminWebhookDelivery);

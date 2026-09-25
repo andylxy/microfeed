@@ -39,17 +39,30 @@ export interface PendingAudit {
   target: string;
 }
 
+/** When set, the audit row lands only if this query returns at least one row.
+ * Use it when the change riding the same batch is itself conditional, so a
+ * skipped change does not leave a trail row describing a write that never
+ * happened (B14: the per-user credential limit). */
+export interface AuditOnlyIf {
+  sql: string;
+  binds?: unknown[];
+}
+
 export function auditStatement(
   db: D1Database,
   entry: PendingAudit,
+  onlyIf?: AuditOnlyIf,
 ): D1PreparedStatement {
+  const columns =
+    "(id, actor_user_id, actor_label, action, target, detail, " +
+    "before_detail, created_at_ms)";
+  const sql = onlyIf
+    ? `INSERT INTO ext_rbac_audit ${columns} ` +
+      `SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (${onlyIf.sql})`
+    : `INSERT INTO ext_rbac_audit ${columns} ` +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
   return db
-    .prepare(
-      "INSERT INTO ext_rbac_audit " +
-        "(id, actor_user_id, actor_label, action, target, detail, " +
-        "before_detail, created_at_ms) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
+    .prepare(sql)
     .bind(
       crypto.randomUUID(),
       entry.actor?.id ?? null,
@@ -59,6 +72,7 @@ export function auditStatement(
       entry.detail ?? null,
       entry.before ?? null,
       Date.now(),
+      ...(onlyIf?.binds ?? []),
     );
 }
 
@@ -68,4 +82,35 @@ export function auditStatement(
  */
 export async function recordRbacAudit(entry: PendingAudit): Promise<void> {
   await auditStatement(env.FEED_DB, entry).run();
+}
+
+/** One trail row, shaped for display (C3: the trail was write-only before). */
+export interface RbacAuditRow {
+  id: string;
+  actorLabel: string | null;
+  action: string;
+  target: string;
+  detail: string | null;
+  beforeDetail: string | null;
+  createdAtMs: number;
+}
+
+/** The latest trail rows, newest first — read side for the admin page. */
+export async function readRecentRbacAudit(
+  db: D1Database,
+  limit = 100,
+): Promise<RbacAuditRow[]> {
+  const result = await db.prepare(
+    "SELECT id, actor_label, action, target, detail, before_detail, created_at_ms " +
+      "FROM ext_rbac_audit ORDER BY created_at_ms DESC, rowid DESC LIMIT ?",
+  ).bind(limit).all<Record<string, unknown>>();
+  return (result.results ?? []).map((row) => ({
+    id: String(row.id ?? ""),
+    actorLabel: row.actor_label == null ? null : String(row.actor_label),
+    action: String(row.action ?? ""),
+    target: String(row.target ?? ""),
+    detail: row.detail == null ? null : String(row.detail),
+    beforeDetail: row.before_detail == null ? null : String(row.before_detail),
+    createdAtMs: Number(row.created_at_ms ?? 0),
+  }));
 }

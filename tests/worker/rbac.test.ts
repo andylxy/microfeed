@@ -2,7 +2,7 @@ import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {STATUSES} from "@/shared/Constants";
-import {DEFAULT_USER_ROLE} from "@/shared/Rbac";
+import {BETTER_AUTH_ADMIN_ROLE, DEFAULT_USER_ROLE} from "@/shared/Rbac";
 import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
@@ -1124,6 +1124,33 @@ describe("RBAC user CRUD endpoints", () => {
     // The request sent no `roles`, so the account falls back to the read-only
     // default rather than being created permission-less.
     expect(newUser?.roles).toEqual([DEFAULT_USER_ROLE]);
+
+    // B1: a freshly created account whose RBAC role is super_admin must mirror
+    // that onto `auth_user.role`, so Better Auth's own admin gate (which reads
+    // that column) stays consistent with RBAC instead of leaving a stale "user".
+    const superCreated = await createAdminRbacUser({
+      locals: userManage(["system:user:manage"]),
+      request: withSession("user-create", {
+        email: "super@example.com",
+        name: "Super",
+        password: "Super password",
+        roles: ["super_admin"],
+      }),
+    } as never);
+    expect(superCreated.status).toBe(200);
+    const superJson = await superCreated.json() as Awaited<ReturnType<typeof readRbacUsers>>;
+    const superUser = superJson.users.find((entry) => entry.email === "super@example.com");
+    expect(superUser).toBeTruthy();
+    const mirrored = await env.FEED_DB.prepare(
+      'SELECT role FROM "auth_user" WHERE id = ?',
+    ).bind(superUser?.id).first<{role: string} | null>();
+    expect(mirrored?.role).toBe(BETTER_AUTH_ADMIN_ROLE);
+
+    const superDeleted = await deleteAdminRbacUser({
+      locals: userManage(["system:user:manage"]),
+      request: withSession("user-delete", {userId: superUser?.id}),
+    } as never);
+    expect(superDeleted.status).toBe(200);
 
     const banned = await updateAdminRbacUserBan({
       locals: userManage(["system:user:manage"]),
