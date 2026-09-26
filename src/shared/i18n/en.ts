@@ -217,6 +217,14 @@ export const en = {
     siteIntro: "Controls the title shown in the public website header. Leave blank to use the channel title.",
     // Access
     accessPolicy: "Access policy",
+    accessPublicName: "Public",
+    accessPublicDescription: "Make the entire site publicly accessible, including all non-Admin web pages, rss feed and json feed.",
+    accessHeadlessName: "Headless",
+    accessHeadlessDescription: "Keep RSS, JSON Feed, APIs, and media available, but return 404 for the website home page, item pages, and sitemap.xml.",
+    accessOfflineName: "Offline",
+    accessOfflineDescription: "Make the entire site offline. All non-Admin web pages, rss feed and json feed will be 404-ed.",
+    accessPasscodeName: "Passcode",
+    accessPasscodeDescription: "Protect all pages with a passcode.",
     // Custom code
     editSharedHtml: "Edit shared HTML code across web pages",
     editSharedHtmlDescription: "Add code inside <head> and at the top or bottom of <body> across public web pages. Use it for tracking snippets such as Google Analytics and Meta Pixel, or for your own JavaScript and CSS.",

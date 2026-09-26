@@ -3,7 +3,6 @@ import AdminRadioGroup from "@/components/admin/shared/AdminRadioGroup";
 import SettingsBase from '../SettingsBase';
 import {
   CHANNEL_STATUSES,
-  CHANNEL_STATUSES_DICT,
   SETTINGS_CATEGORIES,
 } from "@/shared/Constants";
 import type {AccessPolicy} from "@/types";
@@ -58,18 +57,18 @@ export default class AccessSettingsApp extends React.Component<any, any> {
         options={[
           {
             value: CHANNEL_STATUSES.PUBLIC,
-            label: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.PUBLIC].name,
-            description: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.PUBLIC].description,
+            label: t("settings.accessPublicName"),
+            description: t("settings.accessPublicDescription"),
           },
           {
             value: CHANNEL_STATUSES.HEADLESS,
-            label: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.HEADLESS].name,
-            description: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.HEADLESS].description,
+            label: t("settings.accessHeadlessName"),
+            description: t("settings.accessHeadlessDescription"),
           },
           {
             value: CHANNEL_STATUSES.OFFLINE,
-            label: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.OFFLINE].name,
-            description: CHANNEL_STATUSES_DICT[CHANNEL_STATUSES.OFFLINE].description,
+            label: t("settings.accessOfflineName"),
+            description: t("settings.accessOfflineDescription"),
           },
         ]}
       />

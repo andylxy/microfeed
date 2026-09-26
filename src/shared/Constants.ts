@@ -248,25 +248,6 @@ export const CHANNEL_STATUSES = {
   PASSCODE: 'passcode',
 } as const;
 
-export const CHANNEL_STATUSES_DICT = {
-  [CHANNEL_STATUSES.PUBLIC]: {
-    name: 'Public',
-    description: 'Make the entire site publicly accessible, including all non-Admin web pages, rss feed and json feed.',
-  },
-  [CHANNEL_STATUSES.HEADLESS]: {
-    name: 'Headless',
-    description: 'Keep RSS, JSON Feed, APIs, and media available, but return 404 for the website home page, item pages, and sitemap.xml.',
-  },
-  [CHANNEL_STATUSES.OFFLINE]: {
-    name: 'Offline',
-    description: 'Make the entire site offline. All non-Admin web pages, rss feed and json feed will be 404-ed.',
-  },
-  [CHANNEL_STATUSES.PASSCODE]: {
-    name: 'Passcode',
-    description: 'Protect all pages with a passcode.',
-  },
-};
-
 export const ONBOARDING_TYPES = {
   VALID_PUBLIC_BUCKET_URL: 1,
   PROTECTED_ADMIN_DASHBOARD: 2,

@@ -216,6 +216,14 @@ export const zhCN: TranslationKey = {
     siteIntro: "控制公开站点页眉显示的标题。留空则使用频道标题。",
     // Access
     accessPolicy: "访问策略",
+    accessPublicName: "公开",
+    accessPublicDescription: "让整个站点完全公开，包括所有非管理后台的网页、RSS feed 与 JSON feed。",
+    accessHeadlessName: "无头",
+    accessHeadlessDescription: "保留 RSS、JSON Feed、API 与媒体资源可访问，但网站首页、条目页与 sitemap.xml 返回 404。",
+    accessOfflineName: "离线",
+    accessOfflineDescription: "让整个站点下线。所有非管理后台的网页、RSS feed 与 JSON feed 都将返回 404。",
+    accessPasscodeName: "访问口令",
+    accessPasscodeDescription: "使用访问口令保护所有页面。",
     // Custom code
     editSharedHtml: "编辑跨网页共享的 HTML 代码",
     editSharedHtmlDescription: "在公开网页的 <head> 内，以及 <body> 顶部或底部添加代码。可用于接入 Google Analytics、Meta Pixel 等跟踪片段，或你自己的 JavaScript 与 CSS。",

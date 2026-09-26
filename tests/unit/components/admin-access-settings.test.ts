@@ -1,9 +1,10 @@
 import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {describe, expect, it, vi} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
 import AccessSettingsApp from "@/components/admin/settings/AccessSettingsApp";
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
+import i18n from "@/client/i18n";
 
 function props(onSubmit = vi.fn(async (
   _event: unknown,
@@ -34,6 +35,10 @@ function installSynchronousSetState(app: AccessSettingsApp) {
 }
 
 describe("access control settings", () => {
+  afterEach(() => {
+    void i18n.changeLanguage("en");
+  });
+
   it("shows Public, Headless, and Offline without a manual Update action", () => {
     const output = renderToStaticMarkup(
       React.createElement(AccessSettingsApp, props()),
@@ -78,5 +83,20 @@ describe("access control settings", () => {
     );
 
     expect(output).toContain("disabled");
+  });
+
+  it("renders Chinese labels and descriptions under zh-CN", async () => {
+    await i18n.changeLanguage("zh-CN");
+
+    const output = renderToStaticMarkup(
+      React.createElement(AccessSettingsApp, props()),
+    );
+
+    expect(output).toContain("访问控制");
+    expect(output).toContain("公开");
+    expect(output).toContain("无头");
+    expect(output).toContain("离线");
+    expect(output).toContain("让整个站点完全公开");
+    expect(output).toContain("保留 RSS、JSON Feed");
   });
 });
