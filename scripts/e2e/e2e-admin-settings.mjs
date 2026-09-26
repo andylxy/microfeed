@@ -18,14 +18,18 @@
  *       --email you@local --password 'xxxx' [--chrome "C:/path/chrome.exe"] \
  *       [--admin-path admin] [--new-title "测试标题"] [--no-restore]
  *
+ *   或直接给实例名，凭据自动从 .microfeed/instances/<name>/.dev.vars 读取：
+ *   node e2e-admin-settings.mjs --base http://127.0.0.1:4321 --instance practice
+ *
  * 退出码：0 = 全过；2 = 有失败步骤（脚本会打印每步结论）。
  *
- * 凭证纪律：账号密码只通过命令行参数传入本进程，不写文件、不打印到日志之外、
- *           不提交。本脚本不改 .dev.vars、不触碰任何仓库文件。
+ * 凭证纪律（AGENTS.md「内容管理 CLI」一节）：管理员凭据允许读取、不可外泄。
+ * 凭据只经命令行参数或 `--instance` 从本机实例配置读出，只留在本进程内：
+ * 不写文件、不打印到对话/日志之外、不提交。本脚本不改 .dev.vars、不触碰任何仓库文件。
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -39,8 +43,7 @@ const get = (name, def) => {
   return args[i + 1];
 };
 const base = (get("base") || "").replace(/\/+$/, "");
-const email = get("email") || "";
-const password = get("password") || "";
+const instance = get("instance") || "";
 const adminPath = get("admin-path") || "admin";
 const newTitle = get("new-title") || "";
 const restore = !get("no-restore");
@@ -49,12 +52,30 @@ const chromePath = get("chrome") || "";
 const debugPort = Number(get("debug-port") || 9333);
 const shotDir = get("shot-dir") || join(tmpdir(), "microfeed-e2e");
 
+// --instance <name>：从 .microfeed/instances/<name>/.dev.vars 读取 bootstrap 管理员凭据。
+// 值只留在进程内，不经命令行、不打印、不落盘（AGENTS.md 凭证条款）。
+function readInstanceCreds(name) {
+  const p = join(process.cwd(), ".microfeed", "instances", name, ".dev.vars");
+  if (!existsSync(p)) return { email: "", password: "" };
+  const txt = readFileSync(p, "utf8");
+  const m = (k) => (txt.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1];
+  return {
+    email: (m("MICROFEED_SETUP_ADMIN_EMAIL") || "").trim(),
+    password: (m("MICROFEED_SETUP_ADMIN_PASSWORD") || "").trim(),
+  };
+}
+const instCreds = instance ? readInstanceCreds(instance) : { email: "", password: "" };
+const email = get("email") || instCreds.email || "";
+const password = get("password") || instCreds.password || "";
+
 if (!base) {
   console.error("✗ 缺少 --base（管理后台站点基址，如 http://127.0.0.1:4321）");
   process.exit(2);
 }
 if (!email || !password) {
-  console.error("✗ 缺少 --email / --password（用于登录管理后台）");
+  console.error(
+    "✗ 缺少 --email / --password（或 --instance <name> 从实例 .dev.vars 读取）",
+  );
   process.exit(2);
 }
 

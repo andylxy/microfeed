@@ -60,16 +60,27 @@ printf 'MICROFEED_SETUP_ADMIN_EMAIL=admin@practice.local\nMICROFEED_SETUP_ADMIN_
 ```bash
 node scripts/e2e/e2e-admin-settings.mjs \
   --base http://127.0.0.1:4321 \
-  --email admin@practice.local \
-  --password '你的口令'
+  --instance practice
 ```
+
+> `--instance practice` 会自动从 `.microfeed/instances/practice/.dev.vars` 读取
+> bootstrap 管理员凭据（`MICROFEED_SETUP_ADMIN_EMAIL/PASSWORD`），无需手动传账号密码，
+> 凭据只留在进程内、不出现在命令行。若不用 `--instance`，也可显式传：
+>
+> ```bash
+> node scripts/e2e/e2e-admin-settings.mjs \
+>   --base http://127.0.0.1:4321 \
+>   --email admin@practice.local \
+>   --password '你的口令'
+> ```
 
 可选参数：
 
 | 参数 | 说明 | 默认 |
 |---|---|---|
 | `--base` | 管理后台基址（**必填**） | — |
-| `--email` / `--password` | 登录凭据（**必填**） | — |
+| `--email` / `--password` | 登录凭据（与 `--instance` 二选一） | — |
+| `--instance` | 实例名：自动从 `.microfeed/instances/<name>/.dev.vars` 读 bootstrap 管理员凭据 | — |
 | `--admin-path` | 管理路径段 | `admin` |
 | `--new-title` | 指定要设的测试标题（否则用 sentinel `原标题-e2e-时间戳`） | 自动 |
 | `--no-restore` | 不还原原标题（新值保留在服务端） | 默认会还原 |
