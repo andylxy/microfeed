@@ -24,6 +24,7 @@ describe("admin settings navigation", () => {
       ["media-file-storage", "settings.mediaFileStorage", "storage"],
       ["items-settings", "settings.itemsSettings", "list"],
       ["favicon", "settings.favicon", "image"],
+      ["site", "settings.site", "globe"],
     ]);
   });
 

@@ -41,6 +41,11 @@ export const ADMIN_SETTINGS_SECTIONS = [
     id: "favicon",
     nameKey: "settings.favicon",
   },
+  {
+    icon: "globe",
+    id: "site",
+    nameKey: "settings.site",
+  },
 ] as const;
 
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];

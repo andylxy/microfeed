@@ -5,6 +5,9 @@ import AccessSettingsApp from "./AccessSettingsApp";
 import SubscribeSettingsApp from "./SubscribeSettingsApp";
 import CustomCodeSettingsApp from "./CustomCodeSettingsApp";
 import FaviconSettingsApp from "./FaviconSettingsApp";
+import SiteSettingsApp, {
+  SITE_TITLE_SUBMIT_KEY,
+} from "./SiteSettingsApp";
 import ContentReviewSettingsApp from "./ContentReviewSettingsApp";
 import ItemsSettingsApp, {
   ITEMS_PER_PAGE_SUBMIT_KEY,
@@ -212,6 +215,15 @@ export default class SettingsApp extends React.Component<Props, any> {
             mediaStorageReady={mediaStorageReady}
             onSubmit={this.onSubmit}
             onSettingsChanged={this.updateSettingsState}
+          />
+        </section>
+        <section className="scroll-mt-6" id="site">
+          <SiteSettingsApp
+            submitting={submitting}
+            submitForType={submitForType}
+            feed={feed}
+            onSubmit={this.onSubmit}
+            setChanged={() => this.setChanged(SITE_TITLE_SUBMIT_KEY)}
           />
         </section>
         <div aria-hidden="true" className="h-[50vh]" />

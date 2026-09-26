@@ -21,6 +21,7 @@ export function themeContext(
   metadata: ThemeRuntimeMetadata,
   item?: Record<string, unknown>,
 ): ThemeContext {
+  const siteTitle = resolveSiteTitle(publicFeed);
   return {
     ...publicFeed,
     ...getBuiltInTemplateVariables(),
@@ -30,7 +31,29 @@ export function themeContext(
       version: metadata.version,
     },
     ...(item ? {item} : {}),
+    // novel-cms: an Admin-configured site title wins over the channel title.
+    // Always populated (falls back to `title`) so themes can render it
+    // unconditionally; the channel name itself stays untouched.
+    site_title: siteTitle || String(publicFeed.title ?? ""),
   } as ThemeContext;
+}
+
+/** Read the Admin-configured site title. The value comes from
+ *  `settings.webGlobalSettings.siteTitle`, which FeedPublicJsonBuilder already
+ *  writes into the public feed's `_microfeed` pocket (and drops when unset).
+ *  Returns "" when unset, blank or of the wrong type, so the caller can fall
+ *  back to the channel title. */
+function resolveSiteTitle(publicFeed: Record<string, unknown>): string {
+  const microfeed = publicFeed._microfeed;
+  if (
+    microfeed === null ||
+    typeof microfeed !== "object" ||
+    Array.isArray(microfeed)
+  ) {
+    return "";
+  }
+  const value = (microfeed as Record<string, unknown>).siteTitle;
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export function parseThemeBundle(bundle: ThemeBundleV1): void {

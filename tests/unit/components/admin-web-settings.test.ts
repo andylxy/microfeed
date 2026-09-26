@@ -2,6 +2,7 @@ import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {beforeEach, describe, expect, it, vi} from "vitest";
 
+import i18n from "@/client/i18n";
 import Requests from "@/client/requests";
 import CustomCodeSettingsApp from "@/components/admin/settings/CustomCodeSettingsApp";
 import FaviconSettingsApp, {
@@ -15,6 +16,9 @@ import MediaFileStorageSettingsApp, {
   MEDIA_FILE_STORAGE_SUBMIT_KEY,
 } from "@/components/admin/settings/MediaFileStorageSettingsApp";
 import SettingsApp from "@/components/admin/settings/SettingsApp";
+import SiteSettingsApp, {
+  SITE_TITLE_SUBMIT_KEY,
+} from "@/components/admin/settings/SiteSettingsApp";
 import AdminImageUploaderApp from "@/components/admin/shared/AdminImageUploaderApp";
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
 import {ITEM_SORTS} from "@/shared/ItemPagination";
@@ -222,5 +226,75 @@ describe("split web settings", () => {
     expect(app.state.changedSections).toEqual([
       MEDIA_FILE_STORAGE_SUBMIT_KEY,
     ]);
+  });
+
+  it("renders the site title as the last settings section and reads it from webGlobalSettings", () => {
+    const app = new SettingsApp({
+      feedContent: feed(),
+      onboardingResult: {allOk: true, requiredOk: true, result: {}},
+    });
+    const page = app.render();
+    const grid = React.Children.only(page.props.children) as React.ReactElement<any>;
+    const sectionIds = React.Children.toArray(grid.props.children)
+      .filter((child): child is React.ReactElement<any> =>
+        React.isValidElement<any>(child) && child.type === "section"
+      )
+      .map((section) => section.props.id);
+
+    expect(sectionIds[sectionIds.length - 1]).toBe("site");
+  });
+
+  it("prefills the site title from settings and saves it into webGlobalSettings", async () => {
+    const settingsProps = props({
+      feed: {
+        channel: {image: "images/channel.png"},
+        settings: {
+          [SETTINGS_CATEGORIES.WEB_GLOBAL_SETTINGS]: {
+            ...webSettings,
+            siteTitle: "星河剑歌",
+          },
+        },
+      },
+    });
+    const app = new SiteSettingsApp(settingsProps);
+    useSynchronousState(app);
+
+    const output = renderToStaticMarkup(app.render());
+    expect(output).toContain("Site");
+    expect(output).toContain("Site title");
+    expect(output).toContain("e.g. Star River Sword Song");
+    expect(output).toContain(
+      "Controls the title shown in the public website header.",
+    );
+    expect(output).toContain('value="星河剑歌"');
+
+    app.state = {...app.state, siteTitle: "长夜行舟"};
+    await app.save({preventDefault() {}});
+
+    expect(settingsProps.onSubmit).toHaveBeenCalledWith(
+      expect.anything(),
+      SETTINGS_CATEGORIES.WEB_GLOBAL_SETTINGS,
+      {siteTitle: "长夜行舟"},
+      [],
+      SITE_TITLE_SUBMIT_KEY,
+    );
+    expect(app.state.savedSiteTitle).toBe("长夜行舟");
+  });
+
+  it("starts from an empty site title when the setting was never saved", () => {
+    const app = new SiteSettingsApp(props());
+    useSynchronousState(app);
+
+    expect(app.state.siteTitle).toBe("");
+    expect(renderToStaticMarkup(app.render())).toContain('value=""');
+  });
+
+  // 上游约定：卡片标题是「类别」，卡内字段 label 是更窄的字段名，两者不得同名。
+  // 其它卡都遵守（条目设置 → 排序 / 每页条目数；媒体文件存储 → R2 公开存储桶 URL），
+  // 只有自研的站点卡一度两处都叫「站点标题」，改字段 label 收掉重复。
+  it("keeps the site card title distinct from its field label", () => {
+    expect(i18n.t("settings.site")).toBe("Site title");
+    expect(i18n.t("settings.siteTitle")).toBe("Title");
+    expect(i18n.t("settings.site")).not.toBe(i18n.t("settings.siteTitle"));
   });
 });

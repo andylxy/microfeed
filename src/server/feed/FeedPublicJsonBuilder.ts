@@ -184,6 +184,19 @@ export default class FeedPublicJsonBuilder {
     }
     (microfeedExtra as any)['description_text'] = htmlToPlainText(channel.description);
 
+    // novel-cms: the site title now lives in Settings > Site
+    // (`settings.webGlobalSettings.siteTitle`). `channelMicrofeed` was spread in
+    // above, so a `channel._microfeed.siteTitle` pocket left behind by the
+    // earlier Channel > Site location would otherwise still win here. Set or drop
+    // the key explicitly, so Settings is the only source: clearing the field in
+    // Admin must not resurrect the old channel value.
+    const settingsSiteTitle = this.webGlobalSettings.siteTitle;
+    if (typeof settingsSiteTitle === 'string') {
+      (microfeedExtra as any)['siteTitle'] = settingsSiteTitle;
+    } else {
+      delete (microfeedExtra as any)['siteTitle'];
+    }
+
     if (channel['itunes:explicit']) {
       (microfeedExtra as any)['itunes:explicit'] = true;
     }

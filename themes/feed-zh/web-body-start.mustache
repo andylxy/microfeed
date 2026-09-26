@@ -1,18 +1,22 @@
 <header class="fq-header" data-microfeed-site-nav>
   <div class="fq-header-inner">
     <div class="fq-header-left">
-      <a class="fq-logo" href="/" aria-label="{{title}} 首页">
+      {{! Site title: an Admin-configured override (Settings > Site) wins;
+          microfeed falls back to the channel title, so this key is always
+          populated. novel-cms keeps the two decoupled so the header can read
+          星河剑歌 while the channel keeps its own name. }}
+      <a class="fq-logo" href="/" aria-label="{{site_title}} 首页">
         <span class="fq-logo-icon" aria-hidden="true"></span>
-        <span class="fq-logo-text">{{title}}</span>
+        <span class="fq-logo-text">{{site_title}}</span>
       </a>
 
-      {{! The nav is data-driven: 首页 stays fixed, then every visible backend
-          category (内经类 / 本草 / 伤寒 / …), then any custom navigation page.
-          Each category link lands on /category/<id>/, which lists only that
-          category's books. The prototype's 书库 / 书架 / 原创榜 placeholders are
-          gone. }}
+      {{! The nav is data-driven: every visible backend category
+          (内经类 / 本草 / 伤寒 / …), then any custom navigation page. Each
+          category link lands on /category/<id>/, which lists only that
+          category's books. There is deliberately no 首页 entry — the logo above
+          is the way home, so a second link to `/` would just duplicate it.
+          The prototype's 书库 / 书架 / 原创榜 placeholders are gone. }}
       <nav class="fq-nav" aria-label="站点导航">
-        <a href="/"{{#nav_active_home}} class="active"{{/nav_active_home}}>首页</a>
         {{#category_nav}}
         <a href="/category/{{id}}/" rel="tag"{{#active}} class="active"{{/active}}>{{name}}</a>
         {{/category_nav}}
@@ -46,18 +50,6 @@
         <span class="fq-auth-divider" aria-hidden="true"></span>
         <a href="/admin/">注册</a>
       </div>
-
-      {{! Bookshelf entry. The list itself is rendered by the script in
-          web-body-end from localStorage, so it works without any account. }}
-      <button
-        type="button"
-        class="mf-shelf-trigger"
-        aria-label="我的书架"
-        data-mf-shelf-trigger
-      >
-        <span>我的书架</span>
-        <span class="mf-shelf-count" data-mf-shelf-count hidden>0</span>
-      </button>
 
       <div class="mf-theme-menu" data-microfeed-theme-menu>
         <button

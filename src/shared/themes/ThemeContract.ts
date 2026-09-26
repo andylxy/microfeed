@@ -281,6 +281,9 @@ const themeFeedExtraSchema = z.object({
   microfeed_version: z.string(),
   next_url: z.string().optional(),
   prev_url: z.string().optional(),
+  siteTitle: z.string().optional().meta({
+    description: "Admin-configured site title (Settings > Site). ThemeRenderer reads it as the top-level site_title context key, falling back to the channel title when unset.",
+  }),
   subscribe_methods: z.union([
     z.literal(""),
     z.array(themeSubscribeMethodSchema),
@@ -370,6 +373,9 @@ export const themeContextSchema = z.object({
   }),
   language: z.string().optional(),
   next_url: z.string().optional(),
+  site_title: z.string().optional().meta({
+    description: "Site title for the public website chrome (for example the header logo text). Admin sets it in Settings > Site; microfeed falls back to the channel title, so themes can render it unconditionally. Website-only: it is never emitted to RSS or JSON Feed.",
+  }),
   title: z.string().optional(),
   version: z.string(),
 }).loose();
