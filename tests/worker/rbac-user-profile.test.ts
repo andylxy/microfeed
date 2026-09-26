@@ -14,9 +14,12 @@ const RESET_URL = `${ADMIN}/ajax/rbac/user-password-reset`;
 const PROFILE_URL = `${ADMIN}/ajax/rbac/user-profile`;
 
 /** Minimal `App.Locals` shape the RBAC guard reads. */
-function locals(userId: string, permissions: string[] = []) {
+function locals(userId: string, permissions: string[] = [], sessionId?: string) {
   return {
     authUser: {id: userId, role: null},
+    // Present in production (middleware stores it); handlers read
+    // `authSession.id` to keep the performing session on a self-reset.
+    ...(sessionId ? {authSession: {id: sessionId, userId}} : {}),
     rbacBanned: false,
     rbacDeviceRevoked: false,
     rbacMustChangePassword: false,
@@ -327,6 +330,29 @@ describe("password reset (admin-set)", () => {
 
     expect(await countUserRows("ext_login_credentials", "user_id", user.id)).toBe(0);
   });
+
+  it("keeps the performing session when the admin resets their own account", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    await grantOAuthApp(adminId, "client_self");
+    await issueLoginCredential(adminId, "hash_self");
+    const session = await env.FEED_DB.prepare(
+      'SELECT id FROM "auth_session" WHERE "userId" = ?',
+    ).bind(adminId).first<{id: string}>();
+    expect(session).toBeTruthy();
+
+    const response = await resetAdminRbacUserPassword({
+      locals: locals(adminId, ["system:user:manage"], session!.id),
+      request: authedRequest(RESET_URL, {newPassword: "NewPass456", userId: adminId}, cookie),
+    } as never);
+    expect(response.status).toBe(200);
+
+    // The request's own session survives the reset; every other derived
+    // credential (other sessions, OAuth grants, login credentials) is gone.
+    expect(await sessionValid(cookie)).toBe(true);
+    expect(await countUserRows("oauth_connection", "userId", adminId)).toBe(0);
+    expect(await countUserRows("oauth_access_token", "userId", adminId)).toBe(0);
+    expect(await countUserRows("ext_login_credentials", "user_id", adminId)).toBe(0);
+  });
 });
 
 describe("profile edit (name / email)", () => {
@@ -405,6 +431,241 @@ describe("profile edit (name / email)", () => {
       request: authedRequest(PROFILE_URL, {name: "x", userId: "ghost"}, cookie),
     } as never);
     expect(response.status).toBe(404);
+  });
+});
+
+/**
+ * Create an account through the split `username` / `email` fields (the shape
+ * the form now sends), and return the raw response.
+ */
+async function createUserSplit(
+  fields: {email?: string; name: string; password: string; username: string},
+  cookie: string,
+  adminId: string,
+): Promise<Response> {
+  return createAdminRbacUser({
+    locals: locals(adminId, ["system:user:manage"]),
+    request: authedRequest(CREATE_URL, {...fields, roles: ["readonly"]}, cookie),
+  } as never);
+}
+
+/** The board row for a newly created account, matched on its username. */
+async function boardUserByUsername(
+  response: Response,
+  username: string,
+): Promise<{email: string; id: string; username?: string}> {
+  const board = await response.json() as {
+    users: {email: string; id: string; username?: string}[];
+  };
+  const entry = board.users.find((row) => row.username === username);
+  if (!entry) throw new Error("account was not created");
+  return entry;
+}
+
+describe("create with separate username and email fields", () => {
+  it("creates a username-only account with a placeholder address", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createUserSplit(
+      {name: "Solo", password: "Pass1234", username: "solo"},
+      cookie,
+      adminId,
+    );
+    expect(response.status).toBe(200);
+    const created = await boardUserByUsername(response, "solo");
+    expect(created.email).toBe("solo@users.microfeed.local");
+    expect(await trySignIn("solo", "Pass1234")).toBe(true);
+  });
+
+  it("creates an account with both and signs in either way", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createUserSplit(
+      {email: "both@example.com", name: "Both", password: "Pass1234", username: "both"},
+      cookie,
+      adminId,
+    );
+    expect(response.status).toBe(200);
+    const created = await boardUserByUsername(response, "both");
+    expect(created.email).toBe("both@example.com");
+    expect(await trySignIn("both", "Pass1234")).toBe(true);
+    expect(await trySignIn("both@example.com", "Pass1234")).toBe(true);
+  });
+
+  it("rejects an address in the reserved placeholder domain", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createUserSplit(
+      {
+        email: "claim@users.microfeed.local",
+        name: "Claim",
+        password: "Pass1234",
+        username: "claim",
+      },
+      cookie,
+      adminId,
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a duplicate username regardless of case", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const first = await createUserSplit(
+      {name: "One", password: "Pass1234", username: "dupname"},
+      cookie,
+      adminId,
+    );
+    expect(first.status).toBe(200);
+    const second = await createUserSplit(
+      {name: "Two", password: "Pass1234", username: "DUPNAME"},
+      cookie,
+      adminId,
+    );
+    expect(second.status).toBe(409);
+  });
+
+  it("rejects a duplicate email", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const first = await createUserSplit(
+      {email: "clash@example.com", name: "One", password: "Pass1234", username: "one1"},
+      cookie,
+      adminId,
+    );
+    expect(first.status).toBe(200);
+    const second = await createUserSplit(
+      {email: "CLASH@example.com", name: "Two", password: "Pass1234", username: "two2"},
+      cookie,
+      adminId,
+    );
+    expect(second.status).toBe(409);
+  });
+
+  it("keeps the legacy address-only field working (older dashboard builds)", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createAdminRbacUser({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(CREATE_URL, {
+        email: "legacyonly@example.com",
+        name: "LegacyOnly",
+        password: "Pass1234",
+        roles: ["readonly"],
+      }, cookie),
+    } as never);
+    expect(response.status).toBe(200);
+    const board = await response.json() as {
+      users: {email: string; username?: string}[];
+    };
+    const created = board.users.find(
+      (entry) => entry.email === "legacyonly@example.com",
+    );
+    expect(created).toBeTruthy();
+    // No username was sent, so none is stored: the account signs in by address.
+    expect(created?.username).toBeUndefined();
+  });
+
+  it("rejects a legacy address-only create that reuses an address", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    await createUser("takenlegacy@example.com", "First", "Pass1234", cookie, adminId);
+    // The legacy shape (no `username`) must be refused with the same precise
+    // 409, not left to the write to fail on the UNIQUE constraint.
+    const response = await createAdminRbacUser({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(CREATE_URL, {
+        email: "TAKENLEGACY@example.com",
+        name: "Second",
+        password: "Pass1234",
+        roles: ["readonly"],
+      }, cookie),
+    } as never);
+    expect(response.status).toBe(409);
+  });
+
+  it("rejects a create reusing an address a username-only account holds", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    await createUserSplit({name: "Holder", password: "Pass1234", username: "slot"}, cookie, adminId);
+    // `slot@users.microfeed.local` is that account's placeholder address, so
+    // handing it to another account would silently steal its login slot.
+    const response = await createUserSplit(
+      {email: "slot@users.microfeed.local", name: "Thief", password: "Pass1234", username: "thief"},
+      cookie,
+      adminId,
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a create with neither a username nor an address", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createAdminRbacUser({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(CREATE_URL, {
+        name: "Nothing",
+        password: "Pass1234",
+        roles: ["readonly"],
+      }, cookie),
+    } as never);
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("setting a username on an address-only account", () => {
+  it("sets it once, then locks it", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const user = await createUser("legacy@example.com", "Legacy", "Pass1234", cookie, adminId);
+    expect(user.username).toBeUndefined();
+
+    const response = await updateAdminRbacUserProfile({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(PROFILE_URL, {userId: user.id, username: "legacyuser"}, cookie),
+    } as never);
+    expect(response.status).toBe(200);
+    const board = await response.json() as {
+      users: {id: string; username?: string}[];
+    };
+    expect(board.users.find((entry) => entry.id === user.id)?.username).toBe(
+      "legacyuser",
+    );
+    expect(await trySignIn("legacyuser", "Pass1234")).toBe(true);
+
+    // A second attempt is refused: the username is the login identifier, so it
+    // is not silently swapped out from under existing sessions.
+    const locked = await updateAdminRbacUserProfile({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(PROFILE_URL, {userId: user.id, username: "replaced"}, cookie),
+    } as never);
+    expect(locked.status).toBe(400);
+  });
+
+  it("rejects a username another account already holds", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    await createUserSplit({name: "Holder", password: "Pass1234", username: "holder"}, cookie, adminId);
+    const legacy = await createUser("older@example.com", "Older", "Pass1234", cookie, adminId);
+    const response = await updateAdminRbacUserProfile({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(PROFILE_URL, {userId: legacy.id, username: "Holder"}, cookie),
+    } as never);
+    expect(response.status).toBe(409);
+  });
+
+  it("rejects a username that differs only by case from a taken one", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    await createUserSplit({name: "Holder", password: "Pass1234", username: "casesens"}, cookie, adminId);
+    const legacy = await createUser("older2@example.com", "Older2", "Pass1234", cookie, adminId);
+    const response = await updateAdminRbacUserProfile({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(PROFILE_URL, {userId: legacy.id, username: "CASESENS"}, cookie),
+    } as never);
+    expect(response.status).toBe(409);
+  });
+
+  it("rejects moving an address into the reserved domain", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const user = await createUser("move@example.com", "Move", "Pass1234", cookie, adminId);
+    const response = await updateAdminRbacUserProfile({
+      locals: locals(adminId, ["system:user:manage"]),
+      request: authedRequest(
+        PROFILE_URL,
+        {email: "move@users.microfeed.local", userId: user.id},
+        cookie,
+      ),
+    } as never);
+    expect(response.status).toBe(400);
   });
 });
 

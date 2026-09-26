@@ -115,3 +115,14 @@ export function validateAdminUsername(value: string): string | undefined {
 export function adminUsernameEmail(username: string): string {
   return `${normalizeAdminUsername(username)}@${ADMIN_USERNAME_EMAIL_DOMAIN}`;
 }
+
+/**
+ * Whether an address sits in the domain reserved for username-only accounts.
+ * Addresses there are synthesised by `adminUsernameEmail` and never routable,
+ * so an operator must not be able to claim one: doing so would collide with the
+ * placeholder that some username already owns, and the account could never
+ * receive mail anyway.
+ */
+export function isReservedAdminEmailDomain(value: string): boolean {
+  return normalizeAdminEmail(value).endsWith(`@${ADMIN_USERNAME_EMAIL_DOMAIN}`);
+}

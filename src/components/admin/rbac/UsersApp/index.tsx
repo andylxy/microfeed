@@ -7,7 +7,7 @@ import {Input} from "@/components/ui/input";
 import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
 import {cn} from "@/lib/utils";
 import {
-  adminAccountKind,
+  isReservedAdminEmailDomain,
   MIN_ADMIN_PASSWORD_LENGTH,
   normalizeAdminEmail,
   validateAdminEmail,
@@ -53,16 +53,22 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newAccount, setNewAccount] = useState("");
+  // The username and the address are two separate fields: the username is the
+  // identity and is required, the address is optional.
+  const [newUsername, setNewUsername] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   // Pre-ticked `readonly` so a fresh account is never created permission-less.
   const [newRoles, setNewRoles] = useState<string[]>([DEFAULT_USER_ROLE]);
 
-  // Inline profile edits (display name, email) and the password-reset modal.
+  // Inline profile edits (display name, email, username) and the
+  // password-reset modal.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -102,20 +108,29 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   const createUser = async () => {
     const name = newName.trim();
-    const account = newAccount.trim();
+    const username = newUsername.trim();
+    const email = newEmail.trim();
     const password = newPassword;
-    if (!name || !account) {
+    if (!name || !username) {
       showToast(t("errors.rbac.invalidNewUser"), "error");
       return;
     }
     // Mirrors the endpoint's checks so the visitor gets the verdict before a
-    // round trip; the server re-checks regardless.
-    const accountProblem = adminAccountKind(account) === "email"
-      ? validateAdminEmail(account) && t("errors.rbac.invalidEmail")
-      : validateAdminUsername(account) && t("errors.rbac.invalidUsername");
-    if (accountProblem) {
-      showToast(accountProblem, "error");
+    // round trip; the server re-checks regardless. An empty address is allowed
+    // — the account then signs in with its username alone.
+    if (validateAdminUsername(username)) {
+      showToast(t("errors.rbac.invalidUsername"), "error");
       return;
+    }
+    if (email) {
+      if (validateAdminEmail(email)) {
+        showToast(t("errors.rbac.invalidEmail"), "error");
+        return;
+      }
+      if (isReservedAdminEmailDomain(email)) {
+        showToast(t("errors.rbac.reservedEmailDomain"), "error");
+        return;
+      }
     }
     if (validateAdminPassword(password)) {
       showToast(
@@ -127,7 +142,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     setSaving(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxRbacUserCreate(), {
-        body: JSON.stringify({account, name, password, roles: newRoles}),
+        body: JSON.stringify({email, name, password, roles: newRoles, username}),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -140,7 +155,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
       setSelectedId(next.users[0]?.id ?? "");
       setCreating(false);
       setNewName("");
-      setNewAccount("");
+      setNewUsername("");
+      setNewEmail("");
       setNewPassword("");
       setNewRoles([DEFAULT_USER_ROLE]);
       showToast(t("rbac.userRolesSaved"), "success");
@@ -274,6 +290,43 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     }
   };
 
+  /**
+   * Give an account created before the username column existed a username. The
+   * endpoint refuses when one is already set, so this control only ever shows
+   * for accounts that still have none.
+   */
+  const saveUsername = async () => {
+    if (!user) return;
+    const username = usernameDraft.trim();
+    if (validateAdminUsername(username)) {
+      showToast(t("errors.rbac.invalidUsername"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserProfile(), {
+        body: JSON.stringify({userId: user.id, username}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(
+          await parseError(response, t("errors.rbac.profileUpdateFailed")),
+          "error",
+        );
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      setEditingUsername(false);
+      setUsernameDraft("");
+      showToast(t("rbac.usernameSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.profileUpdateFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const savePassword = async () => {
     if (!user) return;
     if (validateAdminPassword(newPw)) {
@@ -352,15 +405,23 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 value={newName}
               />
               <Input
-                aria-label={t("rbac.accountIdentifier")}
+                aria-label={t("rbac.username")}
                 disabled={saving}
-                onChange={(event) => setNewAccount(event.target.value)}
-                placeholder={t("rbac.accountIdentifier")}
+                onChange={(event) => setNewUsername(event.target.value)}
+                placeholder={t("rbac.username")}
                 type="text"
-                value={newAccount}
+                value={newUsername}
+              />
+              <Input
+                aria-label={t("rbac.accountEmail")}
+                disabled={saving}
+                onChange={(event) => setNewEmail(event.target.value)}
+                placeholder={t("rbac.accountEmail")}
+                type="text"
+                value={newEmail}
               />
               <p className="text-xs text-muted-foreground">
-                {t("rbac.accountIdentifierHint")}
+                {t("rbac.accountEmailHint")}
               </p>
               <Input
                 aria-label={t("rbac.accountPassword")}
@@ -411,7 +472,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                   onClick={() => {
                     setCreating(false);
                     setNewName("");
-                    setNewAccount("");
+                    setNewUsername("");
+                    setNewEmail("");
                     setNewPassword("");
                     setNewRoles([DEFAULT_USER_ROLE]);
                   }}
@@ -429,7 +491,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               disabled={saving}
               onClick={() => {
                 setNewName("");
-                setNewAccount("");
+                setNewUsername("");
+                setNewEmail("");
                 setNewPassword("");
                 setNewRoles([DEFAULT_USER_ROLE]);
                 setCreating(true);
@@ -562,12 +625,12 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="w-20 shrink-0 text-xs text-muted-foreground">
-                  {t("rbac.accountIdentifier")}
+                  {t("rbac.email")}
                 </span>
                 {editingEmail ? (
                   <>
                     <Input
-                      aria-label={t("rbac.accountIdentifier")}
+                      aria-label={t("rbac.email")}
                       className="h-8 w-56"
                       disabled={saving}
                       onChange={(event) => setEmailDraft(event.target.value)}
@@ -610,6 +673,63 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                   </>
                 )}
               </div>
+              {/* Accounts created before the username column existed have no
+                  username; they can be given one, once. */}
+              {!user.username && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                    {t("rbac.username")}
+                  </span>
+                  {editingUsername ? (
+                    <>
+                      <Input
+                        aria-label={t("rbac.username")}
+                        className="h-8 w-56"
+                        disabled={saving}
+                        onChange={(event) => setUsernameDraft(event.target.value)}
+                        type="text"
+                        value={usernameDraft}
+                      />
+                      <Button
+                        disabled={saving}
+                        onClick={saveUsername}
+                        size="xs"
+                        type="button"
+                      >
+                        {t("common.save")}
+                      </Button>
+                      <Button
+                        disabled={saving}
+                        onClick={() => {
+                          setEditingUsername(false);
+                          setUsernameDraft("");
+                        }}
+                        size="xs"
+                        type="button"
+                        variant="ghost"
+                      >
+                        {t("common.cancel")}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-mono text-muted-foreground">—</span>
+                      <Button
+                        disabled={saving}
+                        onClick={() => {
+                          setUsernameDraft("");
+                          setEditingUsername(true);
+                        }}
+                        size="xs"
+                        type="button"
+                        variant="ghost"
+                      >
+                        {t("rbac.setUsername")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <p className="mb-4 text-xs text-muted-foreground">

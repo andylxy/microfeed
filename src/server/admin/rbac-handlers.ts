@@ -38,6 +38,7 @@ import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {
   adminAccountKind,
   adminUsernameEmail,
+  isReservedAdminEmailDomain,
   MIN_ADMIN_PASSWORD_LENGTH,
   normalizeAdminEmail,
   normalizeAdminUsername,
@@ -776,13 +777,24 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
       name?: unknown;
       password?: unknown;
       roles?: unknown;
+      username?: unknown;
     }
     | null;
-  // `account` is the current field: it holds either an address or a username.
-  // `email` is still accepted so an older dashboard build keeps working.
-  const typedAccount = (typeof body?.account === "string" && body.account) ||
-    (typeof body?.email === "string" ? body.email : "");
-  const account = typeof typedAccount === "string" ? typedAccount.trim() : "";
+  // The form sends the username and the address as two separate fields, each
+  // landing in the column it belongs to: the username is the identity and is
+  // required, the address is optional and becomes a synthesised placeholder
+  // when it is left out. A `username` in the body is what marks the new form;
+  // without one this stays on the legacy path, where `email` (or `account`)
+  // alone still creates an address-only account for an older dashboard build.
+  const typedUsername = typeof body?.username === "string"
+    ? body.username.trim()
+    : "";
+  const typedEmail = typeof body?.email === "string" ? body.email.trim() : "";
+  const legacyAccount = typeof body?.account === "string"
+    ? body.account.trim()
+    : "";
+  const account = typedUsername || typedEmail || legacyAccount;
+  const splitFields = Boolean(typedUsername);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   // Roles come from the create form; when none are sent the account still gets
@@ -803,13 +815,33 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
   }
 
   const accountKind = adminAccountKind(account);
-  const username = accountKind === "username"
-    ? normalizeAdminUsername(account)
+  const username = splitFields || accountKind === "username"
+    ? normalizeAdminUsername(splitFields ? typedUsername : account)
     : null;
   let email: string;
-  if (accountKind === "email") {
+  if (splitFields) {
+    if (validateAdminUsername(typedUsername)) {
+      return localizedError(request, "errors.rbac.invalidUsername", 400);
+    }
+    if (typedEmail) {
+      if (validateAdminEmail(typedEmail)) {
+        return localizedError(request, "errors.rbac.invalidEmail", 400);
+      }
+      // The placeholder domain belongs to the synthesised addresses, so an
+      // operator claiming one would silently take an existing account's slot.
+      if (isReservedAdminEmailDomain(typedEmail)) {
+        return localizedError(request, "errors.rbac.reservedEmailDomain", 400);
+      }
+    }
+    email = typedEmail
+      ? normalizeAdminEmail(typedEmail)
+      : adminUsernameEmail(typedUsername);
+  } else if (accountKind === "email") {
     if (validateAdminEmail(account)) {
       return localizedError(request, "errors.rbac.invalidEmail", 400);
+    }
+    if (isReservedAdminEmailDomain(account)) {
+      return localizedError(request, "errors.rbac.reservedEmailDomain", 400);
     }
     email = normalizeAdminEmail(account);
   } else {
@@ -820,12 +852,20 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     // gets a placeholder under a domain that never resolves; the username is
     // what signs it in (see AdminCredentials.ts).
     email = adminUsernameEmail(account);
-    const taken = await env.FEED_DB.prepare(
-      "SELECT id FROM auth_user WHERE username = ?",
-    ).bind(username).first<{id: string}>();
-    if (taken) {
-      return localizedError(request, "errors.rbac.usernameTaken", 409);
-    }
+  }
+
+  // Uniqueness, checked once for every path: the username and the address are
+  // the two things an account signs in with, so a clash has to be reported as
+  // one instead of falling through to the write and surfacing as a generic
+  // failure. Both comparisons are case-insensitive — usernames are stored
+  // lowercased and addresses normalised, so "Bob" and "bob" are the same
+  // account. The address check also covers the placeholder addresses that
+  // username-only accounts hold.
+  if (username && await usernameIsTaken(env.FEED_DB, username)) {
+    return localizedError(request, "errors.rbac.usernameTaken", 409);
+  }
+  if (await emailIsTaken(env.FEED_DB, email)) {
+    return localizedError(request, "errors.rbac.emailTaken", 409);
   }
 
   // Validate the role codes before the account exists: a bad code must not
@@ -866,7 +906,7 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
   // role rows below always land on the right account.
   if (!newUserId) {
     const row = await env.FEED_DB.prepare(
-      "SELECT id FROM auth_user WHERE email = ?",
+      "SELECT id FROM auth_user WHERE lower(email) = lower(?)",
     ).bind(email).first<{id: string}>();
     newUserId = row?.id ?? null;
   }
@@ -925,7 +965,7 @@ export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
   if (guard) return guard;
 
   const body = await request.json().catch(() => null) as {userId?: unknown} | null;
-  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  const userId = parseRbacUserId(body);
   if (!userId) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
@@ -981,7 +1021,7 @@ export const updateAdminRbacUserBan: APIRoute = async ({locals, request}) => {
   const body = await request.json().catch(() => null) as
     | {banned?: unknown; userId?: unknown}
     | null;
-  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  const userId = parseRbacUserId(body);
   if (!userId || typeof body?.banned !== "boolean") {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
@@ -1026,6 +1066,48 @@ function parseRbacUserId(body: {userId?: unknown} | null): string {
 }
 
 /**
+ * Whether a username is already taken.
+ *
+ * Compared case-insensitively: the username plugin stores the lowercased form,
+ * so "Bob" and "bob" name one account, and SQLite's UNIQUE index compares bytes
+ * rather than letters, so it would happily admit the second spelling. Every
+ * pre-write check goes through here so the rule cannot drift between callers.
+ */
+async function usernameIsTaken(
+  database: D1Database,
+  username: string,
+): Promise<boolean> {
+  const row = await database.prepare(
+    "SELECT id FROM auth_user WHERE lower(username) = lower(?)",
+  ).bind(username).first<{id: string}>();
+  return Boolean(row);
+}
+
+/**
+ * Whether an address is already used by an account, optionally ignoring one
+ * account (`exceptUserId`) so an edit is not compared against itself.
+ *
+ * Case-insensitive for the same reason as the username: SQLite's UNIQUE index
+ * is byte-wise, so `Bob@example.com` and `bob@example.com` are two rows unless
+ * this check stops them.
+ */
+async function emailIsTaken(
+  database: D1Database,
+  email: string,
+  exceptUserId?: string,
+): Promise<boolean> {
+  const statement = exceptUserId
+    ? database.prepare(
+      "SELECT id FROM auth_user WHERE lower(email) = lower(?) AND id <> ?",
+    ).bind(email, exceptUserId)
+    : database.prepare(
+      "SELECT id FROM auth_user WHERE lower(email) = lower(?)",
+    ).bind(email);
+  const row = await statement.first<{id: string}>();
+  return Boolean(row);
+}
+
+/**
  * Map a Better Auth admin-plugin error to our localized response. A 404
  * (`NOT_FOUND`) means the target user does not exist; any other client error is
  * surfaced through `failedKey`; everything else is a 500.
@@ -1050,19 +1132,29 @@ function mapBetterAuthError(
 /**
  * Revoke every credential derived from an account after a forced password
  * reset: dashboard sessions, OAuth app grants (access/refresh tokens, consents,
- * connections), and the `mflc_` login credentials. This mirrors the CLI
- * `reset-password` path (`manage-cli/lib/auth.ts` `passwordResetSql`) so "admin
- * forced reset" and "owner recovery reset" close the same surface — leaving a
- * reset account's third-party app access or API keys alive would defeat the
- * point of a reset done in response to a suspected compromise. The user's own
+ * connections), and the `mflc_` login credentials. This closes at least the
+ * same surface as the CLI `reset-password` path (`manage-cli/lib/auth.ts`
+ * `passwordResetSql` — sessions plus the OAuth tables) and goes one step
+ * further by also revoking the login credentials — leaving a reset account's
+ * third-party app access or API keys alive would defeat the point of a reset
+ * done in response to a suspected compromise. The user's own
  * `auth_user`/`auth_account` rows are left intact; only the *derived* grants go.
+ *
+ * `keepSessionId` spares one dashboard session — used when the admin resets
+ * their own account so the reset does not sign them out of the request that
+ * performs it.
  */
 async function revokeUserDerivedCredentials(
   database: D1Database,
   userId: string,
+  keepSessionId?: string,
 ): Promise<void> {
+  const sessionDelete = keepSessionId
+    ? database.prepare('DELETE FROM "auth_session" WHERE "userId" = ? AND "id" <> ?')
+      .bind(userId, keepSessionId)
+    : database.prepare('DELETE FROM "auth_session" WHERE "userId" = ?').bind(userId);
   await database.batch([
-    database.prepare('DELETE FROM "auth_session" WHERE "userId" = ?').bind(userId),
+    sessionDelete,
     database.prepare('DELETE FROM "oauth_access_token" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "oauth_refresh_token" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "oauth_consent" WHERE "userId" = ?').bind(userId),
@@ -1080,9 +1172,11 @@ async function revokeUserDerivedCredentials(
  * `revokeSessionsOnPasswordReset` hook only fires on the user-facing
  * reset/change flows, not the admin one — so we pull every derived credential via
  * `revokeUserDerivedCredentials` to make "admin reset = signed out and
- * de-authorized everywhere" true. This matches the CLI `reset-password` path so
- * the two recovery flows close the same surface. The admin's own session is
- * untouched (different `userId`). The
+ * de-authorized everywhere" true. That closes at least the surface the CLI
+ * `reset-password` flow closes, and additionally revokes the `mflc_` login
+ * credentials. When the admin resets their *own* account, the current session
+ * is preserved so the reset does not sign them out of the request performing
+ * it; every other derived credential is still revoked. The
  * combination policy is ours (`validateAdminPassword`), because Better Auth
  * only checks length, so it is enforced here rather than at the client alone.
  * No email is involved, so username-only accounts (whose address is a
@@ -1116,8 +1210,15 @@ export const resetAdminRbacUserPassword: APIRoute = async ({locals, request}) =>
   }
   // The admin `set-user-password` endpoint only re-hashes the password; it does
   // not revoke the target's sessions, OAuth grants, or login credentials, so we
-  // pull every derived credential to make the reset effective everywhere.
-  await revokeUserDerivedCredentials(env.FEED_DB, userId);
+  // pull every derived credential to make the reset effective everywhere. A
+  // self-reset keeps the performing session alive (otherwise the admin would be
+  // signed out mid-request); resetting anyone else loses every session. If the
+  // current session cannot be identified, everything is revoked (fail closed).
+  await revokeUserDerivedCredentials(
+    env.FEED_DB,
+    userId,
+    locals.authUser?.id === userId ? locals.authSession?.id : undefined,
+  );
   await recordRbacAudit({
     action: "user.passwordReset",
     actor: locals.authUser,
@@ -1127,14 +1228,17 @@ export const resetAdminRbacUserPassword: APIRoute = async ({locals, request}) =>
 };
 
 /**
- * Admin edit of an account's display name and/or email.
+ * Admin edit of an account's display name, email, and/or username.
  *
- * Both go through Better Auth's `admin-update-user` (`data`), which the admin
- * role may call (`user: ["update"]`, and `user: ["set-email"]` for the email).
- * Email uniqueness is checked here first so the precise `emailTaken` (409) can
- * be returned instead of letting the write throw; Better Auth lowercases the
- * address the same way `normalizeAdminEmail` does. Only `name`/`email` change —
- * no forced password reset, matching the local "no first-sign-in reset" policy.
+ * All three go through Better Auth's `admin-update-user` (`data`), which the
+ * admin role may call (`user: ["update"]`, and `user: ["set-email"]` for the
+ * email). Email uniqueness is checked here first so the precise `emailTaken`
+ * (409) can be returned instead of letting the write throw; Better Auth
+ * lowercases the address the same way `normalizeAdminEmail` does. The username
+ * is a one-way door: an account created before the username column existed may
+ * be given one, but an existing username is never overwritten, because it is
+ * what sign-in resolves. Only `name`/`email`/`username` change — no forced
+ * password reset, matching the local "no first-sign-in reset" policy.
  */
 export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
@@ -1142,7 +1246,7 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
   if (guard) return guard;
 
   const body = await request.json().catch(() => null) as
-    | {email?: unknown; name?: unknown; userId?: unknown}
+    | {email?: unknown; name?: unknown; userId?: unknown; username?: unknown}
     | null;
   const userId = parseRbacUserId(body);
   if (!userId) {
@@ -1150,10 +1254,36 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
   }
   const rawEmail = typeof body?.email === "string" ? body.email.trim() : undefined;
   const rawName = typeof body?.name === "string" ? body.name.trim() : undefined;
-  if (rawEmail === undefined && rawName === undefined) {
+  const rawUsername = typeof body?.username === "string"
+    ? body.username.trim()
+    : undefined;
+  if (rawEmail === undefined && rawName === undefined && rawUsername === undefined) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
   const data: Record<string, string> = {};
+  if (rawUsername !== undefined) {
+    // Only the accounts that predate the username column may be given one: an
+    // existing username is the identifier sessions and tokens resolve against,
+    // so it is set once and then locked rather than being silently swapped.
+    const current = await env.FEED_DB.prepare(
+      "SELECT username FROM auth_user WHERE id = ?",
+    ).bind(userId).first<{username: string | null}>();
+    if (!current) {
+      return localizedError(request, "errors.rbac.unknownUser", 404);
+    }
+    if (current.username) {
+      return localizedError(request, "errors.rbac.usernameLocked", 400);
+    }
+    if (validateAdminUsername(rawUsername)) {
+      return localizedError(request, "errors.rbac.invalidUsername", 400);
+    }
+    const username = normalizeAdminUsername(rawUsername);
+    if (await usernameIsTaken(env.FEED_DB, username)) {
+      return localizedError(request, "errors.rbac.usernameTaken", 409);
+    }
+    data.username = username;
+    data.displayUsername = rawUsername;
+  }
   if (rawName !== undefined) {
     if (!rawName) {
       return localizedError(request, "errors.rbac.invalidName", 400);
@@ -1165,14 +1295,15 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
     if (validateAdminEmail(email)) {
       return localizedError(request, "errors.rbac.invalidEmail", 400);
     }
-    // Case-insensitive against the stored address: SQLite `=` on TEXT is
-    // case-sensitive, so a mixed-case row would slip past the 409 and surface
-    // as a generic 400 inside `adminUpdateUser`. `email` is already normalised
-    // (lowercased) by `normalizeAdminEmail` above.
-    const clash = await env.FEED_DB.prepare(
-      "SELECT id FROM auth_user WHERE lower(email) = lower(?) AND id <> ?",
-    ).bind(email, userId).first<{id: string}>();
-    if (clash) {
+    // The placeholder domain is reserved for username-only accounts, so no
+    // operator should be able to point a real address at it.
+    if (isReservedAdminEmailDomain(email)) {
+      return localizedError(request, "errors.rbac.reservedEmailDomain", 400);
+    }
+    // Compared case-insensitively and against every account but this one, so a
+    // mixed-case row cannot slip past the 409 and surface as a generic failure
+    // inside `adminUpdateUser`.
+    if (await emailIsTaken(env.FEED_DB, email, userId)) {
       return localizedError(request, "errors.rbac.emailTaken", 409);
     }
     data.email = email;
@@ -1310,7 +1441,7 @@ export const updateAdminRbacUserDeviceRevoke: APIRoute = async ({
   const body = await request.json().catch(() => null) as
     | {deviceId?: unknown; userId?: unknown}
     | null;
-  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  const userId = parseRbacUserId(body);
   const deviceId = typeof body?.deviceId === "string" ? body.deviceId.trim() : "";
   if (!userId || !deviceId) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
@@ -1346,7 +1477,7 @@ export const updateAdminRbacUserDeviceRestore: APIRoute = async ({
   const body = await request.json().catch(() => null) as
     | {deviceId?: unknown; userId?: unknown}
     | null;
-  const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
+  const userId = parseRbacUserId(body);
   const deviceId = typeof body?.deviceId === "string" ? body.deviceId.trim() : "";
   if (!userId || !deviceId) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
