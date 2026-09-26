@@ -1207,6 +1207,21 @@ html:has(.fq-header) {
   width: 16px !important;
 }
 
+/* On narrow screens the inline search field no longer fits alongside the
+ * logo, nav, and auth links. Collapse it to just the icon button (matching
+ * the upstream .mf-site-search behaviour at this width) so the header keeps
+ * its single row instead of overflowing horizontally. */
+@media (max-width: 600px) {
+  .fq-search {
+    padding: 0 10px !important;
+    width: auto !important;
+  }
+
+  .fq-search-input {
+    display: none !important;
+  }
+}
+
 /* Auth links */
 .fq-auth {
   align-items: center !important;
