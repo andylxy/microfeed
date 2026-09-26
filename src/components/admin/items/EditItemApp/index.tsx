@@ -462,6 +462,66 @@ export default class EditItemApp extends React.Component<Props, any> {
               }}
             />
           </div>
+          {/* 章节信息排在条目图片之前（用户要求，2026-09-25）。 */}
+          <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+            <h2 className="text-lg font-semibold">{t('items.novelFields')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('items.novelFieldsIntro')}
+            </p>
+            <div className="mt-5">
+              <AdminSelect
+                label={t('items.bookId')}
+                placeholder={t('items.bookIdPlaceholder')}
+                options={[
+                  {value: "", label: t('items.noBook')},
+                  ...this.state.books.map((b: any) => ({
+                    value: b.id,
+                    label: b.title,
+                  })),
+                ]}
+                value={
+                  (() => {
+                    const bid = microfeed.bookId;
+                    if (!bid) return {value: "", label: t('items.noBook')};
+                    const found = this.state.books.find(
+                      (b: any) => b.id === bid,
+                    );
+                    return {
+                      value: String(bid),
+                      label: found ? found.title : String(bid),
+                    };
+                  })()
+                }
+                onChange={(option: any) => {
+                  if (!option || option.value === "") {
+                    this.onUpdateItemMicrofeedMeta('bookId', undefined);
+                  } else {
+                    this.onUpdateItemMicrofeedMeta('bookId', option.value);
+                  }
+                }}
+              />
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <AdminInput
+                label={t('items.volume')}
+                placeholder={t('items.volumePlaceholder')}
+                value={microfeed.volume ? String(microfeed.volume) : ''}
+                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('volume', e.target.value)}
+              />
+              <AdminInput
+                label={t('items.chapterNo')}
+                placeholder={t('items.chapterNoPlaceholder')}
+                value={microfeed.chapterNo != null ? String(microfeed.chapterNo) : ''}
+                onChange={(e: any) => {
+                  const raw = e.target.value.trim();
+                  this.onUpdateItemMicrofeedMeta(
+                    'chapterNo',
+                    raw === '' ? null : raw,
+                  );
+                }}
+              />
+            </div>
+          </div>
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <div className="flex">
               <div>
@@ -659,65 +719,6 @@ export default class EditItemApp extends React.Component<Props, any> {
                 </div>
               </div>
             </details>
-          </div>
-          <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-            <h2 className="text-lg font-semibold">{t('items.novelFields')}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('items.novelFieldsIntro')}
-            </p>
-            <div className="mt-5">
-              <AdminSelect
-                label={t('items.bookId')}
-                placeholder={t('items.bookIdPlaceholder')}
-                options={[
-                  {value: "", label: t('items.noBook')},
-                  ...this.state.books.map((b: any) => ({
-                    value: b.id,
-                    label: b.title,
-                  })),
-                ]}
-                value={
-                  (() => {
-                    const bid = microfeed.bookId;
-                    if (!bid) return {value: "", label: t('items.noBook')};
-                    const found = this.state.books.find(
-                      (b: any) => b.id === bid,
-                    );
-                    return {
-                      value: String(bid),
-                      label: found ? found.title : String(bid),
-                    };
-                  })()
-                }
-                onChange={(option: any) => {
-                  if (!option || option.value === "") {
-                    this.onUpdateItemMicrofeedMeta('bookId', undefined);
-                  } else {
-                    this.onUpdateItemMicrofeedMeta('bookId', option.value);
-                  }
-                }}
-              />
-            </div>
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <AdminInput
-                label={t('items.volume')}
-                placeholder={t('items.volumePlaceholder')}
-                value={microfeed.volume ? String(microfeed.volume) : ''}
-                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('volume', e.target.value)}
-              />
-              <AdminInput
-                label={t('items.chapterNo')}
-                placeholder={t('items.chapterNoPlaceholder')}
-                value={microfeed.chapterNo != null ? String(microfeed.chapterNo) : ''}
-                onChange={(e: any) => {
-                  const raw = e.target.value.trim();
-                  this.onUpdateItemMicrofeedMeta(
-                    'chapterNo',
-                    raw === '' ? null : raw,
-                  );
-                }}
-              />
-            </div>
           </div>
         </div>
         <div className="xl:col-span-3">

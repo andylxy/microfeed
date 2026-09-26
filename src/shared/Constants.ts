@@ -182,7 +182,6 @@ export const ADMIN_MENU_CODES = {
   ADMIN_HOME: 'admin_home',
   EDIT_CHANNEL: 'edit_channel',
   ALL_ITEMS: 'all_items',
-  IMPORT_CHAPTERS: 'import_chapters',
   REVIEW: 'review',
   AUDIT: 'audit',
   PAGES: 'pages',

@@ -182,10 +182,11 @@ export const POST: APIRoute = async ({locals, request}) => {
     | {item?: {id?: unknown; status?: unknown}}
     | null;
   const isDeleting = preview?.item?.status === STATUSES.DELETED;
-  // B3: a save that carries no item id is a *create* (the new/import pages guard
-  // with `content:chapter:create`), so it must be authorised with the create
-  // code rather than update — otherwise a user who can open the new-chapter page
-  // is 403'd on save. A save with an id is an update; a delete status is a delete.
+  // B3: a save that carries no item id is a *create* (the new-chapter page
+  // guards with `content:chapter:create`), so it must be authorised with the
+  // create code rather than update — otherwise a user who can open the
+  // new-chapter page is 403'd on save. A save with an id is an update; a delete
+  // status is a delete.
   const isCreating = preview?.item?.id == null;
   const guardCode = isDeleting
     ? PERMISSION_CODES.CONTENT_CHAPTER_DELETE

@@ -13,7 +13,12 @@ if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 
-const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_CHAPTER_CREATE, adminLanguage);
+// Same code as `items/list` and `items/[itemId]`: a section's `new` form reuses
+// the code of the menu row it belongs to (`all_items`), which is how
+// `pages/new` and `site-files/new` already work. Actually creating the chapter
+// is still gated by `content:chapter:create` on the write path
+// (`ajax/feed.ts`), so opening this form grants nothing.
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_CHAPTER_READ, adminLanguage);
 if (denied) {
   return denied;
 }

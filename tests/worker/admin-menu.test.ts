@@ -147,7 +147,6 @@ describe("readAdminMenu", () => {
 
     expect(codes).toContain(ADMIN_MENU_CODES.ADMIN_HOME);
     expect(codes).toContain(ADMIN_MENU_CODES.ALL_ITEMS);
-    expect(codes).toContain(ADMIN_MENU_CODES.IMPORT_CHAPTERS);
     expect(codes).toContain(ADMIN_MENU_CODES.PAGES);
     expect(codes).toContain(ADMIN_MENU_CODES.SITE_FILES);
     expect(codes).not.toContain(ADMIN_MENU_CODES.USERS);
@@ -175,7 +174,6 @@ describe("readAdminMenu", () => {
     expect(codes).toContain(ADMIN_MENU_CODES.CATEGORIES);
     expect(codes).toContain(ADMIN_MENU_CODES.VOLUMES);
     // Read-only means no create/manage menus.
-    expect(codes).not.toContain(ADMIN_MENU_CODES.IMPORT_CHAPTERS);
     expect(codes).not.toContain(ADMIN_MENU_CODES.PAGES);
     expect(codes).not.toContain(ADMIN_MENU_CODES.SITE_FILES);
     expect(codes).not.toContain(ADMIN_MENU_CODES.REVIEW);
@@ -271,7 +269,6 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.VOLUMES,
       ADMIN_MENU_CODES.CATEGORIES,
       ADMIN_MENU_CODES.ALL_ITEMS,
-      ADMIN_MENU_CODES.IMPORT_CHAPTERS,
       "group_review",
       ADMIN_MENU_CODES.REVIEW,
       ADMIN_MENU_CODES.AUDIT,
