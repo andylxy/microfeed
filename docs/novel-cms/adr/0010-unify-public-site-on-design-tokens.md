@@ -131,7 +131,7 @@
 | 项 | 状态 | 说明 |
 |---|---|---|
 | ⚠️ **共享导航栏 `.fq-*` 在窄屏横向溢出** | ✅ 已修 | 实测 484px 视口下 `scrollWidth = 876`。新增 `@media (max-width: 600px)`：`.fq-search` 收为 `width:auto`、`.fq-search-input` 隐藏，只留搜索图标按钮（与上游 `.mf-site-search` 600px 做法一致）。导航与登录/注册保留，头部维持单行 |
-| 暗色（`.dark`）视觉验收 | ⏳ 待浏览器逐页核对 | 新 token 已补暗色取值；首页/详情页/阅读页在 `0.1.30` 轮验过，但**分类页 / 搜索页 / RSS** 仍未逐页目视核对（本机 Windows 无可用浏览器驱动，CDP 与 agent-browser 均不可用） |
+| 暗色（`.dark`）视觉验收 | ⏳ 静态已确认 / 目视待浏览器 | 新 token 已补暗色取值；首页/详情页/阅读页在 `0.1.30` 轮验过。**本轮静态核查**：`web-header.mustache` 的「硬编码色」实为 `:root`（浅）/ `.dark`（暗）两套 token 源值（非元素样式，是设计 token 本身）；除 token 定义块外，`web-home/web-category/web-feed/web-item/web-search/web-page/web-body-*` **全模板零字面色命中** ⇒ 暗色机制健全、分类页/搜索页/RSS 自动继承新画布，无字面色覆盖风险。仅缺浏览器截图目视（本机 Windows 无 CDP/agent-browser 驱动） |
 | 阅读页 `html[data-mf-reader-night]` 硬编码夜间色 | ✅ 按决定保留 | 已实测**优先级仍高于 token**，未被覆盖；用户拍板「保持现状不动」 |
 | `--mf-accent` / `--mf-novel` / `--mf-brand` 是否合并 | ✅ 决定不合并 | `--mf-accent` 是上游 token（`mf-site-search:focus-within`/`mf-footer-link`/`mf-nav-overflow` 在用），动它波及上游 CSS；`--mf-novel` 全仓零定义；`--mf-brand` 仅 feed-zh 用（`fq-logo-icon`）。合并收益低、风险高 |
 | `themes/feed-zh/rss-stylesheet.xsl` 的硬编码色（实测 16 个） | ✅ 决定不动 | XSL 由**外部 RSS 阅读器**渲染（`rssStylesheetResponse` 直返），输出 HTML 不在站点 CSS 作用域，`var(--mf-*)` 无法解析——token 化要么不可能、要么最终仍写死解析值。属于外部上下文，设计 token 不适用 |
