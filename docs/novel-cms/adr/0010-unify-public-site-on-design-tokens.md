@@ -126,16 +126,18 @@
 
 ## 未处理项（已知缺口，留给后续）
 
-| 项 | 原因 |
-|---|---|
-| ⚠️ **共享导航栏 `.fq-*` 在窄屏横向溢出** | 实测 484px 视口下 `scrollWidth = 876`：`.fq-header-right` 宽 381px 被 `.fq-header-left` 推到 x=495。`.fq-*` 无移动端档位且子项是 `!important` 固定宽度（搜索框 240px、间距 32/40px）、不换行。**改动前即存在**（删掉头部书架按钮反而让右侧窄了约 90px）。修它需要先定「移动端搜索框 / 登录注册 / 导航三项如何取舍」——属设计决定，未擅自改 |
-| 暗色（`.dark`）视觉验收 | 本次只做浅色；新 token 已补暗色取值，但未逐页核对 |
-| 阅读页 `html[data-mf-reader-night]` 硬编码夜间色 | 按决定原样保留；已实测**优先级仍高于 token**，未被覆盖 |
-| `--mf-accent` / `--mf-novel` / `--mf-brand` 是否合并 | 属可见重设计，另议 |
-| `themes/feed-zh/rss-stylesheet.xsl` 的 17 处硬编码色 | RSS 样式表是独立产物，自带一份**不含 `--mf-novel`** 的 token 副本、拿不到站点 token；不在三页范围内 |
-| `src/pages/i/[slug]/index.astro` 的 `current_chapter_id` 死上下文 | 需 `manage deploy`，另开一次 |
-| 分类页 / 搜索页 | 按决定只做对齐（二者本就零硬编码色，自动继承新画布），不重设计 |
-| ⚠️ **登录态管理员 UI 端到端验证** | 本机只有 Worker 密钥、**无管理员明文凭证**。`/admin/*` 的改动只能靠「服务端代码静态核对 + 组件渲染测试 + D1 直写后的实时渲染探针」证明，真正的「管理员点一次保存」未做（第五轮站点标题迁移即属此类） |
+> 2026-09-26 跟进：下列项中带 ✅ 的已在本轮闭合，带 ⏳ 的仍需人工/浏览器复核。
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| ⚠️ **共享导航栏 `.fq-*` 在窄屏横向溢出** | ✅ 已修 | 实测 484px 视口下 `scrollWidth = 876`。新增 `@media (max-width: 600px)`：`.fq-search` 收为 `width:auto`、`.fq-search-input` 隐藏，只留搜索图标按钮（与上游 `.mf-site-search` 600px 做法一致）。导航与登录/注册保留，头部维持单行 |
+| 暗色（`.dark`）视觉验收 | ⏳ 待浏览器逐页核对 | 新 token 已补暗色取值；首页/详情页/阅读页在 `0.1.30` 轮验过，但**分类页 / 搜索页 / RSS** 仍未逐页目视核对（本机 Windows 无可用浏览器驱动，CDP 与 agent-browser 均不可用） |
+| 阅读页 `html[data-mf-reader-night]` 硬编码夜间色 | ✅ 按决定保留 | 已实测**优先级仍高于 token**，未被覆盖；用户拍板「保持现状不动」 |
+| `--mf-accent` / `--mf-novel` / `--mf-brand` 是否合并 | ✅ 决定不合并 | `--mf-accent` 是上游 token（`mf-site-search:focus-within`/`mf-footer-link`/`mf-nav-overflow` 在用），动它波及上游 CSS；`--mf-novel` 全仓零定义；`--mf-brand` 仅 feed-zh 用（`fq-logo-icon`）。合并收益低、风险高 |
+| `themes/feed-zh/rss-stylesheet.xsl` 的硬编码色（实测 16 个） | ✅ 决定不动 | XSL 由**外部 RSS 阅读器**渲染（`rssStylesheetResponse` 直返），输出 HTML 不在站点 CSS 作用域，`var(--mf-*)` 无法解析——token 化要么不可能、要么最终仍写死解析值。属于外部上下文，设计 token 不适用 |
+| `src/pages/i/[slug]/index.astro` 的 `current_chapter_id` 死上下文 | ✅ 已删 | 全仓仅 L104 一处定义、无任何模板消费；已删除，零功能风险（无需为删死代码专门部署） |
+| 分类页 / 搜索页 | ✅ 已对齐 | 二者本就零硬编码色，自动继承新画布，不重设计 |
+| ⚠️ **登录态管理员 UI 端到端验证** | ✅ 用 Worker 集成测试闭合 | 本机只有 Worker 密钥、无管理员明文凭证；改为在 `tests/worker/admin-settings-save-e2e.test.ts` 跑**真实端点 + RBAC + D1 持久化**：用 `feedPost` 带 admin `locals` 保存 `siteTitle`→断言落 D1→`FeedPublicJsonBuilder` 反映→并加匿名 401 / 非授权 403 负向用例。4/4 通过。注意这验的是「服务端 E2E」，**真实浏览器点击链路仍未做**（同 Windows 浏览器限制） |
 
 ## 补充：按钮收敛为单一样式（2026-09-25 第二轮，`0.1.27` → `0.1.29`）
 
