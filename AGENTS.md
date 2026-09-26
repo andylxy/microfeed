@@ -247,6 +247,37 @@ yarn manage theme activate <theme-id> --instance ctwh-881019-xyz
 - 每个环境上限：100 个未删除 Custom 版本、20 个草稿；Built-in 版本不占 Custom 配额。
 - 改主题**只影响显示**，不要顺手改功能逻辑。
 
+#### 安装激活后：清理旧版本（只保留最新版 + 上一版）
+
+**这是本项目的固定收尾动作**：`install` + `activate` 完成后接着执行，不用再逐次确认口径。
+执行后把删掉了哪些版本报给用户。
+
+`install` 只 INSERT、不覆盖——同一个 `packageId` 每装一次就多一行，一天就能堆出十几行
+（2026-09-25 实测：`themes` 表 39 行里有 31 行是 `local.feed-zh`）。后台主题列表会把它们
+全部列出来，所以每次上线后都要清理。
+
+**保留哪两行**：刚安装并激活的那一版（版本号最大）＋ 紧邻的上一版（回滚点）。
+**其余版本全部删除。**
+
+```console
+# 1. 列出全部版本：确认 active 是刚装的那一版，记下要删的 id
+yarn manage theme list --instance ctwh-881019-xyz
+
+# 2. 逐个删除（--confirm 必须与 theme-id 完全一致）
+yarn manage theme delete <theme-id> --instance ctwh-881019-xyz --confirm <theme-id>
+```
+
+- **必须保留上一版**：`theme rollback` 依赖 `theme_state.previous_theme_id`。
+  删除该字段指向的版本时，CLI 会自动把它清成 `NULL`，回滚点随之消失。所以**上一版不要删**。
+- 口径来源（用户 2026-09-25）：「主题改动后上线 install + activate；删除掉旧的版本，
+  只保留安装前那个，其他的全部删除掉。」其中「安装前那个」＝**保留上一版作回滚点**，
+  **不是**「只留新版」。第 3 行起更早的历史版本没有任何用途，一律删除。
+- `theme delete` 是**软删除**（写 `deleted_at`，行仍留在表里），不是物理删除。
+  ⛔ **不要**用 `wrangler d1 execute … "DELETE FROM themes …"` 绕过：物理删除不会清理该版本
+  在 R2 的资产（留下孤儿对象），也不会修正 `theme_state`，且不可恢复。
+- 内置主题（`microfeed.*`）不参与清理：CLI 拒绝删除它们，它们也不占 Custom 配额。
+- 上限参考：每个环境 100 个未删除 Custom 版本、20 个草稿。
+
 ## 实例管理与 Cloudflare 部署
 
 - 当用户要求编码代理操作本地或 Cloudflare 状态上的
