@@ -456,6 +456,10 @@ export const ADMIN_URLS = {
     adminUrl("ajax/rbac/user-credential-create", browserAdminPath()),
   ajaxRbacUserCredentialRevoke: () =>
     adminUrl("ajax/rbac/user-credential-revoke", browserAdminPath()),
+  ajaxRbacUserPasswordReset: () =>
+    adminUrl("ajax/rbac/user-password-reset", browserAdminPath()),
+  ajaxRbacUserProfile: () =>
+    adminUrl("ajax/rbac/user-profile", browserAdminPath()),
   ajaxCredentialLogin: () =>
     adminUrl("ajax/auth/credential-login", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),

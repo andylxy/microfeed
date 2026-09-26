@@ -9,6 +9,7 @@ import {cn} from "@/lib/utils";
 import {
   adminAccountKind,
   MIN_ADMIN_PASSWORD_LENGTH,
+  normalizeAdminEmail,
   validateAdminEmail,
   validateAdminPassword,
   validateAdminUsername,
@@ -56,6 +57,15 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [newPassword, setNewPassword] = useState("");
   // Pre-ticked `readonly` so a fresh account is never created permission-less.
   const [newRoles, setNewRoles] = useState<string[]>([DEFAULT_USER_ROLE]);
+
+  // Inline profile edits (display name, email) and the password-reset modal.
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
 
   const user = board.users.find((entry) => entry.id === selectedId);
 
@@ -183,6 +193,121 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
       showToast(t("rbac.userRolesSaved"), "success");
     } catch {
       showToast(t("errors.rbac.deleteUserFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditName = () => {
+    if (!user) return;
+    setNameDraft(user.name);
+    setEditingName(true);
+  };
+
+  const saveName = async () => {
+    if (!user) return;
+    const name = nameDraft.trim();
+    if (!name) {
+      showToast(t("errors.rbac.invalidName"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserProfile(), {
+        body: JSON.stringify({name, userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(
+          await parseError(response, t("errors.rbac.profileUpdateFailed")),
+          "error",
+        );
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      setEditingName(false);
+      setNameDraft("");
+      showToast(t("rbac.nameSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.profileUpdateFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditEmail = () => {
+    if (!user) return;
+    setEmailDraft(user.email);
+    setEditingEmail(true);
+  };
+
+  const saveEmail = async () => {
+    if (!user) return;
+    const email = normalizeAdminEmail(emailDraft);
+    if (validateAdminEmail(email)) {
+      showToast(t("errors.rbac.invalidEmail"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserProfile(), {
+        body: JSON.stringify({email, userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(
+          await parseError(response, t("errors.rbac.profileUpdateFailed")),
+          "error",
+        );
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      setEditingEmail(false);
+      setEmailDraft("");
+      showToast(t("rbac.emailSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.profileUpdateFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const savePassword = async () => {
+    if (!user) return;
+    if (validateAdminPassword(newPw)) {
+      showToast(
+        t("errors.password.policy", {min: MIN_ADMIN_PASSWORD_LENGTH}),
+        "error",
+      );
+      return;
+    }
+    if (newPw !== confirmPw) {
+      showToast(t("rbac.passwordsMustMatch"), "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserPasswordReset(), {
+        body: JSON.stringify({newPassword: newPw, userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(
+          await parseError(response, t("errors.rbac.passwordResetFailed")),
+          "error",
+        );
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      setResetOpen(false);
+      setNewPw("");
+      setConfirmPw("");
+      showToast(t("rbac.passwordResetSuccess"), "success");
+    } catch {
+      showToast(t("errors.rbac.passwordResetFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -330,10 +455,24 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
                   {user.email}
                 </p>
+                {user.username && (
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                    {t("rbac.username")}: {user.username}
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button disabled={saving} onClick={save} size="sm" type="button">
                   {saving ? t("rbac.saving") : t("rbac.saveUserRoles")}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => setResetOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  {t("rbac.resetPassword")}
                 </Button>
                 <Button
                   disabled={saving}
@@ -370,6 +509,108 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 </dd>
               </div>
             </dl>
+
+            <div className="mb-4 flex flex-col gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                  {t("rbac.accountName")}
+                </span>
+                {editingName ? (
+                  <>
+                    <Input
+                      aria-label={t("rbac.accountName")}
+                      className="h-8 w-56"
+                      disabled={saving}
+                      onChange={(event) => setNameDraft(event.target.value)}
+                      value={nameDraft}
+                    />
+                    <Button
+                      disabled={saving}
+                      onClick={saveName}
+                      size="xs"
+                      type="button"
+                    >
+                      {t("common.save")}
+                    </Button>
+                    <Button
+                      disabled={saving}
+                      onClick={() => {
+                        setEditingName(false);
+                        setNameDraft("");
+                      }}
+                      size="xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono text-foreground">{user.name}</span>
+                    <Button
+                      disabled={saving}
+                      onClick={startEditName}
+                      size="xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("rbac.editName")}
+                    </Button>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                  {t("rbac.accountIdentifier")}
+                </span>
+                {editingEmail ? (
+                  <>
+                    <Input
+                      aria-label={t("rbac.accountIdentifier")}
+                      className="h-8 w-56"
+                      disabled={saving}
+                      onChange={(event) => setEmailDraft(event.target.value)}
+                      type="email"
+                      value={emailDraft}
+                    />
+                    <Button
+                      disabled={saving}
+                      onClick={saveEmail}
+                      size="xs"
+                      type="button"
+                    >
+                      {t("common.save")}
+                    </Button>
+                    <Button
+                      disabled={saving}
+                      onClick={() => {
+                        setEditingEmail(false);
+                        setEmailDraft("");
+                      }}
+                      size="xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono text-foreground">{user.email}</span>
+                    <Button
+                      disabled={saving}
+                      onClick={startEditEmail}
+                      size="xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("rbac.editEmail")}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
 
             <p className="mb-4 text-xs text-muted-foreground">
               {t("rbac.legacyRoleHint")}
@@ -416,6 +657,69 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
               </p>
               <LoginCredentialsPanel key={user.id} userId={user.id} />
             </div>
+
+            {resetOpen && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                onClick={() => setResetOpen(false)}
+              >
+                <div
+                  className="w-full max-w-sm rounded-[14px] border bg-card p-5 shadow-lg"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <h3 className="font-semibold text-foreground">
+                    {t("rbac.resetPasswordTitle")}
+                  </h3>
+                  <p className="mt-1 mb-3 text-xs text-muted-foreground">
+                    {t("rbac.resetPasswordDescription")}
+                  </p>
+                  <label className="block text-xs text-muted-foreground">
+                    {t("rbac.newPassword")}
+                  </label>
+                  <Input
+                    aria-label={t("rbac.newPassword")}
+                    className="mt-1"
+                    disabled={saving}
+                    onChange={(event) => setNewPw(event.target.value)}
+                    type="password"
+                    value={newPw}
+                  />
+                  <label className="mt-3 block text-xs text-muted-foreground">
+                    {t("rbac.confirmPassword")}
+                  </label>
+                  <Input
+                    aria-label={t("rbac.confirmPassword")}
+                    className="mt-1"
+                    disabled={saving}
+                    onChange={(event) => setConfirmPw(event.target.value)}
+                    type="password"
+                    value={confirmPw}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("rbac.passwordHint", {min: MIN_ADMIN_PASSWORD_LENGTH})}
+                  </p>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      disabled={saving}
+                      onClick={() => setResetOpen(false)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                    <Button
+                      disabled={saving}
+                      onClick={savePassword}
+                      size="sm"
+                      type="button"
+                    >
+                      {t("rbac.resetPassword")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <p className="text-sm text-muted-foreground">{t("rbac.noUsers")}</p>

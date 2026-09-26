@@ -54,6 +54,12 @@ export interface RbacUser {
   legacyRole: string | null;
   name: string;
   roles: string[];
+  /**
+   * Login username, present only for username accounts (email accounts have
+   * none). `display_username` is preferred (keeps the original case), falling
+   * back to the normalized `username`; read-only in the UI.
+   */
+  username?: string;
 }
 
 export interface RbacUserBoard {

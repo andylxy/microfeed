@@ -201,15 +201,17 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
   const [accounts, roles, grants] = await Promise.all([
     db
       .prepare(
-        `SELECT id, name, email, role, banned FROM auth_user
-         ORDER BY email`,
+        `SELECT id, name, email, role, banned, username, displayUsername
+         FROM auth_user ORDER BY email`,
       )
       .all<{
         banned: number | null;
+        displayUsername: string | null;
         email: string;
         id: string;
         name: string;
         role: string | null;
+        username: string | null;
       }>(),
     db
       .prepare("SELECT code, name FROM ext_roles ORDER BY code")
@@ -242,6 +244,7 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
       legacyRole: row.role,
       name: row.name,
       roles: (byUser.get(row.id) ?? []).sort(),
+      username: row.displayUsername ?? row.username ?? undefined,
     })),
   };
 }
@@ -1012,6 +1015,180 @@ export const updateAdminRbacUserBan: APIRoute = async ({locals, request}) => {
   await recordRbacAudit({
     action: body.banned ? "user.ban" : "user.unban",
     actor: locals.authUser,
+    target: userId,
+  });
+  return jsonResponse(await readRbacUsers(env.FEED_DB));
+};
+
+/** Pull a trimmed `userId` string out of an RBAC action body, or "" if absent. */
+function parseRbacUserId(body: {userId?: unknown} | null): string {
+  return typeof body?.userId === "string" ? body.userId.trim() : "";
+}
+
+/**
+ * Map a Better Auth admin-plugin error to our localized response. A 404
+ * (`NOT_FOUND`) means the target user does not exist; any other client error is
+ * surfaced through `failedKey`; everything else is a 500.
+ */
+function mapBetterAuthError(
+  request: Request,
+  error: unknown,
+  failedKey: string,
+): Response {
+  const statusCode = (error as {statusCode?: unknown})?.statusCode;
+  const statusText = (error as {status?: unknown})?.status;
+  if (statusCode === 404 || statusText === "NOT_FOUND") {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
+  }
+  if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500) {
+    return localizedError(request, failedKey, 400);
+  }
+  console.error(failedKey, error);
+  return localizedError(request, failedKey, 500);
+}
+
+/**
+ * Revoke every credential derived from an account after a forced password
+ * reset: dashboard sessions, OAuth app grants (access/refresh tokens, consents,
+ * connections), and the `mflc_` login credentials. This mirrors the CLI
+ * `reset-password` path (`manage-cli/lib/auth.ts` `passwordResetSql`) so "admin
+ * forced reset" and "owner recovery reset" close the same surface — leaving a
+ * reset account's third-party app access or API keys alive would defeat the
+ * point of a reset done in response to a suspected compromise. The user's own
+ * `auth_user`/`auth_account` rows are left intact; only the *derived* grants go.
+ */
+async function revokeUserDerivedCredentials(
+  database: D1Database,
+  userId: string,
+): Promise<void> {
+  await database.batch([
+    database.prepare('DELETE FROM "auth_session" WHERE "userId" = ?').bind(userId),
+    database.prepare('DELETE FROM "oauth_access_token" WHERE "userId" = ?').bind(userId),
+    database.prepare('DELETE FROM "oauth_refresh_token" WHERE "userId" = ?').bind(userId),
+    database.prepare('DELETE FROM "oauth_consent" WHERE "userId" = ?').bind(userId),
+    database.prepare('DELETE FROM "oauth_connection" WHERE "userId" = ?').bind(userId),
+    database.prepare('DELETE FROM "ext_login_credentials" WHERE "user_id" = ?').bind(userId),
+  ]);
+}
+
+/**
+ * Admin-set password reset.
+ *
+ * The operator types a new password; Better Auth's `set-user-password` writes
+ * it (re-hashing). That admin endpoint does NOT revoke the target's existing
+ * sessions, OAuth app grants, or login credentials — the
+ * `revokeSessionsOnPasswordReset` hook only fires on the user-facing
+ * reset/change flows, not the admin one — so we pull every derived credential via
+ * `revokeUserDerivedCredentials` to make "admin reset = signed out and
+ * de-authorized everywhere" true. This matches the CLI `reset-password` path so
+ * the two recovery flows close the same surface. The admin's own session is
+ * untouched (different `userId`). The
+ * combination policy is ours (`validateAdminPassword`), because Better Auth
+ * only checks length, so it is enforced here rather than at the client alone.
+ * No email is involved, so username-only accounts (whose address is a
+ * non-routing placeholder) can still be reset.
+ */
+export const resetAdminRbacUserPassword: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
+    request, env.FEED_DB);
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {newPassword?: unknown; userId?: unknown}
+    | null;
+  const userId = parseRbacUserId(body);
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+  if (!userId) {
+    return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+  }
+  if (validateAdminPassword(newPassword)) {
+    return localizedError(request, "errors.password.policy", 400, {
+      min: String(MIN_ADMIN_PASSWORD_LENGTH),
+    });
+  }
+  try {
+    await createMicrofeedAuth(env, request).api.setUserPassword({
+      body: {newPassword, userId},
+      headers: request.headers,
+    });
+  } catch (error) {
+    return mapBetterAuthError(request, error, "errors.rbac.passwordResetFailed");
+  }
+  // The admin `set-user-password` endpoint only re-hashes the password; it does
+  // not revoke the target's sessions, OAuth grants, or login credentials, so we
+  // pull every derived credential to make the reset effective everywhere.
+  await revokeUserDerivedCredentials(env.FEED_DB, userId);
+  await recordRbacAudit({
+    action: "user.passwordReset",
+    actor: locals.authUser,
+    target: userId,
+  });
+  return jsonResponse(await readRbacUsers(env.FEED_DB));
+};
+
+/**
+ * Admin edit of an account's display name and/or email.
+ *
+ * Both go through Better Auth's `admin-update-user` (`data`), which the admin
+ * role may call (`user: ["update"]`, and `user: ["set-email"]` for the email).
+ * Email uniqueness is checked here first so the precise `emailTaken` (409) can
+ * be returned instead of letting the write throw; Better Auth lowercases the
+ * address the same way `normalizeAdminEmail` does. Only `name`/`email` change —
+ * no forced password reset, matching the local "no first-sign-in reset" policy.
+ */
+export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
+    request, env.FEED_DB);
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {email?: unknown; name?: unknown; userId?: unknown}
+    | null;
+  const userId = parseRbacUserId(body);
+  if (!userId) {
+    return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+  }
+  const rawEmail = typeof body?.email === "string" ? body.email.trim() : undefined;
+  const rawName = typeof body?.name === "string" ? body.name.trim() : undefined;
+  if (rawEmail === undefined && rawName === undefined) {
+    return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+  }
+  const data: Record<string, string> = {};
+  if (rawName !== undefined) {
+    if (!rawName) {
+      return localizedError(request, "errors.rbac.invalidName", 400);
+    }
+    data.name = rawName;
+  }
+  if (rawEmail !== undefined) {
+    const email = normalizeAdminEmail(rawEmail);
+    if (validateAdminEmail(email)) {
+      return localizedError(request, "errors.rbac.invalidEmail", 400);
+    }
+    // Case-insensitive against the stored address: SQLite `=` on TEXT is
+    // case-sensitive, so a mixed-case row would slip past the 409 and surface
+    // as a generic 400 inside `adminUpdateUser`. `email` is already normalised
+    // (lowercased) by `normalizeAdminEmail` above.
+    const clash = await env.FEED_DB.prepare(
+      "SELECT id FROM auth_user WHERE lower(email) = lower(?) AND id <> ?",
+    ).bind(email, userId).first<{id: string}>();
+    if (clash) {
+      return localizedError(request, "errors.rbac.emailTaken", 409);
+    }
+    data.email = email;
+  }
+  try {
+    await createMicrofeedAuth(env, request).api.adminUpdateUser({
+      body: {userId, data},
+      headers: request.headers,
+    });
+  } catch (error) {
+    return mapBetterAuthError(request, error, "errors.rbac.profileUpdateFailed");
+  }
+  await recordRbacAudit({
+    action: "user.profile",
+    actor: locals.authUser,
+    detail: Object.keys(data).join(","),
     target: userId,
   });
   return jsonResponse(await readRbacUsers(env.FEED_DB));
