@@ -51,6 +51,8 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:site_file:manage", name: "站点文件管理"},
   {code: "media:file:manage", name: "媒体文件管理"},
   {code: "system:api:manage", name: "API 管理"},
+  {code: "content:annotation-markers:read", name: "标注标记查看"},
+  {code: "content:annotation-markers:manage", name: "标注标记管理"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -90,6 +92,10 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       // and the API area stay admin-only.
       "content:page:manage",
       "content:site_file:manage",
+      // Annotation markers are content work: an editor's rich-text editor
+      // fetches the marker list (`:read`) to build its `$X{...}` toolbar
+      // buttons. Managing the list stays admin-only.
+      "content:annotation-markers:read",
     ],
   },
   {
@@ -103,6 +109,9 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "content:book:read",
       "content:category:read",
       "content:volume:read",
+      // Without this the editor's marker-list fetch 403s and the account only
+      // ever sees the four seed buttons, never the live list (0069).
+      "content:annotation-markers:read",
     ],
   },
 ];

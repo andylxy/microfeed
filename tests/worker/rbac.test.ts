@@ -357,8 +357,10 @@ describe("RBAC catalog integrity", () => {
     ).first<{c: number}>();
     // 13 since migration 0058 added `media:file:manage`, which A1 grants to every
     // role already holding `content:site_file:manage` (the same operator
-    // audience). Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(13);
+    // audience). 14 since 0069 added `content:annotation-markers:read` — the
+    // editor's rich-text editor fetches the marker list for its toolbar.
+    // Bump this when a seed deliberately widens a role.
+    expect(editorCount?.c).toBe(14);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -380,7 +382,9 @@ describe("RBAC catalog integrity", () => {
         "WHERE rp.role_id = 'r_readonly' ORDER BY p.code",
     ).all<{code: string}>();
     expect((grants.results ?? []).map((row) => row.code)).toEqual([
-      // Alphabetical by code (the query orders by code).
+      // Alphabetical by code (the query orders by code). 0069 added the
+      // annotation-markers read code: the editor toolbar needs the live list.
+      "content:annotation-markers:read",
       "content:book:read",
       "content:category:read",
       "content:chapter:read",
@@ -407,8 +411,9 @@ describe("RBAC administration", () => {
   it("reads the seeded roles with their grants and the catalogue", async () => {
     const board = await readRbacBoard(env.FEED_DB);
     const editor = board.roles.find((role) => role.code === "editor");
-    // 13 since 0058 granted `media:file:manage` to the site-file managers (A1).
-    expect(editor?.permissions).toHaveLength(13);
+    // 13 since 0058 granted `media:file:manage` to the site-file managers (A1);
+    // 14 since 0069 added `content:annotation-markers:read`.
+    expect(editor?.permissions).toHaveLength(14);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

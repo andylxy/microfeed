@@ -1,0 +1,38 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AnnotationMarkersApp from "@/components/admin/annotation-markers/AnnotationMarkersApp";
+import AdminShell from "@/layouts/AdminShell.astro";
+import type {AdminMenuCode} from "@/shared/AdminNavigation";
+import type {AnnotationMarker} from "@/server/admin/annotation-marker-handlers";
+import type {FeedContent, OnboardingResult} from "@/types";
+
+interface Props {
+  activeNavItem: AdminMenuCode | null;
+  documentTitle: string;
+  feedContent: FeedContent;
+  initialMarkers: AnnotationMarker[];
+  onboardingResult: OnboardingResult;
+  pageTitle: string;
+}
+
+const {
+  activeNavItem,
+  documentTitle,
+  feedContent,
+  initialMarkers,
+  onboardingResult,
+  pageTitle,
+} = Astro.props;
+---
+
+<AdminShell
+  {activeNavItem}
+  {documentTitle}
+  {feedContent}
+  {onboardingResult}
+  {pageTitle}
+>
+  <AnnotationMarkersApp client:only="react" initialMarkers={initialMarkers}>
+    <AdminPageFallback slot="fallback" kind="list" />
+  </AnnotationMarkersApp>
+</AdminShell>

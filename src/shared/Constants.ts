@@ -195,6 +195,7 @@ export const ADMIN_MENU_CODES = {
   RBAC_AUDIT: 'rbac_audit',
   USERS: 'users',
   SETTINGS: 'settings',
+  ANNOTATION_MARKERS: 'annotation_markers',
 } as const;
 
 /**
@@ -234,6 +235,8 @@ export const PERMISSION_CODES = {
   CONTENT_SITE_FILE_MANAGE: 'content:site_file:manage',
   MEDIA_FILE_MANAGE: 'media:file:manage',
   SYSTEM_API_MANAGE: 'system:api:manage',
+  CONTENT_ANNOTATION_MARKERS_READ: 'content:annotation-markers:read',
+  CONTENT_ANNOTATION_MARKERS_MANAGE: 'content:annotation-markers:manage',
   WILDCARD: '*',
 } as const;
 

@@ -1,0 +1,39 @@
+---
+import {env} from "cloudflare:workers";
+
+import AnnotationMarkersPage from "@/components/admin/annotation-markers/AnnotationMarkersPage.astro";
+import {listAnnotationMarkers} from "@/server/admin/annotation-marker-handlers";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// The page guards itself with the same code its menu row binds
+// (`content:annotation-markers:manage`); without this the link could be opened
+// directly by an account that cannot manage markers.
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+
+const markers = await listAnnotationMarkers(env.FEED_DB);
+---
+
+<AnnotationMarkersPage
+  activeNavItem={ADMIN_MENU_CODES.ANNOTATION_MARKERS}
+  documentTitle={translate("pageDocumentTitle.annotationMarkers", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.annotationMarkers", adminLanguage)}
+  initialMarkers={markers}
+/>

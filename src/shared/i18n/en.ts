@@ -135,6 +135,7 @@ export const en = {
       rbac_audit: "RBAC audit",
       users: "Users",
       settings: "Settings",
+      annotation_markers: "Annotation markers",
     },
     group: {
       account: "Account",
@@ -1824,6 +1825,7 @@ export const en = {
     webhookEventExplorer: "Webhook Event explorer",
     notFound: "Not Found",
     admin: "Admin",
+    annotationMarkers: "Annotation markers",
   },
   publicBook: {
     unknownAuthor: "Unknown author",
@@ -1887,6 +1889,7 @@ export const en = {
     dashboardLogin: "Dashboard login | microfeed",
     createAdminPassword: "Create admin password | microfeed",
     authorize: "Authorize {{name}} | microfeed",
+    annotationMarkers: "Annotation markers | microfeed.org",
   },
   pageMessage: {
     itemNotFound: "The requested item does not exist or has been deleted.",
@@ -1990,6 +1993,29 @@ export const en = {
     statusModalTitle: "Item / status",
     statusText: "An item's status is either published, unlisted, or unpublished. <ul class='list-decimal list-inside'>{{items}}</ul>",
   },
+  annotationMarkers: {
+    description: "These markers become toolbar buttons in the rich-text editor. Select text and click a button to wrap it as $<code>{...}. Add a marker here and it appears on the next editor load — no redeploy needed.",
+    code: "Code",
+    codePlaceholder: "f",
+    title: "Title",
+    titlePlaceholder: "$f 方剂",
+    multi: "Multiple",
+    actions: "Actions",
+    new: "New marker",
+    add: "Add",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    delete: "Delete",
+    created: "Marker added",
+    saved: "Marker updated",
+    deleted: "Marker deleted",
+    createFailed: "Could not add the marker",
+    saveFailed: "Could not save the marker",
+    deleteFailed: "Could not delete the marker",
+    empty: "No markers yet.",
+    confirmDelete: "Delete the marker \"{{title}}\"? Content already tagged with it stays as-is.",
+  },
   errors: {
     password: {
       policy: "Use at least {{min}} characters, with both upper and lower case, or a digit.",
@@ -2022,6 +2048,11 @@ export const en = {
       reservedEmailDomain: "That email domain is reserved: username-only accounts get a placeholder address there.",
       passwordResetFailed: "Could not reset the password.",
       profileUpdateFailed: "Could not update the profile.",
+    },
+    annotationMarkers: {
+      invalidInput: "Send a marker code (1–8 lowercase letters, digits, or underscore) and a title.",
+      duplicateCode: "A marker with that code already exists.",
+      notFound: "That marker does not exist.",
     },
     review: {
       itemMissing: "That chapter no longer exists.",

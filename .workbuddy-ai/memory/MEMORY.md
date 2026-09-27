@@ -2,6 +2,10 @@
 
 > 技能：git-safe-commit / sandbox-safe-delete-guard / microfeed-novel-site-ops / microfeed-admin-layout-verify / microfeed-admin-i18n / microfeed-rbac-menu-permission
 
+## ⚠️ 新功能接入「菜单+权限」强制清单（2026-09-27 起必须遵守）
+- **文档 SSOT：`.scratch/microfeed-rbac/new-feature-menu-permission-checklist.md`**。任何后台新功能要菜单+权限，按清单走。
+- 要点：权限 id 必须 `permissionId()` 推导（连字符保留，手写=bootstrap 500）；菜单行必须挂 `parent_code` 组 + `ext_menu_permissions` 映射（否则权限树不可见）；`PERMISSION_CODES` 与 `seed.ts` 双镜像；测试必跑 rbac.test.ts 全量（bootstrap 全链路）。
+
 ## 硬约束
 - 禁自动 git 提交（须明确指令）；不提交 `main`，用 `<type>/<kebab>`；提交信息 `type(scope): 中文`。
 - 门禁：`git diff --check` 干净 + `yarn typecheck` + `yarn test`。⛔ `tsc --noEmit` 不是门禁。

@@ -137,6 +137,7 @@ export const zhCN: TranslationKey = {
       rbac_audit: "RBAC 修改留痕",
       users: "用户",
       settings: "设置",
+      annotation_markers: "标注标记",
     },
     group: {
       account: "账户",
@@ -1821,6 +1822,7 @@ export const zhCN: TranslationKey = {
     webhookEventExplorer: "Webhook 事件浏览器",
     notFound: "未找到",
     admin: "管理后台",
+    annotationMarkers: "标注标记",
   },
   publicBook: {
     unknownAuthor: "未知作者",
@@ -1884,6 +1886,7 @@ export const zhCN: TranslationKey = {
     dashboardLogin: "管理后台登录 | microfeed",
     createAdminPassword: "创建管理员密码 | microfeed",
     authorize: "授权 {{name}} | microfeed",
+    annotationMarkers: "标注标记 | microfeed.org",
   },
   pageMessage: {
     itemNotFound: "请求的条目不存在或已被删除。",
@@ -1987,6 +1990,29 @@ export const zhCN: TranslationKey = {
     statusModalTitle: "条目 / 状态",
     statusText: "条目的状态可以是已发布、不列出或未发布。<ul class='list-decimal list-inside'>{{items}}</ul>",
   },
+  annotationMarkers: {
+    description: "这些标记会成为富文本编辑器里的工具栏按钮。选中文字后点击按钮即可包裹成 $<code>{...}。在这里新增标记后，下次打开编辑器即生效，无需重新部署。",
+    code: "代码",
+    codePlaceholder: "f",
+    title: "显示名称",
+    titlePlaceholder: "$f 方剂",
+    multi: "可多条",
+    actions: "操作",
+    new: "新增标记",
+    add: "添加",
+    edit: "编辑",
+    save: "保存",
+    cancel: "取消",
+    delete: "删除",
+    created: "标记已添加",
+    saved: "标记已更新",
+    deleted: "标记已删除",
+    createFailed: "无法添加标记",
+    saveFailed: "无法保存标记",
+    deleteFailed: "无法删除标记",
+    empty: "暂无标记。",
+    confirmDelete: "删除标记「{{title}}」？已使用该标记的正文保持不变。",
+  },
   errors: {
     password: {
       policy: "密码至少 {{min}} 位，且需同时含大小写字母，或含数字。",
@@ -2019,6 +2045,11 @@ export const zhCN: TranslationKey = {
       reservedEmailDomain: "该邮箱域名为系统预留：仅用户名账号的占位邮箱使用它。",
       passwordResetFailed: "无法重置密码。",
       profileUpdateFailed: "无法更新资料。",
+    },
+    annotationMarkers: {
+      invalidInput: "请提供标记代码（1–8 位小写字母、数字或下划线）和显示名称。",
+      duplicateCode: "该代码已存在同名标记。",
+      notFound: "该标记不存在。",
     },
     review: {
       itemMissing: "该章节已不存在。",

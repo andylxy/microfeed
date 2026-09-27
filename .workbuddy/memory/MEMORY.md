@@ -1,5 +1,9 @@
 # microfeed 项目长期记忆
 
+## ⚠️ 新功能接入「菜单+权限」强制清单（2026-09-27 用户要求，必须遵守）
+- **文档 SSOT：`.scratch/microfeed-rbac/new-feature-menu-permission-checklist.md`**——任何需要后台页面+菜单+权限的新功能，按它逐步走，漏一步=线上回归。
+- 三条最贵的教训（详见清单）：① 迁移里 `ext_permissions` 的 **id 必须用 `permissionId()` 推导**（只换冒号、连字符保留）——手写 id 会让全新 `bootstrapAdmin` 500；② 菜单行**必须挂 `parent_code` 组**且在 `ext_menu_permissions` 建映射，否则权限树不可见、角色无法勾选；③ 权限码在 `PERMISSION_CODES` + `seed.ts`（RBAC_PERMISSIONS 与 RBAC_ROLES）双镜像，测试跑 `admin-endpoint/page-guards` + **rbac.test.ts 全量**（含 bootstrap 全链路）。
+
 ## 工作流：管理后台 i18n（分支 `chore/admin-i18n` 已合并；RBAC 在 `fix/rbac-conformance`）
 - 架构：i18next + react-i18next 全局单例。资源 `src/shared/i18n/en.ts`（键形状唯一事实来源）+ `zh-CN.ts`（`DeepStringify` 编译期镜像）。
 - 详细流程见用户级技能 **`microfeed-admin-i18n`**（跑测试姿势、失败分类、过期断言收敛、不变量）。不在本文件重复。

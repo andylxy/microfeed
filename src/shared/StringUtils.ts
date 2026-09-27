@@ -462,6 +462,14 @@ export const ADMIN_URLS = {
     adminUrl("ajax/rbac/user-profile", browserAdminPath()),
   ajaxCredentialLogin: () =>
     adminUrl("ajax/auth/credential-login", browserAdminPath()),
+  ajaxAnnotationMarkersList: () =>
+    adminUrl("ajax/annotation-markers/list", browserAdminPath()),
+  ajaxAnnotationMarkersCreate: () =>
+    adminUrl("ajax/annotation-markers/create", browserAdminPath()),
+  ajaxAnnotationMarkersUpdate: () =>
+    adminUrl("ajax/annotation-markers/update", browserAdminPath()),
+  ajaxAnnotationMarkersDelete: () =>
+    adminUrl("ajax/annotation-markers/delete", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
   ajaxVolumeAssign: () =>

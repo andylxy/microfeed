@@ -19,6 +19,10 @@ vi.mock("quill", () => {
 // only the mode list is under test here.
 vi.mock("@wangeditor/editor", () => ({
   i18nChangeLanguage: () => {},
+  // `RichEditorWangEditor` (pulled in by `AdminRichEditor`) registers `$X{...}`
+  // menus via `Boot.registerMenu` at import time; `SlateEditor` is used in exec.
+  Boot: {registerMenu: () => {}},
+  SlateEditor: {deleteFragment: () => {}},
 }));
 vi.mock("@wangeditor/editor-for-react", () => ({
   Editor: () => null,
