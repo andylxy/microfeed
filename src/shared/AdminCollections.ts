@@ -3,6 +3,7 @@ import {
   MAX_ITEMS_PER_PAGE,
 } from "./Constants";
 import type {ItemOrder, ItemSort} from "./ItemPagination";
+import type {TcmKindFilter} from "./ItemList";
 import type {PageRecord} from "./Pages";
 import type {SiteFileMediaType} from "./SiteFiles";
 
@@ -46,12 +47,16 @@ export interface AdminItemListResponse {
   bookFilter?: string;
   categories?: AdminItemCategoryOption[];
   categoryFilter?: string;
+  /** True when any TCM-kind row exists; drives the kind-filter row visibility. */
+  hasTcmItems?: boolean;
   items: AdminItemSummary[];
   nextCursor?: number | string;
   order: ItemOrder;
   prevCursor?: number | string;
   sort: ItemSort;
   statusFilter: "all" | "published" | "unlisted" | "unpublished";
+  /** Echoed TCM kind filter, so paging and sorting keep it. */
+  tcmKindFilter?: TcmKindFilter;
 }
 
 export type AdminPageSummary = Pick<

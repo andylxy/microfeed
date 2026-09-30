@@ -1,0 +1,13 @@
+{
+  "targetBookId": "tcmterm0001",
+  "rootChapterId": "ZDAkg3UmGf2",
+  "mode": "build+apply",
+  "termCount": 17,
+  "sourceMingCiRows": 17,
+  "buildReportMarkers": "13342/13342",
+  "buildReportResidualEscapes": 0,
+  "termSubsetResidualEscapes": 0,
+  "batches": 1,
+  "warnings": [],
+  "outputDir": "D:\\git\\AiCode\\microfeed\\ctwh-books\\term\\out"
+}

@@ -1,0 +1,12 @@
+-- Restored to align the local migration ledger with the remote D1 instance
+-- (ctwh-881019-xyz-db), whose d1_migrations table already records
+-- 0045_ext_user_permissions as APPLIED. The original file was removed from this
+-- checkout by a later history rewrite, but the remote ledger still carries the
+-- record, so `manage snapshot pull` requires the filename to exist locally at the
+-- correct sort position.
+--
+-- Content is intentionally a no-op: the table this migration once created was
+-- dropped by a subsequent migration, and because the remote ledger already marks
+-- 0045 as applied, wrangler will NOT re-execute it against the existing remote DB.
+-- On a fresh database it simply does nothing harmful.
+SELECT 1;

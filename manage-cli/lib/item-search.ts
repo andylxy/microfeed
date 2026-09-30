@@ -232,11 +232,32 @@ export async function withItemSearchIndexesSuspended<T>(
   if (!await itemSearchIndexesExist(cloudflare, config, options)) {
     return operation();
   }
-  await dropItemSearchIndexes(cloudflare, config, options);
+  try {
+    await dropItemSearchIndexes(cloudflare, config, options);
+  } catch (error) {
+    // Best-effort: under the D1 free-tier write quota (code 7500) or other
+    // transient write failures we cannot suspend the FTS indexes. The caller
+    // (snapshot export / pull) only needs a read-only copy of the data, so we
+    // proceed with the operation unsuspended instead of failing the whole pull.
+    console.warn(
+      "Skipping item search index suspension (write blocked); " +
+        "continuing with the operation: " +
+        ((error as Error | undefined)?.message ?? String(error)),
+    );
+    return operation();
+  }
   try {
     return await operation();
   } finally {
-    await rebuildItemSearchIndexes(cloudflare, config, options);
-    await normalizeItemSearchContent(cloudflare, config, options);
+    try {
+      await rebuildItemSearchIndexes(cloudflare, config, options);
+      await normalizeItemSearchContent(cloudflare, config, options);
+    } catch (error) {
+      console.warn(
+        "Could not restore item search indexes after the operation " +
+          "(write blocked): " +
+          ((error as Error | undefined)?.message ?? String(error)),
+      );
+    }
   }
 }

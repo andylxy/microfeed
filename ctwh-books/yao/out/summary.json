@@ -1,0 +1,15 @@
+{
+  "targetBookId": "4KbG9bDqdz3",
+  "rootChapterId": "F5Pf7dvj0rJ",
+  "rootChapterTitle": "中药",
+  "mode": "build+apply",
+  "yaoCount": 172,
+  "titlesPrefixed": 172,
+  "sourceYaoRows": 172,
+  "buildReportMarkers": "13342/13342",
+  "buildReportResidualEscapes": 0,
+  "yaoSubsetResidualEscapes": 0,
+  "batches": 1,
+  "warnings": [],
+  "outputDir": "D:\\git\\AiCode\\microfeed\\ctwh-books\\yao\\out"
+}

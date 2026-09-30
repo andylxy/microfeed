@@ -1,5 +1,11 @@
-import {useCallback, useEffect, useState} from "react";
-import {ArrowDownIcon, ArrowUpIcon, PencilIcon} from "lucide-react";
+import {useCallback, useEffect, useMemo, useState} from "react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PencilIcon,
+} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import AdminInput from "@/components/admin/shared/AdminInput";
@@ -13,11 +19,12 @@ import {
 import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
-import {STATUSES} from "@/shared/Constants";
+import {DEFAULT_ITEMS_PER_PAGE, STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
   VolumeBoard,
   VolumeBookOption,
+  VolumeChapter,
 } from "@/shared/ExtVolume";
 
 interface CategoryOption {
@@ -33,13 +40,34 @@ interface VolumesResponse {
 }
 
 /**
+ * One flattened board row: a volume header, or a chapter under some volume.
+ * Rows are counted together toward the per-page size, so a volume can span a
+ * page boundary while its chapters continue on the next page.
+ */
+type BoardRow =
+  | {kind: "volume"; groupIndex: number; name: string; chapterCount: number}
+  | {kind: "chapter"; groupIndex: number; chapter: VolumeChapter};
+
+/**
  * Volume board: one book's chapters grouped by their `_microfeed.volume` tag.
  *
  * A volume is not an entity, so "managing volumes" is really four chapter
  * writes — file chapters under a volume, renumber chapters, rename a volume
  * (rewrite the tag), and give volumes an explicit order.
  */
-export default function VolumesApp() {
+/**
+ * How many rows show per page on the board: each volume contributes one header
+ * row, then one row per chapter, so the page size from Settings → Items
+ * (itemsPerPage) counts "卷 + 章" together, the same meaning it has on the items
+ * list. The whole board is still loaded in one request; paging is a client-side
+ * slice so a TCM book's ~1000 rows don't render all at once.
+ */
+interface Props {
+  itemsPerPage?: number;
+}
+
+export default function VolumesApp({itemsPerPage}: Props) {
+  const groupsPerPage = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);
   const {t} = useTranslation();
   const [books, setBooks] = useState<VolumeBookOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -50,11 +78,11 @@ export default function VolumesApp() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [chapterEdits, setChapterEdits] = useState<Record<string, string>>({});
   const [targetVolume, setTargetVolume] = useState("");
   const [newVolume, setNewVolume] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [page, setPage] = useState(0);
 
   const load = useCallback(async (id: string, category = categoryId) => {
     setLoading(true);
@@ -88,6 +116,7 @@ export default function VolumesApp() {
   }, [categoryId, t]);
 
   useEffect(() => {
+    setPage(0);
     void load(bookId, categoryId);
   }, [bookId, categoryId, load]);
 
@@ -108,7 +137,6 @@ export default function VolumesApp() {
       if (!response.ok) throw new Error(data.error ?? t(failKey));
       showToast(t(successKey), "success");
       setSelected([]);
-      setChapterEdits({});
       setNewVolume("");
       await load(bookId);
     } catch (saveError) {
@@ -126,6 +154,39 @@ export default function VolumesApp() {
     (name) => ({label: name, value: name}),
   );
 
+  // TCM books (伤寒杂病论・桂林古本 等) render their structure read-only:
+  // volume membership comes from `tcm_parent_id`, not a mutable tag, so the
+  // file/rename/reorder controls would write stray tags onto TCM items.
+  const readOnly = board?.readOnly === true;
+
+  // Client-side paging over a flattened row list: one header row per volume,
+  // then one row per chapter, counted together toward `groupsPerPage`. `safePage`
+  // keeps the view valid if an edit (e.g. a volume merge) shrinks the row count.
+  const rows = useMemo<BoardRow[]>(() => {
+    const out: BoardRow[] = [];
+    for (const [groupIndex, group] of (board?.groups ?? []).entries()) {
+      out.push({
+        kind: "volume",
+        groupIndex,
+        name: group.name,
+        chapterCount: group.chapters.length,
+      });
+      for (const chapter of group.chapters) {
+        out.push({kind: "chapter", groupIndex, chapter});
+      }
+    }
+    return out;
+  }, [board]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / groupsPerPage));
+  const safePage = Math.min(page, totalPages - 1);
+  // Slice rows for the current page; volume headers keep their global
+  // `groupIndex` so the up/down volume reorder still works.
+  const pageRows = rows.slice(
+    safePage * groupsPerPage,
+    (safePage + 1) * groupsPerPage,
+  );
+
   const applyAssign = () => {
     if (!bookId || selected.length === 0) return;
     const volume = newVolume.trim() || targetVolume;
@@ -134,20 +195,6 @@ export default function VolumesApp() {
       {bookId, itemIds: selected, volume},
       "volumes.assigned",
       "volumes.assignFailed",
-    );
-  };
-
-  const saveChapterOrder = () => {
-    if (!bookId) return;
-    const updates = Object.entries(chapterEdits)
-      .map(([id, value]) => ({chapterNo: Number(value), id}))
-      .filter(({chapterNo}) => Number.isFinite(chapterNo));
-    if (updates.length === 0) return;
-    void post(
-      ADMIN_URLS.ajaxVolumeReorder(),
-      {bookId, updates},
-      "volumes.orderSaved",
-      "volumes.orderFailed",
     );
   };
 
@@ -263,7 +310,6 @@ export default function VolumesApp() {
               onClick={() => {
                 setBookId(book.id);
                 setSelected([]);
-                setChapterEdits({});
               }}
               type="button"
             >
@@ -297,45 +343,45 @@ export default function VolumesApp() {
           )}
         >
           <section className="rounded-[14px] border bg-card p-4 shadow-xs">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[12rem] flex-1">
-                <AdminSelect
-                  label={t("volumes.moveTo")}
-                  onChange={(option) => setTargetVolume(option.value)}
-                  options={volumeOptions}
-                  placeholder={t("volumes.moveToPlaceholder")}
-                  value={volumeOptions.find(({value}) => value === targetVolume)
-                    ?? null}
-                />
+            {!readOnly ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[12rem] flex-1">
+                  <AdminSelect
+                    label={t("volumes.moveTo")}
+                    onChange={(option) => setTargetVolume(option.value)}
+                    options={volumeOptions}
+                    placeholder={t("volumes.moveToPlaceholder")}
+                    value={volumeOptions.find(({value}) => value === targetVolume)
+                      ?? null}
+                  />
+                </div>
+                <div className="min-w-[12rem] flex-1">
+                  <AdminInput
+                    label={t("volumes.newVolume")}
+                    onChange={(event: {target: {value: string}}) =>
+                      setNewVolume(event.target.value)}
+                    placeholder={t("volumes.newVolumePlaceholder")}
+                    value={newVolume}
+                  />
+                </div>
+                <Button
+                  disabled={saving || selected.length === 0}
+                  onClick={applyAssign}
+                  type="button"
+                >
+                  {t("volumes.assign")}
+                </Button>
               </div>
-              <div className="min-w-[12rem] flex-1">
-                <AdminInput
-                  label={t("volumes.newVolume")}
-                  onChange={(event: {target: {value: string}}) =>
-                    setNewVolume(event.target.value)}
-                  placeholder={t("volumes.newVolumePlaceholder")}
-                  value={newVolume}
-                />
-              </div>
-              <Button
-                disabled={saving || selected.length === 0}
-                onClick={applyAssign}
-                type="button"
-              >
-                {t("volumes.assign")}
-              </Button>
-              <Button
-                disabled={saving || Object.keys(chapterEdits).length === 0}
-                onClick={saveChapterOrder}
-                type="button"
-                variant="outline"
-              >
-                {t("volumes.saveOrder")}
-              </Button>
-            </div>
-            <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">
-              {t("volumes.selectedCount", {count: selected.length})}
-            </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("volumes.tcmReadOnly")}
+              </p>
+            )}
+            {!readOnly && (
+              <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">
+                {t("volumes.selectedCount", {count: selected.length})}
+              </p>
+            )}
           </section>
 
           {board.groups.length === 0 ? (
@@ -345,119 +391,113 @@ export default function VolumesApp() {
               </p>
             </section>
           ) : (
-            board.groups.map((group, index) => (
-              <section
-                className="overflow-hidden rounded-[14px] border bg-card shadow-xs"
-                key={group.name || "__unfiled__"}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4">
-                  {renaming === group.name ? (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <div className="min-w-[12rem]">
-                        <AdminInput
-                          label={t("volumes.newName")}
-                          onChange={(event: {target: {value: string}}) =>
-                            setRenameValue(event.target.value)}
-                          value={renameValue}
-                        />
+            <section className="overflow-hidden rounded-[14px] border bg-card shadow-xs">
+              <div className="divide-y">
+                {pageRows.map((row) => (
+                  row.kind === "volume" ? (
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-4 py-3"
+                      key={`volume:${row.groupIndex}`}
+                    >
+                      {renaming === row.name ? (
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="min-w-[12rem]">
+                            <AdminInput
+                              label={t("volumes.newName")}
+                              onChange={(event: {target: {value: string}}) =>
+                                setRenameValue(event.target.value)}
+                              value={renameValue}
+                            />
+                          </div>
+                          <Button
+                            onClick={() => applyRename(row.name)}
+                            size="sm"
+                            type="button"
+                          >
+                            {t("volumes.renameSave")}
+                          </Button>
+                          <Button
+                            onClick={() => setRenaming(null)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            {t("volumes.cancel")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <h2 className="font-semibold">
+                            {row.name || t("volumes.unfiled")}
+                          </h2>
+                          <span className="text-xs text-muted-foreground">
+                            {t("volumes.chapterCount", {count: row.chapterCount})}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        {!readOnly && (
+                          <>
+                            <Button
+                              aria-label={t("volumes.moveUp")}
+                              disabled={saving || row.groupIndex === 0}
+                              onClick={() => moveVolume(row.groupIndex, -1)}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <ArrowUpIcon aria-hidden="true" />
+                            </Button>
+                            <Button
+                              aria-label={t("volumes.moveDown")}
+                              disabled={saving || row.groupIndex === board.groups.length - 1}
+                              onClick={() => moveVolume(row.groupIndex, 1)}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <ArrowDownIcon aria-hidden="true" />
+                            </Button>
+                          </>
+                        )}
+                        {!readOnly && row.name && (
+                          <Button
+                            onClick={() => {
+                              setRenaming(row.name);
+                              setRenameValue(row.name);
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <PencilIcon aria-hidden="true" /> {t("volumes.rename")}
+                          </Button>
+                        )}
                       </div>
-                      <Button
-                        onClick={() => applyRename(group.name)}
-                        size="sm"
-                        type="button"
-                      >
-                        {t("volumes.renameSave")}
-                      </Button>
-                      <Button
-                        onClick={() => setRenaming(null)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        {t("volumes.cancel")}
-                      </Button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-semibold">
-                        {group.name || t("volumes.unfiled")}
-                      </h2>
-                      <span className="text-xs text-muted-foreground">
-                        {t("volumes.chapterCount", {
-                          count: group.chapters.length,
-                        })}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <Button
-                      aria-label={t("volumes.moveUp")}
-                      disabled={saving || index === 0}
-                      onClick={() => moveVolume(index, -1)}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <ArrowUpIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                      aria-label={t("volumes.moveDown")}
-                      disabled={saving || index === board.groups.length - 1}
-                      onClick={() => moveVolume(index, 1)}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <ArrowDownIcon aria-hidden="true" />
-                    </Button>
-                    {group.name && (
-                      <Button
-                        onClick={() => {
-                          setRenaming(group.name);
-                          setRenameValue(group.name);
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <PencilIcon aria-hidden="true" /> {t("volumes.rename")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
 
-                <div className="divide-y">
-                  {group.chapters.map((chapter) => (
                     <div
                       className="flex flex-wrap items-center gap-3 px-4 py-2"
-                      key={chapter.id}
+                      key={row.chapter.id}
                     >
                       <input
-                        aria-label={chapter.title}
-                        checked={selected.includes(chapter.id)}
+                        aria-label={row.chapter.title}
+                        checked={selected.includes(row.chapter.id)}
                         className="size-4"
-                        onChange={() => toggleSelected(chapter.id)}
+                        disabled={readOnly}
+                        onChange={() => toggleSelected(row.chapter.id)}
                         type="checkbox"
-                      />
-                      <input
-                        aria-label={t("volumes.chapterNo")}
-                        className="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm"
-                        onChange={(event) => setChapterEdits((current) => ({
-                          ...current,
-                          [chapter.id]: event.target.value,
-                        }))}
-                        type="number"
-                        value={chapterEdits[chapter.id]
-                          ?? String(chapter.chapterNo)}
                       />
                       <a
                         className="min-w-0 flex-1 truncate text-sm hover:underline"
-                        href={ADMIN_URLS.editItem(chapter.id)}
+                        href={ADMIN_URLS.editItem(row.chapter.id)}
                       >
-                        {chapter.title}
+                        {row.chapter.title}
                       </a>
                       <span className="text-xs text-muted-foreground">
-                        {chapter.status === STATUSES.PUBLISHED
+                        {row.chapter.status === STATUSES.PUBLISHED
+                          || row.chapter.status === STATUSES.UNLISTED
                           ? t("volumes.published")
                           : t("volumes.draft")}
                       </span>
@@ -469,18 +509,48 @@ export default function VolumesApp() {
                       */}
                       <a
                         className="shrink-0 text-xs text-muted-foreground hover:underline"
-                        href={ADMIN_URLS.auditItem(chapter.id)}
+                        href={ADMIN_URLS.auditItem(row.chapter.id)}
                         title={t("volumes.auditHint")}
                       >
                         {t("volumes.auditRecords")}
                       </a>
                     </div>
-                  ))}
-                </div>
-              </section>
-            ))
+                  )
+                ))}
+              </div>
+            </section>
           )}
         </div>
+      )}
+      {board?.book && totalPages > 1 && (
+        <nav
+          aria-label={t("volumes.paginationAria")}
+          className="mt-6 flex items-center justify-center gap-2"
+        >
+          <Button
+            disabled={saving || safePage === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <ChevronLeftIcon aria-hidden="true" />
+            {t("volumes.previous")}
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {t("volumes.pageIndicator", {current: safePage + 1, total: totalPages})}
+          </span>
+          <Button
+            disabled={saving || safePage >= totalPages - 1}
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("volumes.next")}
+            <ChevronRightIcon aria-hidden="true" />
+          </Button>
+        </nav>
       )}
     </div>
   );

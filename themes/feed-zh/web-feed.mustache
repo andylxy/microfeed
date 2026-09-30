@@ -70,5 +70,19 @@
         {{/items}}
       </div>
     </section>
+
+    {{#book_fang.length}}
+    <section class="mf-detail-card mf-detail-content-card" id="mf-detail-fang">
+      <h2 class="mf-detail-section-title">附：方剂 · {{book_fang.length}}首</h2>
+      <div class="mf-detail-volume-title">方剂目录 <span>共 {{book_fang.length}} 首</span></div>
+      <div class="mf-detail-chapter-grid">
+        {{#book_fang}}
+        <div class="mf-toc-item">
+          <a href="{{_microfeed.web_url}}">{{title}}</a>
+        </div>
+        {{/book_fang}}
+      </div>
+    </section>
+    {{/book_fang.length}}
   </div>
 </main>

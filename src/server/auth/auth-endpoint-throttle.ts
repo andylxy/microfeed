@@ -31,6 +31,8 @@ const AUTH_ENDPOINT_THROTTLE_WINDOW_SECONDS = 60;
 const THROTTLED_AUTH_PATHS = new Set([
   "/api/auth/sign-in/username",
   "/api/auth/change-password",
+  // App 登录端点（工单 12）——与后台登录共用同一限流窗口策略。
+  "/api/AppBookRequest/login",
 ]);
 
 export async function enforceAuthEndpointThrottle(

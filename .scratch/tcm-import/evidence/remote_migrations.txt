@@ -1,0 +1,236 @@
+
+ ⛅️ wrangler 4.128.0 (update available 4.142.0)
+───────────────────────────────────────────────
+Resource location: remote 
+
+🌀 Executing on remote database ctwh-881019-xyz-db (a7188289-f30d-44c2-881a-28e262ea74ae):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.22ms
+[
+  {
+    "results": [
+      {
+        "name": "0001_initial.sql"
+      },
+      {
+        "name": "0002_better_auth.sql"
+      },
+      {
+        "name": "0003_admin_password_setup.sql"
+      },
+      {
+        "name": "0004_installation_identity.sql"
+      },
+      {
+        "name": "0005_normalize_item_timestamps.sql"
+      },
+      {
+        "name": "0006_api_keys.sql"
+      },
+      {
+        "name": "0007_oauth_provider.sql"
+      },
+      {
+        "name": "0008_account_security.sql"
+      },
+      {
+        "name": "0009_item_search.sql"
+      },
+      {
+        "name": "0010_versioned_themes.sql"
+      },
+      {
+        "name": "0011_bundled_theme_preservation.sql"
+      },
+      {
+        "name": "0012_item_create_idempotency.sql"
+      },
+      {
+        "name": "0013_pages_search_site_files.sql"
+      },
+      {
+        "name": "0014_default_not_found_page.sql"
+      },
+      {
+        "name": "0015_site_file_templates.sql"
+      },
+      {
+        "name": "0016_starter_about_page.sql"
+      },
+      {
+        "name": "0017_webhooks.sql"
+      },
+      {
+        "name": "0018_api_key_scopes.sql"
+      },
+      {
+        "name": "0019_webhook_delivery_budget.sql"
+      },
+      {
+        "name": "0020_webhook_infrastructure_disable.sql"
+      },
+      {
+        "name": "0021_theme_preview_fixtures.sql"
+      },
+      {
+        "name": "0022_webmcp_webhook_origin.sql"
+      },
+      {
+        "name": "0023_ext_novel.sql"
+      },
+      {
+        "name": "0024_ext_content_correction.sql"
+      },
+      {
+        "name": "0025_ext_content_review.sql"
+      },
+      {
+        "name": "0026_ext_content_review_gate.sql"
+      },
+      {
+        "name": "0027_ext_content_audit_archived.sql"
+      },
+      {
+        "name": "0028_ext_rbac.sql"
+      },
+      {
+        "name": "0029_ext_user_devices.sql"
+      },
+      {
+        "name": "0030_ext_replay_nonces.sql"
+      },
+      {
+        "name": "0031_ext_rbac_seed.sql"
+      },
+      {
+        "name": "0032_ext_api_key_owners.sql"
+      },
+      {
+        "name": "0033_api_keys_secret_hash.sql"
+      },
+      {
+        "name": "0034_ext_api_access_log.sql"
+      },
+      {
+        "name": "0035_ext_api_permissions_seed.sql"
+      },
+      {
+        "name": "0036_ext_login_credentials.sql"
+      },
+      {
+        "name": "0037_ext_login_credential_attempts.sql"
+      },
+      {
+        "name": "0038_ext_api_access_log_credential.sql"
+      },
+      {
+        "name": "0039_auth_user_username.sql"
+      },
+      {
+        "name": "0040_ext_menu_permissions.sql"
+      },
+      {
+        "name": "0041_ext_menu.sql"
+      },
+      {
+        "name": "0042_clear_must_change_password.sql"
+      },
+      {
+        "name": "0043_ext_readonly_role.sql"
+      },
+      {
+        "name": "0045_ext_user_permissions.sql"
+      },
+      {
+        "name": "0046_drop_ext_user_permissions.sql"
+      },
+      {
+        "name": "0050_ext_menu_groups.sql"
+      },
+      {
+        "name": "0051_ext_menu_group_icons.sql"
+      },
+      {
+        "name": "0052_ext_menu_permissions.sql"
+      },
+      {
+        "name": "0053_backfill_admin_super_admin.sql"
+      },
+      {
+        "name": "0054_ext_rbac_audit.sql"
+      },
+      {
+        "name": "0055_drop_api_permission_codes.sql"
+      },
+      {
+        "name": "0056_items_book_id.sql"
+      },
+      {
+        "name": "0057_rename_article_permission_codes.sql"
+      },
+      {
+        "name": "0058_ext_media_file_permission.sql"
+      },
+      {
+        "name": "0059_ext_auth_throttle.sql"
+      },
+      {
+        "name": "0060_ext_drop_webhook_alerts_resolved_at.sql"
+      },
+      {
+        "name": "0061_ext_menu_rbac_permissions.sql"
+      },
+      {
+        "name": "0062_ext_menu_rbac_audit.sql"
+      },
+      {
+        "name": "0063_ext_menu_rbac_permission_map.sql"
+      },
+      {
+        "name": "0064_ext_menu_permissions_dedupe.sql"
+      },
+      {
+        "name": "0065_ext_drop_rbac_permissions_page.sql"
+      },
+      {
+        "name": "0066_ext_drop_import_chapters_page.sql"
+      },
+      {
+        "name": "0067_ext_menu_repair_stale_permission_codes.sql"
+      },
+      {
+        "name": "0068_ext_annotation_markers.sql"
+      },
+      {
+        "name": "0069_ext_annotation_markers_menu_map.sql"
+      },
+      {
+        "name": "0070_items_tcm_columns.sql"
+      },
+      {
+        "name": "0071_ext_annotation_marker_styles.sql"
+      },
+      {
+        "name": "0072_ext_tcm_categories_containers.sql"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "LAX",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2195
+      },
+      "duration": 0.2195,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 36433920,
+      "rows_read": 68,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

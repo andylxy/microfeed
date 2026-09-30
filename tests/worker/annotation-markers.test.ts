@@ -10,7 +10,12 @@ import {
 import {PERMISSION_CODES} from "@/shared/Constants";
 import type {RbacLocals} from "@/server/rbac/guard";
 
-const SEED_CODES = ["f", "a", "u", "x"];
+// The 13-marker catalogue migration 0071 seeds (source app defaults, spec §4.2).
+const SEED_CODES = [
+  "f", "a", "u", "x", "w", "q", "m", "n", "g", "r", "v", "y", "h",
+];
+
+const SEED_CODES_SORTED = [...SEED_CODES].sort();
 
 function locals(permissions: Set<string>): RbacLocals {
   return {authUser: {id: "u_test"}, rbacPermissions: permissions};
@@ -42,15 +47,45 @@ afterEach(async () => {
 });
 
 describe("annotation marker handlers", () => {
-  it("lists the four seed markers for a reader", async () => {
+  it("lists the thirteen seed markers for a reader", async () => {
     const response = await listAnnotationMarkersEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_READ])),
       request: new Request("https://example.test/ajax/annotation-markers/list"),
     } as any);
     expect(response.status).toBe(200);
     const data = (await response.json()) as {markers: {code: string; title: string; multi: boolean}[]};
-    expect(data.markers.map((m) => m.code).sort()).toEqual(["a", "f", "u", "x"]);
+    expect(data.markers.map((m) => m.code).sort()).toEqual(SEED_CODES_SORTED);
     expect(data.markers.find((m) => m.code === "x")?.multi).toBe(true);
+  });
+
+  it("seeds the source app styles: colours, small fonts and link types", async () => {
+    // linkType: 1 = 中药 ($u), 2 = 方剂 ($f), 3 = 名词 ($g); everything else 0.
+    const {results} = await env.FEED_DB
+      .prepare(
+        "SELECT code, title, color, small_font, link_type FROM ext_annotation_markers " +
+        "ORDER BY sort_order",
+      )
+      .all<{code: string; title: string; color: string; small_font: number; link_type: number}>();
+
+    const byCode = new Map(results.map((row) => [row.code, row]));
+    expect(byCode.get("u")?.link_type).toBe(1);
+    expect(byCode.get("f")?.link_type).toBe(2);
+    expect(byCode.get("g")?.link_type).toBe(3);
+
+    // Small-font markers per the source app: $r / $a / $w render at 0.7x.
+    for (const code of ["r", "a", "w"]) {
+      expect(byCode.get(code)?.small_font).toBe(1);
+    }
+    for (const code of SEED_CODES.filter((c) => !["r", "a", "w"].includes(c))) {
+      expect(byCode.get(code)?.small_font).toBe(0);
+    }
+
+    // 0068 seeded three titles against the source semantics; 0071 fixed them.
+    expect(byCode.get("a")?.title).toBe("$a 按语");
+    expect(byCode.get("u")?.title).toBe("$u 中药");
+    expect(byCode.get("x")?.title).toBe("$x 橙字");
+    expect(byCode.get("w")?.color).toBe("#1CB55C");
+    expect(results).toHaveLength(SEED_CODES.length);
   });
 
   it("refuses the list to an account without the read permission", async () => {
@@ -67,7 +102,7 @@ describe("annotation marker handlers", () => {
       request: post({code: "z", title: "$z 针灸", multi: false}),
     } as any);
     expect(created.status).toBe(200);
-    expect(await listCodes()).toEqual(["a", "f", "u", "x", "z"]);
+    expect(await listCodes()).toEqual([...SEED_CODES_SORTED, "z"]);
 
     const dup = await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
@@ -109,7 +144,7 @@ describe("annotation marker handlers", () => {
       request: post({code: "z"}),
     } as any);
     expect(deleted.status).toBe(200);
-    expect(await listCodes()).toEqual(["a", "f", "u", "x"]);
+    expect(await listCodes()).toEqual(SEED_CODES_SORTED);
   });
 
   it("returns 404 when updating or deleting a missing marker", async () => {

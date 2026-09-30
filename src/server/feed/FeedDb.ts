@@ -744,4 +744,5 @@ export default class FeedDb {
     const builder = new FeedPublicJsonBuilder(content, this.baseUrl, this.request, forOneItem);
     return builder.getJsonData();
   }
+
 }

@@ -1,0 +1,1 @@
+INSERT OR REPLACE INTO channels (id, status, is_primary, data, created_at, updated_at, genre) VALUES ('tcmterm0001', 1, NULL, '{"title":"名词","description":"中医名词解释","_microfeed":{}}', '2026-09-30 10:08:26', '2026-09-30 10:08:26', 'gsY3ELgQsE4');

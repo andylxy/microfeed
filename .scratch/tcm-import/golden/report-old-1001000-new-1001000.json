@@ -1,0 +1,73 @@
+[
+  {
+    "endpoint": "GetNav",
+    "counts": {
+      "known-adaptation": 3,
+      "OK": 6
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookChapter",
+    "counts": {
+      "known-id": 62,
+      "OK": 62
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetChapterContent",
+    "counts": {
+      "OK": 7,
+      "known-signature-value": 2,
+      "known-id": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookIdFang",
+    "counts": {
+      "OK": 2132,
+      "known-id": 358,
+      "known-signature-value": 395,
+      "known-order": 658,
+      "known-null-to-empty": 11
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAllZhongYao",
+    "counts": {
+      "known-adaptation": 2
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAliaZhongYao",
+    "counts": {
+      "MISMATCH": 1
+    },
+    "mismatches": [
+      {
+        "path": "$.data",
+        "verdict": "MISMATCH",
+        "detail": "别名多重集差异过大（204 条）：旧独有 {\"bieming\":\"旋华\",\"name\":\"旋覆花\"}×1、{\"bieming\":\"雀瓮\",\"name\":\"蝉蜕\"}×1、{\"bieming\":\"橘皮\",\"name\":\"陈皮\"}×1、{\"bieming\":\"水花\",\"name\":\"浮萍\"}×1、{\"bieming\":\"蜂子\",\"name\":\"蜂蜜\"}×1；新独有 {\"bieming\":\"硝石\",\"name\":\"赤消\"}×1、{\"bieming\":\"消石\",\"name\":\"赤消\"}×1"
+      }
+    ]
+  },
+  {
+    "endpoint": "GetAllMingCi",
+    "counts": {
+      "known-id": 17,
+      "OK": 57
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetTipsStyleConfig",
+    "counts": {
+      "known-new-endpoint": 1
+    },
+    "mismatches": []
+  }
+]

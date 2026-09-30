@@ -1540,10 +1540,10 @@ async function restoreSnapshotLocally(
         snapshotApplicationTables: snapshotApplicationTables(manifest),
       }), {encoding: "utf8", mode: 0o600});
       progress("Importing the snapshot D1 schema and durable data");
-      await new CloudflareClient(runner).executeSqlFile(
+      await new CloudflareClient(runner).executeLocalSqlFileChunked(
         config,
         restoreSqlPath,
-        {local: true, persistTo: temporaryPersistence},
+        temporaryPersistence,
       );
       const cloudflare = new CloudflareClient(runner);
       progress("Verifying imported D1 row counts");

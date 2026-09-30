@@ -169,6 +169,14 @@ const handleRequest = defineMiddleware(async (context, next) => {
       : apiNotFoundResponse(context.request);
   }
 
+  // TCM app endpoints (spec `.scratch/tcm-import/spec.md` §6): the mobile
+  // app's dedicated namespace, anonymous by contract — the legacy backend
+  // served these same paths with AllowAnonymous-style access. Everything else
+  // under /api/ keeps its existing credential flow untouched.
+  if (pathname.startsWith("/api/AppBookRequest/")) {
+    return next();
+  }
+
   if (pathname.startsWith("/api/")) {
     const db = env.FEED_DB;
     let attribution: ApiAttribution | null = null;

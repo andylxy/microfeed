@@ -12,6 +12,9 @@ import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {
   getBookById,
   getBookChapters,
+  getTcmBookChapters,
+  getTcmBookEntries,
+  getTcmBookFang,
   listPublishedBookSamples,
 } from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
@@ -62,21 +65,45 @@ const siteNav = await loadSiteNav(feedDb, Astro.request);
 // `_microfeed.bookId` tag, so the catalog is never truncated by the primary
 // feed's paged item window. Fall back to the feed's items during the
 // transition before chapters are tagged.
-const tagged = await getBookChapters(feedDb, bookId, Astro.url.origin);
+// A TCM book carries no volume tags and keeps its 条文 unlisted, so the
+// published-only catalog above would show just the bare 篇章 (plus the 方剂
+// catalog) with nothing to group by. Detect that shape and read the real
+// structure instead: 篇章 are the volumes, 条文 the chapters inside them.
+const tcmProbe = await db.prepare(
+  "SELECT 1 AS one FROM items WHERE book_id = ? AND tcm_kind IS NOT NULL LIMIT 1",
+).bind(bookId).first();
+const isTcmBook = tcmProbe != null;
+const tagged = isTcmBook
+  ? await getTcmBookChapters(db, bookId, Astro.url.origin)
+  : await getBookChapters(feedDb, bookId, Astro.url.origin);
 const allItems = loaded.publicFeed.items as Array<Record<string, any>>;
-const bookItems = tagged.length > 0 ? tagged : allItems;
+// A TCM book whose entries are flat reference rows (中药 / 名词 collections) has
+// no 篇章 to walk, so the tree query above comes back empty. The old fallback
+// then handed this page the *primary feed's* items — which is how a 中药 channel
+// ended up rendering another book's chapter list. Read the book's own rows
+// instead; only non-TCM books may still fall back to the feed window.
+const bookItems = tagged.length > 0
+  ? tagged
+  : isTcmBook
+    ? await getTcmBookEntries(db, bookId, Astro.url.origin)
+    : allItems;
 // Order by publish date: `chapterNo` restarts per volume, so sorting on it
 // alone interleaves 第一卷 / 第二卷 / 第三卷. chapterNo only breaks same-day ties.
-bookItems.sort((a: any, b: any) => {
-  const ad = String(a.date_published ?? "");
-  const bd = String(b.date_published ?? "");
-  if (ad !== bd) return ad < bd ? -1 : 1;
-  const an = Number(a._microfeed?.chapterNo);
-  const bn = Number(b._microfeed?.chapterNo);
-  if (!Number.isFinite(an)) return 1;
-  if (!Number.isFinite(bn)) return -1;
-  return an - bn;
-});
+// The TCM catalog already comes back in volume-then-receipt order, and the
+// theme groups it by the volume attribute, so re-sorting by date here would
+// only scatter those groups.
+if (!isTcmBook) {
+  bookItems.sort((a: any, b: any) => {
+    const ad = String(a.date_published ?? "");
+    const bd = String(b.date_published ?? "");
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    const an = Number(a._microfeed?.chapterNo);
+    const bn = Number(b._microfeed?.chapterNo);
+    if (!Number.isFinite(an)) return 1;
+    if (!Number.isFinite(bn)) return -1;
+    return an - bn;
+  });
+}
 
 const totalWordCount = bookItems.reduce(
   (total: number, item: any) =>
@@ -92,6 +119,12 @@ const bookSamples = (await listPublishedBookSamples(feedDb))
     ...b,
     url: `/book/${b.id}`,
   }));
+
+// 方剂 are a catalog of their own, not chapters, so they get an appendix block
+// rather than being mixed into the 卷/章 catalog above.
+const bookFang = isTcmBook
+  ? await getTcmBookFang(db, bookId, Astro.url.origin)
+  : [];
 
 const bookMicrofeed = book?.microfeed ?? {};
 const headerMicrofeed = {
@@ -112,6 +145,7 @@ const extraContext = book
       description: book.description ?? "",
       _microfeed: headerMicrofeed,
       items: bookItems,
+      ...(bookFang.length > 0 ? {book_fang: bookFang} : {}),
       book_samples: bookSamples,
       novel_detail: {
         // B23: the fallback copy follows the site language instead of being

@@ -148,6 +148,11 @@ export default class EditItemApp extends React.Component<Props, any> {
       autosaveState: {dirty: false, phase: "idle"} satisfies AutosaveState,
       replacedImageUrls: [],
       books: [],
+      // Volume names of the currently selected book, so the volume field can
+      // offer them as a strict list instead of free text (a volume is the
+      // `_microfeed.volume` tag, so a book's volumes are whatever its chapters
+      // already carry).
+      volumeNames: [],
     };
 
     this.autosave = new AutosaveCoordinator({
@@ -200,11 +205,64 @@ export default class EditItemApp extends React.Component<Props, any> {
     Requests.axiosGet(ADMIN_URLS.ajaxBooks())
       .then((res: any) => this.setState({books: res?.data?.books || []}))
       .catch(() => this.setState({books: []}));
+
+    // An existing chapter may already belong to a book (edit mode): load that
+    // book's volumes so the volume dropdown is populated on first paint.
+    const existingMicrofeed =
+      (item?._microfeed as Record<string, unknown> | undefined) ?? {};
+    const existingBookId = existingMicrofeed.bookId;
+    if (typeof existingBookId === "string" && existingBookId) {
+      this.loadVolumes(existingBookId);
+    }
+  }
+
+  /** Fetch the selected book's volume names for the volume dropdown. */
+  loadVolumes(bookId: string) {
+    if (!bookId) {
+      this.setState({volumeNames: []});
+      return;
+    }
+    const url =
+      `${ADMIN_URLS.ajaxVolumes()}?bookId=${encodeURIComponent(bookId)}`;
+    Requests.axiosGet(url)
+      .then((res: any) => this.setState({
+        volumeNames: Array.isArray(res?.data?.board?.volumeNames)
+          ? res.data.board.volumeNames
+          : [],
+      }))
+      .catch(() => this.setState({volumeNames: []}));
+  }
+
+  /** Options for the volume dropdown: the selected book's existing volumes plus
+   *  an "unfiled" entry. Offering only values the book already carries keeps a
+   *  typo from creating a phantom volume; a genuinely new volume is opened from
+   *  the volume board, not from here. */
+  volumeOptions(microfeed: Record<string, unknown>) {
+    const current = microfeed.volume ? String(microfeed.volume) : "";
+    const names = this.state.volumeNames.filter(
+      (name: any) => typeof name === "string" && name,
+    ) as string[];
+    // Keep a value that is already on the item visible, so editing an old
+    // chapter never silently drops its volume.
+    const withCurrent =
+      current && !names.includes(current) ? [current, ...names] : names;
+    return [
+      {value: "", label: i18n.t('volumes.unfiled')},
+      ...withCurrent.map((name: string) => ({value: name, label: name})),
+    ];
   }
 
   componentDidUpdate(_previousProps: Props, previousState: any) {
     if (previousState.item.status !== this.state.item.status) {
       this.reconcileWebMcpTool();
+    }
+    // Switching the book invalidates the volume list: reload it.
+    const previousBook =
+      ((previousState.item?._microfeed ?? {}) as Record<string, unknown>).bookId;
+    const currentBook =
+      ((this.state.item?._microfeed ?? {}) as Record<string, unknown>).bookId;
+    if (previousBook !== currentBook) {
+      this.loadVolumes(typeof currentBook === "string" ? currentBook : "");
     }
   }
 
@@ -502,11 +560,22 @@ export default class EditItemApp extends React.Component<Props, any> {
               />
             </div>
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <AdminInput
+              <AdminSelect
                 label={t('items.volume')}
                 placeholder={t('items.volumePlaceholder')}
-                value={microfeed.volume ? String(microfeed.volume) : ''}
-                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('volume', e.target.value)}
+                options={this.volumeOptions(microfeed)}
+                value={{
+                  value: microfeed.volume ? String(microfeed.volume) : '',
+                  label: microfeed.volume
+                    ? String(microfeed.volume)
+                    : i18n.t('volumes.unfiled'),
+                }}
+                onChange={(option: any) => {
+                  this.onUpdateItemMicrofeedMeta(
+                    'volume',
+                    option && option.value ? option.value : undefined,
+                  );
+                }}
               />
               <AdminInput
                 label={t('items.chapterNo')}

@@ -2,6 +2,7 @@ import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
 import {
+  getTcmBookEntries,
   listCategoryNav,
   listChannelsByGenre,
   type CategoryDb,
@@ -104,5 +105,80 @@ describe("novel-cms public categories", () => {
       link: "",
       title: "星河剑歌",
     }]);
+  });
+});
+
+/** Items table with the columns the TCM queries read (`book_id` + `tcm_kind`). */
+function databaseWithTcmItems(): CategoryDb {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE items (
+      id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      pub_date TEXT,
+      book_id TEXT,
+      tcm_kind TEXT,
+      tcm_parent_id TEXT
+    );
+    INSERT INTO items (id, data, status, pub_date, book_id, tcm_kind, tcm_parent_id) VALUES
+      ('yao_late', '{"title":"栝蒌根","_microfeed":{"no":38}}', 1, '2024-09-14T16:56:58.000Z', 'book_yao', 'yao', NULL),
+      ('yao_early', '{"title":"甘草","_microfeed":{"no":0}}', 1, '2024-09-14T16:56:57.000Z', 'book_yao', 'yao', NULL),
+      ('yao_deleted', '{"title":"已删药","_microfeed":{"no":1}}', 3, '2024-09-14T16:56:57.000Z', 'book_yao', 'yao', NULL),
+      ('fang_1', '{"title":"桂枝汤","_microfeed":{"no":1}}', 1, '2024-09-14T16:56:57.000Z', 'book_yao', 'fang', NULL),
+      ('section_1', '{"title":"条文","_microfeed":{"receiptNo":1}}', 1, '2024-09-14T16:56:57.000Z', 'book_tcm', 'section', 'chapter_1'),
+      ('chapter_1', '{"title":"平脉法第一"}', 1, '2024-09-14T16:56:57.000Z', 'book_tcm', 'chapter', NULL),
+      ('yao_other', '{"title":"别的书的药","_microfeed":{"no":2}}', 1, '2024-09-14T16:56:57.000Z', 'book_other', 'yao', NULL);
+  `);
+  return new SqliteCategoryDb(database);
+}
+
+describe("TCM flat-entry books (中药 / 名词 collections)", () => {
+  it("returns the book's own yao rows in source order, without 方剂", async () => {
+    const entries = await getTcmBookEntries(
+      databaseWithTcmItems(),
+      "book_yao",
+      "https://example.test",
+    );
+
+    expect(entries.map(({id, title}) => ({id, title}))).toEqual([
+      {id: "yao_early", title: "甘草"},
+      {id: "yao_late", title: "栝蒌根"},
+    ]);
+  });
+
+  it("skips deleted rows and every book other than the one asked for", async () => {
+    const entries = await getTcmBookEntries(
+      databaseWithTcmItems(),
+      "book_yao",
+      "https://example.test",
+    );
+
+    const ids = entries.map(({id}) => id);
+    expect(ids).not.toContain("yao_deleted");
+    expect(ids).not.toContain("yao_other");
+    expect(ids).not.toContain("fang_1");
+  });
+
+  it("gives each entry a web url so the catalog links somewhere", async () => {
+    const entries = await getTcmBookEntries(
+      databaseWithTcmItems(),
+      "book_yao",
+      "https://example.test",
+    );
+
+    for (const entry of entries) {
+      expect(String(entry._microfeed.web_url)).toContain(String(entry.id));
+    }
+  });
+
+  it("returns nothing for a book whose entries live in the 篇章/条文 tree", async () => {
+    const entries = await getTcmBookEntries(
+      databaseWithTcmItems(),
+      "book_tcm",
+      "https://example.test",
+    );
+
+    expect(entries).toEqual([]);
   });
 });

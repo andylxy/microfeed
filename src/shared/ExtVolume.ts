@@ -44,4 +44,12 @@ export interface VolumeBoard {
   groups: VolumeGroup[];
   /** Distinct volume labels, excluding the unfiled bucket, for pickers. */
   volumeNames: string[];
+  /**
+   * True for TCM-structured books (伤寒杂病论・桂林古本 等): their "volumes"
+   * are real chapter entities and the chapters under them are the sections
+   * filed via `tcm_parent_id` — not `_microfeed.volume` tags. Reassigning or
+   * renaming volumes would write stray tags onto TCM items, so the board is
+   * read-only (structure view) for these books.
+   */
+  readOnly?: boolean;
 }

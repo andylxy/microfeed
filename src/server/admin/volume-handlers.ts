@@ -5,6 +5,7 @@ import type {FeedContent} from "../../types";
 import {z} from "zod";
 
 import {AppError} from "@/shared/errors";
+import {STATUSES} from "@/shared/Constants";
 import FeedDb from "@/server/feed/FeedDb";
 import {createFeedCrud} from "@/server/feed/feed";
 import {recordContentChange} from "@/server/feed/extContentReview";
@@ -72,6 +73,87 @@ function microfeedOf(item: ItemRecord): ItemRecord {
     : {};
 }
 
+/** An 11-character item id, matching the ids the rest of the app mints. */
+function newItemId(): string {
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(11);
+  crypto.getRandomValues(bytes);
+  let id = "";
+  for (const b of bytes) id += alphabet[b % alphabet.length];
+  return id;
+}
+
+/**
+ * In a TCM book a volume *is* a `chapter` (篇章) row — the board renders those
+ * rows as volumes and files each `section` under one through `tcm_parent_id`.
+ * So volume names have to be resolved back to the row that carries them.
+ */
+async function findTcmChapterId(
+  db: VolumeDb,
+  bookId: string,
+  title: string,
+): Promise<string | null> {
+  const row = await db.prepare(
+    "SELECT id FROM items WHERE book_id = ? AND tcm_kind = 'chapter' " +
+      "AND status != ? AND json_extract(data, '$.title') = ? LIMIT 1",
+  ).bind(bookId, STATUSES.DELETED, title).first();
+  return row && typeof row.id === "string" ? row.id : null;
+}
+
+/** Resolve the chapter backing `title`, creating it when the volume is new —
+ *  that is how "new volume" works for a TCM book. */
+async function ensureTcmChapter(
+  db: VolumeDb,
+  bookId: string,
+  title: string,
+): Promise<string> {
+  const existing = await findTcmChapterId(db, bookId, title);
+  if (existing) return existing;
+  const maxRow = await db.prepare(
+    "SELECT MAX(json_extract(data, '$._microfeed.section')) AS m " +
+      "FROM items WHERE book_id = ? AND tcm_kind = 'chapter'",
+  ).bind(bookId).first();
+  const nextSection = Number(maxRow?.m ?? 0) + 1;
+  const now = new Date().toISOString();
+  const id = newItemId();
+  await db.prepare(
+    "INSERT INTO items " +
+      "(id,status,data,pub_date,created_at,updated_at,content_text," +
+      "review_status,book_id,tcm_kind) VALUES (?,?,?,?,?,?,?,?,?,?)",
+  ).bind(
+    id,
+    STATUSES.PUBLISHED,
+    JSON.stringify({title, _microfeed: {bookId, section: nextSection}}),
+    now,
+    now,
+    now,
+    "",
+    "approved",
+    bookId,
+    "chapter",
+  ).run();
+  return id;
+}
+
+/** Re-file one TCM section under a chapter (null sends it to the unfiled
+ *  bucket) and keep its display tag in step. `tcm_parent_id` is a column while
+ *  `_microfeed.volume` lives inside `data`, so both are written here in one
+ *  statement instead of through the tag-only `_microfeed` patch — otherwise the
+ *  section would move on the board while the item editor still shows the old
+ *  volume. */
+async function setTcmChapter(
+  db: VolumeDb,
+  itemId: string,
+  parentId: string | null,
+  volume: string,
+): Promise<void> {
+  await db.prepare(
+    "UPDATE items SET tcm_parent_id = ?, " +
+      "data = json_set(data, '$._microfeed.volume', ?) WHERE id = ?",
+  ).bind(parentId, volume, itemId).run();
+}
+
 /** Rewrite one chapter's `_microfeed` keys, saving through FeedCrud so the
  *  `items.review_status` mirror stays in sync, and record the edit. */
 async function patchChapter(
@@ -111,14 +193,21 @@ async function openBook(
 ): Promise<{
   chapterIds: Set<string>;
   database: FeedDb;
+  db: VolumeDb;
   feedCrud: ReturnType<typeof createFeedCrud>;
+  tcm: boolean;
 }> {
   const database = new FeedDb(runtimeEnv, request, cache);
-  const board = await listVolumeBoard(
-    database.FEED_DB as unknown as VolumeDb,
-    bookId,
-  );
+  const db = database.FEED_DB as unknown as VolumeDb;
+  const board = await listVolumeBoard(db, bookId);
   if (!board.book) throw new AppError(VOLUME_ERRORS.bookMissing, 404);
+  // TCM books keep their structure in `tcm_kind`/`tcm_parent_id`, so their
+  // writes have to be translated (see findTcmChapterId) instead of stopping at
+  // the `_microfeed.volume` tag the board ignores.
+  const probe = await db.prepare(
+    "SELECT 1 AS one FROM items WHERE book_id = ? " +
+      "AND tcm_kind IS NOT NULL LIMIT 1",
+  ).bind(bookId).first();
   const chapterIds = new Set<string>();
   for (const group of board.groups) {
     for (const chapter of group.chapters) chapterIds.add(chapter.id);
@@ -127,7 +216,9 @@ async function openBook(
   return {
     chapterIds,
     database,
+    db,
     feedCrud: createFeedCrud(content, database, request),
+    tcm: probe != null,
   };
 }
 
@@ -153,11 +244,18 @@ export async function assignChaptersHandler(
   const parsed = assignSchema.safeParse(body);
   if (!parsed.success) throw new AppError(VOLUME_ERRORS.invalidInput, 400);
   const {bookId, itemIds, volume} = parsed.data;
-  const {chapterIds, database, feedCrud} = await openBook(
+  const {chapterIds, database, db, feedCrud, tcm} = await openBook(
     request,
     runtimeEnv,
     bookId,
   );
+  const target = volume.trim();
+  // In a TCM book a volume is a 篇章 row, so resolve (or create) it once and
+  // point every filed section at it — otherwise the move would only rewrite an
+  // ignored tag and the section would stay where it was.
+  const tcmChapterId = tcm && target
+    ? await ensureTcmChapter(db, bookId, target)
+    : null;
   let updated = 0;
   for (const itemId of itemIds) {
     if (!chapterIds.has(itemId)) continue;
@@ -165,10 +263,14 @@ export async function assignChaptersHandler(
       database,
       feedCrud,
       itemId,
-      {volume: volume.trim()},
+      {volume: target},
       () => true,
     );
-    if (ok) updated += 1;
+    if (!ok) continue;
+    updated += 1;
+    if (tcm) {
+      await setTcmChapter(db, itemId, target ? tcmChapterId : null, target);
+    }
   }
   return {updated};
 }
@@ -185,7 +287,7 @@ export async function renameVolumeHandler(
   const {bookId, from, to} = parsed.data;
   const target = to.trim();
   if (!target) throw new AppError(VOLUME_ERRORS.invalidInput, 400);
-  const {chapterIds, database, feedCrud} = await openBook(
+  const {chapterIds, database, db, feedCrud, tcm} = await openBook(
     request,
     runtimeEnv,
     bookId,
@@ -193,10 +295,7 @@ export async function renameVolumeHandler(
   // Merging two volumes by renaming one onto the other is easy to trigger by
   // accident and hard to undo, so it is rejected; use "file under volume"
   // instead when a merge is really wanted.
-  const board = await listVolumeBoard(
-    database.FEED_DB as unknown as VolumeDb,
-    bookId,
-  );
+  const board = await listVolumeBoard(db, bookId);
   if (target !== from.trim() && board.volumeNames.includes(target)) {
     throw new AppError(VOLUME_ERRORS.volumeExists, 409);
   }
@@ -210,6 +309,22 @@ export async function renameVolumeHandler(
       (microfeed) => String(microfeed.volume ?? "").trim() === from.trim(),
     );
     if (ok) updated += 1;
+  }
+  // A TCM volume's name is the 篇章 row's own title — the board renders that
+  // title as the group name — so renaming the volume means renaming the row,
+  // not just the tags its sections carry.
+  if (tcm) {
+    const chapterId = await findTcmChapterId(db, bookId, from.trim());
+    if (chapterId) {
+      await db.prepare(
+        "UPDATE items SET data = json_set(data, '$.title', ?) WHERE id = ?",
+      ).bind(target, chapterId).run();
+      // Every section filed under it carries the volume name for display.
+      await db.prepare(
+        "UPDATE items SET data = json_set(data, '$._microfeed.volume', ?) " +
+          "WHERE tcm_parent_id = ?",
+      ).bind(target, chapterId).run();
+    }
   }
   return {updated};
 }

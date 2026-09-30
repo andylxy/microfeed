@@ -8,6 +8,7 @@ import {STATUSES} from "@/shared/Constants";
 import {
   itemQueryForStatusFilter,
   normalizeItemStatusFilter,
+  normalizeTcmKindFilter,
 } from "@/shared/ItemList";
 import {
   encodeItemCursor,
@@ -94,6 +95,7 @@ export async function listAdminItems(
   const statusFilter = normalizeItemStatusFilter(searchParams.get("status"));
   const categoryFilter = (searchParams.get("categoryId") ?? "").trim();
   const bookFilter = (searchParams.get("bookId") ?? "").trim();
+  const tcmKindFilter = normalizeTcmKindFilter(searchParams.get("tcmKind"));
   const pagination = resolveItemPagination(searchParams, {
     order: ITEM_ORDERS.DESC,
     sort: ITEM_SORTS.UPDATED_AT,
@@ -134,7 +136,15 @@ export async function listAdminItems(
   // filtering by category means resolving the chapter's book and comparing its
   // genre. Only added when a category is asked for, leaving the default list
   // query untouched.
-  const bookRef = "json_extract(items.data, '$._microfeed.bookId')";
+  // TCM fang (方剂) entries live on the fang container channel but belong to a
+  // real book through `_microfeed.sourceBookId` — resolve that first so the
+  // admin list shows (and filters by) 伤寒杂病论・(桂林古本) instead of a book
+  // literally titled 方剂. Every other item has no sourceBookId and falls back
+  // to `_microfeed.bookId` unchanged.
+  const bookRef =
+    "CASE WHEN json_extract(items.data, '$._microfeed.sourceBookId') IS NOT NULL " +
+    "THEN json_extract(items.data, '$._microfeed.sourceBookId') " +
+    "ELSE json_extract(items.data, '$._microfeed.bookId') END";
   // Every clause appends its value to `bindings`, so these blocks MUST stay in
   // the same order as the placeholders in the WHERE clause below. They used to
   // push the book first while the SQL asked for the category first, which bound
@@ -144,14 +154,21 @@ export async function listAdminItems(
   if (categoryFilter) {
     // `items.` is required: an unqualified `data` inside the subquery resolves
     // to `channels.data` (the inner FROM), which silently matches nothing.
-    categoryClause = " AND (SELECT genre FROM channels " +
-      "WHERE id = json_extract(items.data, '$._microfeed.bookId')) = ?";
+    categoryClause = ` AND (SELECT genre FROM channels ` +
+      `WHERE id = ${bookRef}) = ?`;
     bindings.push(categoryFilter);
   }
   let bookClause = "";
   if (bookFilter) {
     bookClause = ` AND ${bookRef} = ?`;
     bindings.push(bookFilter);
+  }
+  // TCM kind filter hits the `items_tcm_kind_parent` composite index by its
+  // leftmost column; NULL kinds (novel rows) only ever surface under "all".
+  let tcmKindClause = "";
+  if (tcmKindFilter !== "all") {
+    tcmKindClause = " AND tcm_kind = ?";
+    bindings.push(tcmKindFilter);
   }
   const categories = (await listCategoryNav(
     database as unknown as CategoryDb,
@@ -188,7 +205,7 @@ export async function listAdminItems(
         WHERE c.id = ${bookRef}) AS book_title,
       (SELECT c.genre FROM channels c WHERE c.id = ${bookRef}) AS category_id
     FROM items
-    WHERE ${where}${cursorClause}${categoryClause}${bookClause}
+    WHERE ${where}${cursorClause}${categoryClause}${bookClause}${tcmKindClause}
     ORDER BY ${pagination.column} ${queryDirection}, id ${idDirection}
     LIMIT ?
   `).bind(...bindings, limit + 1).all<AdminItemRow>();
@@ -203,6 +220,13 @@ export async function listAdminItems(
   const hasPreviousPage = hasItems && (
     requestedNextPage || (previousPage && hasLookahead)
   );
+  // One cheap probe for the kind-filter row's visibility. With a composite
+  // index on (tcm_kind, …) SQLite scans the index rather than the table, so
+  // this stays fast even as the TCM corpus grows.
+  const tcmProbe = await database.prepare(
+    "SELECT 1 FROM items WHERE tcm_kind IS NOT NULL LIMIT 1",
+  ).first();
+  const hasTcmItems = tcmProbe !== null;
   const cursorForItem = (item: AdminItemSummary): number | string => {
     const timestamp = item[pagination.timestampKey];
     return pagination.mode === "legacy"
@@ -215,11 +239,13 @@ export async function listAdminItems(
     ...(bookFilter ? {bookFilter} : {}),
     categories,
     ...(categoryFilter ? {categoryFilter} : {}),
+    hasTcmItems,
     items,
     ...(hasNextPage ? {nextCursor: cursorForItem(items.at(-1)!)} : {}),
     order: pagination.order,
     ...(hasPreviousPage ? {prevCursor: cursorForItem(items[0]!)} : {}),
     sort: pagination.sort,
     statusFilter,
+    ...(tcmKindFilter !== "all" ? {tcmKindFilter} : {}),
   };
 }

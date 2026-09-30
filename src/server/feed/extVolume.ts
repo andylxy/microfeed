@@ -63,7 +63,10 @@ function asText(value: unknown): string {
  *
  *  Unlike the public helpers this does **not** filter to published books: an
  *  admin must be able to structure a book that is still a draft. Deleted
- *  channels are the only ones hidden. */
+ *  channels are the only ones hidden. TCM container channels (方剂/本草/名词,
+ *  marked by `_microfeed.tcmContainer`) are not books — their entries belong to
+ *  the real books through `_microfeed.sourceBookId` — so they are filtered out
+ *  here instead of showing up as a book titled "方剂". */
 export async function listVolumeBooks(
   db: VolumeDb,
 ): Promise<VolumeBookOption[]> {
@@ -75,6 +78,10 @@ export async function listVolumeBooks(
   for (const row of rows) {
     if (Number(row.status) === STATUSES.DELETED) continue;
     const data = safeParseJson(row.data);
+    const microfeed = data._microfeed && typeof data._microfeed === "object"
+      ? data._microfeed as Record<string, unknown>
+      : {};
+    if (microfeed.tcmContainer != null) continue;
     books.push({
       id: asText(row.id),
       title: typeof data.title === "string" && data.title
@@ -111,6 +118,21 @@ export async function listVolumeBoard(
         : "未命名作品";
     })(),
   };
+  if (book == null) {
+    return {book, groups: [], volumeNames: []};
+  }
+
+  // TCM books (伤寒杂病论・桂林古本 等) structure chapters/sections through
+  // `tcm_kind` + `tcm_parent_id` instead of `_microfeed.volume` tags, so the
+  // tag-based grouping below would file every entry into the unfiled bucket.
+  // Detect them by the presence of any `tcm_kind` item and use the entity
+  // structure instead (chapters as volumes, sections as their chapters).
+  const tcmProbe = await db.prepare(
+    "SELECT 1 AS one FROM items WHERE book_id = ? AND tcm_kind IS NOT NULL AND status != ? LIMIT 1",
+  ).bind(bookId, STATUSES.DELETED).first();
+  if (tcmProbe != null) {
+    return buildTcmVolumeBoard(db, bookId, book);
+  }
 
   // B18: `items.book_id` is the denormalized, indexed copy of
   // `_microfeed.bookId` (migration 0056) — filtering in SQL turns the volume
@@ -188,5 +210,124 @@ export async function listVolumeBoard(
     volumeNames: groups
       .map((group) => group.name)
       .filter((name): name is string => name !== ""),
+  };
+}
+
+/** Volume board for a TCM-structured book.
+ *
+ *  TCM entries carry no `_microfeed.volume` tag. Their structure is:
+ *    chapter (篇章) = volume, sections (条文) = the chapters filed under it via
+ *    `tcm_parent_id`. Fang (方剂) entries are not chapters: they belong to this
+ *    book through `_microfeed.sourceBookId` and surface as the book's own items
+ *    in the admin item list, not as a separate "方剂" volume here.
+ *
+ *  The board is editable, same as a novel book: the write handlers
+ *  (`volume-handlers.ts`) are TCM-aware and translate each edit onto the
+ *  structural fields — filing a section under a volume rewrites its
+ *  `tcm_parent_id`, and renaming a volume renames the chapter entity — so the
+ *  board, the item editor and the App all stay in agreement instead of the
+ *  edit landing on an ignored tag.
+ */
+async function buildTcmVolumeBoard(
+  db: VolumeDb,
+  bookId: string,
+  book: VolumeBookOption,
+): Promise<VolumeBoard> {
+  const chapterResult = await db.prepare(
+    "SELECT id, status, data, pub_date FROM items " +
+      "WHERE book_id = ? AND tcm_kind = 'chapter' AND status != ? " +
+      "ORDER BY json_extract(data, '$._microfeed.section'), id",
+  ).bind(bookId, STATUSES.DELETED).all();
+  const chapterRows = Array.isArray(chapterResult.results)
+    ? chapterResult.results
+    : [];
+
+  const groups: VolumeGroup[] = [];
+  for (const chapterRow of chapterRows) {
+    const data = safeParseJson(chapterRow.data);
+    const chapterId = asText(chapterRow.id);
+    const name = typeof data.title === "string" && data.title
+      ? data.title
+      : "未命名篇章";
+    const microfeed = data._microfeed && typeof data._microfeed === "object"
+      ? data._microfeed as Record<string, unknown>
+      : {};
+
+    const sectionResult = await db.prepare(
+      "SELECT id, status, data, pub_date FROM items " +
+        "WHERE tcm_parent_id = ? AND status != ? " +
+        // 条文(sections)按 receiptNo 排序；yao/term 这类没有 receiptNo 的条目
+        // 回落到 `no`（与书页目录 getTcmBookEntries 的排序键一致），否则 receiptNo
+        // 全为 NULL 会退化为按 id（哈希序）乱排。
+        "ORDER BY COALESCE(json_extract(data, '$._microfeed.receiptNo'), json_extract(data, '$._microfeed.no')), id",
+    ).bind(chapterId, STATUSES.DELETED).all();
+    const sectionRows = Array.isArray(sectionResult.results)
+      ? sectionResult.results
+      : [];
+    const chapters: VolumeChapter[] = sectionRows.map((row, index) => {
+      const sectionData = safeParseJson(row.data);
+      return {
+        // ReceiptNo restarts per chapter, so number sections 1..N within it —
+        // matching the order the App's GetChapterContent returns them.
+        chapterNo: index + 1,
+        id: asText(row.id),
+        title: typeof sectionData.title === "string" && sectionData.title
+          ? sectionData.title
+          : "未命名章节",
+        status: Number(row.status ?? 0),
+        datePublished: asText(row.pub_date),
+        volume: name,
+        volumeOrder: null,
+      };
+    });
+
+    groups.push({
+      name,
+      order: asNumber(microfeed.section) ?? 0,
+      chapters,
+    });
+  }
+
+  // Defense: any section in this book not filed under one of its chapters
+  // (e.g. a section whose parent points elsewhere) lands in the unfiled bucket.
+  // Only `section` entries are chapters-in-a-volume: fang entries belong to the
+  // book as well (their book key points at the real book) but they are a
+  // catalog rather than part of the chapter tree, so counting them here would
+  // manufacture an "unfiled" bucket full of prescriptions.
+  const orphanResult = await db.prepare(
+    "SELECT id, status, data, pub_date FROM items " +
+      "WHERE book_id = ? AND tcm_kind = 'section' " +
+      "AND status != ? " +
+      "AND (tcm_parent_id IS NULL OR tcm_parent_id NOT IN " +
+      "(SELECT id FROM items WHERE book_id = ? AND tcm_kind = 'chapter'))",
+  ).bind(bookId, STATUSES.DELETED, bookId).all();
+  const orphanRows = Array.isArray(orphanResult.results)
+    ? orphanResult.results
+    : [];
+  if (orphanRows.length > 0) {
+    const chapters: VolumeChapter[] = orphanRows.map((row) => {
+      const data = safeParseJson(row.data);
+      return {
+        chapterNo: 0,
+        id: asText(row.id),
+        title: typeof data.title === "string" && data.title
+          ? data.title
+          : "未命名章节",
+        status: Number(row.status ?? 0),
+        datePublished: asText(row.pub_date),
+        volume: "",
+        volumeOrder: null,
+      };
+    });
+    groups.push({name: "", order: null, chapters});
+  }
+
+  return {
+    book,
+    groups,
+    volumeNames: groups
+      .map((group) => group.name)
+      .filter((name): name is string => name !== ""),
+    readOnly: false,
   };
 }

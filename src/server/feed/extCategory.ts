@@ -566,6 +566,169 @@ export async function getBookChapters(
 }
 
 /**
+ * Catalog for a TCM-structured book.
+ *
+ * A TCM book has no `_microfeed.volume` tags to group by: its structure is
+ * `tcm_kind` + `tcm_parent_id`, where a 篇章 (chapter row) is what a reader sees
+ * as a volume and its 条文 (section rows) are the chapters inside it. The 条文
+ * are deliberately unlisted so they stay out of the public feed, which also
+ * means the published-only query above would omit them and leave the book's
+ * catalog showing only bare 篇章 plus the 方剂 catalog.
+ *
+ * So this walks the real structure instead: one group per 篇章 in source order,
+ * each holding its 条文 in receipt order, and stamps the 篇章 title onto every
+ * 条文 as its `volume`. The theme groups the catalog purely by that attribute,
+ * which is what makes a TCM book render with the same "volume heading +
+ * chapters" shape a novel does.
+ */
+export async function getTcmBookChapters(
+  db: CategoryDb,
+  bookId: string,
+  baseUrl: string,
+): Promise<Array<Record<string, any>>> {
+  const chapterResult = await db.prepare(
+    "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'chapter' " +
+      "AND status != ? " +
+      "ORDER BY json_extract(data, '$._microfeed.section'), id",
+  ).bind(bookId, STATUSES.DELETED).all();
+  const chapterRows = Array.isArray(chapterResult.results)
+    ? chapterResult.results
+    : [];
+
+  const catalog: Array<Record<string, any>> = [];
+  for (const chapterRow of chapterRows) {
+    const chapterData = safeParseJson(chapterRow.data);
+    const volumeName = typeof chapterData.title === "string" && chapterData.title
+      ? chapterData.title
+      : "未命名篇章";
+    const sectionResult = await db.prepare(
+      "SELECT id, data, pub_date FROM items WHERE tcm_parent_id = ? " +
+        "AND tcm_kind = 'section' AND status != ? " +
+        "ORDER BY json_extract(data, '$._microfeed.receiptNo'), id",
+    ).bind(String(chapterRow.id), STATUSES.DELETED).all();
+    const sectionRows = Array.isArray(sectionResult.results)
+      ? sectionResult.results
+      : [];
+
+    for (const [index, row] of sectionRows.entries()) {
+      const data = safeParseJson(row.data);
+      const id = String(row.id);
+      const title = typeof data.title === "string" ? data.title : "未命名章节";
+      const microfeed = data._microfeed && typeof data._microfeed === "object"
+        ? data._microfeed as Record<string, unknown>
+        : {};
+      const pubDate = typeof row.pub_date === "string" ? row.pub_date : "";
+      const shortDate = pubDate ? pubDate.slice(0, 10) : "";
+      catalog.push({
+        id,
+        ...data,
+        ...(pubDate ? {date_published: pubDate} : {}),
+        _microfeed: {
+          ...microfeed,
+          // The 篇章 this 条文 is filed under is the volume — set it from the
+          // live structure so grouping never depends on a stale tag.
+          volume: volumeName,
+          chapterNo: Number(
+            Number.isFinite(Number(microfeed.chapterNo))
+              ? Number(microfeed.chapterNo)
+              : index + 1,
+          ),
+          wordCount: chapterWordCount(data),
+          web_url: PUBLIC_URLS.webItem(id, title, baseUrl),
+          ...(shortDate ? {date_published_short: shortDate} : {}),
+        },
+      });
+    }
+  }
+  return catalog;
+}
+
+/**
+ * The 方剂 (prescription) catalog attached to a TCM book.
+ *
+ * 方剂 are reference material rather than chapters: they are not filed under a
+ * 篇章 and carry no volume, so mixing them into the 卷/章 catalog would only
+ * produce a long ungrouped tail. The book page renders them in their own
+ * appendix block instead.
+ */
+export async function getTcmBookFang(
+  db: CategoryDb,
+  bookId: string,
+  baseUrl: string,
+): Promise<Array<Record<string, any>>> {
+  const result = await db.prepare(
+    "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'fang' " +
+      "AND status != ? " +
+      "ORDER BY json_extract(data, '$._microfeed.no'), id",
+  ).bind(bookId, STATUSES.DELETED).all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  return rows.map((row) => {
+    const data = safeParseJson(row.data);
+    const id = String(row.id);
+    const title = typeof data.title === "string" && data.title
+      ? data.title
+      : "未命名方剂";
+    return {
+      id,
+      title,
+      _microfeed: {
+        web_url: PUBLIC_URLS.webItem(id, title, baseUrl),
+      },
+    };
+  });
+}
+
+/**
+ * Catalog for a TCM book made of flat reference rows instead of a 篇章/条文
+ * tree — 中药 (`yao`) and 名词 (`term`) collections hang straight off their
+ * channel and have no parent row to walk.
+ *
+ * Without this a 中药 book page had nothing to show: the 篇章 walk above comes
+ * back empty, and the page's fallback then handed it the *primary feed's*
+ * items, so the channel rendered an unrelated book's chapter list. Read the
+ * book's own rows instead, in source (`_microfeed.no`) order.
+ *
+ * 方剂 are excluded — they carry their own appendix block (`getTcmBookFang`).
+ */
+export async function getTcmBookEntries(
+  db: CategoryDb,
+  bookId: string,
+  baseUrl: string,
+): Promise<Array<Record<string, any>>> {
+  const result = await db.prepare(
+    "SELECT id, data, pub_date FROM items WHERE book_id = ? " +
+      "AND tcm_kind IS NOT NULL " +
+      "AND tcm_kind NOT IN ('chapter', 'section', 'fang') " +
+      "AND status != ? " +
+      "ORDER BY json_extract(data, '$._microfeed.no'), id",
+  ).bind(bookId, STATUSES.DELETED).all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  return rows.map((row) => {
+    const data = safeParseJson(row.data);
+    const id = String(row.id);
+    const title = typeof data.title === "string" && data.title
+      ? data.title
+      : "未命名条目";
+    const microfeed = data._microfeed && typeof data._microfeed === "object"
+      ? data._microfeed as Record<string, unknown>
+      : {};
+    const pubDate = typeof row.pub_date === "string" ? row.pub_date : "";
+    const shortDate = pubDate ? pubDate.slice(0, 10) : "";
+    return {
+      id,
+      ...data,
+      ...(pubDate ? {date_published: pubDate} : {}),
+      _microfeed: {
+        ...microfeed,
+        wordCount: chapterWordCount(data),
+        web_url: PUBLIC_URLS.webItem(id, title, baseUrl),
+        ...(shortDate ? {date_published_short: shortDate} : {}),
+      },
+    };
+  });
+}
+
+/**
  * Pure helper that derives the `channels.genre` mirror value from a channel's
  * parsed `data` JSON. The primary category id lives in `data._microfeed.genre`
  * (the SSOT); the `channels.genre` column is only a denormalized, queryable

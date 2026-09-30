@@ -5,6 +5,7 @@ import {
   buildItemsListUrl,
   itemQueryForStatusFilter,
   normalizeItemStatusFilter,
+  normalizeTcmKindFilter,
 } from "@/shared/ItemList";
 import {
   buildItemPaginationUrl,
@@ -54,6 +55,30 @@ describe("admin item list filters", () => {
       statusFilter: "all",
     })).toBe(
       "?prev_cursor=previous_value&sort=created_at&order=desc",
+    );
+  });
+
+  it("normalizes the TCM kind filter and carries it in list URLs", () => {
+    expect(normalizeTcmKindFilter("Section")).toBe("section");
+    expect(normalizeTcmKindFilter("fang")).toBe("fang");
+    expect(normalizeTcmKindFilter("not-a-kind")).toBe("all");
+    expect(normalizeTcmKindFilter(undefined)).toBe("all");
+
+    expect(buildItemsListUrl({
+      statusFilter: "all",
+      tcmKindFilter: "section",
+    })).toBe("?tcmKind=section&sort=updated_at&order=desc");
+    // "all"（或非法值）不往地址里塞参数，保持默认视图 URL 干净。
+    expect(buildItemsListUrl({tcmKindFilter: "all"}))
+      .toBe("?sort=updated_at&order=desc");
+    // 与状态、分类、书过滤可任意组合且互不丢失。
+    expect(buildItemsListUrl({
+      bookId: "book1",
+      categoryId: "cat1",
+      statusFilter: "unlisted",
+      tcmKindFilter: "fang",
+    })).toBe(
+      "?status=unlisted&categoryId=cat1&bookId=book1&tcmKind=fang&sort=updated_at&order=desc",
     );
   });
 });

@@ -1,4 +1,6 @@
 import nodePath from "node:path";
+import os from "node:os";
+import {readFile, writeFile, rm} from "node:fs/promises";
 import {setTimeout as delay} from "node:timers/promises";
 
 import {
@@ -1738,6 +1740,70 @@ export class CloudflareClient {
     );
   }
 
+  /**
+   * Loads a SQL file into a local (miniflare) D1 database by splitting it into
+   * chunks small enough that wrangler's `--file` loader never hits the
+   * `SQLITE_TOOBIG` ("statement too long") limit. Splits on statement
+   * boundaries and, for very large multi-row INSERTs, across row groups so no
+   * single statement exceeds the cap.
+   */
+  async executeLocalSqlFileChunked(
+    config: MicrofeedConfig,
+    filename: string,
+    persistTo: string,
+    options: {maxChunkBytes?: number; maxRowBatchBytes?: number} = {},
+  ): Promise<void> {
+    const maxChunkBytes = options.maxChunkBytes ?? 4 * 1024 * 1024;
+    const maxRowBatchBytes = options.maxRowBatchBytes ?? 512 * 1024;
+    const sql = await readFile(filename, "utf8");
+    const statements = splitSqlStatements(sql).flatMap((stmt) =>
+      splitLargeInsert(stmt, maxRowBatchBytes),
+    );
+    let batch: string[] = [];
+    let batchBytes = 0;
+    let chunkIndex = 0;
+    const flush = async () => {
+      if (batch.length === 0) return;
+      const chunkPath = nodePath.join(
+        os.tmpdir(),
+        `microfeed-restore-chunk-${chunkIndex++}.sql`,
+      );
+      await writeFile(chunkPath, batch.join("\n") + "\n", {encoding: "utf8"});
+      try {
+        await runWrangler(
+          this.runner,
+          [
+            "d1",
+            "execute",
+            "FEED_DB",
+            "--local",
+            "--file",
+            chunkPath,
+            "--yes",
+            "--config",
+            wranglerConfigPath(config),
+            "--persist-to",
+            persistTo,
+          ],
+          {env: process.env},
+        );
+      } finally {
+        await rm(chunkPath, {force: true});
+      }
+      batch = [];
+      batchBytes = 0;
+    };
+    for (const stmt of statements) {
+      const bytes = Buffer.byteLength(stmt, "utf8");
+      if (batchBytes + bytes > maxChunkBytes && batch.length > 0) {
+        await flush();
+      }
+      batch.push(stmt);
+      batchBytes += bytes;
+    }
+    await flush();
+  }
+
   async authOwner(
     config: MicrofeedConfig,
     local = false,
@@ -1938,4 +2004,119 @@ export async function assertNoPagesCollision(
   if (pagesProjects.includes(projectName)) {
     throw new Error(pagesCollisionMessage(projectName));
   }
+}
+
+/**
+ * Splits a SQL script into individual statements on `;` boundaries, treating
+ * single-quoted string literals as opaque (so a `;` inside a string is not a
+ * separator). Each returned statement keeps its trailing `;`.
+ */
+function splitSqlStatements(sql: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inString = false;
+  for (let i = 0; i < sql.length; i += 1) {
+    const ch = sql[i]!;
+    if (inString) {
+      current += ch;
+      if (ch === "'") {
+        if (sql[i + 1] === "'") {
+          i += 1;
+          current += "'";
+          continue;
+        }
+        inString = false;
+      }
+      continue;
+    }
+    current += ch;
+    if (ch === "'") {
+      inString = true;
+      continue;
+    }
+    if (ch === ";") {
+      const trimmed = current.trim();
+      if (trimmed) out.push(trimmed);
+      current = "";
+    }
+  }
+  const last = current.trim();
+  if (last) out.push(last);
+  return out;
+}
+
+/**
+ * If `stmt` is a single multi-row INSERT whose VALUES list is large, split it
+ * into several INSERT statements with smaller row groups. Non-INSERT statements
+ * (or small INSERTs) are returned unchanged.
+ */
+function splitLargeInsert(stmt: string, maxRowBatchBytes: number): string[] {
+  const match =
+    /^(\s*INSERT\s+INTO\s+(?:"[\w]+"|[\w]+)\s*(?:\([^)]*\))?\s*VALUES\s*)([\s\S]*);\s*$/i
+      .exec(stmt);
+  if (!match) return [stmt];
+  const prefix = match[1]!;
+  const valuesPart = match[2]!;
+  const rows = splitTopLevelRows(valuesPart);
+  if (rows.length <= 1) return [stmt];
+  const out: string[] = [];
+  let batchRows: string[] = [];
+  let batchBytes = 0;
+  for (const row of rows) {
+    const bytes = Buffer.byteLength(row, "utf8");
+    if (batchRows.length > 0 && batchBytes + bytes > maxRowBatchBytes) {
+      out.push(`${prefix}${batchRows.join(",")};`);
+      batchRows = [];
+      batchBytes = 0;
+    }
+    batchRows.push(row);
+    batchBytes += bytes;
+  }
+  if (batchRows.length > 0) out.push(`${prefix}${batchRows.join(",")};`);
+  return out;
+}
+
+/**
+ * Splits a `VALUES (...),(...),...` payload into individual `(...)` row
+ * strings, tracking parentheses depth and ignoring `;`/`(`/`)` inside string
+ * literals.
+ */
+function splitTopLevelRows(valuesPart: string): string[] {
+  const rows: string[] = [];
+  let depth = 0;
+  let inString = false;
+  let current = "";
+  for (let i = 0; i < valuesPart.length; i += 1) {
+    const ch = valuesPart[i]!;
+    if (inString) {
+      current += ch;
+      if (ch === "'") {
+        if (valuesPart[i + 1] === "'") {
+          i += 1;
+          current += "'";
+          continue;
+        }
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inString = true;
+      current += ch;
+      continue;
+    }
+    if (ch === "(") depth += 1;
+    if (ch === ")") {
+      depth -= 1;
+      current += ch;
+      if (depth === 0) {
+        rows.push(current.trim());
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) rows.push(current.trim());
+  return rows;
 }

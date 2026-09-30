@@ -87,6 +87,11 @@ export const SNAPSHOT_TABLES = {
     // RBAC audit trail (migration 0054). The only record of who changed which
     // role or grant; a restore that dropped it would erase that history.
     "ext_rbac_audit",
+    // TCM annotation markers (migrations 0068, 0069, 0071). The 13 marker
+    // definitions — id, label, color, small_font, link_type — drive both the
+    // PC web renderer (TcmMarkers) and the App GetTipsStyleConfig payload, so a
+    // restored site must keep them or TCM tips lose their styling.
+    "ext_annotation_markers",
   ],
   ephemeral: [
     "item_create_idempotency",

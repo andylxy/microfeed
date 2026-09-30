@@ -3,6 +3,7 @@ import VolumesApp from "@/components/admin/volumes/VolumesApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {requirePagePermission} from "@/server/rbac/page-guard";
@@ -17,6 +18,10 @@ const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_VOLU
 if (denied) {
   return denied;
 }
+// Page size for the volume board's footer paging comes from the same
+// Settings → Items setting the items list uses.
+const webSettings = feedContent.settings?.webGlobalSettings ?? {};
+const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
 ---
 
 <AdminShell
@@ -26,7 +31,7 @@ if (denied) {
   {onboardingResult}
   pageTitle={translate("pageTitle.volumes", adminLanguage)}
 >
-  <VolumesApp client:only="react">
+  <VolumesApp client:only="react" {itemsPerPage}>
     <AdminPageFallback slot="fallback" kind="list" />
   </VolumesApp>
 </AdminShell>

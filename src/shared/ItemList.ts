@@ -29,6 +29,35 @@ export function normalizeItemStatusFilter(value: unknown): ItemStatusFilter {
     : "all";
 }
 
+// TCM content kinds (spec `.scratch/tcm-import/spec.md` §5.2). Rows carry the
+// kind in the `items.tcm_kind` column; "all" clears the filter. Existing
+// (non-TCM) rows have a NULL kind and only surface under "all".
+export const TCM_KIND_FILTERS = [
+  "all",
+  "chapter",
+  "section",
+  "fang",
+  "yao",
+  "term",
+] as const;
+
+export type TcmKindFilter = typeof TCM_KIND_FILTERS[number];
+
+export const TCM_KINDS: readonly Exclude<TcmKindFilter, "all">[] = [
+  "chapter",
+  "section",
+  "fang",
+  "yao",
+  "term",
+];
+
+export function normalizeTcmKindFilter(value: unknown): TcmKindFilter {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return TCM_KIND_FILTERS.includes(normalized as TcmKindFilter)
+    ? normalized as TcmKindFilter
+    : "all";
+}
+
 export function itemQueryForStatusFilter(
   value: unknown,
 ): Record<string, number> {
@@ -45,6 +74,8 @@ interface ItemsListUrlOptions {
   categoryId?: string;
   /** novel-cms book id, for the category → book → chapters drill-down. */
   bookId?: string;
+  /** TCM content kind, kept across paging and sorting like the rest. */
+  tcmKindFilter?: unknown;
   nextCursor?: number | string;
   order?: ItemOrder;
   prevCursor?: number | string;
@@ -59,10 +90,12 @@ export function buildItemsListUrl({
   prevCursor,
   sort = ITEM_SORTS.UPDATED_AT,
   statusFilter,
+  tcmKindFilter,
   categoryId = "",
 }: ItemsListUrlOptions = {}): string {
   const searchParams = new URLSearchParams();
   const normalizedStatus = normalizeItemStatusFilter(statusFilter);
+  const normalizedKind = normalizeTcmKindFilter(tcmKindFilter);
 
   if (normalizedStatus !== "all") {
     searchParams.set("status", normalizedStatus);
@@ -76,6 +109,11 @@ export function buildItemsListUrl({
   // table would silently widen back to the whole category on the next page.
   if (bookId) {
     searchParams.set("bookId", bookId);
+  }
+  // TCM kind behaves the same way: changing status or page must not widen the
+  // list back to every kind.
+  if (normalizedKind !== "all") {
+    searchParams.set("tcmKind", normalizedKind);
   }
   applyItemPaginationParams(searchParams, {
     nextCursor,

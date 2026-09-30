@@ -1,0 +1,114 @@
+[
+  {
+    "results": [
+      {
+        "id": "J1jGJjUWeCz",
+        "status": 1,
+        "is_primary": 1,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"http://feed.881019.xyz\",\"language\":\"zh-CN\",\"categories\":[\"Business\",\"Business / Careers\"],\"itunes:explicit\":false,\"itunes:type\":\"episodic\",\"itunes:complete\":false,\"itunes:block\":false,\"copyright\":\"©{{current_year}}\",\"publisher\":\"墨青\",\"title\":\"星河剑歌\",\"description\":\"少年陆尘持一柄断剑，自边陲小城走出，踏碎星河。\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"authors\":[{\"name\":\"墨青\"}],\"genre\":\"cat_x1\",\"_microfeed\":{\"serialStatus\":\"serializing\",\"signStatus\":\"signed\",\"genre\":\"cat_x1\",\"tags\":[\"热血\",\"升级\",\"剑道\"],\"wordCount\":799}}",
+        "created_at": "2026-09-14 03:09:12",
+        "updated_at": "2026-09-25 16:34:12",
+        "genre": "cat_x1"
+      },
+      {
+        "id": "BkA1x9pQ2Lm",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"夜航风暴\",\"description\":\"少年在停电的城市里追逐一束不会熄灭的光。\",\"authors\":[{\"name\":\"潮汐\"}],\"publisher\":\"林渡\",\"genre\":\"cat_x1\",\"_microfeed\":{\"genre\":\"cat_x1\",\"genreName\":\"都市高武\",\"tags\":[\"热血\",\"异能\",\"成长\"],\"serialStatus\":\"serializing\",\"wordCount\":136,\"sampleBook\":true}}",
+        "created_at": 1789000000000,
+        "updated_at": 1789000000000,
+        "genre": "cat_x1"
+      },
+      {
+        "id": "BkB2y8qR3Mn",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"春灯旧梦\",\"description\":\"一盏春灯照进旧梦，少女在药香与江湖之间寻找失散的家人。\",\"authors\":[{\"name\":\"灯下人\"}],\"publisher\":\"沈照晚\",\"genre\":\"j24vLiF3Sym\",\"_microfeed\":{\"genre\":\"j24vLiF3Sym\",\"genreName\":\"内经类\",\"tags\":[\"古风\",\"悬疑\",\"情感\"],\"serialStatus\":\"serializing\",\"wordCount\":107,\"sampleBook\":true}}",
+        "created_at": 1789000001000,
+        "updated_at": 1789000001000,
+        "genre": "j24vLiF3Sym"
+      },
+      {
+        "id": "BkC3z7rS4No",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"药王归来\",\"description\":\"隐居山村的药王重返人间，以一卷医经救下乱世中的无数人。\",\"authors\":[{\"name\":\"杏林客\"}],\"publisher\":\"白术\",\"genre\":\"OteD-aXHV_d\",\"_microfeed\":{\"genre\":\"OteD-aXHV_d\",\"genreName\":\"本草\",\"tags\":[\"医术\",\"传统玄幻\",\"逆袭\"],\"serialStatus\":\"serializing\",\"wordCount\":105,\"sampleBook\":true}}",
+        "created_at": 1789000002000,
+        "updated_at": 1789000002000,
+        "genre": "OteD-aXHV_d"
+      },
+      {
+        "id": "BkD4a6sT5Op",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"雾城档案\",\"description\":\"每一场雾都藏着一份档案，而档案的最后一页写着侦探自己的名字。\",\"authors\":[{\"name\":\"无名档案员\"}],\"publisher\":\"顾南川\",\"genre\":\"1runoCsI7dr\",\"_microfeed\":{\"genre\":\"1runoCsI7dr\",\"genreName\":\"伤寒\",\"tags\":[\"悬疑\",\"推理\",\"都市\"],\"serialStatus\":\"serializing\",\"wordCount\":102,\"sampleBook\":true}}",
+        "created_at": 1789000003000,
+        "updated_at": 1789000003000,
+        "genre": "1runoCsI7dr"
+      },
+      {
+        "id": "BkE5b5tU6Pq",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"天工开物录\",\"description\":\"少年工匠用一把旧尺丈量天地，在机关与星辰之间重建失落的文明。\",\"authors\":[{\"name\":\"机关子\"}],\"publisher\":\"闻山\",\"genre\":\"cat_x1\",\"_microfeed\":{\"genre\":\"cat_x1\",\"genreName\":\"东方玄幻\",\"tags\":[\"工匠\",\"升级\",\"东方玄幻\"],\"serialStatus\":\"serializing\",\"wordCount\":105,\"sampleBook\":true}}",
+        "created_at": 1789000004000,
+        "updated_at": 1789000004000,
+        "genre": "cat_x1"
+      },
+      {
+        "id": "BkF6c4uV7Qr",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"image\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"icon\":\"https://feed.881019.xyz/assets/default/channel-image.png\",\"link\":\"https://feed.881019.xyz/\",\"language\":\"zh-CN\",\"title\":\"长街听雪\",\"description\":\"长街尽头的雪落了十年，等一个人带着剑和未完的约定归来。\",\"authors\":[{\"name\":\"听雪人\"}],\"publisher\":\"顾知白\",\"genre\":\"cat_x1\",\"_microfeed\":{\"genre\":\"cat_x1\",\"genreName\":\"东方玄幻\",\"tags\":[\"仙侠\",\"江湖\",\"群像\"],\"serialStatus\":\"serializing\",\"wordCount\":101,\"sampleBook\":true}}",
+        "created_at": 1789000005000,
+        "updated_at": 1789000005000,
+        "genre": "cat_x1"
+      },
+      {
+        "id": "tcmfang0001",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"title\":\"方剂\",\"description\":\"中医方剂库\",\"_microfeed\":{\"tcmContainer\":\"fang\"}}",
+        "created_at": "2026-09-28 10:38:27",
+        "updated_at": "2026-09-28 10:38:27",
+        "genre": null
+      },
+      {
+        "id": "tcmyao00001",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"title\":\"本草\",\"description\":\"中药条目库\",\"_microfeed\":{\"tcmContainer\":\"yao\"}}",
+        "created_at": "2026-09-28 10:38:27",
+        "updated_at": "2026-09-28 10:38:27",
+        "genre": null
+      },
+      {
+        "id": "tcmterm0001",
+        "status": 1,
+        "is_primary": null,
+        "data": "{\"title\":\"名词\",\"description\":\"中医名词解释\",\"_microfeed\":{\"tcmContainer\":\"term\"}}",
+        "created_at": "2026-09-28 10:38:27",
+        "updated_at": "2026-09-28 10:38:27",
+        "genre": null
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WNAM",
+      "served_by_colo": "LAX",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.5452
+      },
+      "duration": 0.5452,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 5865472,
+      "rows_read": 10,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

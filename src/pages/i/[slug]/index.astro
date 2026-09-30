@@ -7,7 +7,11 @@ import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import {getBookChapters, getBookById} from "@/server/feed/extCategory";
+import {
+  getBookById,
+  getBookChapters,
+  getTcmBookChapters,
+} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {loadSiteNav} from "@/server/feed/siteNav";
@@ -54,13 +58,23 @@ const navigation = await loadSiteNav(loaded.database.FEED_DB, Astro.request);
 // "已是第一章" and "已是最后一章" at the same time.
 const currentBookId = ((item?._microfeed ?? {}) as Record<string, unknown>)
   .bookId ?? null;
+const chapterDb = loaded.database.FEED_DB as unknown as CategoryDb;
+// A TCM book's readable sequence is 篇章 → 条文, and its 方剂 are a catalog of
+// their own rather than chapters. The published-only chapter list would pull
+// those 方剂 into the sequence and order everything by publish date, so a 条文
+// at the end of a 篇章 linked "next" to a prescription instead of the first 条文
+// of the following 篇章.
+const tcmProbe = currentBookId == null
+  ? null
+  : await chapterDb.prepare(
+      "SELECT 1 AS one FROM items WHERE book_id = ? " +
+        "AND tcm_kind IS NOT NULL LIMIT 1",
+    ).bind(String(currentBookId)).first();
 const bookChapters = currentBookId == null
   ? []
-  : await getBookChapters(
-      loaded.database.FEED_DB as unknown as CategoryDb,
-      String(currentBookId),
-      Astro.url.origin,
-    );
+  : tcmProbe != null
+    ? await getTcmBookChapters(chapterDb, String(currentBookId), Astro.url.origin)
+    : await getBookChapters(chapterDb, String(currentBookId), Astro.url.origin);
 // Only lean metadata is kept: each chapter carries its full `content_html`, and
 // handing that to the theme would embed the whole novel into every chapter page.
 const chapters = bookChapters.map((chapter) => {

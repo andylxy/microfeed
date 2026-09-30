@@ -42,6 +42,9 @@ import {
   ITEM_STATUS_FILTERS,
   type ItemStatusFilter,
   normalizeItemStatusFilter,
+  normalizeTcmKindFilter,
+  TCM_KIND_FILTERS,
+  type TcmKindFilter,
 } from "@/shared/ItemList";
 import {
   ITEM_ORDERS,
@@ -98,6 +101,16 @@ const FILTER_KEYS: Record<ItemStatusFilter, string> = {
   published: "items.filterPublished",
   unlisted: "items.filterUnlisted",
   unpublished: "items.filterUnpublished",
+};
+
+// TCM kind pills (篇章/条文/方剂/中药/名词)；"all" 是默认的整库视图。
+const KIND_FILTER_KEYS: Record<TcmKindFilter, string> = {
+  all: "items.filterKindAll",
+  chapter: "items.filterKindChapter",
+  fang: "items.filterKindFang",
+  section: "items.filterKindSection",
+  term: "items.filterKindTerm",
+  yao: "items.filterKindYao",
 };
 
 const STATUS_CLASSES: Record<number, string> = {
@@ -267,6 +280,7 @@ function ItemStatusFilters({
   navigate,
   order,
   sort,
+  tcmKindFilter = "all",
 }: {
   activeFilter: ItemStatusFilter;
   /** novel-cms: kept in the address so changing status does not drop it. */
@@ -276,6 +290,8 @@ function ItemStatusFilters({
   navigate: ListNavigationHandler;
   order: ItemOrder;
   sort: ItemSort;
+  /** TCM kind, kept in the address so changing status does not drop it. */
+  tcmKindFilter?: TcmKindFilter;
 }) {
   const {t} = useTranslation();
   return (
@@ -290,6 +306,7 @@ function ItemStatusFilters({
           order,
           sort,
           statusFilter,
+          tcmKindFilter,
         });
         return (
           <a
@@ -314,6 +331,63 @@ function ItemStatusFilters({
   );
 }
 
+function ItemKindFilters({
+  activeKind,
+  bookId = "",
+  categoryId = "",
+  loading,
+  navigate,
+  order,
+  sort,
+  statusFilter,
+}: {
+  activeKind: TcmKindFilter;
+  bookId?: string;
+  categoryId?: string;
+  loading: boolean;
+  navigate: ListNavigationHandler;
+  order: ItemOrder;
+  sort: ItemSort;
+  statusFilter: ItemStatusFilter;
+}) {
+  const {t} = useTranslation();
+  return (
+    <nav
+      aria-label={t("items.filterByKind")}
+      className="mb-5 grid grid-cols-3 gap-2 md:grid-cols-6"
+    >
+      {TCM_KIND_FILTERS.map((kind) => {
+        const active = kind === activeKind;
+        const href = buildItemsListUrl({bookId,
+          categoryId,
+          order,
+          sort,
+          statusFilter,
+          tcmKindFilter: kind,
+        });
+        return (
+          <a
+            aria-current={active ? "page" : undefined}
+            aria-disabled={loading ? "true" : undefined}
+            className={cn(
+              buttonVariants({size: "lg", variant: "outline"}),
+              "w-full text-sm sm:text-base",
+              active &&
+                "border-brand-light bg-brand-light/10 text-brand-dark ring-1 ring-brand-light/20 hover:bg-brand-light/15 dark:border-brand-light dark:bg-brand-light/20 dark:text-white dark:ring-brand-light/50 dark:hover:bg-brand-light/25",
+              loading && "cursor-not-allowed opacity-70",
+            )}
+            href={href}
+            key={kind}
+            onClick={(event) => navigate(event, href)}
+          >
+            {t(KIND_FILTER_KEYS[kind])}
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function ItemListTable({
   data,
   listing,
@@ -327,6 +401,8 @@ export function ItemListTable({
 }) {
   const {t} = useTranslation();
   const activeFilter = normalizeItemStatusFilter(listing.statusFilter);
+  // The server echoes the applied kind, so paging and sorting keep it too.
+  const tcmKindFilter = normalizeTcmKindFilter(listing.tcmKindFilter);
   const sort = itemSortDefinition(listing.sort);
   const order = listing.order;
   // The server echoes the applied category, so paging and sorting keep it.
@@ -339,6 +415,7 @@ export function ItemListTable({
         order,
         sort: sort.sort,
         statusFilter: activeFilter,
+        tcmKindFilter,
       });
   const prevUrl = listing.prevCursor === undefined
     ? undefined
@@ -347,6 +424,7 @@ export function ItemListTable({
         order,
         sort: sort.sort,
         statusFilter: activeFilter,
+        tcmKindFilter,
       });
 
   const sortableHeader = (
@@ -362,6 +440,7 @@ export function ItemListTable({
       order: nextOrder,
       sort: field,
       statusFilter: activeFilter,
+      tcmKindFilter,
     });
     return (
       <a
@@ -505,7 +584,20 @@ export function ItemListTable({
         navigate={navigate}
         order={order}
         sort={sort.sort}
+        tcmKindFilter={tcmKindFilter}
       />
+      {listing.hasTcmItems && (
+        <ItemKindFilters
+          activeKind={tcmKindFilter}
+          bookId={bookId}
+          categoryId={categoryId}
+          loading={loading}
+          navigate={navigate}
+          order={order}
+          sort={sort.sort}
+          statusFilter={activeFilter}
+        />
+      )}
       <div className="overflow-x-auto rounded-[14px] border bg-card">
         <table className="w-full min-w-[64rem] table-fixed border-collapse text-sm">
           <thead>

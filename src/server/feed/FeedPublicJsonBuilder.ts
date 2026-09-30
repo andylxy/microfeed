@@ -330,6 +330,11 @@ export default class FeedPublicJsonBuilder {
     const contentFormat = bodyFormat(
       (item as any).contentFormat ?? (item as any).content_format,
     );
+    // TCM inline markers (`$u{桂枝}`) stay LITERAL in `content_html`: the PC
+    // web shows them as-is for now (user decision 2026-09-28), and the mobile
+    // app renders them itself via the `GetTipsStyleConfig` catalogue.
+    // `src/shared/TcmMarkers.ts` keeps the recursive renderer for when the web
+    // wants styling — wire it here at that point.
     (newItem as any)['content_html'] = bodyToHtml(item.description, contentFormat);
     (newItem as any)['content_text'] = item.descriptionText || '';
     // `apiItemOutputSchema` advertises this field, but it was never emitted — so
