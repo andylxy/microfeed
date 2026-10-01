@@ -150,9 +150,22 @@ TCM 书是另一套模型：**篇章（`tcm_kind='chapter'`）即卷，条文（
 
 编辑后 board / 编辑页 / App 三方一致，不会再出现"标签改了但结构没动"。孤儿兜底桶只收 `tcm_kind='section'`，否则方剂（`tcm_parent_id` 为 NULL）会被收进"未分卷"造成回归。
 
-### 4.3 方剂归属（不要乱改）
+### 4.3 方剂归属与组成（不要乱改）
 
-方剂（`tcm_kind='fang'`）的 `book_id` 就是**真实书本**，不放容器频道；`_microfeed.sourceBookId` **必须保留**——App 的 `GetBookIdFang` 按它查询（`src/server/tcm/reads.ts`），这也是"改 book_id 不动 App 契约"的原因。容器频道（方剂/本草/名词，带 `_microfeed.tcmContainer` 标记）已从书选择器过滤，不应当作一本书。
+方剂（`tcm_kind='fang'`）在**导入管线（build.ts）里 `book_id` 列 = 方剂容器频道**（`tcmfang0001`，`CONTAINER_CHANNEL_IDS.fang`），**真实书走 `_microfeed.sourceBookId`**（spec §16.3 明示"方剂的 book_id 是容器频道而非来源典籍"）。**但本地 ctwh 实例实测相反**（2026-09-30 直查 D1）：329 个方剂全部 `book_id = sourceBookId = 5IGM9t76quT`（真实书），`tcmfang0001` 是 `status=3` 空壳——两套布局都存在，**取方剂一律按 `sourceBookId` 过滤**（App `GetBookIdFang`、后台 `admin-list.ts` 的 `bookRef` CASE、方剂看板 `extFang.ts` 都是如此），对两种布局都成立。**`sourceBookId` 必须保留**，容器频道（方剂/本草/名词，带 `_microfeed.tcmContainer` 标记）已从书选择器过滤，不应当作一本书。组成（FangBody 2023 行）内嵌 `_microfeed.fangYaoList[]`：`{yaoId, amount, weight, suffix, showName, extraProcess}`，药味 ID 必须是中药条目 11 位 id。
+
+**⚠️ 组成 `yaoId` 的 off-by-one（源 bug，2026-09-30 实测；改方剂组成必读）**：源 MySQL `FangBody.YaoID` 是**0-based 引用，比 `Yao.YaoId` 整体少 1**（甘草引用 = 0，悬空）。netcore 老系统下发的 `yaoID` 就是这错位值（麻黄汤杏仁=17，正解 18）。故：
+- 导入必须用 `tcmId("yao", YaoID + 1)`（build.ts 已加补偿 + `yaoMaxId` 上限保护）；全量 2023 行验证：精确命中 1927；94 行是 `ShowName` 用别名异写同药（白芍药/芍药、香豉/豉、白蜜/石蜜、栝楼实/栝蒌），**语义一致不算错**；2 行 `YaoID=172` 越界。
+- 未补偿时每条组成 `yaoId` 会指向「序号少一位」的错误中药条目——编辑页药名下拉显示错名（杏仁行显示当归）、甘草行 `yaoId=null` 显示**空白**。判据：`yaoId →` 本地 yao 条目裸名 ≠ 该行 `showName`。
+- 本地已修：脚本 **`.scratch/fix-fang-yao.mjs`（`--apply`）** 按「源 FangBody + 标题匹配本地 yao」重写 7 个方剂的 `fangYaoList`（33 行），`--apply` 会写**完整对象数组**（勿写成纯 id 数组，否则编辑页全空）。
+- 由于 `compare.mts` 把 `yaoID` 列入 `ID_FIELDS` 走 known-id 放行（只看是否 11 位、不校验指向），**修 `yaoId` 不影响 golden 对齐**，可放心修。
+- **源 FangBody 只给桂林古本 7 个方剂（FangId 426–432，对应本地 `no` 1–7）准备了组成**；其余 322 个方剂源里本就没有组成行，本地空是「源数据如此」，不是导入丢了。
+
+**方剂的管理入口（2026-09-30 重做：独立只读看板）**：
+
+- **独立「方剂管理」看板 `/admin/fangs/`（只读，编辑跳条目页）**：菜单项 `fangs`（icon=`pill`、permission=`content:fang:read`、迁移 0073）。页面 `pages/[adminPath]/fangs/index.astro`（guard `content:fang:read`）+ 组件 `FangsApp.tsx`：选书（复用 `listVolumeBooks` 过滤容器）→ 与卷章页同款卡片看板逐行列出该书方剂（**方剂名链接跳条目编辑页** + `#no` + 状态徽章 `PUBLISHED||UNLISTED→已发布`），按 `itemsPerPage` 分页，**行内不编辑**。数据源 `ajax/fangs?bookId=`（`extFang.ts` `listFangBoard`，`tcm_kind='fang' AND status!=3 AND sourceBookId=书id` 按 `_microfeed.no,id` 序，行只带 `{id,name,no,status}`）。**没有 `content:fang:update` 权限/保存端点**——组成与状态编辑都走条目编辑页（通用条目权限守门），2026-09-30 曾短暂引入 `update` 权限 + `ajax/fangs/save`，因用户拍板"看板行跳条目编辑页"而整体移除。
+- **编辑页「药味组成」表单**：`EditItemApp` 检测 `_microfeed.fangYaoList` 为数组即渲染 `FangEditor`（`EditItemApp/components/FangEditor.tsx`）——表格逐行编辑药名（AdminSelect 搜索中药，数据源 `ajaxItems?tcmKind=yao&limit=300`）/ 剂量 / 单位 / 炮制 / 显示名 / 备注，保存走 `onUpdateItemMicrofeedMeta('fangYaoList', next)` 合并回口袋（`updateAdminFeed` 直写整个 data，其余口袋字段不丢）。判断"是不是方剂条目"只能看 `fangYaoList` 数组特征——`getItemJson` 返回的 item **没有 `tcm_kind` 列**。
+- **反向引用**：`admin/ajax/tcm/fang-references?name=<方剂名>`（`pages/[adminPath]/ajax/tcm/fang-references.ts`）——查 `tcm_kind='section'` 的 `_microfeed.fangList`（json_each 精确匹配）或正文 `$f{名}` 标记，返回引用条文列表，FangEditor 内联展示。
 
 ### 4.4 状态语义——修显示 ≠ 改数据
 
@@ -288,6 +301,13 @@ build.ts 推导不一致，方剂组成对不上（`yaoID` 字段变 null）。`
 必须剥前缀——`src/server/tcm/reads.ts` 的 `yaoAppName()`（`titleOf(data).replace(/^\d+、/, "")`），仅用于 App，
 后台标题保留前缀；该剥离对有/无前缀两种数据都安全（无前缀时正则不匹配、名字不变）。**判据**：
 `curl -sL localhost:4321/api/AppBookRequest/GetAllZhongYao` 的 `.data[0].name` 应为裸名（`甘草` 而非 `1、甘草`）。
+**错误区 9 — yaoAlias 折叠丢弃「短名」行（别名源①不全，2026-09-30）**
+`build.ts` 的 yaoAlias 折叠按 `YaoName` join Yao 表；4 条用**短名**的行（`蜜`/`艾`/`煅灶灰`）匹配不到
+Yao 表长名（`石蜜`/`艾叶`/`煅灶下灰`）→ 被静默丢弃（本地 43 条 vs 源 47 行）。**netcore 对 yaoAlias 表原样
+下发**（`name` = yaoAlias.YaoName，不 join）——golden 实测 `{食蜜→蜜}`/`{艾叶→艾}`/`{煅灶下灰→煅灶灰}`。
+**落点**：折叠改为原样保留全部行、`name` 用源 YaoName；孤儿行挂最贴近的 yao（YaoList 包含→子串→最长公共
+前缀；endpoint `getAppYaoAliases` 只遍历全部 yao 的 `aliases[]`，挂哪条不影响输出）。**判据**：本地 yao
+`aliases` 总条数应 = 源 `yaoAlias.sql` 行数（47）。
 **自检判据（3 秒发现 yao 导入错）**：
 1. `SELECT count(*) FROM items WHERE book_id='<中药书ID>' AND tcm_kind='yao'` 应 = 172（源 `Yao.sql` 行数）；
 2. 全部 yao 的 `json_extract(data,'$._microfeed.bookId')` = 真实中药书频道 ID（不是 `tcmyao00001`）；
@@ -328,7 +348,8 @@ build.ts 推导不一致，方剂组成对不上（`yaoID` 字段变 null）。`
   MICROFEED_LOCAL_STATE=.microfeed/instances/<n>/local-state
   ```
   判据：`dist/server/wrangler.json` 的 `topLevelName` 应为实例名、`database_id` 应为 `a7188289-…`。
-- **dev 重启跨调用回收 + 70s 冷启动**：`manage dev` 起的进程跨 Bash 调用会被回收，所以"起服务 + 轮询 + 抓页面"必须**在同一次调用内**完成（`nohup ... &` 后轮询等 `astro ready` + `Local http://localhost:4321/`），冷启动到可响应约 **70 秒**，只等 25s 会误判没起来。
+- **dev 重启跨调用回收 + 70s 冷启动**：`manage dev` 起的进程跨 Bash 调用会被回收，所以"起服务 + 轮询 + 抓页面"必须**在同一次调用内**完成（`nohup ... &` 后轮询等 `astro ready` + `Local http://localhost:4321/`），冷启动到可响应约 **70 秒**，只等 25s 会误判没起来。常驻起法 = `run_in_background` 跑 `./node_modules/.bin/yarn manage dev --local --instance ctwh-881019-xyz`（见 `dev-local-server.bat` 同款命令）。
+- **⚠️ 起 dev 必须带 `CODEBUDDY_SAFE_DELETE_ENABLED=0`**（2026-09-30）：Vite 重优化要删的 `node_modules/.vite/deps_temp_*` 超 50 文件 → safe-delete 闸抛错 → **dev server 崩溃**；崩溃后页面报 `file does not exist at .../deps_ssr/<dep>.js`（marked.js 等）。**表象像依赖不兼容，真因是闸杀死优化器——别去加 `optimizeDeps.exclude`**。修法：`export CODEBUDDY_SAFE_DELETE_ENABLED=0` 后重启；必要时先 `mv node_modules/.vite .vite-old-<ts>`。
 - **主题激活一致性（公开页样式）**：公开站首页 / 书页样式取决于**激活主题**而非内容。本地若丢失 `feed-zh`（带 ADR-0010 画布色的 `--mf-page-bg`），样式会与远程全不对；排查本地≠远程页面样式时**先比激活主题**（`theme_state.active_theme_id`）。TCM 前端展示要求 `feed-zh` **≥ 0.1.35**（`manage theme install ./themes/feed-zh --local --instance <n>` → `theme activate <id>`）。
 - **本地实例现状（2026-09-30 起）**：`ctwh-881019-xyz` 本地库**已有 TCM 数据**（桂林古本 31 篇章 / 984 条文 / 329 方剂 + 17 条中药），channels 4 个：星河剑歌、伤寒杂病论・(桂林古本)、方剂（`tcmfang0001`，status=3）、中药（`4KbG9bDqdz3`，genre=本草，用户 09-30 新建）。**本地缺「本草」`tcmyao00001` 与「名词」`tcmterm0001` 两个容器频道**（远端齐全），引用它们的条目在后台「归属书本」会回落显示原始 id（见 §4.8）。远端仍是权威全集；需要全量可 `.scratch/backups/resync-remote-to-local.sh` 拉回（停服务后跑）。
 
@@ -383,3 +404,4 @@ curl --noproxy '*' -s -L -b ck.txt "http://localhost:4321/admin/ajax/items?limit
 | 10 | 卷面板 / 编辑页章标题乱序（yao 按 id 哈希序而非目录 `no` 序） | 卷面板子项排序 `COALESCE(receiptNo, no)`：`extVolume.ts` 子项 `ORDER BY` 由 `receiptNo, id` 改为 `COALESCE(receiptNo, no), id`（条文仍按 receiptNo、yao/term 回落 no） | `src/server/feed/extVolume.ts` `buildTcmVolumeBoard` / 回归 `tests/unit/server/extVolume.test.ts` yao 排序用例 / **防复发专章 §4.10 错误区 7** |
 | 11 | App 端点 `GetAllZhongYao` / `GetAliaZhongYao` 的 `name` 带「N、」序号前缀（netcore 是裸名） | App 端点剥前缀：`reads.ts` 新增 `yaoAppName()`（`titleOf(data).replace(/^\d+、/, "")`），仅 App 用、后台标题保留；对有/无前缀两种数据都安全 | `src/server/tcm/reads.ts` `getAppAllYao` / `getAppYaoAliases` / **防复发专章 §4.10 错误区 8** |
 | 12 | 本地缺「名词」数据（`GetAllMingCi` 空） | 建普通书频道 `tcmterm0001`（genre=本草、无 tcmContainer）+ 根 chapter + 17 条 term；工具 `import-term.mjs` | `scripts/import-ctwh/import-term.mjs` / `src/server/tcm/reads.ts` `getAppAllTerms` / **防复发专章 §4.11** |
+| 13 | 别名源①不全（yaoAlias 4 条短名行被丢弃，43/47） | `build.ts` yaoAlias 折叠改原样保留全部行、`name` 用源 YaoName；孤儿行挂最贴近 yao | `scripts/import-ctwh/build.ts` / `src/server/tcm/reads.ts` `getAppYaoAliases` / **防复发专章 §4.10 错误区 9** |

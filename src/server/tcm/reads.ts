@@ -287,15 +287,15 @@ export function md5(input: string): string {
 }
 
 /**
- * §9 防御性降级：读函数正常返回数组；D1 异常时降级为 [] 并留痕，
+ * §9 防御性降级：读函数正常返回值；D1 异常时降级为空值（数组返回 []、Map 返回空 Map）并留痕，
  * 避免 App 端因未知异常崩。未知 id 已在各函数内返回 []（不报 404）。
  */
-async function withEmpty<T>(label: string, op: () => Promise<T[]>): Promise<T[]> {
+async function withEmpty<T>(label: string, op: () => Promise<T>): Promise<T> {
   try {
     return await op();
   } catch (e) {
-    console.error(`[tcm-reads] ${label} 读取失败，降级为 []:`, e);
-    return [];
+    console.error(`[tcm-reads] ${label} 读取失败，降级为空值:`, e);
+    return [] as unknown as T;
   }
 }
 
@@ -541,13 +541,16 @@ export async function getAppAllYao(db: D1Database): Promise<AppZhongYao[]> {
 const ALIAS_SPLIT_PATTERN = /[,，；; 。.、]+/;
 
 /**
- * 药名别名对照——照抄旧后端三源合并（重复别名后者覆盖前者，处理顺序一致）：
+ * 纯「导入派生」别名——照抄旧后端三源合并（重复别名后者覆盖前者，处理顺序一致）：
  * ① `yaoAlias` 表（中药口袋内嵌 `aliases[]`）→ {别名, 药名}；
  * ② 源 `Yao.YaoList`（口袋 `yaoNames` 原文）切分，每 token → 药名；
  * ③ 源 `BookBody.BieMing`（条文口袋 `bieMing`）切分，result[0]=正名，其余为别名。
+ * 不含 ext_tcm_aliases（后台覆盖/隐藏由 getAppYaoAliases 单独合并）。
  */
-export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
-  return withEmpty("getAppYaoAliases", async () => {
+export async function getDerivedYaoAliases(
+  db: D1Database,
+): Promise<Map<string, string>> {
+  return withEmpty("getDerivedYaoAliases", async () => {
     const merged = new Map<string, string>();
     const add = (bieming: string, name: string) => {
       if (bieming !== "") merged.set(bieming, name);
@@ -582,6 +585,38 @@ export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
         const canonical = parts[0] ?? "";
         for (let i = 1; i < parts.length; i++) add(parts[i] as string, canonical);
       }
+    }
+    return merged;
+  });
+}
+
+/**
+ * 药名别名对照——在纯派生（三源）之上最后合并 ext_tcm_aliases（后台 /admin/aliases/ 维护）：
+ *   deleted=0 → 手工覆盖别名，覆盖同名派生别名；
+ *   deleted=1 → 隐藏指令，把同名派生别名从端点结果中剔除。
+ * 表可能尚未迁移（旧库）→ 查询失败静默跳过，不影响三源。
+ */
+export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
+  return withEmpty("getAppYaoAliases", async () => {
+    const merged = await getDerivedYaoAliases(db);
+    try {
+      const manual = await db
+        .prepare(
+          "SELECT bieming, name, deleted FROM ext_tcm_aliases ORDER BY bieming",
+        )
+        .all();
+      for (const row of manual.results ?? []) {
+        const bieming = str(row.bieming);
+        if (Number(row.deleted) === 1) {
+          // 隐藏指令：剔除同名派生别名（App 端点不再下发）。
+          merged.delete(bieming);
+        } else {
+          // 手工覆盖：覆盖同名派生别名。
+          merged.set(bieming, str(row.name));
+        }
+      }
+    } catch {
+      // ext_tcm_aliases 不存在（迁移未应用）——忽略。
     }
     return [...merged].map(([bieming, name]) => ({bieming, name}));
   });

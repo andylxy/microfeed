@@ -37,6 +37,70 @@ export interface VolumeBookOption {
   title: string;
 }
 
+/** One ingredient row of a 方剂, mirroring the shape build.ts writes into
+ *  `_microfeed.fangYaoList` — the App's GetBookIdFang reads these exact fields
+ *  (suffix/amount/yaoID/weight/showName/extraProcess). Shared so the item
+ *  editor's FangEditor and the fang board both speak the same type. */
+export interface FangYaoEntry {
+  yaoId: string;
+  amount?: string | number | null;
+  weight?: string | number | null;
+  suffix?: string | null;
+  showName?: string;
+  extraProcess?: string | null;
+}
+
+/** One 方剂 (prescription) row on the dedicated fang board.
+ *
+ *  Fang entries are items on the book's channel whose real book is resolved
+ *  through `_microfeed.sourceBookId` (the board is keyed by that real book).
+ *  The board is a read-only catalog in the same style as the volume/chapter
+ *  board: each row links out to the item editor, which owns composition
+ *  (`fangYaoList`) and status editing, so only the fields the row displays
+ *  are carried. */
+export interface FangRow {
+  id: string;
+  /** Prescription name (the fang item's title). */
+  name: string;
+  /** Raw microfeed item status (draft / published / ...). */
+  status: number;
+  /** Source `_microfeed.no` (display order within the book). */
+  no: number | null;
+}
+
+/** Everything the fang board page needs to render one book's prescriptions. */
+export interface FangBoard {
+  /** Null when the requested book does not exist. */
+  book: VolumeBookOption | null;
+  /** The book's 方剂 (prescriptions), ordered by `_microfeed.no` then id. */
+  fangs: FangRow[];
+}
+
+/** One 中药 (herb) / 名词 (term) row on the dedicated yao/term board.
+ *
+ *  These are flat TCM books: the item's `book_id` is the real book channel
+ *  (no `sourceBookId`), so membership is resolved by `book_id` + `tcm_kind`.
+ *  Like the fang board, the page is read-only — each row links out to the item
+ *  editor, which owns aliases / content / status editing — so only the fields
+ *  the row displays are carried. */
+export interface TcmEntryRow {
+  id: string;
+  /** Entry title (the item's title). */
+  name: string;
+  /** Raw microfeed item status (draft / published / ...). */
+  status: number;
+  /** Source `_microfeed.no` (display order within the book). */
+  no: number | null;
+}
+
+/** Everything a yao/term board page needs to render one book's entries. */
+export interface TcmEntryBoard {
+  /** Null when the requested book does not exist. */
+  book: VolumeBookOption | null;
+  /** The book's entries of the requested kind, ordered by `_microfeed.no` then id. */
+  entries: TcmEntryRow[];
+}
+
 /** Everything the volume board page needs to render one book. */
 export interface VolumeBoard {
   /** Null when the requested book does not exist. */

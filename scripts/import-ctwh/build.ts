@@ -489,6 +489,12 @@ export function buildTargets(
       fangRankByFangId.set(String(rowValue(row, "FangId") ?? ""), index + 1);
     });
   }
+  // Largest `Yao.YaoId` in the source dump — the upper bound for the FangBody
+  // 0-based YaoID compensation below (a YaoID of 172 would overshoot).
+  const yaoMaxId = tables.yao.reduce(
+    (max, row) => Math.max(max, Number(rowValue(row, "YaoId") ?? 0)),
+    0,
+  );
   // 单书模式：本书方剂组成引用的中药条目（fangYaoList.yaoId 的关系依赖）一并导入
   const onlyBookYaoIds = new Set<string>();
   if (onlyBookNo) {
@@ -511,8 +517,19 @@ export function buildTargets(
     }
     const fangYaoList = (fangBodyByFang.get(fangId) ?? []).map((bodyRow) => {
       const yaoSourceId = rowValue(bodyRow, "YaoID");
+      // ⚠️ 源 `FangBody.YaoID` 是 **0-based 引用**：比 `Yao.YaoId` 整体少 1
+      // （实测 2023 行全量验证：YaoID+1 精确命中 1927 行；其余 94 行是 ShowName
+      // 用别名——白芍药/香豉/白蜜/栝楼实 —— 与 Yao 表正名异写同药，语义一致；
+      // 仅 2 行 YaoID=172 越界）。甘草的源引用是 0（悬空）。
+      // 不补偿会让每条方剂组成的 `yaoId` 指向「序号少一位」的错误中药条目
+      // （编辑页药名下拉显示错名、甘草显示空白）——2026-09-30 实测修复。
+      const yaoSourceKey = Number(yaoSourceId) + 1;
+      const yaoRefKey =
+        yaoSourceId && Number.isFinite(yaoSourceKey) && yaoSourceKey <= yaoMaxId
+          ? String(yaoSourceKey)
+          : null;
       return {
-        yaoId: yaoSourceId ? tcmId("yao", String(yaoSourceId)) : null,
+        yaoId: yaoRefKey ? tcmId("yao", yaoRefKey) : null,
         amount: rowText(bodyRow, "Amount"),
         weight: rowValue(bodyRow, "Weight"),
         suffix: rowText(bodyRow, "Suffix"),
@@ -561,14 +578,43 @@ export function buildTargets(
   }
 
   // ---- yaoAlias folded, Yao → herb items --------------------------------
+  // 旧后端 GetAliaZhongYao 把 yaoAlias 表**原样**下发（`name` = yaoAlias.YaoName），
+  // 不与 Yao 表 join。故 4 条 `YaoName` 用短名（蜜/艾/煅灶灰；Yao 表用 石蜜/艾叶/煅灶下灰）
+  // 也必须原样发出（golden 实测：{食蜜→蜜}、{艾叶→艾}、{煅灶下灰→煅灶灰}；{白蜜→蜜} 会被
+  // 第二源 Yao.YaoList 覆盖为 {白蜜→石蜜}）。这些"孤儿"别名挂到**最贴近**的 yao 条目上——
+  // endpoint（reads.ts getAppYaoAliases）只遍历全部 yao 的 aliases[] 并 add(bieming, name)，
+  // 挂在哪条不影响输出，但 `name` 必须保持源 yaoAlias.YaoName 原样才能逐字节对齐 netcore。
+  const yaoNameSet = new Set(tables.yao.map((row) => rowText(row, "YaoName")));
+  const yaoListTokens = new Map(
+    tables.yao.map((row) => [
+      rowText(row, "YaoName"),
+      rowText(row, "YaoList").split(/[,，]/).map((s) => s.trim()).filter((s) => s.length > 0),
+    ]),
+  );
+  const resolveYaoCarrier = (canonical: string): string | null => {
+    if (yaoNameSet.has(canonical)) return canonical;
+    for (const [name, tokens] of yaoListTokens) if (tokens.includes(canonical)) return name;
+    for (const name of yaoNameSet) if (name.includes(canonical)) return name;
+    let best: string | null = null;
+    let bestLen = 0;
+    for (const name of yaoNameSet) {
+      let i = 0;
+      while (i < canonical.length && i < name.length && canonical[i] === name[i]) i += 1;
+      if (i > bestLen) { bestLen = i; best = name; }
+    }
+    return bestLen > 0 ? best : null;
+  };
   const aliasesByYaoName = new Map<string, Array<{bieming: string; name: string}>>();
   for (const row of tables.yaoAlias) {
     const canonical = rowText(row, "YaoName");
     const alias = rowText(row, "YaoBieMing");
     if (!canonical || !alias) continue;
-    const list = aliasesByYaoName.get(canonical) ?? [];
+    const carrier = resolveYaoCarrier(canonical);
+    if (!carrier) continue;
+    const list = aliasesByYaoName.get(carrier) ?? [];
+    // name 用源 yaoAlias.YaoName 原样（对齐 netcore），不是 Yao 表的正名。
     list.push({bieming: alias, name: canonical});
-    aliasesByYaoName.set(canonical, list);
+    aliasesByYaoName.set(carrier, list);
   }
   const selectedYao =
     onlyBookNo

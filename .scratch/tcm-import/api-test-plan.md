@@ -166,6 +166,20 @@ node --import tsx .scratch/tcm-import/golden/compare.mts \
 > 本地 8 个内容端点现仅剩 `GetAliaZhongYao` 一处，根因是**别名三源数据缺失**（本地 `section.bieMing` 覆盖
 > 0/984、yao `aliases[]` 仅 27/172），与名词无关——需另行补导别名数据（或从远端 resync）。
 
+### 4.6 第六轮：netcore vs 本地（**别名导入后**）— 2026-09-30
+
+别名三源：① `yaoAlias`→yao `aliases[]`、② `Yao.YaoList`→yao `yaoNames`、③ `BookBody.BieMing`→section `bieMing`。
+本轮修 `build.ts` 的 yaoAlias 折叠（原按 `YaoName` join 会**丢弃** 4 条短名行），使**源①完整**：
+
+| 端点 | 结果 | 差异分类 |
+| --- | --- | --- |
+| **GetAliaZhongYao** | ❌ 1 处（本地 141→**144** 条；源①已 47/47，缺口全在源③） | `{MISMATCH:1}` |
+| 其余 7 端点 | ✅ 零硬差异 | 同 §4.5 |
+
+> 新增 `{食蜜→蜜}`、`{煅灶下灰→煅灶灰}`、`{艾叶→艾}`（与 netcore 逐字一致）。
+> 剩余 199 条**全部来自源③**——`BookBody.BieMing` 只存在于 `9020000`(神农本草经・人纪) 与
+> `400100`(神农本草经疏) 两本书，桂林古本一条没有。**用户拍板：那两本书暂不处理**，故该端点保持差异。
+
 ---
 
 ## 5. 问题、根因与修复
@@ -206,6 +220,17 @@ node --import tsx .scratch/tcm-import/golden/compare.mts \
   - 且 netcore 的 `GetAliaZhongYao` 是**全局聚合**（含其他书 `BookBody.BieMing`），本地只导入了桂林古本。
 - **证据**：远端生产（全量数据）`GetAliaZhongYao` 与 netcore 零硬差异（仅 1 条 known-data-drift）⇒ 端点代码正确。
 - **处置**：需向本地补导别名三源数据（或从远端 resync）后复测；**非代码问题**。
+- **2026-09-30 更新**：第一源已修复（见问题 5）；第二源本就齐全；第三源（两本书）用户暂不处理。
+
+### 问题 5：GetAliaZhongYao —— yaoAlias 折叠丢弃短名行（真 bug，源①）
+
+- **现象**：本地别名 43 条 vs 源 `yaoAlias` 47 行。
+- **根因**：`build.ts` 的 yaoAlias 折叠按 `YaoName` join Yao 表；4 条用**短名**的行（`蜜`/`艾`/`煅灶灰`）
+  匹配不到 Yao 表的长名（`石蜜`/`艾叶`/`煅灶下灰`）→ 被静默丢弃。**但 netcore 对 yaoAlias 表原样下发**
+  （`name` = yaoAlias.YaoName，不 join）——golden 实测 `{食蜜→蜜}`、`{艾叶→艾}`、`{煅灶下灰→煅灶灰}`。
+- **修复**：`build.ts` 折叠改为**原样保留全部行**、`name` 用源 `YaoName`；孤儿行挂到最贴近的 yao
+  （YaoList 包含 → 子串 → 最长公共前缀；endpoint 只遍历全部 yao 的 `aliases[]`，挂哪条不影响输出）。
+- **验证**：本地 43 → **47**（源有本地无=0、本地有源无=0）；端点 141 → 144。
 
 ---
 
@@ -266,7 +291,7 @@ microfeed（修复后，对齐）：`yaoCount:"4"`、`height:"0"`、`ID:"dR1IAFF
 **待办**：
 1. ✅ **部署** `reads.ts` 修复到远端生产 → 远端 `GetBookIdFang` 归零（第四轮验证）。
 2. ✅ 向本地补导**名词**数据（`scripts/import-ctwh/import-term.mjs`，17 条）→ 本地 `GetAllMingCi` 归零（第五轮验证）。
-3. ⏳ 向本地补导**别名三源**数据（`section.bieMing` / yao `aliases[]`）→ 本地 `GetAliaZhongYao` 归零。
+3. 🟡 别名：**源①已修复**（`build.ts` yaoAlias 折叠，47/47，第六轮）＋**源②本就齐全**；**源③（`BookBody.BieMing`，仅 `9020000`/`400100` 两本书有）用户拍板暂不处理** ⇒ `GetAliaZhongYao` 保持差 199 条。
 4. ⏳ 登录 / 配置类端点（#9–#14）单列测试。
 5. ✅ 门禁：`yarn typecheck` 0 error / 0 warning / 5 hints。
 6. ⏳ 提交（用户手动执行）：`src/server/tcm/reads.ts` + `scripts/import-ctwh/import-term.mjs` + 本测试文档。
@@ -280,6 +305,7 @@ microfeed（修复后，对齐）：`yaoCount:"4"`、`height:"0"`、`ID:"dR1IAFF
 - 路由：`src/pages/api/AppBookRequest/*.ts`
 - 测试程序：`.scratch/tcm-import/golden/{capture,capture-new,compare}.mts`
 - 名词导入：`scripts/import-ctwh/import-term.mjs`（`--apply` 幂等；新建名词书 `tcmterm0001` + 根 chapter + 17 条 term）
+- 别名折叠：`scripts/import-ctwh/build.ts`（yaoAlias → yao `aliases[]`；`name` 用源 `YaoName` 原样、孤儿行挂最贴近 yao）
 - 本轮产物：`.scratch/tcm-import/golden/{old-1001000,new-1001000,new-prod-1001000}/`、
   `report-old-1001000-new-1001000.json`、`report-old-1001000-new-prod-1001000.json`
 - 规范：`.scratch/tcm-import/spec.md`（§6 端点契约、§6.2 golden 比对、§15 差异清单）

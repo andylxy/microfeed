@@ -1,0 +1,44 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import AliasesApp from "@/components/admin/aliases/AliasesApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {hasPermission} from "@/server/rbac/guard";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// Guarded with the same code its menu row binds (`content:alias:read`); the
+// write controls need `content:alias:manage` (endpoint-enforced, surfaced here
+// so a read-only account does not see buttons that would 403).
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.CONTENT_ALIAS_READ,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+const canManage = hasPermission(
+  Astro.locals,
+  PERMISSION_CODES.CONTENT_ALIAS_MANAGE,
+);
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.ALIASES}
+  documentTitle={translate("pageDocumentTitle.aliases", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.aliases", adminLanguage)}
+>
+  <AliasesApp canManage={canManage} client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </AliasesApp>
+</AdminShell>

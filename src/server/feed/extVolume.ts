@@ -322,6 +322,11 @@ async function buildTcmVolumeBoard(
     groups.push({name: "", order: null, chapters});
   }
 
+  // 方剂（tcm_kind='fang'）不在卷/章树里——它们挂在方剂容器频道下、按
+  // `_microfeed.sourceBookId` 归属真实典籍，属于独立的方剂目录。管理入口已收敛
+  // 到专用的 `/admin/fangs/` 看板（src/components/admin/fangs/FangsApp.tsx），
+  // 此处不再内联展示，避免双入口不一致。
+
   return {
     book,
     groups,

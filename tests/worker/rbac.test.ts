@@ -359,8 +359,14 @@ describe("RBAC catalog integrity", () => {
     // role already holding `content:site_file:manage` (the same operator
     // audience). 14 since 0069 added `content:annotation-markers:read` — the
     // editor's rich-text editor fetches the marker list for its toolbar.
+    // 15 since 0073 added `content:fang:read` — the fang board is view-only
+    // (rows link out to the item editor), so the editor gains read, not update.
+    // 16 since 0074 added `content:alias:read` — the alias board is read-only too.
+    // 17 since 0075 added `content:alias:manage` — editors maintain the alias list.
+    // 19 since 0077 added `content:yao:read` + `content:term:read` — the herb and
+    // term boards are read-only too (rows link out to the item editor).
     // Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(14);
+    expect(editorCount?.c).toBe(19);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -384,11 +390,20 @@ describe("RBAC catalog integrity", () => {
     expect((grants.results ?? []).map((row) => row.code)).toEqual([
       // Alphabetical by code (the query orders by code). 0069 added the
       // annotation-markers read code: the editor toolbar needs the live list.
+      // 0073 added `content:fang:read` — a read-only account may open the fang
+      // board and inspect a prescription, but not edit one.
+      // 0074 added `content:alias:read` — the alias board is a read-only mirror.
+      // 0077 added `content:term:read` + `content:yao:read` — the herb and term
+      // boards are read-only content work for a read-only account.
+      "content:alias:read",
       "content:annotation-markers:read",
       "content:book:read",
       "content:category:read",
       "content:chapter:read",
+      "content:fang:read",
+      "content:term:read",
       "content:volume:read",
+      "content:yao:read",
     ]);
   });
 });
@@ -412,8 +427,11 @@ describe("RBAC administration", () => {
     const board = await readRbacBoard(env.FEED_DB);
     const editor = board.roles.find((role) => role.code === "editor");
     // 13 since 0058 granted `media:file:manage` to the site-file managers (A1);
-    // 14 since 0069 added `content:annotation-markers:read`.
-    expect(editor?.permissions).toHaveLength(14);
+    // 14 since 0069 added `content:annotation-markers:read`; 15 since 0073 added
+    // `content:fang:read`; 16 since 0074 added `content:alias:read`; 17 since 0075
+    // added `content:alias:manage`; 19 since 0077 added `content:yao:read` +
+    // `content:term:read`.
+    expect(editor?.permissions).toHaveLength(19);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

@@ -31,6 +31,8 @@ import {
 import {AdminSideQuickLinks, SideQuickLink} from "@/components/admin/shared/AdminSideQuickLinks";
 import AdminRichEditor from "@/components/admin/shared/AdminRichEditor";
 import AdminHelpLabel from "@/components/admin/shared/AdminHelpLabel";
+import FangEditor from "./components/FangEditor";
+import type {FangYaoEntry} from "@/shared/ExtVolume";
 import {
   ITEM_CONTROLS,
   CONTROLS_TEXTS_DICT
@@ -591,6 +593,15 @@ export default class EditItemApp extends React.Component<Props, any> {
               />
             </div>
           </div>
+          {Array.isArray((microfeed.fangYaoList as unknown)) && (
+            <FangEditor
+              disabled={autosaveState.phase === "saving"}
+              fangName={String(item.title ?? "")}
+              onChange={(next: FangYaoEntry[]) =>
+                this.onUpdateItemMicrofeedMeta('fangYaoList', next)}
+              value={(microfeed.fangYaoList as unknown as FangYaoEntry[])}
+            />
+          )}
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <div className="flex">
               <div>

@@ -196,6 +196,10 @@ export const ADMIN_MENU_CODES = {
   USERS: 'users',
   SETTINGS: 'settings',
   ANNOTATION_MARKERS: 'annotation_markers',
+  FANGS: 'fangs',
+  ALIASES: 'aliases',
+  YAO: 'yao',
+  TERM: 'term',
 } as const;
 
 /**
@@ -237,6 +241,11 @@ export const PERMISSION_CODES = {
   SYSTEM_API_MANAGE: 'system:api:manage',
   CONTENT_ANNOTATION_MARKERS_READ: 'content:annotation-markers:read',
   CONTENT_ANNOTATION_MARKERS_MANAGE: 'content:annotation-markers:manage',
+  CONTENT_FANG_READ: 'content:fang:read',
+  CONTENT_ALIAS_READ: 'content:alias:read',
+  CONTENT_ALIAS_MANAGE: 'content:alias:manage',
+  CONTENT_YAO_READ: 'content:yao:read',
+  CONTENT_TERM_READ: 'content:term:read',
   WILDCARD: '*',
 } as const;
 

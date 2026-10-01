@@ -479,6 +479,16 @@ export const ADMIN_URLS = {
   ajaxVolumeReorder: () =>
     adminUrl("ajax/volumes/reorder", browserAdminPath()),
   ajaxVolumeOrder: () => adminUrl("ajax/volumes/order", browserAdminPath()),
+  /** TCM: 条文反向引用某方剂（section 的 fangList / 正文标记含方剂名）。 */
+  ajaxTcmFangReferences: () =>
+    adminUrl("ajax/tcm/fang-references", browserAdminPath()),
+  /** 方剂管理独立看板：列某书的方剂（只读看板，编辑走条目页）。 */
+  ajaxFangs: () => adminUrl("ajax/fangs", browserAdminPath()),
+  /** 别名对照只读列表（移动端 GetAliaZhongYao 的后台镜像）。 */
+  ajaxAliases: () => adminUrl("ajax/aliases", browserAdminPath()),
+  /** 中药 / 名词管理只读看板：列某书的条目（kind = yao | term）。 */
+  ajaxTcmEntry: (kind: string) =>
+    adminUrl(`ajax/${kind}`, browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),

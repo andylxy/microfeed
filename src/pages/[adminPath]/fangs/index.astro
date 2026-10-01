@@ -1,0 +1,37 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import FangsApp from "@/components/admin/fangs/FangsApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_FANG_READ, adminLanguage);
+if (denied) {
+  return denied;
+}
+// Page size for the fang board's footer paging comes from the same Settings →
+// Items setting the items list and the volume board use.
+const webSettings = feedContent.settings?.webGlobalSettings ?? {};
+const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.FANGS}
+  documentTitle={translate("pageDocumentTitle.fangs", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.fangs", adminLanguage)}
+>
+  <FangsApp client:only="react" {itemsPerPage}>
+    <AdminPageFallback slot="fallback" kind="list" />
+  </FangsApp>
+</AdminShell>

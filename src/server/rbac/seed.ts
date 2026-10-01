@@ -53,6 +53,13 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "system:api:manage", name: "API 管理"},
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
+  // content - fangs (方剂 / prescriptions), view-only on the dedicated board
+  {code: "content:fang:read", name: "方剂查看"},
+  {code: "content:alias:read", name: "别名查看"},
+  {code: "content:alias:manage", name: "别名维护"},
+  // content - yao (中药) / term (名词), view-only on the dedicated boards
+  {code: "content:yao:read", name: "中药查看"},
+  {code: "content:term:read", name: "名词查看"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -96,6 +103,17 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       // fetches the marker list (`:read`) to build its `$X{...}` toolbar
       // buttons. Managing the list stays admin-only.
       "content:annotation-markers:read",
+      // Fang (方剂) board is read-only on the page (rows link out to the item
+      // editor, which is gated by the generic item permissions): an editor can
+      // open it, but composition/status editing happens on the item page.
+      "content:fang:read",
+      "content:alias:read",
+      "content:alias:manage",
+      // 中药 / 名词 boards are read-only content work (rows link out to the item
+      // editor, which is gated by the generic item permissions): an editor may
+      // open them, but editing happens on the item page.
+      "content:yao:read",
+      "content:term:read",
     ],
   },
   {
@@ -108,7 +126,15 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "content:chapter:read",
       "content:book:read",
       "content:category:read",
+      // Fang list is read-only content work for a read-only account: it may
+      // open the dedicated board and inspect a prescription's composition, but
+      // not edit it (no `content:fang:update`).
+      "content:fang:read",
+      "content:alias:read",
       "content:volume:read",
+      // 中药 / 名词 lists are read-only content work for a read-only account.
+      "content:term:read",
+      "content:yao:read",
       // Without this the editor's marker-list fetch 403s and the account only
       // ever sees the four seed buttons, never the live list (0069).
       "content:annotation-markers:read",

@@ -150,9 +150,15 @@ TCM 书是另一套模型：**篇章（`tcm_kind='chapter'`）即卷，条文（
 
 编辑后 board / 编辑页 / App 三方一致，不会再出现"标签改了但结构没动"。孤儿兜底桶只收 `tcm_kind='section'`，否则方剂（`tcm_parent_id` 为 NULL）会被收进"未分卷"造成回归。
 
-### 4.3 方剂归属（不要乱改）
+### 4.3 方剂归属与组成（不要乱改）
 
-方剂（`tcm_kind='fang'`）的 `book_id` 就是**真实书本**，不放容器频道；`_microfeed.sourceBookId` **必须保留**——App 的 `GetBookIdFang` 按它查询（`src/server/tcm/reads.ts`），这也是"改 book_id 不动 App 契约"的原因。容器频道（方剂/本草/名词，带 `_microfeed.tcmContainer` 标记）已从书选择器过滤，不应当作一本书。
+方剂（`tcm_kind='fang'`）的 `book_id` 列 = **方剂容器频道**（`tcmfang0001`，build.ts `CONTAINER_CHANNEL_IDS.fang`）；**真实书走 `_microfeed.sourceBookId`**（spec §16.3 明示"方剂的 book_id 是容器频道而非来源典籍"）。App 的 `GetBookIdFang` 按 `sourceBookId` 过滤（`src/server/tcm/reads.ts`）；后台条目列表/分类筛选也靠 `admin-list.ts` 的 `bookRef` CASE(sourceBookId 优先) 解析归属书。**`sourceBookId` 必须保留**，容器频道（方剂/本草/名词，带 `_microfeed.tcmContainer` 标记）已从书选择器过滤，不应当作一本书。组成（FangBody 2023 行）内嵌 `_microfeed.fangYaoList[]`：`{yaoId, amount, weight, suffix, showName, extraProcess}`，药味 ID 必须是中药条目 11 位 id。
+
+**方剂的三处管理入口（2026-09-30 新增）**：
+
+- **卷面板「方剂」只读块**：`buildTcmVolumeBoard`（`extVolume.ts`）对 TCM 书额外查 `tcm_kind='fang' AND sourceBookId=书id`（GetBookIdFang 同款过滤），作为独立块展示在卷章列表下方（方剂名 + 组成简表 + 状态 + 跳条目编辑页）。不进 `groups`（不是卷/章），也不参与行分页。
+- **编辑页「药味组成」表单**：`EditItemApp` 检测 `_microfeed.fangYaoList` 为数组即渲染 `FangEditor`（`EditItemApp/components/FangEditor.tsx`）——表格逐行编辑药名（AdminSelect 搜索中药，数据源 `ajaxItems?tcmKind=yao&limit=300`）/ 剂量 / 单位 / 炮制 / 显示名 / 备注，保存走 `onUpdateItemMicrofeedMeta('fangYaoList', next)` 合并回口袋（`updateAdminFeed` 直写整个 data，其余口袋字段不丢）。判断"是不是方剂条目"只能看 `fangYaoList` 数组特征——`getItemJson` 返回的 item **没有 `tcm_kind` 列**。
+- **反向引用**：`admin/ajax/tcm/fang-references?name=<方剂名>`（`pages/[adminPath]/ajax/tcm/fang-references.ts`）——查 `tcm_kind='section'` 的 `_microfeed.fangList`（json_each 精确匹配）或正文 `$f{名}` 标记，返回引用条文列表，FangEditor 内联展示。
 
 ### 4.4 状态语义——修显示 ≠ 改数据
 
@@ -288,6 +294,13 @@ build.ts 推导不一致，方剂组成对不上（`yaoID` 字段变 null）。`
 必须剥前缀——`src/server/tcm/reads.ts` 的 `yaoAppName()`（`titleOf(data).replace(/^\d+、/, "")`），仅用于 App，
 后台标题保留前缀；该剥离对有/无前缀两种数据都安全（无前缀时正则不匹配、名字不变）。**判据**：
 `curl -sL localhost:4321/api/AppBookRequest/GetAllZhongYao` 的 `.data[0].name` 应为裸名（`甘草` 而非 `1、甘草`）。
+**错误区 9 — yaoAlias 折叠丢弃「短名」行（别名源①不全，2026-09-30）**
+`build.ts` 的 yaoAlias 折叠按 `YaoName` join Yao 表；4 条用**短名**的行（`蜜`/`艾`/`煅灶灰`）匹配不到
+Yao 表长名（`石蜜`/`艾叶`/`煅灶下灰`）→ 被静默丢弃（本地 43 条 vs 源 47 行）。**netcore 对 yaoAlias 表原样
+下发**（`name` = yaoAlias.YaoName，不 join）——golden 实测 `{食蜜→蜜}`/`{艾叶→艾}`/`{煅灶下灰→煅灶灰}`。
+**落点**：折叠改为原样保留全部行、`name` 用源 YaoName；孤儿行挂最贴近的 yao（YaoList 包含→子串→最长公共
+前缀；endpoint `getAppYaoAliases` 只遍历全部 yao 的 `aliases[]`，挂哪条不影响输出）。**判据**：本地 yao
+`aliases` 总条数应 = 源 `yaoAlias.sql` 行数（47）。
 **自检判据（3 秒发现 yao 导入错）**：
 1. `SELECT count(*) FROM items WHERE book_id='<中药书ID>' AND tcm_kind='yao'` 应 = 172（源 `Yao.sql` 行数）；
 2. 全部 yao 的 `json_extract(data,'$._microfeed.bookId')` = 真实中药书频道 ID（不是 `tcmyao00001`）；
@@ -383,3 +396,4 @@ curl --noproxy '*' -s -L -b ck.txt "http://localhost:4321/admin/ajax/items?limit
 | 10 | 卷面板 / 编辑页章标题乱序（yao 按 id 哈希序而非目录 `no` 序） | 卷面板子项排序 `COALESCE(receiptNo, no)`：`extVolume.ts` 子项 `ORDER BY` 由 `receiptNo, id` 改为 `COALESCE(receiptNo, no), id`（条文仍按 receiptNo、yao/term 回落 no） | `src/server/feed/extVolume.ts` `buildTcmVolumeBoard` / 回归 `tests/unit/server/extVolume.test.ts` yao 排序用例 / **防复发专章 §4.10 错误区 7** |
 | 11 | App 端点 `GetAllZhongYao` / `GetAliaZhongYao` 的 `name` 带「N、」序号前缀（netcore 是裸名） | App 端点剥前缀：`reads.ts` 新增 `yaoAppName()`（`titleOf(data).replace(/^\d+、/, "")`），仅 App 用、后台标题保留；对有/无前缀两种数据都安全 | `src/server/tcm/reads.ts` `getAppAllYao` / `getAppYaoAliases` / **防复发专章 §4.10 错误区 8** |
 | 12 | 本地缺「名词」数据（`GetAllMingCi` 空） | 建普通书频道 `tcmterm0001`（genre=本草、无 tcmContainer）+ 根 chapter + 17 条 term；工具 `import-term.mjs` | `scripts/import-ctwh/import-term.mjs` / `src/server/tcm/reads.ts` `getAppAllTerms` / **防复发专章 §4.11** |
+| 13 | 别名源①不全（yaoAlias 4 条短名行被丢弃，43/47） | `build.ts` yaoAlias 折叠改原样保留全部行、`name` 用源 YaoName；孤儿行挂最贴近 yao | `scripts/import-ctwh/build.ts` / `src/server/tcm/reads.ts` `getAppYaoAliases` / **防复发专章 §4.10 错误区 9** |
