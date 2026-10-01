@@ -368,6 +368,32 @@ export function buildTargets(
   const chapterChannelBySource = new Map<string, string>();
   const chapterHeaderBySource = new Map<string, string>();
   const bookNosWithChapters = new Set<string>();
+  // netcore GetBookChapter 按源主键（BookInfoId）序返回 —— 这是唯一能同时解释
+  // 两类反例的排序：9040000 的「前言」（section=904000203）排第 3（数值序会垫底），
+  // 10001 的 section 0..21 按数字序（字符串序会排成 0,1,10,11,…）。落
+  // `_microfeed.no` = 书内主键排名，作篇章排序键（reads/extCategory/extVolume
+  // 三处 ORDER BY 共用，见 src/server/tcm/ordering.ts；同 fangRankByFangId 先例）。
+  const chapterRankBySource = new Map<string, number>();
+  {
+    const byBook = new Map<string, DumpRow[]>();
+    for (const row of tables.book) {
+      const bookNo = String(rowValue(row, "BookId") ?? "");
+      if (onlyBookNo && bookNo !== onlyBookNo) continue;
+      const group = byBook.get(bookNo) ?? [];
+      group.push(row);
+      byBook.set(bookNo, group);
+    }
+    for (const rows of byBook.values()) {
+      const ordered = [...rows].sort((a, b) => {
+        const av = Number(rowValue(a, "BookInfoId") ?? 0);
+        const bv = Number(rowValue(b, "BookInfoId") ?? 0);
+        return av - bv;
+      });
+      ordered.forEach((row, index) => {
+        chapterRankBySource.set(String(rowValue(row, "BookInfoId") ?? ""), index + 1);
+      });
+    }
+  }
   for (const row of selectedBooks) {
     const sourceId = String(rowValue(row, "BookInfoId") ?? "");
     const bookNo = String(rowValue(row, "BookId") ?? "");
@@ -400,12 +426,17 @@ export function buildTargets(
       tcmParentId: null,
       pubDate,
       data: {
-        title: header.trim(),
+        // 篇章标题原样保留（不 trim）：netcore GetBookChapter.chapterHeader 原样下发
+        // （400100 8 处前导空格、9040000 3 处尾随空格，golden 逐字节对齐 2026-10-01）。
+        // 同 MingCi title「原样不 trim」惯例（§4.11）。
+        title: header,
         description,
         content_format: "html",
         _microfeed: {
           bookId: channelId,
           section: rowValue(row, "ChapterSection"),
+          // 书内主键排名：篇章排序键（netcore 按源主键序下发，见上方注释）
+          no: chapterRankBySource.get(sourceId) ?? null,
         },
       },
       contentText: htmlToPlain(description),
@@ -422,8 +453,15 @@ export function buildTargets(
     const channelId = chapterChannelBySource.get(chapterSourceId);
     if (!parentId || !channelId) continue;
     const capped = limitPerKind == null ? rows : rows.slice(0, 5);
-    const header = chapterHeaderBySource.get(chapterSourceId) ?? "";
-    for (const row of capped) {
+    // 条文标题规范为「卷内章号」（与《伤寒杂病论・(桂林古本)》既有的 "1/2/3" 模式一致）：
+    // 源脏标题「第<ReceiptNo>条・<篇章名>」只在卷面板 / 阅读页产生噪声。源 ReceiptNo 仍保留在
+    // `_microfeed.receiptNo`（未丢失），排序按 ReceiptNo（与 backfill 的 chapterNo、卷面板 ORDER BY 一致）。
+    const ordered = capped.slice().sort(
+      (a, b) =>
+        Number(rowValue(a, "ReceiptNo") ?? 0) -
+        Number(rowValue(b, "ReceiptNo") ?? 0),
+    );
+    ordered.forEach((row, idx) => {
       const receiptNo = rowValue(row, "ReceiptNo");
       const description = textToHtml(rowText(row, "SectionText"));
       const pubDate = toIso(rowText(row, "CreateDate"));
@@ -436,7 +474,7 @@ export function buildTargets(
           tcmParentId: parentId,
           pubDate,
           data: {
-            title: `第${String(receiptNo ?? "?")}条・${header}`,
+            title: String(idx + 1),
             description,
             content_format: "html",
             _microfeed: {
@@ -456,7 +494,7 @@ export function buildTargets(
         },
         rowText(row, "SectionText"),
       );
-    }
+    });
   }
 
   // ---- FangBody grouped, Fang → formula items ---------------------------
@@ -489,11 +527,12 @@ export function buildTargets(
       fangRankByFangId.set(String(rowValue(row, "FangId") ?? ""), index + 1);
     });
   }
-  // Largest `Yao.YaoId` in the source dump — the upper bound for the FangBody
-  // 0-based YaoID compensation below (a YaoID of 172 would overshoot).
-  const yaoMaxId = tables.yao.reduce(
-    (max, row) => Math.max(max, Number(rowValue(row, "YaoId") ?? 0)),
-    0,
+  // 源 dump 里实际存在的 `Yao.YaoId` 集合 —— FangBody 0-based YaoID 补偿后的
+  // 成员闸：YaoId 不连续（dump 只截取了部分行），仅判 `<= yaoMaxId` 会放行
+  // 指向集合外空洞 id 的引用，产出悬空 yaoId（金匮要略・(宋版) 实测 2 处，
+  // 2026-10-01）。成员检查让这类行像越界行一样落 null。
+  const yaoSourceIdSet = new Set(
+    tables.yao.map((row) => String(rowValue(row, "YaoId") ?? "")),
   );
   // 单书模式：本书方剂组成引用的中药条目（fangYaoList.yaoId 的关系依赖）一并导入
   const onlyBookYaoIds = new Set<string>();
@@ -525,7 +564,9 @@ export function buildTargets(
       // （编辑页药名下拉显示错名、甘草显示空白）——2026-09-30 实测修复。
       const yaoSourceKey = Number(yaoSourceId) + 1;
       const yaoRefKey =
-        yaoSourceId && Number.isFinite(yaoSourceKey) && yaoSourceKey <= yaoMaxId
+        yaoSourceId &&
+        Number.isFinite(yaoSourceKey) &&
+        yaoSourceIdSet.has(String(yaoSourceKey))
           ? String(yaoSourceKey)
           : null;
       return {

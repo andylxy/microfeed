@@ -1,0 +1,70 @@
+[
+  {
+    "endpoint": "GetNav",
+    "counts": {
+      "known-adaptation": 3,
+      "OK": 6
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookChapter",
+    "counts": {
+      "known-id": 54,
+      "OK": 54,
+      "known-merge": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetChapterContent",
+    "counts": {
+      "OK": 7,
+      "known-signature-value": 2,
+      "known-id": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookIdFang",
+    "counts": {
+      "OK": 3377,
+      "known-id": 654,
+      "known-signature-value": 1195,
+      "known-order": 225,
+      "known-null-to-empty": 6,
+      "known-data-drift": 1,
+      "known-merge": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAllZhongYao",
+    "counts": {
+      "known-adaptation": 2
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAliaZhongYao",
+    "counts": {
+      "known-data-drift": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAllMingCi",
+    "counts": {
+      "known-id": 17,
+      "OK": 57
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetTipsStyleConfig",
+    "counts": {
+      "known-new-endpoint": 1
+    },
+    "mismatches": []
+  }
+]

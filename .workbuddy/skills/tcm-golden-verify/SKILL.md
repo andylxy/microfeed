@@ -76,15 +76,30 @@ node --import tsx .scratch/tcm-import/golden/compare.mts \
 | `analyze-yao-gap.mjs` | 中药缺口分析：唯一药名数、本地缺失清单、需补齐 text 的条数 |
 | `verify-yao.mjs` | 本地 yao ↔ 源 dump 核对（id/no/正文语义级/别名） |
 
-## 4. 已知结论（2026-10-01 核对，供下次对照）
+## 4. 已知结论（2026-10-01 第七轮：13 部书逐书比对后）
 
-- **桂林古本（1001000）的书 + 篇章 + 条文 + 329 个方剂：与 netcore 零硬差异**——方剂 329=329、顺序一致、有组成的 7 个方剂其 `yaoList` 与 `standardYaoList` 药味序列 **0 差异**。
-- **⚠️ 中药（GetAllZhongYao）数据不完整（暂未修，待全量导入后重验）**：
-  - netcore **601 味**（唯一名，无重复） vs 本地 **172 味** → **缺 429 味**（铁锈/绿矾/朴硝/玛瑙/磁石…，全部有实质 text）。
-  - 已有 172 味中 **112 味 text 缺后半段**（netcore 含《神农本草经疏》，本地在基础内容处截断）。
-  - **根因是源 dump `ctwh/Yao.sql` 本身只有 172 行且 YaoText 被截断**，不是导入丢数据。方剂不受影响（33 行组成引用的药都在 172 味内）。
-- `GetAliaZhongYao` 差 201 条：第三源 `BookBody.BieMing` 只在另两本书（9020000/9040000…），用户已拍板暂不处理。
+- **逐书抓取**：`capture.mts --old http://192.168.2.158:9991 --new http://localhost:4321 --book-no <X> --old-dir old-<X> --new-dir new-<X>` 可对任意 BookNo 双端抓取（netcore 局域网可达）；`capture-new.mts` 同样支持 `--book-no`。golden 目录里已留有各书 old-*/new-* 包可复用。
+- **10 部已导入书全对齐**（GetBookChapter/GetChapterContent/GetNav/GetAllZhongYao/GetAliaZhongYao/GetAllMingCi）：1001000、10001、20100000、20200000、20300000、9020000、400100（+第七轮修复后的 9040000）。
+- **GetAliaZhongYao 已归零**：此前差 199 条的源③ `BookBody.BieMing` 随 9020000/400100 导入收口（仅剩 1 条 known-data-drift）。
+- **⚠️ GetBookIdFang 遗留差异（netcore 侧行为，接受）**：netcore 对 9040000(111)/10002(202)/9050000(49) 返回**空**；对 10001 返回 **315 = 113+202**（宋版两本合并下发，compare `known-merge` 已验证合并对齐）；对 1001000 返回 329。本地按 dump `FangSourceBookId` 忠实导入是超集，不是错数据。
+- **两个新 bug 类（已修复，2026-10-01）**：
+  1. **章节排序的真键 = 源主键（BookInfoId）序**（第八轮定论，推翻第七轮「字符串序」假说）：netcore 对
+     9040000（前言 section=904000203 排第 3，数值序会垫底）与 10001（section 0..21 数字序，字符串序会排成
+     0,1,10,11）只有主键序能同时解释。修复 = `build.ts` 写篇章 `_microfeed.no`（书内主键排名），三处 ORDER BY
+     统一 `src/server/tcm/ordering.ts` 的 `COALESCE(no, CAST(section AS TEXT)), id`。**验证章节序必须抽查
+     section 等宽与混合宽度两类书**（等宽书字符串序=数值序=主键序，测不出这类 bug）。
+  2. **篇章标题 trim**：netcore `chapterHeader` 原样下发（400100 8 处前导空格、9040000 3 处尾随空格）；
+     `build.ts` 曾 trim。修复 = 篇章 title 不 trim（同 MingCi 原样惯例）。改后必须**重建 + repour 受影响书**才生效。
+- **⚠️ per-book repour 的固定收尾三步**（2026-10-01 两次实证）：repour 带方剂的书 → yao 被写回悬空容器
+  `tcmyao00001` → **必须重跑 `import-yao.mjs --apply`**；再跑 `backfill-tcm-volume.mjs`（幂等补 volume/chapterNo）。
+- **⚠️ 换新目录名重跑 capture/compare 的坑**：compare.mts 的 known-merge（10001 并上 10002）按
+  `$.data` 旧多出行判定——10001 的旧抓包有 49 章/315 方（宋版合并），新抓只有 27/113 属正常
+  known-merge；若报 50 处 MISMATCH 先核对是否新抓目录不完整，不要误判排序。
+- **⚠️ 中药（GetAllZhongYao）数据不完整（源 dump 缺口，暂未修）**：
+  - netcore **601 味**（唯一名） vs 本地 **172 味** → **缺 429 味**；已有 172 味中 **112 味 text 缺后半段**。
+  - **根因是源 dump `ctwh/Yao.sql` 本身只有 172 行且 YaoText 被截断**，不是导入丢数据。方剂组成不受影响（引用药都在 172 内）。
 - `compare.mts` 对 `yaoID` 走 `ID_FIELDS` 的 known-id 放行（**只看是否 11 位、不校验指向**）→ 修正 `fangYaoList.yaoId` 的指向**不影响 golden 对齐**，可放心修。
+- **vitest 池 2026-10-01 已恢复可用**（此前记录的「池起不来」已失效）；单测相关：`tcm-import.test.ts` 夹具已对齐容器随发 + yaoId +1 补偿语义。
 
 ## 5. 坑清单
 

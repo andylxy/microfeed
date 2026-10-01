@@ -1,6 +1,7 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
+import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import {
   bookWordCounts,
   chapterWordCount,
@@ -589,7 +590,7 @@ export async function getTcmBookChapters(
   const chapterResult = await db.prepare(
     "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'chapter' " +
       "AND status != ? " +
-      "ORDER BY json_extract(data, '$._microfeed.section'), id",
+      "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
   ).bind(bookId, STATUSES.DELETED).all();
   const chapterRows = Array.isArray(chapterResult.results)
     ? chapterResult.results
@@ -657,10 +658,15 @@ export async function getTcmBookFang(
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
   const result = await db.prepare(
-    "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'fang' " +
+    // 方剂归属一律按 `_microfeed.sourceBookId` 过滤（两布局铁律，同 extFang.ts /
+    // App GetBookIdFang）：桂林古本布局 book_id=真实书，导入管线布局
+    // book_id=容器 tcmfang0001 —— 按 book_id 过滤只对前者成立，会让后者书页丢
+    // 「附：方剂」区块（2026-10-01 实测）。
+    "SELECT id, data FROM items WHERE tcm_kind = 'fang' " +
       "AND status != ? " +
+      "AND json_extract(data, '$._microfeed.sourceBookId') = ? " +
       "ORDER BY json_extract(data, '$._microfeed.no'), id",
-  ).bind(bookId, STATUSES.DELETED).all();
+  ).bind(STATUSES.DELETED, bookId).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   return rows.map((row) => {
     const data = safeParseJson(row.data);

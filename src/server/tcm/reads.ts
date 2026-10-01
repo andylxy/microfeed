@@ -15,6 +15,8 @@
  * deterministic wrapping.
  */
 
+import {TCM_CHAPTER_ORDER_SQL} from "./ordering";
+
 // 所有字段名与值类型照抄旧后端真实 wire 形状（golden 对齐 2026-09-28：全小驼峰、
 // 部分数值字段旧后端序列化为字符串、空值发 null）。
 export interface AppNavListItem {
@@ -363,7 +365,7 @@ export async function getAppBookChapters(
       .prepare(
         "SELECT id, data FROM items " +
           "WHERE tcm_kind = 'chapter' AND book_id = ? AND status = 1 " +
-          "ORDER BY json_extract(data, '$._microfeed.section'), id",
+          "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
       )
       .bind(bookId)
       .all();

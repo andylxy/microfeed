@@ -1,4 +1,5 @@
 import {STATUSES} from "@/shared/Constants";
+import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import type {
   VolumeBoard,
   VolumeBookOption,
@@ -236,7 +237,8 @@ async function buildTcmVolumeBoard(
   const chapterResult = await db.prepare(
     "SELECT id, status, data, pub_date FROM items " +
       "WHERE book_id = ? AND tcm_kind = 'chapter' AND status != ? " +
-      "ORDER BY json_extract(data, '$._microfeed.section'), id",
+      // 与 App GetBookChapter / 书页目录同一排序键（netcore 字符串序，见 ordering.ts）
+      "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
   ).bind(bookId, STATUSES.DELETED).all();
   const chapterRows = Array.isArray(chapterResult.results)
     ? chapterResult.results

@@ -1,0 +1,309 @@
+[
+  {
+    "endpoint": "GetNav",
+    "counts": {
+      "known-adaptation": 3,
+      "OK": 6
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookChapter",
+    "counts": {
+      "known-id": 50,
+      "OK": 50
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetChapterContent",
+    "counts": {
+      "OK": 6,
+      "known-signature-value": 3,
+      "known-id": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetBookIdFang",
+    "counts": {
+      "MISMATCH": 49
+    },
+    "mismatches": [
+      {
+        "path": "$.data[0]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[1]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[2]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[3]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[4]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[5]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[6]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[7]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[8]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[9]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[10]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[11]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[12]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[13]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[14]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[15]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[16]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[17]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[18]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[19]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[20]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[21]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[22]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[23]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[24]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[25]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[26]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[27]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[28]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[29]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[30]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[31]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[32]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[33]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[34]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[35]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[36]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[37]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[38]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[39]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[40]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[41]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[42]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[43]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[44]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[45]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[46]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[47]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      },
+      {
+        "path": "$.data[48]",
+        "verdict": "MISMATCH",
+        "detail": "新多出的行"
+      }
+    ]
+  },
+  {
+    "endpoint": "GetAllZhongYao",
+    "counts": {
+      "known-adaptation": 2
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAliaZhongYao",
+    "counts": {
+      "known-data-drift": 1
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetAllMingCi",
+    "counts": {
+      "known-id": 17,
+      "OK": 57
+    },
+    "mismatches": []
+  },
+  {
+    "endpoint": "GetTipsStyleConfig",
+    "counts": {
+      "known-new-endpoint": 1
+    },
+    "mismatches": []
+  }
+]

@@ -95,7 +95,8 @@ describe("buildTargets relation wiring", () => {
       makeRow("Fang", ["FangId", "FangName", "FangSourceBookId", "FangText", "YaoCount", "YaoList", "FangList", "CreateDate"], [500, "桂枝汤", 10001, "$f{桂枝汤} 5味", 5, "桂枝,芍药", "", "2024-09-17 08:59:43"]),
     ],
     fangBody: [
-      makeRow("FangBody", ["FangBodyId", "FangId", "YaoID", "Amount", "ShowName", "ExtraProcess"], [1, 500, 7, "三两", "桂枝", "去皮"]),
+      // YaoID=6 是源 0-based 引用 → 导入 +1 补偿后引用 YaoId=7（桂枝）
+      makeRow("FangBody", ["FangBodyId", "FangId", "YaoID", "Amount", "ShowName", "ExtraProcess"], [1, 500, 6, "三两", "桂枝", "去皮"]),
     ],
     yao: [
       makeRow("Yao", ["YaoId", "YaoName", "YaoBieMing", "YaoText", "CreateDate"], [7, "桂枝", "牡桂", "$u{桂枝} 味辛。温。", "2024-09-15 00:56:57"]),
@@ -110,10 +111,18 @@ describe("buildTargets relation wiring", () => {
 
   const {channels, items, report} = buildTargets(tables, null);
 
-  it("builds one channel with the mapped category", () => {
-    expect(channels).toHaveLength(1);
-    expect(channels[0]!.genre).toBe("1runoCsI7dr");
-    expect((channels[0]!.data as any).title).toBe("伤寒金匮・(宋版)");
+  it("builds the work channel plus the 3 container channels, with the mapped category", () => {
+    // build.ts 非单书模式随发方剂/本草/名词 3 个容器频道（fang/yao/term 条目书键的归属），
+    // 工作频道在最前；容器频道 id 固定（CONTAINER_CHANNEL_IDS）。
+    expect(channels).toHaveLength(4);
+    const work = channels[0]!;
+    expect(work.genre).toBe("1runoCsI7dr");
+    expect((work.data as any).title).toBe("伤寒金匮・(宋版)");
+    expect(channels.slice(1).map((c) => c.id)).toEqual([
+      "tcmfang0001",
+      "tcmyao00001",
+      "tcmterm0001",
+    ]);
   });
 
   it("builds one item per kind with the right status", () => {
@@ -152,9 +161,11 @@ describe("buildTargets relation wiring", () => {
     expect((fang?.data as any)._microfeed.sourceBookId).not.toBe("10001");
   });
 
-  it("resolves 方剂组成 yaoId to the herb item id", () => {
+  it("resolves 方剂组成 yaoId to the herb item id (source YaoID is 0-based → +1 compensation)", () => {
     const yao = items.find((item) => item.tcmKind === "yao");
     const fang = items.find((item) => item.tcmKind === "fang");
+    // 源 FangBody.YaoID 是 0-based 引用（比 Yao.YaoId 整体少 1），build.ts 导入时 +1：
+    // 夹具 FangBody.YaoID=6 → 引用 YaoId=7（桂枝），yaoId 必须等于 yao 条目 id。
     expect((fang?.data as any)._microfeed.fangYaoList[0].yaoId).toBe(yao?.id);
     expect((yao?.data as any)._microfeed.aliases).toEqual([{bieming: "桂", name: "桂枝"}]);
   });

@@ -31,7 +31,8 @@ const db = new DatabaseSync(join(d1Dir, dbFile));
 // 会在 site_search_documents/FTS 留孤儿行（2026-09-29 审计发现）——必须显式打开。
 db.exec("PRAGMA recursive_triggers=ON;");
 
-const outDir = ".scratch/tcm-import/out";
+// 注意：outDir 取自命令行第 4 参（按需导入时传 ctwh-books/<BookNo>/out），
+// 不要在此硬编码覆盖（此前曾被同名 const 覆盖导致 per-book 目录失效）。
 const files = ["tcm-channels.sql"].concat(
   readdirSync(outDir)
     .filter((f) => /^tcm-batch-\d+\.sql$/.test(f))

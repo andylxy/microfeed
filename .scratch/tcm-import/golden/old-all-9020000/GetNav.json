@@ -1,0 +1,1 @@
+{"code":200,"data":[{"caseId":3,"name":"本草","navList":[{"bookNo":400100,"imageUrl":null,"bookName":"神农本草经疏","chengShu":null,"author":"缪希雍.明","caseTag":3,"desc":null,"chapterCount":0}]},{"caseId":5,"name":"伤寒金匮","navList":[{"bookNo":1001000,"imageUrl":null,"bookName":"伤寒杂病论・(桂林古本)","chengShu":null,"author":"张仲景","caseTag":5,"desc":null,"chapterCount":0}]}],"msg":"请求成功"}
