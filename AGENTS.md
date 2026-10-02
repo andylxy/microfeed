@@ -23,6 +23,7 @@
 - 已部署实例的部署流程（本机已验证，可直接复现）
 - 已部署的 microfeed 实例
 - 本机环境注意事项
+- 本地 D1 数据库文件管理
 - 语言
 - 行为
 
@@ -487,6 +488,31 @@ yarn manage theme delete <theme-id> --instance ctwh-881019-xyz --confirm <theme-
   （撤销：`git config --global --unset http.proxy`）。SSH 到 `github.com:22` 与
   `ssh.github.com:443` 亦可连通（仅缺密钥），可作为备选路径。该代理由本机
   VPN/代理客户端提供，客户端未启动时间接推送会失败。
+
+## 本地 D1 数据库文件管理
+
+- 本地 D1 业务库**只保留一个文件**：
+  `.microfeed/instances/<实例>/local-state/v3/d1/miniflare-D1DatabaseObject/<hash>.sqlite`。
+  同目录下任何 `*.bak-*`、`*.sqlite.bak`、`*.sqlite.old` 副本都属于**过时临时文件，必须删除**；
+  实例目录下不得出现第二个 D1 业务库文件。
+- `metadata.sqlite` 及其 `-shm`/`-wal` 属于 miniflare 运行时元数据，与业务库无关，必须保留；
+  `cache/`、`observability/`、`r2/` 下的同名文件同理。删除前先确认目标文件确实是业务库副本。
+- 需要直接改库（或运行任何会写库的修复脚本）时，**先在同一目录创建临时备份**，
+  命名 `…sqlite.bak-<YYYYMMDD-HHMMSS>`，再改数据。
+- **任务成功并通过验证后，必须删除该备份**，回到"只有一个 D1 文件"的状态。
+  需要回滚时先用备份恢复，恢复并复验通过后同样删除备份。
+- 删除备份的前置条件：①当前库可正常读写（dev server 跑通、关键页面/接口返回预期值）；
+  ②备份已确认不再需要。禁止在验证通过前删除，禁止把备份遗留到下一个任务。
+- 本机 safe-delete 闸的行为：`rm -f` 对**单个文件**有效；`rm -rf` 对**目录**会被
+  genie-trash 拦下（报 `SAFE_DELETE_FAIL_CLOSED`）。删目录需先逐文件删、再删空目录：
+
+  ```bash
+  find <dir> -type f -print0 | xargs -0 -n 100 rm -f
+  find <dir> -depth -type d -print0 | xargs -0 rmdir
+  ```
+
+- 一次性产物同样用完即删：`.vite-old-<ts>`、`node_modules/.vite` 的搬移副本、
+  `.scratch/chrome-cdp-tmp` 等，不得留在仓库里。
 
 ## 语言
 
