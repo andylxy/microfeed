@@ -52,6 +52,13 @@ export const CONTAINER_CHANNEL_IDS = {
  */
 export const BOOK_NAME_OVERRIDE: Record<string, string> = {};
 
+/**
+ * 本草书（WorkInfo.BookNo）——条文的「标题 = 整段 SectionText、描述 = SectionText +
+ * SectionNote」规则**只对这两本**生效。其它书（含同样有 SectionNote 的
+ * 伤寒论・(人纪) / 金匮要略・(人纪)）保持「标题 = 卷内章号」，避免把整段正文塞进标题。
+ */
+export const HERB_BOOK_NOS: ReadonlySet<string> = new Set(["9020000", "400100"]);
+
 const STATUS_PUBLISHED = 1;
 const STATUS_UNLISTED = 4;
 /** Keep in sync with `ITEM_CONTENT_TEXT_REVISION` in `src/shared/ItemSearch.ts`. */
@@ -146,6 +153,85 @@ export function htmlToPlain(html: string): string {
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** 标题型分隔符：SectionText 里「标题──正文」的分界（只认开头 60 字内）。 */
+const TITLE_SEPARATORS = /(──|——|—|：|　)/;
+const TITLE_MAX = 30;
+/** 无标题分隔符时，首句短于此长度即当标题（2026-10-02：20 → 30，用户要求）。 */
+const SHORT_TEXT_MAX = 30;
+
+/** 对话/发语词：这类"标题"会大量重复（素问的「帝曰/岐伯曰」等），不当标题用。 */
+const TITLE_STOPWORDS = new Set([
+  "曰", "又曰", "论曰", "问曰", "师曰", "答曰", "或问", "帝曰", "岐伯曰",
+  "岐伯对曰", "黄帝问曰", "黄帝曰", "雷公曰", "鬼臾区曰",
+]);
+
+/**
+ * 条文标题：从 SectionText 提炼「标题──正文」式标题；提炼不出就回退章号。
+ *
+ * 只在 SectionText **开头 60 字内存在标题分隔符**（──/——/—/：/全角空格）时才
+ * 提炼，否则说明该文是散文正文（无标题结构），强行取首个分句只会得到
+ * 「论曰 / 曰 / 问曰」这类开场白或半截句子——**保留卷内章号才是正确的**。
+ *
+ * 提炼后还要通过校验：取第一行、折叠空白、长度 2–30、不含句末标点 `。！？`、
+ * 且不是对话/发语词；`$x{}`/`$m{}` 引用标记**允许保留**（如「夫$x{药石}禀$m{…}」）。
+ * 任一不满足即回退章号。
+ */
+export function deriveSectionTitle(
+  sectionText: string,
+  fallback: string,
+): string {
+  const text = (sectionText ?? "").trim();
+  if (!text) return fallback;
+  const window = text.slice(0, 60);
+  const separator = TITLE_SEPARATORS.exec(window);
+  let candidate: string;
+  if (separator) {
+    candidate = text.slice(0, separator.index);
+  } else {
+    // 无标题分隔符时：取**首句**（截止到第一个句末标点）当标题——
+    // 例如「4、痈疽毒气攻心，发谵语」（后面才是【宜】…正文）；
+    // 「今夫病，譬诸兵焉。料敌出奇者…」→ 只取「今夫病，譬诸兵焉。」。
+    // 首句过长说明是整段散文，回退章号（避免拿长句当标题）。
+    const firstLine = (text.split(/\r?\n/)[0] ?? "")
+      .replace(/\s+/g, " ").trim();
+    const firstSentence =
+      (/^[^。！？]*[。！？]?/.exec(firstLine)?.[0] ?? firstLine).trim();
+    candidate = firstSentence.length <= SHORT_TEXT_MAX ? firstSentence : "";
+  }
+  candidate = (candidate.split(/\r?\n/)[0] ?? "").replace(/\s+/g, " ").trim();
+  // 去掉句末标点（「4、痈疽毒气攻心，发谵语。」→「4、痈疽毒气攻心，发谵语」）。
+  candidate = candidate.replace(/[。，；、！？]+$/, "").trim();
+  if (candidate.length > TITLE_MAX) {
+    const cut = Math.max(
+      candidate.lastIndexOf("，", TITLE_MAX),
+      candidate.lastIndexOf("、", TITLE_MAX),
+      candidate.lastIndexOf("：", TITLE_MAX),
+      candidate.lastIndexOf("；", TITLE_MAX),
+    );
+    candidate = (cut > 8
+      ? candidate.slice(0, cut)
+      : candidate.slice(0, TITLE_MAX)).trim();
+  }
+  // 截断若落在引用标记 $x{…}/$m{…} 内部，把不完整的标记尾巴去掉
+  // （避免标题里出现半个「$x{」）。完整标记（含配对的 }）不会被误删。
+  const dangling = candidate.lastIndexOf("$");
+  if (dangling >= 0 && !candidate.slice(dangling).includes("}")) {
+    candidate = candidate.slice(0, dangling).trim();
+  }
+  const bare = candidate.replace(/^\d+\s*[、.．]\s*/, "");
+  // 候选 ≤30 字允许带句中逗号/分号，如「4、痈疽毒气攻心，发谵语」——这类本身
+  // 就是合适的标题；句末标点（。！？）仍一律拒绝（那说明截到了句子尾巴）。
+  const allowClausePunctuation = candidate.length <= TITLE_MAX;
+  const rejected =
+    candidate.length < 2 ||
+    bare.length < 2 || // 只剩「N、」没有实质标题
+    /[。！？]/.test(candidate) ||
+    (!allowClausePunctuation && /[；，]/.test(candidate)) ||
+    /曰$/.test(bare) || // 帝曰 / 岐伯曰 / 故曰 / 乃问于天师曰… 一律是发语词
+    TITLE_STOPWORDS.has(bare);
+  return rejected ? fallback : candidate;
 }
 
 export function countMarkers(text: string): number {
@@ -335,6 +421,10 @@ export function buildTargets(
     bookNoToChannel.set(bookNo, id);
   }
 
+  // 频道 → 书号 反向映射：本草书的条文规则按书判定（见 HERB_BOOK_NOS）。
+  const channelToBookNo = new Map<string, string>();
+  for (const [bookNo, id] of bookNoToChannel) channelToBookNo.set(id, bookNo);
+
   // 容器频道（方剂/本草/名词）随产物一起发出，保证 fang/yao/term 条目书键有归属
   // 容器频道：全量模式发出方剂/本草/名词三个；单书模式只带方剂容器（本书方剂的归属）
   if (onlyBookNo) {
@@ -463,7 +553,19 @@ export function buildTargets(
     );
     ordered.forEach((row, idx) => {
       const receiptNo = rowValue(row, "ReceiptNo");
-      const description = textToHtml(rowText(row, "SectionText"));
+      const sectionText = rowText(row, "SectionText");
+      const sectionNote = rowText(row, "SectionNote");
+      // 本草书条文（9020000 神农本草经・(人纪) / 400100 神农本草经疏 且源
+      // SectionNote 非空）：标题取整段 SectionText（保留源序号），描述 =
+      // SectionText + SectionNote（源解说并入正文）。
+      // 其余条文（含伤寒论・(人纪) 等同样带 note 的书）保持「标题=卷内章号」，
+      // 否则整段正文会被塞进标题。
+      const isHerbEntry =
+        HERB_BOOK_NOS.has(channelToBookNo.get(channelId) ?? "") &&
+        sectionNote.trim() !== "";
+      const description = isHerbEntry
+        ? textToHtml(sectionText) + textToHtml(sectionNote)
+        : textToHtml(sectionText);
       const pubDate = toIso(rowText(row, "CreateDate"));
       track(
         {
@@ -474,13 +576,17 @@ export function buildTargets(
           tcmParentId: parentId,
           pubDate,
           data: {
-            title: String(idx + 1),
+            // 本草条目保留整段 SectionText（含源序号）；其余条文从 SectionText
+            // 提炼标题，提炼不出才回退「卷内章号」。
+            title: (isHerbEntry
+              ? sectionText
+              : deriveSectionTitle(sectionText, String(idx + 1))).trim(),
             description,
             content_format: "html",
             _microfeed: {
               bookId: channelId,
               receiptNo,
-              note: rowText(row, "SectionNote"),
+              note: sectionNote,
               videoMemo: rowText(row, "SectionVideoMemo"),
               fangList: rowText(row, "FangJi")
                 .split(",")
@@ -492,7 +598,9 @@ export function buildTargets(
           },
           contentText: htmlToPlain(description),
         },
-        rowText(row, "SectionText"),
+        // track 的第二参数是「源正文」——本草条目描述已并入 SectionNote，
+        // 源侧必须同步带上 note，否则 build 末尾「标记数 源 vs 产物」断言会失败。
+        isHerbEntry ? sectionText + sectionNote : sectionText,
       );
     });
   }

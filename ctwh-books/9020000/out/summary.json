@@ -1,0 +1,31 @@
+{
+  "mode": "single-book-9020000",
+  "sourceCounts": {
+    "work": 13,
+    "book": 445,
+    "bookBody": 8066,
+    "fang": 804,
+    "fangBody": 2023,
+    "yao": 172,
+    "yaoAlias": 47,
+    "mingCi": 17
+  },
+  "report": {
+    "channels": 2,
+    "itemsByKind": {
+      "chapter": 7,
+      "section": 399
+    },
+    "markerCountSource": 0,
+    "markerCountOutput": 0,
+    "residualEscapes": 0,
+    "sanitizedSurrogates": 0,
+    "warnings": []
+  },
+  "outputFiles": [
+    "D:\\git\\AiCode\\microfeed\\ctwh-books\\9020000\\out\\tcm-channels.sql",
+    "D:\\git\\AiCode\\microfeed\\ctwh-books\\9020000\\out\\tcm-batch-001.sql",
+    "D:\\git\\AiCode\\microfeed\\ctwh-books\\9020000\\out\\tcm-batch-002.sql"
+  ],
+  "nextStep": "先核对 summary（转义/标记/关联/行数），全绿后用 --full 重跑，再按工单 07 导入本地库。"
+}

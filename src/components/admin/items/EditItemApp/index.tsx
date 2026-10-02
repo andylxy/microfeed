@@ -595,6 +595,9 @@ export default class EditItemApp extends React.Component<Props, any> {
           </div>
           {Array.isArray((microfeed.fangYaoList as unknown)) && (
             <FangEditor
+              bookId={typeof microfeed.sourceBookId === "string"
+                ? microfeed.sourceBookId
+                : undefined}
               disabled={autosaveState.phase === "saving"}
               fangName={String(item.title ?? "")}
               onChange={(next: FangYaoEntry[]) =>

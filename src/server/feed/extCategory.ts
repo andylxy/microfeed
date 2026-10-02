@@ -657,11 +657,11 @@ export async function getTcmBookFang(
   bookId: string,
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
+  // 方剂归属一律按 `_microfeed.sourceBookId` 过滤（两布局铁律，同 extFang.ts /
+  // App GetBookIdFang）：桂林古本布局 book_id=真实书，导入管线布局
+  // book_id=容器 tcmfang0001 —— 按 book_id 过滤只对前者成立，会让后者书页丢
+  // 「附：方剂」区块（2026-10-01 实测）。
   const result = await db.prepare(
-    // 方剂归属一律按 `_microfeed.sourceBookId` 过滤（两布局铁律，同 extFang.ts /
-    // App GetBookIdFang）：桂林古本布局 book_id=真实书，导入管线布局
-    // book_id=容器 tcmfang0001 —— 按 book_id 过滤只对前者成立，会让后者书页丢
-    // 「附：方剂」区块（2026-10-01 实测）。
     "SELECT id, data FROM items WHERE tcm_kind = 'fang' " +
       "AND status != ? " +
       "AND json_extract(data, '$._microfeed.sourceBookId') = ? " +

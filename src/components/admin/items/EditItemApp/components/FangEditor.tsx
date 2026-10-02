@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from "react";
+import {Fragment, useCallback, useEffect, useState} from "react";
 import {PlusIcon, Trash2Icon} from "lucide-react";
 
 import {useTranslation} from "@/client/i18n";
@@ -18,6 +18,10 @@ interface Props {
   onChange: (next: FangYaoEntry[]) => void;
   /** The fang item's own title, used to find the 条文 that cite it. */
   fangName: string;
+  /** The fang's owning book (`_microfeed.sourceBookId`). When set, the
+   *  citation search is scoped to this book — several books have same-named
+   *  formulas (桂枝汤 ×4), and each editor page should cite only its own. */
+  bookId?: string;
   /** Whether a save can currently run (mirrors the editor's autosave phase). */
   disabled?: boolean;
 }
@@ -26,6 +30,45 @@ interface FangReference {
   id: string;
   title: string;
   status: number;
+  /** 所属篇章（tcm_parent_id），后端 2026-10-01 起下发；空 = 未分组兜底。 */
+  chapterId?: string;
+  chapterTitle?: string;
+  /** 所属书频道（book_id → channels.data.title）。 */
+  bookId?: string;
+  bookTitle?: string;
+}
+
+/** 一组「同一本书同一篇章」的引用，组内条文号用「、」串联展示。 */
+interface FangReferenceGroup {
+  key: string;
+  bookTitle: string;
+  chapterTitle: string;
+  references: FangReference[];
+}
+
+/**
+ * 按 书+篇章 分组（保持后端已排好的 book → receiptNo 顺序）。
+ * 分组键带 bookId：不同书的同名篇章（如两个「辨太阳病脉证并治」）不会混。
+ */
+function groupReferences(references: FangReference[]): FangReferenceGroup[] {
+  const groups: FangReferenceGroup[] = [];
+  const byKey = new Map<string, FangReferenceGroup>();
+  for (const reference of references) {
+    const key = `${reference.bookId ?? ""}||${reference.chapterId ?? ""}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        bookTitle: reference.bookTitle ?? "",
+        chapterTitle: reference.chapterTitle ?? "",
+        references: [],
+      };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.references.push(reference);
+  }
+  return groups;
 }
 
 const MAX_SUMMARY_YAOS = 300;
@@ -43,6 +86,7 @@ function emptyEntry(): FangYaoEntry {
  * （sourceBookId / no / yaoCount …）不受影响。
  */
 export default function FangEditor({
+  bookId,
   disabled = false,
   fangName,
   onChange,
@@ -51,6 +95,7 @@ export default function FangEditor({
   const {t} = useTranslation();
   const [yaoOptions, setYaoOptions] = useState<AdminSelectOption[]>([]);
   const [references, setReferences] = useState<FangReference[] | null>(null);
+  const [referencesTotal, setReferencesTotal] = useState(0);
   const [referencesError, setReferencesError] = useState(false);
 
   // 中药选择器数据源：挂在本草容器频道下的 yao 条目（tcm_kind='yao'），
@@ -84,18 +129,21 @@ export default function FangEditor({
   const loadReferences = useCallback(() => {
     if (!fangName) return;
     setReferences(null);
+    setReferencesTotal(0);
     setReferencesError(false);
     const url = new URL(
       ADMIN_URLS.ajaxTcmFangReferences(),
       window.location.origin,
     );
     url.searchParams.set("name", fangName);
+    if (bookId) url.searchParams.set("bookId", bookId);
     Requests.axiosGet(url.toString())
       .then((res: any) => {
         setReferences(Array.isArray(res?.data?.items) ? res.data.items : []);
+        setReferencesTotal(Number(res?.data?.total ?? 0));
       })
       .catch(() => setReferencesError(true));
-  }, [fangName]);
+  }, [fangName, bookId]);
 
   useEffect(() => {
     loadReferences();
@@ -119,6 +167,11 @@ export default function FangEditor({
     const found = yaoOptions.find((option) => option.value === entry.yaoId);
     return found ?? {label: entry.showName || entry.yaoId, value: entry.yaoId};
   };
+
+  const referenceGroups = references ? groupReferences(references) : [];
+  // 跨书时在篇章名旁标注书名；单书时省略（默认场景就是单书）。
+  const crossBook =
+    references ? new Set(references.map((r) => r.bookId ?? "")).size > 1 : false;
 
   return (
     <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
@@ -257,18 +310,38 @@ export default function FangEditor({
             {t("items.fangReferencesEmpty")}
           </p>
         ) : (
-          <ul className="mt-2 space-y-1">
-            {references.map((reference) => (
-              <li key={reference.id}>
-                <a
-                  className="text-sm text-primary hover:underline"
-                  href={ADMIN_URLS.editItem(reference.id)}
-                >
-                  {reference.title}
-                </a>
-              </li>
+          <div className="mt-2 space-y-3">
+            {referenceGroups.map((group) => (
+              <div key={group.key}>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {group.chapterTitle || t("items.fangReferencesUngrouped")}
+                  {crossBook && group.bookTitle ? (
+                    <span className="ml-1 font-normal">
+                      ・{group.bookTitle}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-1 text-sm leading-6">
+                  {group.references.map((reference, index) => (
+                    <Fragment key={reference.id}>
+                      {index > 0 ? "、" : ""}
+                      <a
+                        className="text-primary hover:underline"
+                        href={ADMIN_URLS.editItem(reference.id)}
+                      >
+                        {reference.title || reference.id}
+                      </a>
+                    </Fragment>
+                  ))}
+                </p>
+              </div>
             ))}
-          </ul>
+            {referencesTotal > references.length ? (
+              <p className="text-xs text-muted-foreground">
+                {t("items.fangReferencesTruncated", {total: referencesTotal})}
+              </p>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

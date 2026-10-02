@@ -1286,6 +1286,9 @@ export const en = {
     fangReferencesLoading: "Looking up references…",
     fangReferencesEmpty: "No sections reference this formula yet.",
     fangReferencesError: "Could not load the reference list.",
+    fangReferencesUngrouped: "Ungrouped sections",
+    fangReferencesTruncated:
+      "{{total}} sections cite this formula; showing the first 50.",
     // All items list
     filterAll: "All items",
     filterPublished: "Published",

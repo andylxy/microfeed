@@ -1285,6 +1285,8 @@ export const zhCN: TranslationKey = {
     fangReferencesLoading: "正在查找引用…",
     fangReferencesEmpty: "暂未发现引用此方剂的条文。",
     fangReferencesError: "无法加载引用列表。",
+    fangReferencesUngrouped: "未分组条文",
+    fangReferencesTruncated: "共 {{total}} 条引用，仅显示前 50 条。",
     // 全部条目列表
     filterAll: "全部条目",
     filterPublished: "已发布",
