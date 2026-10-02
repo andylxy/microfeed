@@ -98,7 +98,7 @@ REM ============================================================
 cls
 echo ============================================================
 echo   microfeed 本地实例管理（实例: %INSTANCE%）
-echo   本地地址: http://localhost:%PORT%/
+echo   本地地址: http://192.168.2.158:%PORT%/
 echo   线上站点: %SITE_URL%
 echo ============================================================
 call :is_running && (echo   当前状态: [运行中] PID !RUN_PID!) || (echo   当前状态: [未运行])
@@ -129,7 +129,7 @@ echo ============================================================
 echo   启动本地实例（前台模式）
 echo   实例   : %INSTANCE%
 echo   目录   : %PROJECT_DIR%
-echo   访问   : http://localhost:%PORT%/
+echo   访问   : http://192.168.2.158:%PORT%/
 echo   停止   : 按 Ctrl+C
 echo ============================================================
 echo.
@@ -149,7 +149,7 @@ echo ============================================================
 echo   启动本地实例（后台隐藏模式，无窗口常驻）
 echo   实例   : %INSTANCE%
 echo   日志   : %LOG_FILE%
-echo   访问   : http://localhost:%PORT%/
+echo   访问   : http://192.168.2.158:%PORT%/
 echo   停止   : 菜单选 3（停止），或 %~nx0 stop
 echo ============================================================
 echo.
@@ -175,7 +175,7 @@ call :wait_ready
 if "%READY%"=="1" (
   echo.
   echo [OK] 服务已启动！
-  echo      访问地址: http://localhost:%PORT%/
+  echo      访问地址: http://192.168.2.158:%PORT%/
   echo      运行方式: 后台隐藏进程（无窗口，持续运行）
   echo      停止服务: 菜单选 3（停止），或 %~nx0 stop
   echo      查看日志: 菜单选 6（查看日志）
@@ -222,7 +222,7 @@ exit /b 0
 
 REM ============================================================
 :do_status
-call :is_running && (echo [运行中] PID !RUN_PID!  -^>  http://localhost:%PORT%/ ) || echo [未运行] 端口 %PORT% 无服务
+call :is_running && (echo [运行中] PID !RUN_PID!  -^>  http://192.168.2.158:%PORT%/ ) || echo [未运行] 端口 %PORT% 无服务
 exit /b 0
 
 REM ============================================================

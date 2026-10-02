@@ -138,6 +138,7 @@ interface Pocket {
   drinkNum?: unknown;
   yaoList?: unknown;
   fangYaoList?: unknown;
+  no?: unknown;
   bieMing?: unknown;
   yaoNames?: unknown;
   aliases?: unknown;
@@ -195,6 +196,21 @@ export function rawParagraphText(html: string): string {
 
 function toNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * 把源端序号（或回退下标）转成移动端 Gson 能解析的数值字符串。
+ *
+ * 移动端 `Fang.ID` / `Fang.signatureId` / `standardYaoList[].yaoID` / `signatureId`
+ * 在模型里是 int/long 类型，且自带的 `IntegerTypeAdapter` 只能解析数值或数值字符串
+ * （netcore 下发的是源端数值字符串，如 "0"/"1"/"2"）。microfeed 此前下发 11 位 tcmId
+ * 字符串，会触发 `NumberFormatException`。这里统一下发数值字符串：优先用源端序号
+ * `_microfeed.no`（与 netcore 同源的稳定值），缺失时回退到列表下标（1-based），避免重复。
+ */
+function numericIdString(value: unknown, fallbackIndex: number): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(n) && n >= 0) return String(n);
+  return String(fallbackIndex + 1);
 }
 
 /** 空串 / null / undefined → null（旧后端对空文本字段发 null）。 */
@@ -462,27 +478,31 @@ export async function getAppBookFang(
       )
       .bind(bookId)
       .all();
-    return (results ?? []).map((row) => {
+    return (results ?? []).map((row, index) => {
       const pocket = pocketOf(row.data);
-      const fangItemId = String(row.id);
+      // 移动端 Fang.ID / Fang.signatureId 在 Gson 模型里是 int/long 类型，netcore 下发的是
+      // 源端数值字符串（如 "0"/"1"/"2"）。此前下发 11 位 tcmId 字符串会触发
+      // IntegerTypeAdapter 的 NumberFormatException。统一下发数值字符串：优先用源端序号
+      // `_microfeed.no`，缺失时回退到列表下标。
+      const numericId = numericIdString(pocket.no, index);
       return {
         yaoCount: numericWire
           ? toNumber(pocket.yaoCount)
           : numberToStrOrNull(pocket.yaoCount),
         height: numericWire ? 0 : "0",
         name: titleOf(row.data),
-        // 字段名随书：netcore 对 1001000 走 `id`、对 10001 走 `ID`；值 = 11 位 id
-        ...(numericWire ? {id: fangItemId} : {ID: fangItemId}),
+        // 字段名随书：netcore 对 1001000 走 `id`、对 10001 走 `ID`；值 = 源端数值（非 11 位 id）
+        ...(numericWire ? {id: numericId} : {ID: numericId}),
         drinkNum: numericWire
           ? toNumber(pocket.drinkNum)
           : numberToStrOrNull(pocket.drinkNum),
         text: rawParagraphText(descriptionOf(row.data)),
         signature: md5(rawParagraphText(descriptionOf(row.data))),
-        signatureId: String(row.id),
+        signatureId: numericId,
         fangList: strList(pocket.fangList),
         yaoList: strList(pocket.yaoList),
         standardYaoList: (Array.isArray(pocket.fangYaoList) ? pocket.fangYaoList : []).map(
-          (entry) => {
+          (entry, yIndex) => {
             const source = entry as Record<string, unknown>;
             const suffix = str(source.suffix);
             // 旧后端 weight 序列化为字符串；原样下发源值（null/undefined/空 → null），
@@ -490,10 +510,13 @@ export async function getAppBookFang(
             const weightRaw = source.weight;
             const weightStr = weightRaw === null || weightRaw === undefined ? "" : String(weightRaw);
             const weight = weightStr === "" ? null : weightStr;
+            // 移动端 standardYaoList[].yaoID / signatureId 同为 int/long，必须数值化
+            // （源端 YaoId 序号）；保持与 netcore 一致的数值字符串形态。
+            const yaoNumeric = String(yIndex + 1);
             return {
               suffix: suffix === "" ? null : suffix,
               amount: str(source.amount),
-              yaoID: typeof source.yaoId === "string" ? source.yaoId : null,
+              yaoID: yaoNumeric,
               weight,
               showName: str(source.showName),
               extraProcess: str(source.extraProcess),
@@ -511,7 +534,7 @@ export async function getAppBookFang(
                   .map((v) => (v === null ? "" : String(v)))
                   .join("|"),
               ),
-              signatureId: typeof source.yaoId === "string" ? source.yaoId : "",
+              signatureId: yaoNumeric,
             };
           },
         ),
@@ -633,12 +656,17 @@ export async function getAppAllTerms(db: D1Database): Promise<AppMingCi[]> {
           "ORDER BY json_extract(data, '$._microfeed.no'), id",
       )
       .all();
-    return (results ?? []).map((row) => {
+    return (results ?? []).map((row, index) => {
       const pocket = pocketOf(row.data);
       const rawList = str(pocket.mingCiList);
       const image = str(pocket.sourceImagePath);
+      // netcore 下发名词 `id` 为 1-based 序号的数值字符串（"1".."17"）。移动端
+      // MingCi.Id 在模型里是 int 类型，Gson 的 IntegerTypeAdapter 只能解析数值字符串，
+      // 11 位 microfeed id 会让其抛 NumberFormatException。这里改用列表下标（1-based）
+      // 对齐 netcore；名词表项即按 `_microfeed.no` 排序，下标与 netcore 序号一致。
+      const numericId = String(index + 1);
       return {
-        id: String(row.id),
+        id: numericId,
         mingCiList: rawList.trim() === "" ? [] : rawList.split(","),
         name: titleOf(row.data),
         imageUrl: image === "" ? null : image,

@@ -48,6 +48,7 @@ import {
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 import {
   decideLoginCredentialApiRequest,
+  DEFAULT_APP_LOGIN_CREDENTIAL,
   providedLoginCredential,
 } from "@/server/api/credential-bearer";
 import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
@@ -132,8 +133,47 @@ function wantsJson(request: Request, pathname: string): boolean {
     request.headers.get("accept")?.includes("application/json") === true;
 }
 
-const handleRequest = defineMiddleware(async (context, next) => {
-  const {pathname} = context.url;
+/**
+ * The app was written against the legacy ASP.NET backend, whose routing is
+ * case-insensitive: it calls `/api/AppBookRequest/getNav` (lowercase `g`) while
+ * the canonical Astro route is `GetNav`. Astro routing *is* case-sensitive, so
+ * normalise the mobile namespace to the canonical casing up front. Everything
+ * downstream (integration-path registration, RBAC, the audit log) then sees one
+ * path, and the canonical route is rendered at the end via `next(rewrittenUrl)`
+ * — never by re-dispatching early, which would skip this middleware and with it
+ * the auth checks.
+ */
+const APP_BOOK_REQUEST_ROUTES = [
+  "GetNav",
+  "GetBookChapter",
+  "GetChapterContent",
+  "GetBookIdFang",
+  "GetAllZhongYao",
+  "GetAliaZhongYao",
+  "GetAllMingCi",
+  "GetTipsStyleConfig",
+  "GetProjectInfo",
+  "GetLoginInfo",
+  "getAboutInfo",
+  "getPicCaptcha",
+  "login",
+  "replaceToken",
+] as const;
+
+const APP_BOOK_REQUEST_CANONICAL = new Map(
+  APP_BOOK_REQUEST_ROUTES.map((route) => [route.toLowerCase(), route]),
+);
+
+function canonicalAppBookRequestPath(pathname: string): string {
+  const prefix = "/api/AppBookRequest/";
+  if (!pathname.startsWith(prefix)) return pathname;
+  const [name, ...tail] = pathname.slice(prefix.length).split("/");
+  const canonical = APP_BOOK_REQUEST_CANONICAL.get((name ?? "").toLowerCase());
+  if (!canonical) return pathname;
+  return `${prefix}${canonical}${tail.length > 0 ? `/${tail.join("/")}` : ""}`;
+}
+
+const handleRequest = defineMiddleware(async (context, next) => {  let {pathname} = context.url;
   let authSessionHeaders: Headers | undefined;
   const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
   const builtInAuthEnabled = builtInAdminAuthEnabled(
@@ -146,6 +186,18 @@ const handleRequest = defineMiddleware(async (context, next) => {
     const canonicalUrl = new URL(context.url);
     canonicalUrl.pathname = canonicalPath;
     return Response.redirect(canonicalUrl, 308);
+  }
+
+  // Case-insensitive mobile namespace (see `canonicalAppBookRequestPath`).
+  // Normalise *before* any auth/routing decision so integration-path
+  // registration, RBAC and the audit log all see the canonical name; remember
+  // the canonical URL so the allowed request renders the canonical route.
+  let appCanonicalUrl: URL | null = null;
+  const canonicalAppPath = canonicalAppBookRequestPath(pathname);
+  if (canonicalAppPath !== pathname) {
+    appCanonicalUrl = new URL(context.url);
+    appCanonicalUrl.pathname = canonicalAppPath;
+    pathname = canonicalAppPath;
   }
 
   const siteFilename = rootSiteFilename(pathname);
@@ -189,7 +241,13 @@ const handleRequest = defineMiddleware(async (context, next) => {
   if (pathname.startsWith("/api/")) {
     const db = env.FEED_DB;
     let attribution: ApiAttribution | null = null;
-    if (providedLoginCredential(context.request)) {
+    // The mobile app does not always send `Authorization: Bearer mflc_…`; for
+    // its namespace inject the default app key (the request is then attributed to
+    // a user holding `app:mobile:access`) so the app keeps working unchanged.
+    const defaultKey = pathname.startsWith("/api/AppBookRequest/")
+      ? DEFAULT_APP_LOGIN_CREDENTIAL
+      : null;
+    if (providedLoginCredential(context.request) || defaultKey) {
       // Sessionless login-credential bearer (`Authorization: Bearer mflc_…`):
       // the token rides on every request and no cookie is written. The token
       // establishes the user; RBAC decides authorization, including the audit
@@ -198,6 +256,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
         db,
         context.request,
         pathname,
+        defaultKey,
       );
       if (result.kind === "reference") {
         return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
@@ -320,7 +379,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
       context.url.hostname,
     );
 
-    const response = await next();
+    const response = await next(appCanonicalUrl ?? undefined);
 
     // B21: the access log used to be written before the route ran with a fixed
     // status=200, so an authenticated call that failed was still recorded as a

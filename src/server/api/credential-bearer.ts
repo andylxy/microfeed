@@ -36,6 +36,19 @@ import {LOGIN_CREDENTIAL_PREFIX} from "@/shared/LoginCredential";
 import {apiPathDetails, type ApiAttribution} from "./access";
 import {requiredApiPermission} from "./api-permissions";
 
+/**
+ * Fallback login credential used by the mobile app. The legacy .NET backend
+ * served the `/api/AppBookRequest/*` content endpoints without requiring the
+ * app to present a bearer on every call; the app therefore does not always send
+ * `Authorization: Bearer mflc_…`. When such a request arrives without a
+ * credential, the middleware injects this default key so the request still
+ * resolves to a user that holds `app:mobile:access` and the app keeps working.
+ * Reference: user instruction to "add the default key when the request carries
+ * no `Authorization: Bearer mflc_`". No new endpoint or feature is introduced.
+ */
+export const DEFAULT_APP_LOGIN_CREDENTIAL =
+  "mflc_4ee17b881c8aaf49005522b1254950727985a9260321247c4cd0b8ebdc655a82";
+
 /** Throttle bucket for this path; paired with the client address in the key. */
 const THROTTLE_KEY_SUFFIX = ":/api/bearer";
 
@@ -60,12 +73,16 @@ export async function decideLoginCredentialApiRequest(
   database: D1Database,
   request: Request,
   pathname: string,
+  defaultKey: string | null = null,
 ): Promise<CredentialBearerDecision> {
   const details = apiPathDetails(pathname);
   if (!details) return {kind: "notFound"};
   if (details.kind === "reference") return {kind: "reference"};
 
-  const token = providedLoginCredential(request);
+  // A caller-supplied `mflc_…` bearer wins; otherwise fall back to the default
+  // app key (see {@link DEFAULT_APP_LOGIN_CREDENTIAL}) so the mobile app, which
+  // may omit the header, is still attributed to a user with `app:mobile:access`.
+  const token = providedLoginCredential(request) ?? defaultKey;
   if (!token) return {kind: "unauthorized"};
 
   // Throttle before the lookup runs: the token is a bearer secret, so this path
