@@ -121,3 +121,9 @@ webpack-stats.json
 !packages/theme-kit/assets/starter/.microfeed/schemas/
 !packages/theme-kit/assets/starter/.microfeed/schemas/*.json
 src/worker-configuration.d.ts
+
+# TCM import golden 比对机器产物，不入库。
+# golden/ 下所有子目录（new-*/old-*/newfinal-*/newfix-*/r13-*/... 抓取响应）与根级比对报告
+# 均为机器生成，忽略之；保留 golden/*.mts 等比对工具与根级 .md 设计文档。
+.scratch/tcm-import/golden/*/
+.scratch/tcm-import/golden/report*.json
