@@ -188,10 +188,11 @@ WHERE tcm_kind='fang'
 
 **修复（只动数据，不动代码）**：脚本 `.scratch/investigate-fang/repair-fang-yao.mjs`（`--apply` 幂等）——
 把 null 行按 `showName` 映射到本地 yao 条目（`甘草`→`vVJUANA6k8h`、`木防己`→`防己` `M9HezPeSGkC`，源《神农本草经》注「防己（木防己）」即同药）。改动前 `cp` 备份 D1（`.sqlite.bak-<ts>`）。
-**根治 = 用当前 build.ts 重导带方剂的书**：build.ts 现有 `tcmId("yao",YaoID+1)` 补偿 + `yaoSourceIdSet` 成员闸，重导即无 null；重导后**必须重跑 `import-yao.mjs --apply`**（per-book repour 会把引用 yao 写回悬空容器 `tcmyao00001`，见 #20）。
+**根治 = 用当前 build.ts 重导带方剂的书**：build.ts 现有 `tcmId("yao",YaoID+1)` 补偿 + `yaoSourceIdSet` 成员闸，重导即无 null；重导后**必须重跑 `import-yao.mjs --apply`**（per-book repour 会把引用 yao 写回悬空容器 `tcmyao00001`，见 #20）**和 `investigate-fang/fix-fang-book.mjs --apply`**（repour 会把 fang 的 `book_id`+口袋 `bookId` 写回容器 `tcmfang0001`，编辑页「归属书本」会显示「方剂」而非真实书，见 #22）。
 
 **回归防线（改任何方剂导入 / 补丁 / repour 后必跑）**：
 - 跑上面 SQL，应返回 **0 行** null；桂枝汤 `UN8KV9xhXQH` 组成数 = 5 且含 `甘草`。
+- 归属 SQL：`SELECT count(*) FROM items WHERE tcm_kind='fang' AND status!=3 AND json_extract(data,'$._microfeed.sourceBookId') IS NOT NULL AND (book_id != json_extract(data,'$._microfeed.sourceBookId') OR json_extract(data,'$._microfeed.bookId') != json_extract(data,'$._microfeed.sourceBookId'))` 应 = **0**（book_id 列与口袋 bookId 是 ADR-0006 的副本/事实源对，必须同步搬）。
 - 浏览器复核：`/admin/items/UN8KV9xhXQH/` 药味组成 5 行全显示（无需硬刷新，dev server 读同一 D1）。
 - 网关注：netcore 对照 `GetBookIdFang` 的 `standardYaoList` 与本地 `fangYaoList` 药名集合一致。
 
@@ -366,6 +367,67 @@ Yao 表长名（`石蜜`/`艾叶`/`煅灶下灰`）→ 被静默丢弃（本地 
   `description=textToHtml(MingCiText)`；`_microfeed.{no, mingCiList, beiMing, type, sourceImagePath}`。
 - **自检**：`SELECT count(*) FROM items WHERE tcm_kind='term'` = 17；全部 `tcm_parent_id` 指向根 chapter；
   `curl -sL .../GetAllMingCi` 的 `data[0].name` 为裸名（如「六气图」）。
+
+### 4.12 ⚠️ 卷 / 章 / 条文：排序与标题现状（2026-10-01～02 多轮修订后）
+
+改卷章前先读本节——**标题决定卷面板 / 书页目录显示什么**，而部分标题又在 App 契约里，改错直接破 golden。
+
+**① 排序：只有一个键**
+
+- **TCM 书**：三处查询（App `getAppBookChapters`、书页 `getTcmBookChapters`、卷面板 `buildTcmVolumeBoard`）
+  统一用 `src/server/tcm/ordering.ts` 的 `TCM_CHAPTER_ORDER_SQL`（真键 = **源主键 BookInfoId 序**）。
+  别再用 `ORDER BY section`（字符串序会拆散 10001 的 0..21，数值序会让 9040000「前言」垫底）。
+- **小说书**：另走 §2.3（pub_date / chapterNo 三键），**不要混用** TCM 排序键。
+
+**② 标题：分三类，各有各的红线**
+
+| 层级 | 规则 | 红线 |
+|---|---|---|
+| **篇章 chapter** | 源样保留、**不 trim**（netcore `chapterHeader` 逐字节对齐，400100 有 8 处前导空格、9040000 有 3 处尾随） | 它 = App `GetBookChapter.header`，**改一个字就可能破 golden** |
+| **本草条文** `HERB_BOOK_NOS={9020000,400100}` + `SectionNote` 非空 | 标题 = **整段 SectionText**（保留源序号，如 `292、牙子`）；描述 = SectionText + SectionNote | 判据必须**按书**——用「note 非空」会连 伤寒论・(人纪) 381 / 金匮・(人纪) 116 一起改坏（它们的 SectionText 是整段长文） |
+| **其余条文 section** | `deriveSectionTitle()` 提炼；提炼不出 → 回退「卷内章号」 | 见下 |
+
+**`deriveSectionTitle()` 提炼规则**（`scripts/import-ctwh/build.ts`，数据脚本必须 `import` 复用，禁止另写一份）：
+
+1. 开头 60 字内有标题分隔符（`──/——/—/：/全角空格`）→ 取其之前的部分；
+2. **无分隔符但首行 ≤30 字 → 取「首句」（截止到第一个 `。`，并去句末标点）当标题**
+   （如 `4、痈疽毒气攻心，发谵语`、`今夫病，譬诸兵焉。`、`夫$x{药石}禀$m{天地偏至之气者也}`）；
+3. 都没有 = 长散文正文 → **回退章号**（硬取首句只会得到「论曰 / 曰 / 问曰 / 帝曰」开场白）。
+
+校验：取首行、折叠空白、**去句末标点**、长 2–30、**≤30 字允许 `，、；` 句中逗号**；
+`。！？` 句末标点、去「N、」后为发语词（含以「曰」结尾者）一律拒绝；
+**`$x{}`/`$m{}`/`$f{}` 引用标记允许保留**（如「夫$x{药石}禀$m{…}」、「…，$f{葛根汤}主之」）；
+截断若落在标记内部，自动去掉不完整的标记尾巴（避免半个 `$x{`）。
+
+**③ 改标题的两条铁律**
+
+- **脚本必须限定 `tcm_kind='section'`**。篇章标题进 `GetBookChapter.header`、名词进 `GetAllMingCi`、
+  方剂/中药同理——2026-10-02 r15 踩实：未限定导致 `GetBookChapter` 400100 8 处 / 9040000 3 处、
+  `GetAllMingCi` 每书 1 处新 MISMATCH，只能从备份回滚重做。
+- **改标题要同步 `site_search_documents.title`**（搜索索引里存了标题，否则前台搜到旧标题）。
+
+**④ 现状数字（2026-10-02 收口）**：全库 8066 条 section，本轮回提炼/复提炼 **3508 条**（含 `$` 标记 232 条）；
+余 **1203 条**仍保持序号——多为长散文（首句 >30 字、无标题结构）或带 `SectionNote` 的本草条文
+（按书规则它们标题=整段 SectionText，不强行派生）；标题带尾随空格 **0** 条。
+
+**⑤ 方剂编辑页「引用此方剂的条文」**：按 `书 + 篇章` 分组显示（章名做小标题、条号「、」串联），
+且只查**本书**条文（`fang-references.ts` 的 `bookId` 参数，缺省=全局向后兼容）。详见 §4.3 / #22。
+
+**⑥ 回归自检（改完必跑）**
+
+```sql
+-- 标题仍有尾随空格？健康值 0
+SELECT count(*) FROM items WHERE trim(json_extract(data,'$.title')) != json_extract(data,'$.title');
+-- 搜索索引与条目标题是否一致？健康值 0
+SELECT count(*) FROM items i JOIN site_search_documents d ON d.content_id=i.id
+  WHERE d.title != json_extract(i.data,'$.title');
+```
+
+再跑全量 golden（§6）：**篇章标题**进 `GetBookChapter.header`、**名词标题**进 `GetAllMingCi` —— 这两处必须零 MISMATCH（标题改动唯一对外风险面）。
+**⚠️ 但条文（section）标题不在任何 golden 端点里**：`GetChapterContent` 的 section 对象只有 `{id, text}`，`GetBookChapter` 用的是 chapter 级 `chapterHeader`，grep `title` 全目录 **0 次**。
+故改 section 标题**不会**破 golden —— 这正是 r16/r17/r18 三连改标题仍零 MISMATCH 的根因，也反证了 r15 那次回归**只**来自篇章/名词标题（当时脚本没限定 `tcm_kind='section'`，把它们也动了）。
+结论：**只动 section 标题 → 无需跑 golden；动 chapter/term 标题 → 必跑 golden**。
+
 ## 5. 本地环境 & 部署陷阱（动手前必读）
 
 - **admin 全页 500（裸 500）**：`/` 返回 200 但 `/admin/*` 全返回裸 `500` ⇒ 不是业务代码问题，是强杀 dev 进程树导致 **Vite 依赖预构建缓存损坏**（`.vite/deps_ssr/` 缺文件，admin 走 SSR）。修法：杀 dev → `mv node_modules/.vite node_modules/.stale/vite-<ts>`（用 mv 不用 rm，绕开 safe-delete 闸）+ 同样移走 `.astro` → `run_in_background` 重启 `manage dev`。重启后首访触发重新预构建。
@@ -436,8 +498,11 @@ curl --noproxy '*' -s -L -b ck.txt "http://localhost:4321/admin/ajax/items?limit
 | 14 | per-book 导入后 repour 灌错目录（per-book out 被忽略） | `repour.mts` 曾有同名 `const outDir` 硬编码覆盖命令行第 4 参 → 已删；调用格式 `repour.mts <instance> local-state ctwh-books/<BookNo>/out` | `.scratch/tcm-import/repour.mts` |
 | 15 | 9040000 篇章序错位（「前言」section=904000203 应排第 3 却垫底） | **真键 = 源主键（BookInfoId）序**，不是 section 字符串序（字符串序会拆散 10001 的数字 section 0..21）。`build.ts` 给篇章写书内主键排名 `_microfeed.no`；三处 ORDER BY 统一 `src/server/tcm/ordering.ts`：`COALESCE(no, CAST(section AS TEXT)), id` | `scripts/import-ctwh/build.ts`（chapterRankBySource）/ `src/server/tcm/ordering.ts`（reads/extCategory/extVolume 共用）（2026-10-01 第八轮） |
 | 16 | 400100/9040000 篇章标题逐字节不等（前导/尾随空格） | netcore `chapterHeader` **原样下发不 trim**；`build.ts` 篇章 title 不再 trim（同 MingCi 原样惯例） | `scripts/import-ctwh/build.ts`（2026-10-01） |
-| 17 | netcore `GetBookIdFang` 对 9040000/10002/9050000 返回空而本地有数据 | **netcore 侧行为**：活动库把宋版两本合并挂 10001（章 49=27+22、方 315=113+202），对 9040000/10002/9050000 单独请求返回空；本地按 dump `FangSourceBookId`/`BookId` 忠实拆分是超集，App 逐本请求（拍板），接受不改 | `.scratch/tcm-import/api-test-plan.md` §4.7/§4.8 遗留差异 ① |
+| 17 | netcore `GetBookIdFang` 对 9040000/10002/9050000 返回空而本地按书有数据（10001 反而 netcore 多 202 金匮方） | **结构性分道（netcore 合并主书 vs 本地拆分子书，非 bug 非 netcore 局限）**：netcore 方剂独立表按书号管，活动库把金匮(10002) 合并挂到伤寒杂病论(10001)（→ 10001=315=伤寒113+金匮202、10002 返空），人纪系列(9040000/9050000) 在 netcore 整个就没有方剂（既不分发也不并入）。**本地方剂按 `sourceBookId` 拆到各子书**（App 逐本请求：10001=伤寒113、10002=金匮202、9040000=111、9050000=49），是与 netcore 旧合并行为的**刻意分道**（拍板"App 逐本请求"）。`compare.mts` 已把 10001 多出的金匮行归为 `known-merge` 接受；9040000/10002/9050000 本地有方、netcore 空属正常分歧。**2026-10-02 曾试"合并金匮进 10001 对齐 netcore"→ 必炸：netcore 的 315 顺序是独立方剂表主键/插入序（伤寒1–113 后杂乱交错），本地按书 `no` 排序无法复现，等长逐位比对出 3639 处 MISMATCH。结论：此路不通，回滚，维持本地拆分子书** | `.scratch/tcm-import/api-test-plan.md` §4.7/§4.8/§4.16/§4.17 遗留差异 ①（结构性分道）；`compare.mts` `known-merge` / `MERGE_ENDPOINTS` |
 | 18 | 新书（容器布局）书页没有「附：方剂」区块 | `getTcmBookFang` 原按 `book_id` 过滤（只对桂林古本布局成立）→ 改按 `$._microfeed.sourceBookId` 过滤（两布局铁律，同 extFang.ts/App） | `src/server/feed/extCategory.ts` `getTcmBookFang`（2026-10-01 第八轮） |
 | 19 | `fangYaoList.yaoId` 悬空（金匮要略・(宋版) 2 处指向不存在的 yao） | build.ts 闸原只查 `≤yaoMaxId`，YaoId 有空洞 → 收紧为 **YaoId 成员检查**（`yaoSourceIdSet.has`），空洞引用落 null | `scripts/import-ctwh/build.ts`（2026-10-01 第八轮） |
 | 20 | 重灌书后中药库 yao 的 book_id 被改到悬空容器 `tcmyao00001` | **每次 repour 带方剂的书后必须重跑 `import-yao.mjs --apply`**（幂等归回 4KbG9bDqdz3）——本轮两次踩实 | `scripts/import-ctwh/import-yao.mjs`（2026-10-01 两次实证） |
 | 21 | 桂枝汤等方剂「药味组成」少一味（编辑页某药材行空白）；整库扫出 **223 个 `yaoId=null` 组成行**（221 甘草 + 2 木防己） | 根因 = 旧 build.ts 导入 + `fix-fang-yao.mjs` 只覆盖源 FangId 426–754（桂林古本 329 方），漏了宋版桂枝汤（FangId=1 等）。netcore `standardYaoList` 证实甘草本应关联。**修复**：`.scratch/investigate-fang/repair-fang-yao.mjs --apply`（甘草→`vVJUANA6k8h`、木防己→`防己` `M9HezPeSGkC`，幂等）；根治=用当前 build.ts 重导带方剂书 + 重跑 import-yao。**回归**：§4.3.5 SQL 扫 null 应 0 行 | `scripts/import-ctwh/build.ts`（off-by-one+成员闸）/ `.scratch/investigate-fang/repair-fang-yao.mjs`（2026-10-01 第十轮） |
+| 24 | 条文标题全是序号（如 `G9OnR1ZMxW2` 标题="1"），而 SectionText 里其实带标题（`1、五味之义──凡药酸属木入肝…`）；用户要求「提炼出合适的标题」且范围=全部书 | **规则 = `build.ts` 的 `deriveSectionTitle()`（单一实现，数据脚本 `import` 复用）**：①开头 60 字内有标题分隔符（`──/——/—/：/全角空格`）→ 取其之前的部分；②**无分隔符但首行 ≤30 字 → 取首句（截到第一个 `。`，去句末标点）当标题**（如 `4、痈疽毒气攻心，发谵语`、`今夫病，譬诸兵焉.`、`夫$x{药石}禀$m{天地偏至之气者也}`）；③都没有 = 长散文正文 → **回退章号**。校验：长 2–30、**≤30 字允许 `，、；` 句中逗号**（`4、痈疽毒气攻心，发谵语` 这类就是好标题），`。！？` 句末标点、去「N、」后为发语词（含以「曰」结尾）一律拒绝；**`$x{}`/`$m{}`/`$f{}` 引用标记允许保留**（用户明确要求，如「夫$x{药石}禀$m{…}」），截断若落在标记内部会自动去掉半个标记尾巴。全库收口 **3508 条**派生（含 `$` 标记 232 条），余 1203 条长散文/带 note 保持序号。**⚠️ 铁律：脚本必须限定 `tcm_kind='section'`**——篇章标题进 App `GetBookChapter.header`、名词进 `GetAllMingCi`，动它们会直接破 golden（2026-10-02 r15 踩实：新增 GetBookChapter 8+3 处、GetAllMingCi 10 处 MISMATCH，已回滚重做）。另：改标题要同步 `site_search_documents.title` | `scripts/import-ctwh/build.ts`（deriveSectionTitle）/ `.scratch/inspect-yao-books/fix-section-titles.mts`（**共 3508 条**，幂等；2026-10-02 第十五～十七轮）· **正文见 §4.12** |
+| 23 | 本草两书（9020000 神农本草经・(人纪) / 400100 神农本草经疏）条文标题只剩序号（如 `0L2kXiogaZH` 牙子条 title="38"），中药名被第 8 轮「标题=卷内章号」规范化挤掉；描述也缺源 SectionNote | 本草条目特殊映射：**标题 = 整段 SectionText（保留源序号，如 `292、牙子`）、描述 = SectionText + SectionNote**；判据必须**按书**（`HERB_BOOK_NOS={9020000,400100}` + note 非空），**不能用「note 非空」**——伤寒论・(人纪)/金匮要略・(人纪) 也有 note（共 1427 条）且 SectionText 是整段长文，会污染标题。改 build.ts 时 `track()` 第二源文本要同步加 note，否则 build 末尾「标记数 源 vs 产物」断言抛错。**别名方向**：netcore = BieMing 第 1 token 为正名（`牙子→狼牙`/`鸡头实→芡实`/`蜂子→蜂蜜`…），用户直觉的「正名=中药名」会反转 39 条 → 维持 netcore 方向；自指别名 `桑螵蛸→桑螵蛸` **netcore 也有**（其唯一一条），故保留不删 | `scripts/import-ctwh/build.ts`（HERB_BOOK_NOS 分支）/ `.scratch/inspect-yao-books/fix-herb-sections.mjs`（930 条，幂等）（2026-10-01 第十四轮） |
+| 22 | 方剂编辑页「归属书本」显示容器「方剂」而非真实书（475 方 book_id+口袋 bookId=tcmfang0001）；且「引用此方剂的条文」跨书混入其它书同名方的引用（桂枝汤全局 122 条跨 3 书） | 容器布局（build.ts 导入管线）与参照布局（桂林古本 329 方 book_id=真实书）混存。**数据修正**：`.scratch/investigate-fang/fix-fang-book.mjs --apply` 把 475 方 book_id+口袋 bookId 同步搬到 `sourceBookId`（113/202/111/49 按 book 分布，与 golden 遗留差异①计数吻合；幂等，改前 cp 备份）；**代码**：`fang-references.ts` 接受 `bookId` 参数（`AND book_id=?`，缺省全局=向后兼容），`FangEditor` 新 prop `bookId`（传 `microfeed.sourceBookId`）——每本书的编辑页只引用本书条文。**回归**：§4.3.5 归属 SQL 应 0 | `.scratch/investigate-fang/fix-fang-book.mjs` / `src/pages/[adminPath]/ajax/tcm/fang-references.ts` / `FangEditor.tsx`（2026-10-01 第十三轮） |
