@@ -51,6 +51,12 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:site_file:manage", name: "站点文件管理"},
   {code: "media:file:manage", name: "媒体文件管理"},
   {code: "system:api:manage", name: "API 管理"},
+  // The mobile app's API access gate, surfaced as a leaf in the role editor's
+  // permission tree under 集成 → API (the `api` page, migration 0078). Granting
+  // it to a role is what lets that role's account call the `/api/AppBookRequest/*`
+  // mobile endpoints — the user → role → permissions path. Deliberately NOT an
+  // `api:*` code: ADR-0009 retired that prefix family (migration 0055).
+  {code: "app:mobile:access", name: "移动端权限"},
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
   // content - fangs (方剂 / prescriptions), view-only on the dedicated board

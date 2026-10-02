@@ -123,8 +123,30 @@ async function oldGet(pathAndQuery: string): Promise<{status: number; text: stri
   return {status: res.status, text: await res.text()};
 }
 
+// 新侧（microfeed）鉴权：AppBookRequest 内容端点需登录用户的 `mflc_` 凭证
+// （Bearer → 用户 → 角色 → 权限 `app:mobile:access`），并带防重放头
+// （X-Timestamp/X-Nonce，服务端 checkReplay 做时间窗 + nonce 去重）。
+// 从环境变量 MICROFEED_APP_TOKEN 读取（不回显、不落日志）；未提供则匿名（内容端点会 401）。
+const newToken = process.env.MICROFEED_APP_TOKEN?.trim();
+
+function newHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    app: "2",
+    SessionId: randomUUID().replace(/-/g, ""),
+  };
+  if (newToken) {
+    headers.Authorization = `Bearer ${newToken}`;
+    headers["X-Timestamp"] = String(Date.now());
+    headers["X-Nonce"] = randomUUID().replace(/-/g, "").toLowerCase();
+  }
+  return headers;
+}
+
 async function newGet(pathAndQuery: string): Promise<{status: number; text: string}> {
-  const res = await fetch(`${newBase}${pathAndQuery}`, {signal: AbortSignal.timeout(30_000)});
+  const res = await fetch(`${newBase}${pathAndQuery}`, {
+    headers: newHeaders(),
+    signal: AbortSignal.timeout(30_000),
+  });
   return {status: res.status, text: await res.text()};
 }
 

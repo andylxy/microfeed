@@ -478,6 +478,53 @@ describe("sessionless API bearer", () => {
     );
     expect(missing.kind).toBe("notFound");
   });
+
+  it("gates the mobile app content endpoints on app:mobile:access", async () => {
+    // The mobile app namespace (spec §6) is registered as integration paths and
+    // requires the single `app:mobile:access` code. An account with no grants is
+    // forbidden (proving the path is classified + mapped, not merely notFound);
+    // a wildcard holder is allowed. The app's pre-auth endpoints are deliberately
+    // not integration paths — `notFound` here, which the middleware turns into
+    // anonymous access.
+    await seedUser("u_mobile_none");
+    const plain = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_mobile_none",
+    });
+    const denied = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetNav/`, {
+        headers: {authorization: `Bearer ${plain.secret}`},
+      }),
+      "/api/AppBookRequest/GetNav/",
+    );
+    expect(denied.kind).toBe("forbidden");
+
+    await seedUser("u_mobile_ok");
+    await grantRole("u_mobile_ok", "r_super_admin");
+    const admin = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_mobile_ok",
+    });
+    const allowed = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetBookChapter/`, {
+        headers: {authorization: `Bearer ${admin.secret}`},
+      }),
+      "/api/AppBookRequest/GetBookChapter/",
+    );
+    expect(allowed.kind).toBe("allow");
+
+    const loginPath = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/login/`, {
+        method: "POST",
+        headers: {authorization: `Bearer ${admin.secret}`},
+      }),
+      "/api/AppBookRequest/login/",
+    );
+    expect(loginPath.kind).toBe("notFound");
+  });
 });
 
 describe("login credential usage tracking", () => {

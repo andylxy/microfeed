@@ -93,6 +93,16 @@ const DOMAIN_RULES: DomainRule[] = [
     write: "content:site_file:manage",
   },
   {prefix: "media_files", read: "media:file:manage", write: "media:file:manage"},
+  // The mobile app namespace (`/api/AppBookRequest/…`, spec §6). Only the
+  // content endpoints are registered as integration paths (see `access.ts`), so
+  // they all require the single `app:mobile:access` gate. Read-only, so `read`
+  // and `write` carry the same code; a write method against these paths is a
+  // 405 further down.
+  {
+    prefix: "AppBookRequest/",
+    read: "app:mobile:access",
+    write: "app:mobile:access",
+  },
 ];
 
 function requiredCode(rule: DomainRule, method: string): string {

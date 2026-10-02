@@ -608,6 +608,33 @@ netcore 方剂是**独立表按书号管**，且把子书方剂**合并下发**�
 
 ---
 
+### 4.18 第二十一轮：鉴权落地后的全量复测（10 部书 + 14 端点）— 2026-10-02
+
+**背景**：移动端鉴权落地——8 个内容端点改为需登录用户的 `mflc_` 凭证 + `app:mobile:access` 权限
+（`middleware.ts` 走 `decideLoginCredentialApiRequest`），并接上 `checkReplay`（`X-Timestamp`/`X-Nonce`）；
+`login`/`replaceToken`/`getPicCaptcha`/`GetProjectInfo`/`GetLoginInfo`/`getAboutInfo` 保持匿名。
+
+**抓取方式更新**：`capture.mts` 的新侧（microfeed）不再匿名——从环境变量 `MICROFEED_APP_TOKEN`
+读取 `mflc_` 凭证，并带 `X-Timestamp`/`X-Nonce` 防重放头：
+`MICROFEED_APP_TOKEN=<mflc_…> node --import tsx .scratch/tcm-import/golden/capture.mts --old http://192.168.2.158:9991 --new http://localhost:4321 --book-no <B> --old-dir old-v-<B> --new-dir new-v-<B>`
+
+**全量结果（10 部书，产物 `old-v-<BookNo>/`、`new-v-<BookNo>/`）**：
+
+| 书 (BookNo) | 结果 |
+| --- | --- |
+| 1001000 / 10001 / 20100000 / 20200000 / 20300000 / 9020000 / 400100 | ✅ 8 端点全部零 MISMATCH |
+| 9040000 / 10002 / 9050000 | 仅 `GetBookIdFang` 111 / 202 / 49，**100% 为「新多出的行」**（结构性分道 ①） |
+
+**14 个端点状态核验（microfeed 本地）**：
+- 内容 8 个（GetNav / GetBookChapter / GetChapterContent / GetBookIdFang / GetAllZhongYao / GetAliaZhongYao / GetAllMingCi / GetTipsStyleConfig）：无 token → **401**；带 `mflc_` → **200**；伪造 token → **401**。
+- 配置/登录类 6 个：`login`(POST) → 200；`replaceToken`(POST，带 JSON + token) → 200（回显凭证）、伪造 → 「凭证无效或已过期」、无 token → 「请先登录」；`GetProjectInfo` / `GetLoginInfo` / `getAboutInfo` / `getPicCaptcha` → 匿名 200。
+- 防重放：带 `X-Timestamp`/`X-Nonce` 第 1 次 200、**同 nonce 第 2 次 → 400**。
+
+**结论**：鉴权落地（RBAC + 防重放）后，与 netcore 的接口对齐**逐本与 r19/r21 基线一致，无回归**；
+唯一差异仍是已定性的方剂归类粒度结构性分道 ①。
+
+---
+
 ## 5. 问题、根因与修复
 
 ### 问题 1：GetBookIdFang —— 1001000 的 wire 形状判断错误（真 bug）

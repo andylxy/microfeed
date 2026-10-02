@@ -30,12 +30,35 @@ export type ApiRequestDecision =
   | "not-found"
   | "unauthorized";
 
+const APP_BOOK_REQUEST_PREFIX = "/api/AppBookRequest/";
+
+/**
+ * The mobile app's content endpoints (`/api/AppBookRequest/…`). The app was
+ * built against the legacy backend and calls these fixed paths, so they sit
+ * under the legacy `/api/` base — but they are a current integration surface,
+ * not a deprecated one. Suffixes carry the trailing slash `canonicalPathname`
+ * produces before the middleware dispatches. The app's pre-auth endpoints
+ * (login, replaceToken, captcha) and its config dictionaries are deliberately
+ * absent: they stay anonymous (see `src/middleware.ts`).
+ */
+const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
+  "AppBookRequest/GetNav/",
+  "AppBookRequest/GetBookChapter/",
+  "AppBookRequest/GetChapterContent/",
+  "AppBookRequest/GetBookIdFang/",
+  "AppBookRequest/GetAllZhongYao/",
+  "AppBookRequest/GetAliaZhongYao/",
+  "AppBookRequest/GetAllMingCi/",
+  "AppBookRequest/GetTipsStyleConfig/",
+]);
+
 function integrationSuffix(suffix: string, legacy: boolean): boolean {
   return suffix === "feed/" ||
     suffix === "items/" ||
     /^items\/[^/]+\/$/u.test(suffix) ||
     /^channels\/[^/]+\/$/u.test(suffix) ||
     suffix === "media_files/presigned_urls/" ||
+    APP_BOOK_REQUEST_CONTENT_SUFFIXES.has(suffix) ||
     (!legacy && (
       // Novel content read API (ADR-0006). Registered inside this guard on
       // purpose: a legacy `/api/content/*` caller then falls through to
@@ -57,6 +80,16 @@ function integrationSuffix(suffix: string, legacy: boolean): boolean {
 }
 
 export function apiPathDetails(pathname: string): ApiPathDetails | null {
+  // The mobile app namespace is served under the legacy `/api/` base but is a
+  // current surface, not a deprecated predecessor of a `/api/v1/…` path — match
+  // it first so it reports `legacy: false` and carries no deprecation headers.
+  if (pathname.startsWith(APP_BOOK_REQUEST_PREFIX)) {
+    const suffix = pathname.slice(LEGACY_API_BASE_PATH.length);
+    return integrationSuffix(suffix, false)
+      ? {canonicalPath: `${API_BASE_PATH}${suffix}`, kind: "integration", legacy: false}
+      : null;
+  }
+
   const bases = [
     {base: API_BASE_PATH, legacy: false},
     {base: LEGACY_API_BASE_PATH, legacy: true},

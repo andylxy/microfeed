@@ -15,7 +15,7 @@
 
 import {describe, expect, it} from "vitest";
 
-import {isIntegrationApiPath} from "@/server/api/access";
+import {apiPathDetails, isIntegrationApiPath} from "@/server/api/access";
 import {requiredApiPermission} from "@/server/api/api-permissions";
 import {API_BASE_PATH, LEGACY_API_BASE_PATH} from "@/shared/ApiVersion";
 import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
@@ -89,5 +89,57 @@ describe("every integration path maps to a RBAC code (A1 fail-closed)", () => {
     for (const [path, method] of documented) {
       expect(requiredApiPermission(path, method)).not.toMatch(/^api:/u);
     }
+  });
+});
+
+describe("mobile app namespace (/api/AppBookRequest/…)", () => {
+  const CONTENT = [
+    "GetNav",
+    "GetBookChapter",
+    "GetChapterContent",
+    "GetBookIdFang",
+    "GetAllZhongYao",
+    "GetAliaZhongYao",
+    "GetAllMingCi",
+    "GetTipsStyleConfig",
+  ];
+  const ANONYMOUS = [
+    "login",
+    "replaceToken",
+    "getPicCaptcha",
+    "GetProjectInfo",
+    "GetLoginInfo",
+    "getAboutInfo",
+  ];
+
+  it("classifies only the content endpoints as integration paths", () => {
+    for (const name of CONTENT) {
+      expect(isIntegrationApiPath(`/api/AppBookRequest/${name}/`)).toBe(true);
+    }
+    for (const name of ANONYMOUS) {
+      expect(isIntegrationApiPath(`/api/AppBookRequest/${name}/`)).toBe(false);
+    }
+  });
+
+  it("is a non-legacy integration surface (no deprecation headers)", () => {
+    expect(apiPathDetails("/api/AppBookRequest/GetNav/")).toEqual({
+      canonicalPath: "/api/v1/AppBookRequest/GetNav/",
+      kind: "integration",
+      legacy: false,
+    });
+  });
+
+  it("requires the single app:mobile:access code for content endpoints", () => {
+    for (const name of CONTENT) {
+      expect(
+        requiredApiPermission(`/api/AppBookRequest/${name}/`, "GET"),
+      ).toBe("app:mobile:access");
+    }
+    // Pre-auth / config endpoints are not integration paths → no code required
+    // (the middleware exempts them from auth rather than mapping a code).
+    expect(requiredApiPermission("/api/AppBookRequest/login/", "POST")).toBeNull();
+    expect(
+      requiredApiPermission("/api/AppBookRequest/GetProjectInfo/", "GET"),
+    ).toBeNull();
   });
 });

@@ -40,6 +40,7 @@ import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
   decideApiRequest,
+  isIntegrationApiPath,
   providedApiKey,
   type ApiAttribution,
   writeApiAccessLog,
@@ -51,6 +52,7 @@ import {
 } from "@/server/api/credential-bearer";
 import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
+import {checkReplay} from "@/server/rbac/replay";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
 import {applyWorkerCachePolicy} from "@/server/cache/public-cache";
 import {publicSiteFileResponse} from "@/server/site-files/public";
@@ -169,12 +171,19 @@ const handleRequest = defineMiddleware(async (context, next) => {
       : apiNotFoundResponse(context.request);
   }
 
-  // TCM app endpoints (spec `.scratch/tcm-import/spec.md` §6): the mobile
-  // app's dedicated namespace, anonymous by contract — the legacy backend
-  // served these same paths with AllowAnonymous-style access. Everything else
-  // under /api/ keeps its existing credential flow untouched.
+  // TCM app namespace (spec `.scratch/tcm-import/spec.md` §6). The app's
+  // pre-auth endpoints (login / replaceToken / captcha) and its config
+  // dictionaries stay anonymous, exactly as the legacy backend served them.
   if (pathname.startsWith("/api/AppBookRequest/")) {
-    return next();
+    if (!isIntegrationApiPath(pathname)) {
+      return next();
+    }
+    // Content endpoints: anti-replay first (the app sends `X-Timestamp` /
+    // `X-Nonce`, de-duplicated in `ext_replay_nonces`), then the API auth block
+    // below requires the `app:mobile:access` RBAC code via the caller's login
+    // credential (`mflc_…`).
+    const replay = await checkReplay(env.FEED_DB, context.request);
+    if (replay) return replay;
   }
 
   if (pathname.startsWith("/api/")) {

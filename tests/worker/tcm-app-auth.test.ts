@@ -1,9 +1,9 @@
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {env} from "cloudflare:workers";
 
-import {apiKeyScopes} from "@/server/api/api-keys";
 import {createAdminRbacUser} from "@/server/admin/rbac-handlers";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
+import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
 import {appLogin, appReplaceToken} from "@/server/tcm/app-auth";
 import {
   emptyPicCaptcha,
@@ -60,7 +60,7 @@ function appRequest(url: string, init: RequestInit = {}): Request {
 
 beforeEach(async () => {
   await db.batch([
-    db.prepare("DELETE FROM api_keys WHERE name LIKE 'app-login:%'"),
+    db.prepare("DELETE FROM ext_login_credentials"),
     db.prepare("DELETE FROM auth_account"),
     db.prepare("DELETE FROM auth_session"),
     db.prepare("DELETE FROM ext_user_security"),
@@ -74,7 +74,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await db.batch([
-    db.prepare("DELETE FROM api_keys WHERE name LIKE 'app-login:%'"),
+    db.prepare("DELETE FROM ext_login_credentials"),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
   ]);
@@ -87,7 +87,7 @@ async function seedPrimaryChannel(data: Record<string, unknown>): Promise<void> 
 }
 
 describe("App login (ticket 12)", () => {
-  it("signs in by username and issues a content:read API key", async () => {
+  it("signs in by username and issues an mflc_ login credential", async () => {
     await createAccount({account: "appuser", name: "App User", password: "secret1"});
 
     const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
@@ -96,14 +96,29 @@ describe("App login (ticket 12)", () => {
     }) as Record<string, unknown>;
 
     expect(typeof payload.Token).toBe("string");
-    expect((payload.Token as string).length).toBeGreaterThan(20);
+    // 签发的是绑定该用户的 mflc_ 登录凭证（用户 → 角色 → 权限 模型），
+    // 不是设备级 mf_ API Key。
+    expect(payload.Token as string).toMatch(/^mflc_/u);
     expect(payload.Account).toBe("appuser");
     expect(payload.UserName).toBe("appuser");
     expect(payload.Name).toBe("App User");
     expect(payload.DefaultModule).toBeNull();
-    // 签发的钥匙具备 content:read scope，可走现有 Bearer 鉴权。
-    const scopes = await apiKeyScopes(db, payload.Token as string);
-    expect(scopes).toContain("content:read");
+    // 凭证可解析回该用户（Bearer 走 decideLoginCredentialApiRequest）。
+    const verified = await verifyLoginCredentialToken(db, payload.Token as string);
+    expect(verified).not.toBeNull();
+  });
+
+  it("reuses the same credential across repeated logins", async () => {
+    await createAccount({account: "reuse", name: "Reuse", password: "secret1"});
+    const first = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "reuse",
+      Password: "secret1",
+    }) as Record<string, unknown>;
+    const second = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "reuse",
+      Password: "secret1",
+    }) as Record<string, unknown>;
+    expect(second.Token).toBe(first.Token);
   });
 
   it("signs in by email address", async () => {

@@ -239,6 +239,7 @@ export const PERMISSION_CODES = {
   CONTENT_SITE_FILE_MANAGE: 'content:site_file:manage',
   MEDIA_FILE_MANAGE: 'media:file:manage',
   SYSTEM_API_MANAGE: 'system:api:manage',
+  APP_MOBILE_ACCESS: 'app:mobile:access',
   CONTENT_ANNOTATION_MARKERS_READ: 'content:annotation-markers:read',
   CONTENT_ANNOTATION_MARKERS_MANAGE: 'content:annotation-markers:manage',
   CONTENT_FANG_READ: 'content:fang:read',
