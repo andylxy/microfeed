@@ -176,6 +176,27 @@ export default class FeedDb {
     return this.FEED_DB.prepare(sql).bind(...insertBindList, ...updateBindList);
   }
 
+  /**
+   * 出厂默认频道数据（主频道缺失时的内存占位）。
+   *
+   * 与 initDb() 共用同一份定义，避免两处漂移。
+   * 只在内存中返回、不写库，因此不会触碰 `channels.is_primary` 的
+   * UNIQUE 约束，也不会产生任何 INSERT 副作用。
+   */
+  _defaultChannel() {
+    return {
+      image: '/assets/default/channel-image.png',
+      link: this.baseUrl,
+      language: 'en-us',
+      categories: [],
+      'itunes:explicit': false,
+      'itunes:type': 'episodic',
+      'itunes:complete': false,
+      'itunes:block': false,
+      'copyright': DEFAULT_CHANNEL_COPYRIGHT,
+    };
+  }
+
   async initDb() {
     const settings = {
       [SETTINGS_CATEGORIES.SUBSCRIBE_METHODS]: {
@@ -200,17 +221,7 @@ export default class FeedDb {
       [SETTINGS_CATEGORIES.ANALYTICS]: {},
       [SETTINGS_CATEGORIES.CUSTOM_CODE]: {},
     };
-    const channel = {
-      image: '/assets/default/channel-image.png',
-      link: this.baseUrl,
-      language: 'en-us',
-      categories: [],
-      'itunes:explicit': false,
-      'itunes:type': 'episodic',
-      'itunes:complete': false,
-      'itunes:block': false,
-      'copyright': DEFAULT_CHANNEL_COPYRIGHT,
-    };
+    const channel = this._defaultChannel();
 
     const batchStatements = [
       this.getInsertSql('channels', {
@@ -434,10 +445,21 @@ export default class FeedDb {
     }
 
     let contentJson = await this._getContent(things);
-    if (Object.keys(contentJson).length === 0 || !(contentJson as any).channel ||
-      Object.keys((contentJson as any).channel).length === 0 || !(contentJson as any).settings ||
-      Object.keys((contentJson as any).settings).length === 0) {
+    const storedSettings = (contentJson as any).settings;
+    const hasSettings = !!storedSettings && Object.keys(storedSettings).length > 0;
+    const storedChannel = (contentJson as any).channel;
+    const hasChannel = !!storedChannel && Object.keys(storedChannel).length > 0;
+
+    if (!hasSettings) {
+      // 首次安装：settings 与 channel 同时为空，走完整出厂初始化。
+      // initDb() 用 INSERT OR IGNORE，即便此时库中已有部分数据也不会覆盖。
       contentJson = await this.initDb();
+    } else if (!hasChannel) {
+      // 主频道被隐藏（unpublished）或未发布——这是有意行为，不应连带丢弃
+      // 已持久化的站点设置，否则后台保存的 siteTitle 等会凭空消失，
+      // 公开页回落到 channel.title || 'untitled'。
+      // 这里只补一个内存默认频道占位，保留库里真实的 settings。
+      (contentJson as any).channel = this._defaultChannel();
     }
 
     let itemJson = {};

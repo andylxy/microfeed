@@ -10,7 +10,7 @@ import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {listPublishedBookSamples} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {loadSiteNav} from "@/server/feed/siteNav";
-import {renderThemeTemplate} from "@/shared/themes/ThemeRenderer";
+import {renderThemeTemplate, resolveSiteTitle} from "@/shared/themes/ThemeRenderer";
 import DEFAULT_WEB_HOME from "../../themes/default/web-home.mustache?raw";
 
 const loaded = await loadPublishedFeed(env, Astro.request, {
@@ -76,7 +76,7 @@ const bodyHtml = renderThemeTemplate(
   <PublicNotFoundHeading />
 ) : (
   <PublicLayout
-    title={loaded.publicFeed.title}
+    title={resolveSiteTitle(loaded.publicFeed) || loaded.publicFeed.title}
     description={String(loaded.publicFeed._microfeed?.description_text ?? "")}
     language={loaded.publicFeed.language}
     channelImage={String(loaded.content.channel?.image ?? "")}

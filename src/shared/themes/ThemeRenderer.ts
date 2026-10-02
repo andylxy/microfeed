@@ -42,8 +42,12 @@ export function themeContext(
  *  `settings.webGlobalSettings.siteTitle`, which FeedPublicJsonBuilder already
  *  writes into the public feed's `_microfeed` pocket (and drops when unset).
  *  Returns "" when unset, blank or of the wrong type, so the caller can fall
- *  back to the channel title. */
-function resolveSiteTitle(publicFeed: Record<string, unknown>): string {
+ *  back to the channel title.
+ *
+ *  Exported so non-theme callers (e.g. the page `<title>` tag) resolve the
+ *  site title with the same rule as `site_title`, instead of duplicating the
+ *  fallback logic and drifting apart. */
+export function resolveSiteTitle(publicFeed: Record<string, unknown>): string {
   const microfeed = publicFeed._microfeed;
   if (
     microfeed === null ||
