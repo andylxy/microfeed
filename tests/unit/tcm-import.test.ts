@@ -4,6 +4,7 @@ import {iterInsertRows, mysqlUnescape, rowText, type DumpRow} from "../../script
 import {
   buildTargets,
   htmlToPlain,
+  parseFangTextIngredients,
   textToHtml,
   tcmId,
   toIso,
@@ -184,5 +185,125 @@ describe("buildTargets relation wiring", () => {
     const second = buildTargets(tables, null);
     expect(second.items.map((i) => i.id)).toEqual(items.map((i) => i.id));
     expect(second.channels.map((c) => c.id)).toEqual(channels.map((c) => c.id));
+  });
+});
+
+/**
+ * 源 dump 的 `FangBody` 表并不完整（金匮・人纪 49 首仅 2 首有行、桂林古本
+ * 329 首仅 7 首），其余方剂的药味组成写在 `Fang.FangText` 的 `$u{}/$w{}`
+ * 标记里。以下用例锁定「从正文回退补组成」的行为（2026-10-03）。
+ */
+describe("FangText 组成回退", () => {
+  it("分离式 $u{药名}$w{剂量}（源中最常见的写法）", () => {
+    expect(
+      parseFangTextIngredients("$u{牡蛎}$w{四两，熬}，$u{麻黄}$w{四两，去节}"),
+    ).toEqual([
+      {showName: "牡蛎", amount: "四两，熬"},
+      {showName: "麻黄", amount: "四两，去节"},
+    ]);
+  });
+
+  it("嵌套式 $u{药名$w{剂量}} —— 外层 } 缺失也不能漏（单层正则会漏）", () => {
+    expect(
+      parseFangTextIngredients("$u{知母$w{六两}、$u{石膏$w{一斤}、$u{甘草$w{二两(炙)}"),
+    ).toEqual([
+      {showName: "知母", amount: "六两"},
+      {showName: "石膏", amount: "一斤"},
+      {showName: "甘草", amount: "二两(炙)"},
+    ]);
+  });
+
+  it("脏括号 $w{四两| 不应吞掉后续药味", () => {
+    expect(
+      parseFangTextIngredients("$u{禹余粮}$w{四两|  $u{人参}$w{三两}    $u{附子}$w{二枚}"),
+    ).toEqual([
+      {showName: "禹余粮", amount: "四两|"},
+      {showName: "人参", amount: "三两"},
+      {showName: "附子", amount: "二枚"},
+    ]);
+  });
+
+  it("共享剂量的写法：前味无剂量、末味带剂量", () => {
+    expect(parseFangTextIngredients("$u{括蒌根}、$u{牡蛎 (熬) }$w{各等分}。")).toEqual([
+      {showName: "括蒌根", amount: null},
+      {showName: "牡蛎 (熬)", amount: "各等分"},
+    ]);
+  });
+
+  it("只取组成段：「上X味」之后的加减法不得计入", () => {
+    // 源 FangText 的结构是 组成 →「上X味，以水…」煎服法 → 加减法，后两段的
+    // $u{} 不是本方组成（全段扫描会让小青龙汤虚增到 18 味）。
+    expect(
+      parseFangTextIngredients(
+        "$u{麻黄}$w{三两}、$u{芍药}$w{三两}、$u{桂枝}$w{三两}\n\n" +
+          "上八味，以水一斗…若渴者，去半夏，加$u{栝蒌根}$w{三两}",
+      ),
+    ).toEqual([
+      {showName: "麻黄", amount: "三两"},
+      {showName: "芍药", amount: "三两"},
+      {showName: "桂枝", amount: "三两"},
+    ]);
+  });
+
+  it("无 $u{} 标记 → 空数组（源标注『(佚)』『方未见。』的方剂）", () => {
+    expect(parseFangTextIngredients("39、$f{禹余粮丸} (佚)")).toEqual([]);
+    expect(parseFangTextIngredients("125、$f{杏子汤} 方未见。")).toEqual([]);
+  });
+
+  // ---- 接线：buildTargets 是否按书号白名单启用回退 ----------------------
+  const fangTables = (bookNo: number, fangText: string): SourceTables => ({
+    work: [
+      makeRow(
+        "WorkInfo",
+        ["ChapterId", "Case", "BookName", "BookNo", "Author", "Chapter", "ImageUrl", "Comment", "CreateDate"],
+        [6, "5", "测试书", bookNo, null, 10, null, null, "2024-09-17 08:57:25"],
+      ),
+    ],
+    book: [],
+    bookBody: [],
+    fang: [
+      makeRow(
+        "Fang",
+        ["FangId", "FangName", "FangSourceBookId", "FangText", "YaoCount", "YaoList", "FangList", "CreateDate"],
+        [501, "四逆加人参汤", bookNo, fangText, 2, "", "", "2024-09-17 08:59:43"],
+      ),
+    ],
+    fangBody: [], // 关键：无 FangBody 行，必须走正文回退
+    yao: [
+      makeRow("Yao", ["YaoId", "YaoName", "YaoBieMing", "YaoText", "CreateDate"], [7, "桂枝", null, "$u{桂枝}", "2024-09-15 00:56:57"]),
+      makeRow("Yao", ["YaoId", "YaoName", "YaoBieMing", "YaoText", "CreateDate"], [5, "芍药", null, "$u{芍药}", "2024-09-15 00:56:57"]),
+    ],
+    yaoAlias: [],
+    mingCi: [],
+  });
+
+  it("白名单书号（9050000）无 FangBody → 从正文补组成，yaoId 按名命中", () => {
+    const {items} = buildTargets(fangTables(9050000, "$u{桂枝}$w{三两}、$u{芍药}$w{二两}"), null);
+    const fang = items.find((item) => item.tcmKind === "fang");
+    const list = (fang?.data as any)._microfeed.fangYaoList;
+    expect(list).toHaveLength(2);
+    expect(list[0].showName).toBe("桂枝");
+    expect(list[0].amount).toBe("三两");
+    // 按名解析命中真实 YaoId=7（**不做** FangBody 那套 0-based +1 补偿）
+    expect(list[0].yaoId).toBe(tcmId("yao", "7"));
+    expect(list[1].yaoId).toBe(tcmId("yao", "5"));
+    // 源 YaoList 为空 → 回退时由组成填充
+    expect((fang?.data as any)._microfeed.yaoList).toEqual(["桂枝", "芍药"]);
+  });
+
+  it("非白名单书号（10001 宋版）→ 回退不生效，组成保持为空", () => {
+    const {items} = buildTargets(fangTables(10001, "$u{桂枝}$w{三两}"), null);
+    const fang = items.find((item) => item.tcmKind === "fang");
+    expect((fang?.data as any)._microfeed.fangYaoList).toEqual([]);
+    expect((fang?.data as any)._microfeed.yaoList).toEqual([]);
+  });
+
+  it("回退命中不了的中药 → yaoId 为 null 但保留 showName", () => {
+    const {items} = buildTargets(fangTables(9050000, "$u{括蒌根}$w{二两}"), null);
+    const fang = items.find((item) => item.tcmKind === "fang");
+    const list = (fang?.data as any)._microfeed.fangYaoList;
+    expect(list).toHaveLength(1);
+    expect(list[0].showName).toBe("括蒌根");
+    expect(list[0].yaoId).toBeNull();
   });
 });

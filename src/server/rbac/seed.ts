@@ -63,9 +63,11 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:fang:read", name: "方剂查看"},
   {code: "content:alias:read", name: "别名查看"},
   {code: "content:alias:manage", name: "别名维护"},
-  // content - yao (中药) / term (名词), view-only on the dedicated boards
+  // content - yao (中药) / term (名词): view on the board, manage for its CRUD
   {code: "content:yao:read", name: "中药查看"},
+  {code: "content:yao:manage", name: "中药维护"},
   {code: "content:term:read", name: "名词查看"},
+  {code: "content:term:manage", name: "名词维护"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -115,11 +117,14 @@ export const RBAC_ROLES: RbacRoleDef[] = [
       "content:fang:read",
       "content:alias:read",
       "content:alias:manage",
-      // 中药 / 名词 boards are read-only content work (rows link out to the item
-      // editor, which is gated by the generic item permissions): an editor may
-      // open them, but editing happens on the item page.
+      // 中药 / 名词 boards own their rows' identity + publishing state (add /
+      // rename / publish / soft-delete / restore), which is content work an
+      // editor already does on the item page — so it also gets the `manage`
+      // codes. The full body still opens in the item editor.
       "content:yao:read",
+      "content:yao:manage",
       "content:term:read",
+      "content:term:manage",
     ],
   },
   {

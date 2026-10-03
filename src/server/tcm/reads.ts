@@ -16,6 +16,7 @@
  */
 
 import {TCM_CHAPTER_ORDER_SQL} from "./ordering";
+import {JINGSHU_ONLY_YAO_NAMES} from "./zhongyao-anchor";
 
 // 所有字段名与值类型照抄旧后端真实 wire 形状（golden 对齐 2026-09-28：全小驼峰、
 // 部分数值字段旧后端序列化为字符串、空值发 null）。
@@ -196,21 +197,6 @@ export function rawParagraphText(html: string): string {
 
 function toNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-/**
- * 把源端序号（或回退下标）转成移动端 Gson 能解析的数值字符串。
- *
- * 移动端 `Fang.ID` / `Fang.signatureId` / `standardYaoList[].yaoID` / `signatureId`
- * 在模型里是 int/long 类型，且自带的 `IntegerTypeAdapter` 只能解析数值或数值字符串
- * （netcore 下发的是源端数值字符串，如 "0"/"1"/"2"）。microfeed 此前下发 11 位 tcmId
- * 字符串，会触发 `NumberFormatException`。这里统一下发数值字符串：优先用源端序号
- * `_microfeed.no`（与 netcore 同源的稳定值），缺失时回退到列表下标（1-based），避免重复。
- */
-function numericIdString(value: unknown, fallbackIndex: number): string {
-  const n = typeof value === "number" ? value : Number(value);
-  if (Number.isFinite(n) && n >= 0) return String(n);
-  return String(fallbackIndex + 1);
 }
 
 /** 空串 / null / undefined → null（旧后端对空文本字段发 null）。 */
@@ -482,9 +468,10 @@ export async function getAppBookFang(
       const pocket = pocketOf(row.data);
       // 移动端 Fang.ID / Fang.signatureId 在 Gson 模型里是 int/long 类型，netcore 下发的是
       // 源端数值字符串（如 "0"/"1"/"2"）。此前下发 11 位 tcmId 字符串会触发
-      // IntegerTypeAdapter 的 NumberFormatException。统一下发数值字符串：优先用源端序号
-      // `_microfeed.no`，缺失时回退到列表下标。
-      const numericId = numericIdString(pocket.no, index);
+      // IntegerTypeAdapter 的 NumberFormatException。
+      // ⚠️ netcore 的 `ID` 是 **0-based 序号**（首方为 "0"），必须与之一致；
+      // 用 1-based 会让逐字段 golden 比对每条都差 1（2026-10-03 修正）。
+      const numericId = String(index);
       return {
         yaoCount: numericWire
           ? toNumber(pocket.yaoCount)
@@ -543,22 +530,153 @@ export async function getAppBookFang(
   });
 }
 
-/** 全部中药。 */
+/** 神农本草经疏书（book_id 固定，见 channel._microfeed）——netcore 429 味的正文来源。 */
+const JINGSHU_BOOK_ID = "OsOP62cyp3j";
+
+/**
+ * 经疏书条目正文 → 纯文本，段间用 CRLF 连接。
+ *
+ * 与 `rawParagraphText` 的区别：经疏条目的 HTML 段分隔符不统一（首段 `</p><p>` 无换行、
+ * 后续 `</p>\n<p>`），`rawParagraphText` 的「`</p>` 后必须跟换行」正则会整段失配、把
+ * `</p><p>` 当正文吞进去。这里改为「逐个抓 `<p>…</p>` 块、用 CRLF 拼接」，对任意段分隔符
+ * 都稳定，且与 netcore 逐字节实测一致（`$q{《神农本草经疏》}` 之后即为此形态）。
+ */
+function jingshuParagraphText(html: string): string {
+  const source = String(html ?? "");
+  const blocks: string[] = [];
+  for (const m of source.matchAll(/<p>([\s\S]*?)<\/p>/g)) blocks.push(m[1] as string);
+  if (blocks.length === 0) return source;
+  return blocks.join("\r\n");
+}
+
+/**
+ * 经疏书药条 → 正文 + 条目归属。
+ *
+ * 键为条目标题里逗号并列的**全部**名字（`灶心土,伏龙肝` 两条都建索引），因为 netcore 会把
+ * 别名也拆成独立药味下发。`entry` 记录该名字所属条目的**首个药名**（主名），合并归属判定要用。
+ */
+interface JingshuEntry {
+  text: string;
+  entry: string;
+}
+
+async function jingshuYaoText(db: D1Database): Promise<Map<string, JingshuEntry>> {
+  const map = new Map<string, JingshuEntry>();
+  const {results} = await db
+    .prepare(
+      "SELECT data FROM items WHERE book_id = ? AND tcm_kind = 'section' AND status != 3",
+    )
+    .bind(JINGSHU_BOOK_ID)
+    .all();
+  for (const row of results ?? []) {
+    const data = JSON.parse(String(row.data ?? "{}")) as Record<string, unknown>;
+    const title = typeof data.title === "string" ? data.title : "";
+    // 药条形如「14、铁锈」/「28、灶心土  ,伏龙肝」；排除 `$m{…}` 标记条目（方剂分类等非药条）。
+    if (!/^\d+[、.\s]/.test(title) || /\$m\{/.test(title)) continue;
+    const text = jingshuParagraphText(typeof data.description === "string" ? data.description : "");
+    const names = title
+      .replace(/^\d+[、.\s]*/, "")
+      .split(/[,，]/)
+      .map((n) => n.trim())
+      .filter((n) => n !== "");
+    const primary = names[0] ?? "";
+    for (const name of names) {
+      if (!map.has(name)) map.set(name, {text, entry: primary});
+    }
+  }
+  return map;
+}
+
+/**
+ * 异名表：172（本经+别录）与经疏书对同一味药的**不同写法**。
+ * netcore 会把这种「写在正文、没进标题」的别名也认作同一味药，故合并查找需双向试。
+ */
+const JINGSHU_NAME_ALIAS: Record<string, string> = {
+  神曲: "曲",
+  鸡爪三棱: "草三棱根",
+  葶苈子: "葶苈",
+};
+
+/**
+ * 全部中药——复刻 netcore `GetAllZhongYao`：601 味 = 源 Yao 表 172 味（本经+别录）
+ * + 从《神农本草经疏》提取的 429 味。
+ *
+ * 合并规则（netcore golden 逐条核对）：
+ *  - 172 味：正文 = 本经+别录；若经疏书也有同名药，其正文以 `\r\n\r\n$q{《神农本草经疏》}`
+ *    接在后面（同 App 端「相同药加换行合并显示」）。
+ *  - 429 味：正文 = `$u{药名}\r\n$q{《神农本草经疏》}` + 经疏正文。
+ *
+ * **为什么 172 的合并是动态推导的**（新增 yao 无需改代码即可自动合并）：
+ *  「某味 172 药该不该补经疏」由一条可推导的规则决定，而非硬编码名单——
+ *   ① 该药名在经疏书里命中某个药条（`JINGSHU_NAME_ALIAS` 兜异名写法）；
+ *   ② 且该药条**没有**被另一个 429 药认领。若被别的 429 认领（如 172「橘皮」与 429「陈皮」
+ *      同属经疏「3、陈皮,橘皮」条），netcore 只把经疏正文发给 429 那个名字，172 侧不补。
+ *  经实测该规则精确复现 golden 的 112 条合并，且天然覆盖「新增 yao 与 429 同名」的情形
+ *  （该味yao 升为 172 条并吸收经疏，429 段跳过它，不丢内容）。
+ *
+ * **为什么 429 仍是静态锚点**：netcore 的 429 是一份**策展清单**（从经疏 904 条药里精选），
+ * 已验证无法用章节/形态规则还原（部名章节规则得 609、宽松规则得 746，均不等于 601），
+ * 故 `JINGSHU_ONLY_YAO_NAMES` 锁定「netcore 已确认的 429 名单」。**新增经疏药条**若要下发，
+ * 需把药名加入该锚点（见 `.scratch/tcm-import/gen_429_anchor.mjs`），这是有意的边界。
+ */
 export async function getAppAllYao(db: D1Database): Promise<AppZhongYao[]> {
   return withEmpty("getAppAllYao", async () => {
-    const {results} = await db
-      .prepare(
-        "SELECT id, data FROM items WHERE tcm_kind = 'yao' AND status = 1 " +
-          "ORDER BY json_extract(data, '$._microfeed.no'), id",
-      )
-      .all();
-    return (results ?? []).map((row) => {
-      const text = rawParagraphText(descriptionOf(row.data));
-      return {
-        name: yaoAppName(row.data),
-        text,
-      };
-    });
+    const [{results}, jingshu] = await Promise.all([
+      db
+        .prepare(
+          "SELECT id, data FROM items WHERE tcm_kind = 'yao' AND status = 1 " +
+            "ORDER BY json_extract(data, '$._microfeed.no'), id",
+        )
+        .all(),
+      jingshuYaoText(db),
+    ]);
+
+    // 经疏药名 → 正文（含异名兜底）
+    const jingText = (name: string): string | undefined => {
+      const hit = jingshu.get(name) ?? jingshu.get(JINGSHU_NAME_ALIAS[name] ?? "");
+      return hit?.text;
+    };
+    // 经疏药名 → 其所属条目的主名（含异名兜底）
+    const jingEntry = (name: string): string | undefined => {
+      const hit = jingshu.get(name) ?? jingshu.get(JINGSHU_NAME_ALIAS[name] ?? "");
+      return hit?.entry;
+    };
+    // 429 名单认领的经疏条目主名 → 认领它的 429 药名。用于判定 172 侧该不该补：
+    // 若某条目被「别的」429 药认领，netcore 只把经疏正文发给那个 429 名字，172 侧不重复补。
+    const claimedBy429 = new Map<string, string>();
+    for (const n of JINGSHU_ONLY_YAO_NAMES) {
+      const e = jingEntry(n);
+      if (e !== undefined && !claimedBy429.has(e)) claimedBy429.set(e, n);
+    }
+
+    const out: AppZhongYao[] = [];
+    const yaoNames = new Set<string>();
+    for (const row of results ?? []) {
+      const name = yaoAppName(row.data);
+      yaoNames.add(name);
+      let text = rawParagraphText(descriptionOf(row.data));
+      const entry = jingEntry(name);
+      // 动态合并：经疏有同名条目、且该条目未被「另一个 429 药」认领 → 追加经疏正文。
+      // claimer===undefined → 无人认领，照常合并；
+      // claimer===name → 认领者就是自己（这味药同时在 429 名单里），照常合并，
+      //   此时 429 段会因 yaoNames.has(name) 跳过它，经疏内容不丢；
+      // claimer是别的 429 药 → 该条经疏正文归它，172 侧不补（对齐 netcore）。
+      const claimer = entry !== undefined ? claimedBy429.get(entry) : undefined;
+      if (entry !== undefined && (claimer === undefined || claimer === name)) {
+        const extra = jingText(name);
+        if (extra !== undefined && extra !== "") {
+          text += "\r\n\r\n$q{《神农本草经疏》}" + extra;
+        }
+      }
+      out.push({name, text});
+    }
+    for (const name of JINGSHU_ONLY_YAO_NAMES) {
+      if (yaoNames.has(name)) continue;
+      const extra = jingText(name);
+      if (extra === undefined || extra === "") continue;
+      out.push({name, text: "  $u{" + name + "}\r\n$q{《神农本草经疏》}    " + extra});
+    }
+    return out;
   });
 }
 

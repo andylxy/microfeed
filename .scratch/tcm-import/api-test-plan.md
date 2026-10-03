@@ -60,8 +60,8 @@
 
 | 程序                | 作用                                           | 关键参数                                                                |
 | ----------------- | -------------------------------------------- | ------------------------------------------------------------------- |
-| `capture.mts`     | 一次性抓 old（netcore，HMAC 签名）+ new（microfeed，匿名） | `--old <url> --new <url> --book-no <X> --old-dir <d> --new-dir <d>` |
-| `capture-new.mts` | 只抓 microfeed 侧（可指向远端）                        | `--base <url> --out-dir <d> --book-no <X>`                          |
+| `capture.mts`     | 一次性抓 old（netcore，HMAC 签名）+ new（microfeed，`mflc_` 凭证） | `--old <url> --new <url> --book-no <X> --old-dir <d> --new-dir <d>` |
+| `capture-new.mts` | 只抓 microfeed 侧（可指向远端）；**需 `MICROFEED_APP_TOKEN`** | `--base <url> --out-dir <d> --book-no <X>`                          |
 | `compare.mts`     | 逐字段比对，差异分类                                   | `--old-dir <d> --new-dir <d> [--lenient-ids]`                       |
 
 **差异分类**（`compare.mts` 判定，依据 spec §6/§6.0/§15）：
@@ -70,11 +70,13 @@
 | ----------------------- | -------------------------------------- |
 | `OK`                    | 完全一致                                   |
 | `known-id`              | id 字段已按拍板换成 11 位新 id（存在性校验通过）          |
+| `known-id-numeric`      | App 侧 id 下发**数值字符串**（源 int64 不落库，值不可复现，2026-10-03 拍板 A） |
 | `known-signature-value` | 签名字段结构对齐、值不同（源签名不可复现，拍板保留字段名）          |
 | `known-order`           | 成员相同仅顺序（yaoList/fangList 旧按组成序）        |
 | `known-null-to-empty`   | 源 `YaoId=0` 哨兵 → `null`                |
 | `known-adaptation`      | 数据模型改造（GetAllZhongYao 容器去重、GetNav 分类化） |
 | `known-data-drift`      | dump 与旧后端活动库的少量数据出入                    |
+| `known-added-fallback`  | GetBookIdFang 内「源 FangBody 缺行 / 旧端公式为空」致旧端无组成或无法，新端经 FangText 标记回退补出（拍板「补」的直接后果，2026-10-03 拍板 B'） |
 | `known-new-endpoint`    | 旧后端无此端点                                |
 | **`MISMATCH`**          | **必须对齐的差异（比对失败）**                      |
 
@@ -775,7 +777,7 @@ A 方案（合并对齐）实测必炸 3639 MISMATCH 已回滚，维持本地拆
 - 读函数：`src/server/tcm/reads.ts`（`getAppAllYao` / `getAppYaoAliases` / `getAppBookFang`）
 - 信封：`src/server/tcm/envelope.ts`
 - 路由：`src/pages/api/AppBookRequest/*.ts`
-- 测试程序：`.scratch/tcm-import/golden/{capture,capture-new,compare}.mts`
+- 测试程序：`.scratch/tcm-import/golden/{capture,capture-new,compare}.mts`。**注意（2026-10-03）**：移动端鉴权已落地，App 8 个内容端点匿名一律 401，抓本地必须 `MICROFEED_APP_TOKEN=<mflc_…>`；dev server 重启后立刻 401 属预期，响应体是12 字节纯文本 `Unauthorized`（非 `{code:200}` 信封）。无凭证时改直查 D1 判断数据面。
 - 名词导入：`scripts/import-ctwh/import-term.mjs`（`--apply` 幂等；新建名词书 `tcmterm0001` + 根 chapter + 17 条 term）
 - 别名折叠：`scripts/import-ctwh/build.ts`（yaoAlias → yao `aliases[]`；`name` 用源 `YaoName` 原样、孤儿行挂最贴近 yao）
 - 本轮产物：`.scratch/tcm-import/golden/{old-1001000,new-1001000,new-prod-1001000}/`、
@@ -785,3 +787,148 @@ A 方案（合并对齐）实测必炸 3639 MISMATCH 已回滚，维持本地拆
 - **第二十轮/r21 全量产物**：`.scratch/tcm-import/golden/{old-r21-<BookNo>,new-r21-<BookNo>}/`（10 部书各一套）、
   `report-old-r21-<BookNo>-new-r21-<BookNo>.json`（逐本比对报告，结论见 §4.17）
 - 规范：`.scratch/tcm-import/spec.md`（§6 端点契约、§6.2 golden 比对、§15 差异清单）
+
+## 4.22 第二十三轮：FangText 组成回退（2026-10-03）
+
+**目标**：修复「方剂药味组成大面积为空」。用户拍板**数据完整性优先于 golden 逐字对齐**，
+故桂林古本（1001000）一并纳入回退（此前为保 golden 7/329 而刻意不补）。
+
+**改动**
+- `scripts/import-ctwh/build.ts`：`FangBody` 缺行时按书号白名单
+  `{9040000, 9050000, 1001000}` 从 `Fang.FangText` 的 `$u{}/$w{}` 解析组成；
+  新增 `parseFangTextIngredients()` / `readMarkerBody()` / `yaoIdByName` /
+  `lookupYaoIdByName()`（均为导出纯函数，可单测）。
+- 顺带修 `onlyBookYaoIds` 的 0-based 错配（详见技能索引 #26），悬空归零。
+- `src/server/tcm/reads.ts`：`Fang.ID` 改 **0-based**（netcore 首方为 `"0"`）。
+
+**判据与结果**
+
+| 判据 | 结果 |
+|---|---|
+| 单元测试 `tests/unit/tcm-import.test.ts` | 25/25 通过（新增 10 条回退用例） |
+| 三本书构建 marker parity | 951/951、1918/1918、4651/4651 全 OK；残留转义 0；警告 0 |
+| 落库后各书有组成数 | 1001000 7→**323**/329、9050000 2→**48**/49、9040000 109→**110**/111 |
+| 宋版（未启用回退） | 10001 112/113、10002 200/202 **不变** ✓ |
+| `fangYaoList.yaoId` 悬空 | **0**（仅 150 条 `yaoId=null`，源 Yao.sql 仅 172 味的固有限制） |
+| `fix-fang-book.mjs` 归属复验 | 不一致残留 **0** |
+| `yarn typecheck` | 0 errors / 0 warnings / 5 hints（既有） |
+
+**golden 回归（r23 产物：`{old,new}-r23-<BookNo>`、`report-old-r23-<BookNo>-new-r23-<BookNo>.json`）**
+
+| 书 | 历史基线 MISMATCH | r23（拍板 A 前） | r23（拍板 A+B' 后） | 说明 |
+|---|---|---|---|---|
+| 10001 宋版 | 0（known-id 654 放行） | **515** ❌ | ✅ **0** | 515 处全部归入 `known-id-numeric` |
+| 9050000 | 49 | 49 | ✅ **0** | 49 处「新多出的行」全是旧端 `$.data` 为空、新端补出 49 首方剂 → `known-added-fallback` |
+| 1001000 | 0 | **2110** | ✅ **0** | 拍板「补」的后果；362 处 id 归入 `known-id-numeric`、1748 处回退补出行归入 `known-added-fallback`、316 处 `yaoList` 成员差异归入 `known-data-drift` |
+
+**10001 的 515 处：根因 + 拍板 A（2026-10-03 用户选 A）**
+上一轮为修 App Gson `IntegerTypeAdapter` 崩溃，把 id 类字段从 11 位 tcmId 改成数值字符串；
+`compare.mts` 的 `known-id` 放行要求「11 位形状」，数值字符串过不了形状校验 → 判 MISMATCH。
+其中 `Fang.ID` 的 113 处**已真修复**（netcore 是 0-based，原先下发 1-based 逐条差 1，
+改 `String(index)` 后 628 → 515）。
+剩余 515 处 `yaoID` **值本身也不可复现**：netcore 下发源 `FangBody.YaoID`（= `Yao.YaoId` - 1），
+本地 `fangYaoList.yaoId` 存的是单向 `tcmId`，spec §16「源 int64 不落库」禁止存源 YaoID。
+→ **拍板 A**：扩 `compare.mts` 判定——id 类字段两侧同为数值形态即视为结构对齐，
+新增 verdict `known-id-numeric`（值不同时在 detail 标注「源 int64 不落库，值不可复现」）。
+实现要点：判据必须加 `oldV !== newV` 前置条件，否则会把本就 `OK` 的相等 id 降级成 known-*
+（实测会把 GetBookIdFang 的 OK 3516 压到 3377、GetAllMingCi 的 OK 74 压到 57）。
+
+**9050000 / 1001000 的「回退补出行」：根因 + 拍板 B'（2026-10-03 用户选 A 后追加「进入执行」）**
+「补」的后果是源 `FangBody` 缺行、但 `FangText` 含组成标记的书（9040000/9050000/1001000），
+本地在导入时回退解析出组成并落库；netcore golden 旧端在这些位置**为空**（9050000 整本 `$.data`
+为空、1001000 各方的 `standardYaoList` 为空）。
+→ **拍板 B'**：`compare.mts` 的 `diffArray` 新增 `known-added-fallback` 判定，把
+GetBookIdFang 内「新端比旧端多出的元素」与「旧端为空、新端补出 N 行的组成数组」归入已知类。
+**安全边界（勿改）**：
+- 仅对 `currentEndpoint === "GetBookIdFang"` 生效；其余端点的数组新增仍判 MISMATCH。
+- `数组长度` 类仅在 `oldArr.length === 0`（旧端本来就没行）时放行，避免把「长度被改动」的真实回归也吃进来。
+- 同位置**双方都有值**的项仍走 `diffValue`，字段值若不同照判 MISMATCH，不会被本分支掩盖
+  （即只放过「纯新增」，不放过「值篡改」）。
+
+**回退精度（有实测依据，勿改）**
+只解析组成段：截断到「上X味」之前（无则首段）。以源 `YaoCount` 为判据 481 首实测：
+全段命中 436、首段 449、截到「上X味」前 **451**。
+
+**本轮产物**
+- `.scratch/tcm-import/golden/{old-r23-10001,new-r23-10001,old-r23b-10001,new-r23b-10001,old-r23-9050000,new-r23-9050000,old-r23-1001000,new-r23-1001000}/`
+- `.scratch/tcm-import/golden/report-old-r23-10001-new-r23-10001.json`（628，修 ID 前）
+- `.scratch/tcm-import/golden/report-old-r23b-10001-new-r23b-10001.json`（515，修 ID 后）
+- `.scratch/tcm-import/golden/report-old-r23-9050000-new-r23-9050000.json`（49，无新增）
+- `.scratch/tcm-import/golden/report-old-r23-1001000-new-r23-1001000.json`（2110，拍板后果）
+
+## 4.23 第二十四轮：GetAllZhongYao 601 味（172 + 神农本草经疏 429）— 2026-10-03
+
+**背景 / 根因**：源 `Yao.sql` 仅 172 味，netcore `GetAllZhongYao` 实际返回 **601** 味。
+差额 429 味并非库里/源里没有独立条目，而是 netcore 从《神农本草经疏》书里提取后与 Yao 合并下发。
+用户拍板：**App 端要 601 味；429 从神农本草经·(人纪)/神农本草经疏提取跟 Yao 一起返回；同名药加换行合并；合并方法参考 netcore 该接口处理方式。**
+
+**netcore 机制（golden 601 条逐一核对）**
+- 601 = **172**（本经+别录，来自 `Yao` 表 / 本地 `中药` 容器 `tcm_kind='yao'`）+ **429**（来自经疏书 `OsOP62cyp3j`）。
+- 合并（App「相同药加换行合并」）：172 中有 **112** 味经疏也有 → `172正文 + "\r\n\r\n$q{《神农本草经疏》}" + 经疏正文`。
+- 429 味（仅经疏）：`"  $u{药名}\r\n$q{《神农本草经疏》}    " + 经疏正文`（`$q{}` 后恒 4 空格；112 合并条目则 0 空格——实测分布 429:4空格 / 112:0空格）。
+- 顺序：172 块（本经序）在前，429 块在后；与 netcore 逐条一致。
+- 人纪（`ZhuBd0Vj7kl`）几乎不贡献（429 文本标记全是「经疏+本经」）。
+
+**改动**
+- `src/server/tcm/reads.ts` `getAppAllYao`：新增 `jingshuYaoText()`（经疏书药条按标题全逗号名建 `Map<药名,正文>`，过滤「数字开头、排除 `$m{}`」）+ `jingshuParagraphText()`（经疏段分隔符不统一，用「逐块抓 `<p>…</p>`、CRLF 拼接」，`rawParagraphText` 对 `</p><p>` 会失配把标签吞进正文）。合并按上述规则；书补 2 个别名例外 `神曲→曲`、`鸡爪三棱→草三棱根`。
+- 新增 `src/server/tcm/zhongyao-anchor.ts`（429 药名锚点），由 `.scratch/tcm-import/gen_429_anchor.mjs` 从 golden 导出，勿手改。选哪些味以 netcore 名集为锚（本地经疏有 904 条，netcore 精选 429），正文一律取本地经疏书条目。**注：本轮初版还有 `zhongyao-append-map.ts`（112 静态映射），已在 §4.24 动态化后删除**。
+- `.scratch/tcm-import/golden/compare.mts`：`compareYao` 从「known-adaptation 放行」改为**真实比对**（名集合 + 顺序 + 文本 exact/仅空白/内容差异三级）。
+
+**判据与结果**
+
+| 判据 | 结果 |
+|---|---|
+| `yarn typecheck` | 0 errors / 0 warnings / 5 hints（既有） |
+| dev 端点 `/api/AppBookRequest/GetAllZhongYao` | 200，**601** 条 |
+| 名字集合 vs netcore | **完全一致**（0 多 / 0 少） |
+| 顺序 vs netcore | **完全一致**（601/601） |
+| 文本：完全一致 | 69 |
+| 文本：仅空白差异（内容逐字相同） | 531（`\n` vs `\r\n`、空行——本地 import 丢失原始空行/换行，已知保真限制） |
+| 文本：内容差异 | **1**（石蜜，源 dump 与 netcore 活动库出入 → `known-data-drift`） |
+| `compare.mts` 汇总 | `GetAllZhongYao: ✅ 零硬差异（{"OK":3,"known-data-drift":1}）`；全部端点零 MISMATCH |
+
+**石蜜（唯一内容差异）**：golden「味甘，平，无毒，微温」vs 本地经疏「味甘，寒，无毒」——源内容版本差异（netcore 活动库比 dump 新），非逻辑问题。
+
+**本轮产物**
+- `src/server/tcm/zhongyao-anchor.ts`（新增，随代码提交）
+- `.scratch/tcm-import/golden/new/GetAllZhongYao.json`（新抓取 601 条）
+- 探针/生成脚本：`gen_429_anchor.mjs`、`gen_append_map.mjs`、`verify_new_yao.mjs`、`compare_capture.mjs`
+
+## 4.24 第二十五轮：yao 增量管理规则动态化（2026-10-03）
+
+**用户要求**：后继给 yao 表新增条目时，接口应能正常显示、并与同名药正确合并，效果与当前实施一致。
+**评估结论：改造前不是这个模式**——增量模拟（`simulate_incremental.mjs`，已删）实测三处失效：
+
+| 场景 | 改造前行为 |
+|---|---|
+| 新增 yao（经疏有同名、且非 429 认领者） | ✅ 显示，但❌ **不合并经疏**（依赖静态 APPEND_MAP） |
+| 新增 yao 名为 429 锚点名（如「铁锈」） | ❌ 172 段+1、429 段被占位跳过 → **该味经疏内容丢失** |
+| 新增经疏药条（锚点外） | ❌ **不显示**（锚点未含该名，静默丢弃） |
+
+**改造（分层）**
+- **合并层 → 动态推导**：`jingshuYaoText` 返回 `{text, entry}`（`entry`=该名所属条目的主名）；`claimedBy429: Map<entry, 认领者>` 由429 名单反推。
+  合并条件 = **经疏有同名条目（异名走 `JINGSHU_NAME_ALIAS` 兜底）且（该条目无人认领 **或** 认领者是自己）**。
+  → 新增 yao 免改代码即自动合并；新增 yao 若与 429 同名则升为 172 条并吸收经疏、429 段跳过，**总数不变、内容不丢**。
+  → 异名表补 `葶苈子→葶苈`（172 写葶苈子、经疏写「4、葶苈」）。
+- **429 层 → 保留静态锚点**（`zhongyao-anchor.ts`）：**已实测无法用规则还原**——部名章节规则得 609（多 82 缺 74）、宽松关键词规则得 746（多出的 `崩中/难产/妊娠恶阻` 是症状词非药名，被「人部」误匹配「妇人门」章节）。故锁定 netcore 已确认名单；**新增经疏药条需重跑 `gen_429_anchor.mjs`**（有意的能力边界）。
+- **删除** `src/server/tcm/zhongyao-append-map.ts`（112 静态映射，已被动态规则取代；留着会漂移成第二事实源）与 `gen_append_map.mjs`。
+- ⚠️ 踩坑：合并条件曾写反（`claimed.get(entry) !== name`），导致橘皮/薯蓣/虻虫/曲/鸡屎白/苏叶 6 条**该不合并的被合并**（合并数 118 ≠ golden 112）。正解：`claimer === undefined || claimer === name` 才合并。
+
+**判据与结果**
+
+| 判据 | 结果 |
+|---|---|
+| `yarn typecheck` | 0 errors / 0 warnings / 5 hints |
+| 现有数据 601 基线 | 601 条、顺序 601/601 一致、**合并 112 == golden 112**、文本 69 完全一致 + 531 仅空白 + 1 内容差异（石蜜） |
+| 增量(a) 新增 yao「荆芥」 | ✅ 显示 + **自动合并经疏** |
+| 增量 (b) 新增 yao「铁锈」（=429 锚点名） | ✅ 显示 + 合并，总数仍 601（**不重复、不丢内容**）——改造前此场景丢内容 |
+| 增量 (c) 新增经疏药条 | 不显示（锚点外，**有意边界**） |
+| dev 端点 | 200 / 601 条 |
+| `compare.mts` | `GetAllZhongYao: ✅ 零硬差异（{"OK":3,"known-data-drift":1}）`，全部端点零 MISMATCH（**与改造前一致，无回归**） |
+| 定向测试 | 13 passed；2 failed 仍是 §4.22 `Fang.ID` 遗留（非本次） |
+| `git diff --check` | PASS |
+
+**本轮产物**
+- `src/server/tcm/reads.ts`（`jingshuYaoText` 返回 `{text,entry}`、合并逻辑动态化）、`src/server/tcm/zhongyao-anchor.ts`（保留）
+- 删除 `src/server/tcm/zhongyao-append-map.ts`
+- 探针/验证脚本：`verify_dynamic.mjs`（可离线验证基线+增量）、`gen_429_anchor.mjs`

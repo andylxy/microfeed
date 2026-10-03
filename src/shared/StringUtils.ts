@@ -486,9 +486,15 @@ export const ADMIN_URLS = {
   ajaxFangs: () => adminUrl("ajax/fangs", browserAdminPath()),
   /** 别名对照只读列表（移动端 GetAliaZhongYao 的后台镜像）。 */
   ajaxAliases: () => adminUrl("ajax/aliases", browserAdminPath()),
-  /** 中药 / 名词管理只读看板：列某书的条目（kind = yao | term）。 */
+  /** 中药 / 名词管理看板：列某书的条目（kind = yao | term）。写操作走 actionFile。 */
   ajaxTcmEntry: (kind: string) =>
     adminUrl(`ajax/${kind}`, browserAdminPath()),
+  /** 中药 / 名词写操作（add / update / 软删，均 POST，用 action 字段区分）。 */
+  ajaxTcmEntryAction: (kind: string) =>
+    adminUrl(`ajax/${kind}/action`, browserAdminPath()),
+  /** 恢复一个被软删的中药 / 名词条目。 */
+  ajaxTcmEntryRestore: (kind: string) =>
+    adminUrl(`ajax/${kind}/restore`, browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),

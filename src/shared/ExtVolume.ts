@@ -80,9 +80,9 @@ export interface FangBoard {
  *
  *  These are flat TCM books: the item's `book_id` is the real book channel
  *  (no `sourceBookId`), so membership is resolved by `book_id` + `tcm_kind`.
- *  Like the fang board, the page is read-only — each row links out to the item
- *  editor, which owns aliases / content / status editing — so only the fields
- *  the row displays are carried. */
+ *  The board owns the row's identity + publishing state (add / rename / publish
+ *  / soft-delete / restore); the full body text is still owned by the item
+ *  editor, so only what the board renders (or needs to edit) is carried. */
 export interface TcmEntryRow {
   id: string;
   /** Entry title (the item's title). */
@@ -91,6 +91,10 @@ export interface TcmEntryRow {
   status: number;
   /** Source `_microfeed.no` (display order within the book). */
   no: number | null;
+  /** Item body text (plain text, `<p>` markup stripped) for the board's editor. */
+  text: string;
+  /** True when the row is soft-deleted (`status = 3`); only listed with `?deleted=1`. */
+  deleted: boolean;
 }
 
 /** Everything a yao/term board page needs to render one book's entries. */

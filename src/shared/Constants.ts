@@ -246,7 +246,9 @@ export const PERMISSION_CODES = {
   CONTENT_ALIAS_READ: 'content:alias:read',
   CONTENT_ALIAS_MANAGE: 'content:alias:manage',
   CONTENT_YAO_READ: 'content:yao:read',
+  CONTENT_YAO_MANAGE: 'content:yao:manage',
   CONTENT_TERM_READ: 'content:term:read',
+  CONTENT_TERM_MANAGE: 'content:term:manage',
   WILDCARD: '*',
 } as const;
 

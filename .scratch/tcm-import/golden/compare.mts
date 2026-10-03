@@ -6,6 +6,9 @@
 // 差异分类（判定依据见 spec §6/§6.0/§15 与 golden-result 文档）：
 //   OK                      完全一致
 //   known-id                id 字段已按拍板换成 11 位新 id（需通过存在性校验与形状校验）
+//   known-id-numeric        App Gson 侧 id 字段（Fang.ID / standardYaoList[].yaoID 等）按拍板
+//                           下发「数值字符串」；源 int64 不落库（spec §16 三段不变式③），
+//                           故只能给出结构同形、值不可逐字节复现的数值（2026-10-03 拍板 A）
 //   known-signature-removed  源签名字段（signature/signatureId，含方剂行内的）已整体移除
 //   known-added             新增字段（spec 明确加的：如 data[].receiptNo）
 //   known-null-to-empty     旧 null → 新 null/""（按旧形状已尽量对齐，残余在此类）
@@ -13,6 +16,10 @@
 //   known-merge             bookId==10001 并上 10002 的旧合并特例（拍板取消，App 逐本请求）
 //   known-adaptation        数据模型改造（GetAllZhongYao 旧按本草书重复 vs 新容器去重；GetNav 分类化）
 //   known-data-drift        dump 与旧后端活动库的少量数据出入（如别名 341↔339）
+//   known-added-fallback    GetBookIdFang 内「源 FangBody 缺行 / 旧端公式为空」导致旧端无组成或
+//                            无公式、新端通过 FangText 标记回退补出（拍板「补」的直接后果，
+//                            2026-10-03 拍板 B'）；仅覆盖「新端比旧端多出的元素」，
+//                            同位置的值差异仍走 diffValue → MISMATCH，不会被掩盖
 //   MISMATCH                必须对齐的差异（比对失败）
 import {existsSync, readFileSync, readdirSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
@@ -26,6 +33,11 @@ const SIGNATURE_FIELDS = new Set(["signature", "Signature"]);
 const KNOWN_ADDED_FIELDS = new Set(["receiptNo"]);
 const OLD_ID_RE = /^-?\d+$/;
 const NEW_ID_RE = /^.{11}$/;
+// App 端 Gson 的 IntegerTypeAdapter 只接受「数值 / 数值字符串」，故 Fang.ID、
+// standardYaoList[].yaoID 等字段在新端以数值字符串下发（发 11 位 tcmId 会让 App 崩溃）。
+// 源 int64（Yao.YaoId / FangBody.YaoID / Fang.ID）按 spec §16 不落库，无法逐字节复现，
+// 新端只能给出同形数值（组成顺序号 / 方剂序号）。→ 结构一致、值不可复现，归 known-id-numeric。
+const NUMERIC_STRING_RE = /^-?\d+$/;
 const MERGE_ENDPOINTS = new Set(["GetBookChapter", "GetBookIdFang"]);
 // 条文项/方剂行内的 signatureId 属签名机制（拍板整体移除）；章节级 signatureId 是定位键（保留）
 const SIGNATURE_ID_REMOVED = new Set(["GetChapterContent", "GetBookIdFang"]);
@@ -53,6 +65,7 @@ for (const row of db.prepare("SELECT id FROM channels").all()) validIds.add(Stri
 type Verdict =
   | "OK"
   | "known-id"
+  | "known-id-numeric"
   | "known-signature-removed"
   // 签名字段两侧都在，但源签名值（32 位十六进制 / 源数字）在新库无法复现
   // （源 int64 与源签名均不落库）→ 结构已对齐，仅值不同，属已知可接受
@@ -64,6 +77,7 @@ type Verdict =
   | "known-adaptation"
   | "known-data-drift"
   | "known-new-endpoint"
+  | "known-added-fallback"
   | "MISMATCH";
 interface Finding {
   path: string;
@@ -82,6 +96,22 @@ function isIdMapped(oldV: unknown, newV: unknown): boolean {
   if (!OLD_ID_RE.test(String(oldV))) return false;
   if (LENIENT_IDS) return true;
   return validIds.has(newV);
+}
+
+/**
+ * 数值化 id 适配判定：旧端发数值（int 或数值字符串），新端发「数值 / 数值字符串」。
+ * 两侧同为「可喂给 Gson IntegerTypeAdapter 的形态」即视为结构对齐；
+ * 值是否相同单独标注（源 int64 不落库，值不可复现属已知可接受）。
+ */
+function isNumericIdAdaptation(oldV: unknown, newV: unknown): boolean {
+  const oldOk =
+    typeof oldV === "number" ||
+    (typeof oldV === "string" && NUMERIC_STRING_RE.test(oldV));
+  if (!oldOk) return false;
+  return (
+    typeof newV === "number" ||
+    (typeof newV === "string" && NUMERIC_STRING_RE.test(newV))
+  );
 }
 
 function canonical(v: unknown): string {
@@ -167,7 +197,17 @@ function diffArray(oldArr: unknown[], newArr: unknown[], path: string): void {
   // 顶层合并特例（仅 GetBookChapter/GetBookIdFang 的 $.data）：新数组是旧数组的前缀
   const allowMerge = path === "$.data" && MERGE_ENDPOINTS.has(currentEndpoint);
   if (!allowMerge) {
-    findings.push({path, verdict: "MISMATCH", detail: `数组长度 旧 ${oldArr.length} / 新 ${newArr.length}`});
+    // GetBookIdFang 的嵌套组成数组（standardYaoList 等）：旧端为空（源 FangBody 缺行）、
+    // 新端通过 FangText 标记回退补出组成 → 纯新增，归 known-added-fallback（拍板「补」）。
+    // 仅当 oldArr 为空（旧端本来就没行）才放行，避免把「长度被改动」的真实回归也吃进来。
+    const isFallbackComposition = currentEndpoint === "GetBookIdFang" && oldArr.length === 0;
+    findings.push({
+      path,
+      verdict: isFallbackComposition ? "known-added-fallback" : "MISMATCH",
+      detail: isFallbackComposition
+        ? `回退补出的组成数组（旧端为空，新端补出 ${newArr.length} 行组成，拍板「补」）`
+        : `数组长度 旧 ${oldArr.length} / 新 ${newArr.length}`,
+    });
   }
   const n = Math.max(oldArr.length, newArr.length);
   let mergeCount = 0;
@@ -182,7 +222,15 @@ function diffArray(oldArr: unknown[], newArr: unknown[], path: string): void {
       mergeCount += 1;
       continue;
     }
-    findings.push({path: `${path}[${i}]`, verdict: "MISMATCH", detail: "新多出的行"});
+    // 仅「新端比旧端多出的元素」才落到这里（旧端无此位置）。GetBookIdFang 中这是
+    // 回退补出的组成行 / 整条公式（旧端公式或组成数组为空），归 known-added-fallback（拍板「补」）。
+    // 同位置双方都有值的项走上面的 diffValue，值若不同仍判 MISMATCH，不会被本分支掩盖。
+    const isFallbackRow = currentEndpoint === "GetBookIdFang";
+    findings.push({
+      path: `${path}[${i}]`,
+      verdict: isFallbackRow ? "known-added-fallback" : "MISMATCH",
+      detail: isFallbackRow ? "新多出的行（回退补出，拍板「补」）" : "新多出的行",
+    });
   }
   if (mergeCount > 0) {
     findings.push({
@@ -201,6 +249,17 @@ function diffValue(oldV: unknown, newV: unknown, path: string): void {
   }
   if (ID_FIELDS.has(lastSeg) && isIdMapped(oldV, newV)) {
     findings.push({path, verdict: "known-id", detail: `id 已换 11 位新 id（库中存在）旧=${oldV} 新=${newV}`});
+    return;
+  }
+  // App Gson 侧 id 字段：两侧均为数值形态即结构对齐（源 int64 不落库 → 值不可复现）
+  // 仅对「严格不等」的项生效；完全相等的项继续下落到 oldV === newV → OK，避免把 OK 降级。
+  if (ID_FIELDS.has(lastSeg) && oldV !== newV && isNumericIdAdaptation(oldV, newV)) {
+    const same = String(oldV) === String(newV);
+    findings.push({
+      path,
+      verdict: "known-id-numeric",
+      detail: `数值化 id（App Gson 要求）：旧=${oldV} 新=${newV}${same ? "" : "；源 int64 不落库，值不可复现（spec §16）"}`,
+    });
     return;
   }
   if (oldV === null && (newV === null || newV === "")) {
@@ -297,29 +356,57 @@ function compareNav(oldV: unknown, newV: unknown): void {
 }
 
 function compareYao(oldV: unknown, newV: unknown): void {
-  // GetAllZhongYao 拍板改造：旧按本草书逐本拼接（同名药重复出现），新=容器频道去重。
+  // GetAllZhongYao 改造（2026-10-03）：新端点复刻 netcore —— 601 味 = 源 Yao 172（本经+别录）
+  // + 从《神农本草经疏》提取 429；同名药以换行合并。改为真实比对：名集合 + 顺序 + 文本内容。
   const oldYao = oldV as Array<{name: string; text: string}>;
   const newYao = newV as Array<{name: string; text: string}>;
-  findings.push({path: "$.data", verdict: "known-adaptation", detail: `GetAllZhongYao 改造（拍板）：旧 ${oldYao.length} 行（本草书×药，含重复）→ 新 ${newYao.length} 行（容器去重）`});
-  const oldByName = new Map<string, string[]>();
-  for (const y of oldYao) {
-    const list = oldByName.get(y.name) ?? [];
-    list.push(y.text);
-    oldByName.set(y.name, list);
+  const norm = (s: string) => s.replace(/\s+/g, "").trim();
+
+  // 1) 名集合（双向）
+  const oldNames = new Set(oldYao.map((y) => y.name));
+  const newNames = new Set(newYao.map((y) => y.name));
+  const onlyOld = [...oldNames].filter((n) => !newNames.has(n));
+  const onlyNew = [...newNames].filter((n) => !oldNames.has(n));
+  if (onlyOld.length === 0 && onlyNew.length === 0) {
+    findings.push({path: "$.data", verdict: "OK", detail: `名集合完全一致（${oldNames.size} 味）`});
+  } else {
+    findings.push({
+      path: "$.data",
+      verdict: "MISMATCH",
+      detail: `名集合不一致：旧独有 ${onlyOld.length}${onlyOld.length ? "：" + onlyOld.slice(0, 5).join("、") : ""}；新独有 ${onlyNew.length}${onlyNew.length ? "：" + onlyNew.slice(0, 5).join("、") : ""}`,
+    });
   }
-  let textOk = 0;
-  let textVariant = 0;
-  for (const y of newYao) {
-    const variants = oldByName.get(y.name);
-    if (!variants) {
-      findings.push({path: `$.data[${y.name}]`, verdict: "MISMATCH", detail: "新中药在旧响应中不存在"});
-      continue;
+
+  // 2) 顺序
+  if (oldYao.length === newYao.length) {
+    let orderOk = true;
+    for (let i = 0; i < oldYao.length; i++) {
+      if (oldYao[i]!.name !== newYao[i]!.name) { orderOk = false; findings.push({path: `$.data[${i}]`, verdict: "MISMATCH", detail: `顺序不同：旧=${oldYao[i]!.name} 新=${newYao[i]!.name}`}); break; }
     }
-    if (variants.includes(y.text)) textOk += 1;
-    else textVariant += 1;
+    if (orderOk) findings.push({path: "$.data", verdict: "OK", detail: `顺序完全一致（${oldYao.length} 条）`});
+  } else {
+    findings.push({path: "$.data", verdict: "MISMATCH", detail: `条数不同：旧 ${oldYao.length} 新 ${newYao.length}`});
   }
-  const missing = [...oldByName.keys()].filter((n) => !newYao.some((y) => y.name === n));
-  findings.push({path: "$.data", verdict: "known-adaptation", detail: `交集比对：text 完全一致 ${textOk}、按书变体 ${textVariant}；旧独有药名 ${missing.length}${missing.length ? "：" + missing.slice(0, 5).join("、") : ""}`});
+
+  // 3) 文本：完全一致 / 仅空白差异（本地 import 丢失原始空行与\r\n，属已知保真限制）/ 内容差异（源数据漂移）
+  const oldByName = new Map(oldYao.map((y) => [y.name, y.text]));
+  let exact = 0, wsOnly = 0;
+  const contentDiff: string[] = [];
+  for (const y of newYao) {
+    const t = oldByName.get(y.name);
+    if (t === undefined) continue;
+    if (t === y.text) exact++;
+    else if (norm(t) === norm(y.text)) wsOnly++;
+    else contentDiff.push(y.name);
+  }
+  findings.push({path: "$.data", verdict: "OK", detail: `文本完全一致 ${exact}、仅空白差异 ${wsOnly}（内容逐字相同）`});
+  if (contentDiff.length === 0) {
+    findings.push({path: "$.data", verdict: "OK", detail: "无内容级文本差异"});
+  } else if (contentDiff.length <= 10) {
+    findings.push({path: "$.data", verdict: "known-data-drift", detail: `内容差异 ${contentDiff.length} 条（源 dump 与 netcore 活动库出入）：${contentDiff.join("、")}`});
+  } else {
+    findings.push({path: "$.data", verdict: "MISMATCH", detail: `内容差异过多（${contentDiff.length} 条）：${contentDiff.slice(0, 8).join("、")}`});
+  }
 }
 
 function compareAlia(oldV: unknown, newV: unknown): void {
