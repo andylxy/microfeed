@@ -48,7 +48,6 @@ import {
 import {API_BASE_PATH} from "@/shared/ApiVersion";
 import {
   decideLoginCredentialApiRequest,
-  DEFAULT_APP_LOGIN_CREDENTIAL,
   providedLoginCredential,
 } from "@/server/api/credential-bearer";
 import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
@@ -241,13 +240,14 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
   if (pathname.startsWith("/api/")) {
     const db = env.FEED_DB;
     let attribution: ApiAttribution | null = null;
-    // The mobile app does not always send `Authorization: Bearer mflc_…`; for
-    // its namespace inject the default app key (the request is then attributed to
-    // a user holding `app:mobile:access`) so the app keeps working unchanged.
-    const defaultKey = pathname.startsWith("/api/AppBookRequest/")
-      ? DEFAULT_APP_LOGIN_CREDENTIAL
-      : null;
-    if (providedLoginCredential(context.request) || defaultKey) {
+    // The mobile content API requires a login-credential bearer (`mflc_…`) on
+    // every request; there is no hardcoded fallback key. A request to the app
+    // namespace without a bearer is rejected with 401 (unauthorized). The
+    // bearer branch is also taken whenever a bearer is present.
+    if (
+      providedLoginCredential(context.request) ||
+      pathname.startsWith("/api/AppBookRequest/")
+    ) {
       // Sessionless login-credential bearer (`Authorization: Bearer mflc_…`):
       // the token rides on every request and no cookie is written. The token
       // establishes the user; RBAC decides authorization, including the audit
@@ -256,7 +256,6 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         db,
         context.request,
         pathname,
-        defaultKey,
       );
       if (result.kind === "reference") {
         return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
