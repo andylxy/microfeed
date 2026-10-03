@@ -155,6 +155,114 @@ export function htmlToPlain(html: string): string {
     .trim();
 }
 
+/** 任意标记起始（ADR-03：`$u{}` `$w{}` `$f{}` `$m{}` `$n{}` `$q{}` …）。 */
+const MARKER_START = /^\$[a-zA-Z]+\{/;
+
+/** 煎服法起始：「上X味，以水…」——其后属煎服法/加减法，不再是要的组成。 */
+const DOSAGE_INTRO = /上[一二三四五六七八九十百千零〇\d]+味/;
+/** 段落分隔（用于无「上X味」标记时取首段）。 */
+const PARAGRAPH_BREAK = /\r\n\r\n|\n\n|\r\r/;
+
+/**
+ * 读取一个标记体的内容，带**脏括号容错**。
+ *
+ * `openIdx` 指向标记名后的 `{`。返回内容与结束下标（正常闭合时指向 `}` 之后，
+ * 脏括号时指向截断点）。源 dump 里存在 `$w{四两|` 这类未闭合写法，单纯找
+ * 下一个 `}` 会把后面的其它标记一并吞掉。
+ */
+export function readMarkerBody(
+  text: string,
+  openIdx: number,
+): { body: string; end: number } {
+  let i = openIdx + 1;
+  let depth = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      // depth 归零即本标记的闭合括号
+      if (depth === 0) return { body: text.slice(openIdx + 1, i), end: i + 1 };
+      depth--;
+    } else if (ch === "\n" || ch === "\r") {
+      break; // 未闭合：截到行尾
+    } else if (ch === "$" && MARKER_START.test(text.slice(i))) {
+      break; // 未闭合：下一个标记已经开始
+    } else if (depth === 0 && /\s{2,}/.test(text.slice(i, i + 2))) {
+      break; // 未闭合：连续空格（剂量后紧跟下一味药，如 `$w{四两|  $u{人参`)
+    }
+    i++;
+  }
+  return { body: text.slice(openIdx + 1, i), end: i };
+}
+
+/**
+ * 从 `Fang.FangText` 提取药味组成 —— 供「源 `FangBody` 表缺行」时回退使用。
+ *
+ * 遵循 ADR-03：标记**可嵌套**且源含**脏括号**，因此**禁止**用单层正则
+ * `/\$u\{([^}]*)\}/`（会漏掉嵌套式、被脏括号截断）。全库实测三种形态：
+ *   分离式 `$u{药名}$w{剂量}`（788 行，绝大多数）
+ *   嵌套式 `$u{药名$w{剂量}}`（5 行，外层 `}` 常缺失）
+ *   脏括号  `$w{四两|  $u{人参`（15 行）
+ * 策略：从 `$u{` 起线性扫描，看「先遇到 `$w{` 还是 `}`」——前者为嵌套式
+ * （其前为药名），后者为分离式（到 `}` 为药名）；剂量一律走带容错的配对。
+ */
+export function parseFangTextIngredients(
+  fangText: string,
+): Array<{ showName: string; amount: string | null }> {
+  // 只解析「组成段」。FangText 的结构是：组成 → 「上X味，以水…」煎服法 →
+  // 加减法/注解，后两段里的 `$u{}` 不是本方的组成（如小青龙汤加减法会再提
+  // 七八味药）。全段扫描会把它们虚增进来：以源 `YaoCount` 为判据实测
+  // 481 首，全段命中 436、截断到煎服法前命中 451，故按语义截断。
+  const intro = DOSAGE_INTRO.exec(fangText);
+  const scope = intro
+    ? fangText.slice(0, intro.index)
+    : (fangText.split(PARAGRAPH_BREAK)[0] ?? fangText);
+  const out: Array<{ showName: string; amount: string | null }> = [];
+  let i = 0;
+  while (i < scope.length) {
+    const uIdx = scope.indexOf("$u{", i);
+    if (uIdx < 0) break;
+    let p = uIdx + 3;
+    let nameEnd = -1; // 分离式：`$u{` 的闭合 `}`
+    let doseOpen = -1; // 嵌套式：内容里 `$w{` 的 `{`
+    while (p < scope.length) {
+      if (scope.startsWith("$w{", p)) {
+        doseOpen = p + 2;
+        break;
+      }
+      if (scope[p] === "}") {
+        nameEnd = p;
+        break;
+      }
+      if (scope[p] === "\n" || scope[p] === "\r") break;
+      if (scope[p] === "$" && MARKER_START.test(scope.slice(p))) break;
+      p++;
+    }
+    if (nameEnd < 0 && doseOpen < 0) {
+      i = uIdx + 3; // 无法判定：跳过，避免死循环
+      continue;
+    }
+    const showName = scope.slice(uIdx + 3, nameEnd >= 0 ? nameEnd : p).trim();
+    let amount: string | null = null;
+    let cursor = uIdx + 3;
+    if (doseOpen >= 0) {
+      const read = readMarkerBody(scope, doseOpen);
+      amount = read.body.trim() || null;
+      cursor = read.end;
+    } else if (scope.startsWith("$w{", nameEnd + 1)) {
+      const read = readMarkerBody(scope, nameEnd + 3);
+      amount = read.body.trim() || null;
+      cursor = read.end;
+    } else {
+      cursor = nameEnd + 1;
+    }
+    if (showName) out.push({ showName, amount });
+    i = cursor > uIdx + 3 ? cursor : uIdx + 3;
+  }
+  return out;
+}
+
 /** 标题型分隔符：SectionText 里「标题──正文」的分界（只认开头 60 字内）。 */
 const TITLE_SEPARATORS = /(──|——|—|：|　)/;
 const TITLE_MAX = 30;
@@ -642,14 +750,129 @@ export function buildTargets(
   const yaoSourceIdSet = new Set(
     tables.yao.map((row) => String(rowValue(row, "YaoId") ?? "")),
   );
+
+  // ---- FangText 组成回退 ------------------------------------------------
+  /**
+   * 源 dump 的 `FangBody` 表并不完整：金匮要略・(人纪) 49 首方剂只有 2 首有
+   * FangBody 行、桂林古本 329 首只有 7 首 —— 其余方剂的药味组成其实写在
+   * `Fang.FangText` 的 `$u{药名}$w{剂量}` 标记里（`YaoCount` 与标记数吻合）。
+   * 只认 FangBody 会让这些方剂的 `fangYaoList` 为空，后台「药味组成」与 App
+   * `standardYaoList` 都拿不到数据（2026-10-03 修复）。
+   *
+   * 白名单说明：宋版（10001/10002）在 netcore 侧共 315 首方剂，其中 3 首
+   * （禹余粮丸 / 杏子汤 / 黄连粉）正文明确标注「(佚)」「方未见。」、`YaoCount=0`
+   * 且无 `$u{}` 标记 —— 源本身无数据，回退对它们天然不生效。白名单保留是为了
+   * 让「哪些书启用了回退」显式可查，避免全量静默开启。用户已拍板：
+   * 数据完整性优先于 golden 逐字对齐，故桂林古本（1001000）一并纳入。
+   */
+  const FANG_TEXT_FALLBACK_BOOK_NOS = new Set(["9040000", "9050000", "1001000"]);
+
+  /** 药名（正名 + `YaoList` 别名）→ 源 `Yao.YaoId`。 */
+  const yaoIdByName = new Map<string, string>();
+  for (const row of tables.yao) {
+    const yaoId = String(rowValue(row, "YaoId") ?? "");
+    if (!yaoId) continue;
+    const names = [rowText(row, "YaoName"), ...rowText(row, "YaoList").split(/[,，]/)];
+    for (const raw of names) {
+      const name = raw.trim();
+      if (name && !yaoIdByName.has(name)) yaoIdByName.set(name, yaoId);
+    }
+  }
+  /**
+   * 异名 / 古名 / 异体字 → 源 `Yao.YaoName` 正名。回退解析
+   * （parseFangTextIngredients）从 `Fang.FangText` 的 `$u{}` 标记抽出的药名，
+   * 常是古名 / 异写 / 带后缀（芎藭 / 葶苈 / 干地黄 / 川乌 …），与 `Yao.YaoName`
+   * 不完全一致，导致 `yaoId` 算不出落点（编辑页药味组成显示空白 / 下拉错名）。
+   * 这些映射全部经本地库 172 味 yao 条目 + 源 `Yao.sql`（172 味）双向核验，
+   * 目标正名在源内确实存在，可安全桥接（2026-10-03 防复发固化，
+   * 对应 `.scratch/tcm-import/repair_fang_yao_null.mjs` 实测救回的 63 条）。
+   *
+   * ⚠️ 源 dump `Yao.sql` 仅 172 味（netcore 实有 601），以下药名在源内与本地
+   * 都无独立条目，属已知数据缺口，保持 `yaoId=null` 不强行造假：
+   * 狼毒 / 冬瓜子 / 香蒲 / 木通 / 王瓜根 / 鸡子（经方或指黄或指白，歧义）/
+   * 食蜜（≠石蜜）/ （庶/虫）虫（乱码名）。
+   */
+  const YAO_NAME_ALIASES: Record<string, string> = {
+    "芎藭": "芎䓖", "芎穷": "芎䓖", "川芎": "芎䓖",
+    "诃黎勒": "诃梨勒",
+    "白蔹": "白敛",
+    "葶苈": "葶苈子", "葶历": "葶苈子",
+    "括蒌": "栝蒌", "括蒌实": "栝蒌", "栝楼实": "栝蒌",
+    "牡丹": "牡丹皮",
+    "干地黄": "地黄", "生地黄": "地黄", "地黄汁": "地黄", "熟地黄": "地黄",
+    "大附子": "附子",
+    "白酒": "酒",
+    "葱白": "葱",
+    "麻仁": "麻子仁", "麻子": "麻子仁",
+    "神曲": "曲", "神麯": "曲",
+    "豆黄": "豆黄卷",
+    "薏苡": "薏苡仁", "苡米": "薏苡仁",
+    "木防已": "防己", "木防己": "防己",
+    "川乌": "乌头",
+    "山药": "薯蓣",
+    "桑根白皮": "桑东南根白皮",
+    "蒴藿": "蒴藋细叶", "蒴藋": "蒴藋细叶",
+    "太乙禹余粮": "禹余粮",
+    "防已": "防己",
+    "乌扇": "射干",
+    "芜花": "芫花",
+  };
+
+  /**
+   * 药名归一化：去序号前缀（「1、」）→ 去空白 → 去尾部括号修饰
+   * （「牡蛎 (熬)」→「牡蛎」）→ 异名桥接 → 去尾部「剂量+单位」
+   * （回退解析偶把剂量吞进药名，如「人参三两」「甘草二两 (炙)」）。
+   * 单位必须出现才剥离，避免误伤以数字结尾的真药名（如「三七」）。
+   */
+  function normalizeYaoShowName(s: string): string {
+    let x = String(s ?? "")
+      .replace(/^\d+\s*[、.．.]\s*/, "")
+      .replace(/\s+/g, "")
+      .replace(/[（(][^）)]*[）)]\s*$/, "");
+    const alias = YAO_NAME_ALIASES[x];
+    if (alias) x = alias;
+    x = x.replace(
+      /[一二三四五六七八九十百千0-9]+\s*(两|斤|个|枚|升|合|钱|分|铢|撮|把|握|束|片|枝|根|茎|叶|花|仁|斗|丸|贴)\s*$/,
+      "",
+    );
+    return x.trim();
+  }
+
+  /**
+   * 按名查药：经 `normalizeYaoShowName` 归一后查 `yaoIdByName`。
+   * ⚠️ 这里**不做** FangBody 那套 0-based `+1` 补偿 —— `+1` 只针对
+   * `FangBody.YaoID` 的错位引用，按名解析直接命中真实 `YaoId`。
+   */
+  function lookupYaoIdByName(showName: string): string | null {
+    const key = normalizeYaoShowName(showName);
+    if (!key) return null;
+    return yaoIdByName.get(key) ?? null;
+  }
+
+  type FangYaoEntry = {
+    yaoId: string | null;
+    amount: string | null;
+    weight: string | number | null;
+    suffix: string | null;
+    showName: string;
+    extraProcess: string | null;
+  };
   // 单书模式：本书方剂组成引用的中药条目（fangYaoList.yaoId 的关系依赖）一并导入
   const onlyBookYaoIds = new Set<string>();
   if (onlyBookNo) {
     for (const row of selectedFangs) {
       const fid = String(rowValue(row, "FangId") ?? "");
       for (const bodyRow of fangBodyByFang.get(fid) ?? []) {
-        const y = String(rowValue(bodyRow, "YaoID") ?? "");
-        if (y) onlyBookYaoIds.add(y);
+        // ⚠️ `FangBody.YaoID` 是 **0-based 引用**（见下方 fangYaoList 的 +1
+        // 补偿），而 onlyBookYaoIds 是按 `Yao.YaoId`（真实 id）查的 —— 必须
+        // 同样 +1 并做成员检查，否则单书导入会漏掉真正被引用的中药、却导入
+        // 「序号少一位」的错药，使 fangYaoList.yaoId 悬空（2026-10-03 修复；
+        // 此前只能靠 repour 后跑 import-yao.mjs 收尾来掩盖）。
+        const raw = rowValue(bodyRow, "YaoID");
+        const key = raw === null ? Number.NaN : Number(raw) + 1;
+        if (Number.isFinite(key) && yaoSourceIdSet.has(String(key))) {
+          onlyBookYaoIds.add(String(key));
+        }
       }
     }
   }
@@ -662,7 +885,7 @@ export function buildTargets(
         warnings.push(`方剂 ${fangId} 的来源书 ${sourceBookNo} 无对应频道`);
       }
     }
-    const fangYaoList = (fangBodyByFang.get(fangId) ?? []).map((bodyRow) => {
+    let fangYaoList: FangYaoEntry[] = (fangBodyByFang.get(fangId) ?? []).map((bodyRow) => {
       const yaoSourceId = rowValue(bodyRow, "YaoID");
       // ⚠️ 源 `FangBody.YaoID` 是 **0-based 引用**：比 `Yao.YaoId` 整体少 1
       // （实测 2023 行全量验证：YaoID+1 精确命中 1927 行；其余 94 行是 ShowName
@@ -686,6 +909,25 @@ export function buildTargets(
         extraProcess: rowText(bodyRow, "ExtraProcess"),
       };
     });
+    // FangBody 缺失 → 从正文 `$u{}/$w{}` 标记回退（仅白名单书号启用）。
+    // 回退新增的引用必须同步进 onlyBookYaoIds，否则单书 repour 时这些中药
+    // 条目不在导入集里，yaoId 会悬空。
+    let fromFangText = false;
+    if (fangYaoList.length === 0 && FANG_TEXT_FALLBACK_BOOK_NOS.has(sourceBookNo)) {
+      fangYaoList = parseFangTextIngredients(rowText(row, "FangText")).map((entry) => {
+        const yaoSourceKey = lookupYaoIdByName(entry.showName);
+        if (onlyBookNo && yaoSourceKey) onlyBookYaoIds.add(yaoSourceKey);
+        return {
+          yaoId: yaoSourceKey ? tcmId("yao", yaoSourceKey) : null,
+          amount: entry.amount,
+          weight: null,
+          suffix: null,
+          showName: entry.showName,
+          extraProcess: null,
+        };
+      });
+      fromFangText = fangYaoList.length > 0;
+    }
     const description = textToHtml(rowText(row, "FangText"));
     const pubDate = toIso(rowText(row, "CreateDate"));
     track(
@@ -709,10 +951,13 @@ export function buildTargets(
               : rowValue(row, "FangNo"),
             yaoCount: rowValue(row, "YaoCount"),
             drinkNum: rowValue(row, "FangdrinkNum"),
-            yaoList: rowText(row, "YaoList")
-              .split(",")
-              .map((name) => name.trim())
-              .filter((name) => name.length > 0),
+            // 回退生效时源 `YaoList` 为空，改用解析出的药名（保序去重）
+            yaoList: fromFangText
+              ? [...new Set(fangYaoList.map((entry) => entry.showName).filter(Boolean))]
+              : rowText(row, "YaoList")
+                  .split(",")
+                  .map((name) => name.trim())
+                  .filter((name) => name.length > 0),
             fangList: rowText(row, "FangList")
               .split(",")
               .map((name) => name.trim())
