@@ -1,4 +1,11 @@
-import {useCallback, useEffect, useState, type ChangeEvent} from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
@@ -61,6 +68,115 @@ function formToPayload(form: BookFormState) {
     status: form.status,
     title: form.title.trim(),
   };
+}
+
+/**
+ * Shared book editor. Rendered both at the top (for "New book") and inline
+ * inside the row being edited, so editing expands where the user clicked
+ * instead of jumping to the top of the page.
+ */
+function BookForm({
+  form,
+  setForm,
+  editing,
+  categoryOptions,
+  statusOptions,
+  visibilityOptions,
+  saving,
+  onSave,
+  onCancel,
+  title,
+}: {
+  form: BookFormState;
+  setForm: Dispatch<SetStateAction<BookFormState>>;
+  editing: BookAdmin | null;
+  categoryOptions: AdminSelectOption[];
+  statusOptions: AdminSelectOption[];
+  visibilityOptions: AdminSelectOption[];
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+  title: string;
+}) {
+  const {t} = useTranslation();
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      <h3 className="font-medium">{title}</h3>
+      <AdminInput
+        label={t("books.nameLabel")}
+        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+          setForm({...form, title: event.target.value})}
+        value={form.title}
+      />
+      <AdminInput
+        label={t("books.authorLabel")}
+        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+          setForm({...form, author: event.target.value})}
+        value={form.author}
+      />
+      <AdminInput
+        label={t("books.coverLabel")}
+        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+          setForm({...form, cover: event.target.value})}
+        value={form.cover}
+      />
+      <div className="grid gap-1 text-sm">
+        <span className="font-medium">{t("books.wordCountLabel")}</span>
+        <span className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {editing ? `${editing.wordCount} ${t("books.wordCountUnit")}` : "—"}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {t("books.wordCountDerivedHint")}
+        </span>
+      </div>
+      <AdminSelect
+        label={t("books.categoryLabel")}
+        onChange={(option) =>
+          setForm({...form, categoryId: option.value})}
+        options={categoryOptions}
+        value={categoryOptions.find(({value}) => value === form.categoryId)
+          ?? categoryOptions[0]}
+      />
+      <AdminSelect
+        label={t("books.serialStatusLabel")}
+        onChange={(option) =>
+          setForm({...form, serialStatus: option.value})}
+        options={statusOptions}
+        value={statusOptions.find(({value}) => value === form.serialStatus)
+          ?? statusOptions[0]}
+      />
+      <AdminSelect
+        label={t("books.statusLabel")}
+        onChange={(option) =>
+          setForm({...form, status: Number(option.value)})}
+        options={visibilityOptions}
+        value={visibilityOptions.find(
+          ({value}) => Number(value) === form.status,
+        ) ?? visibilityOptions[0]}
+      />
+      <div className="space-y-1">
+        <label className="text-sm font-medium" htmlFor="book-description">
+          {t("books.descriptionLabel")}
+        </label>
+        <textarea
+          className="w-full rounded-md border px-3 py-2 text-sm"
+          id="book-description"
+          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            setForm({...form, description: event.target.value})}
+          rows={4}
+          value={form.description}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button disabled={saving} onClick={onSave} type="button">
+          {t("books.saveAction")}
+        </Button>
+        <Button onClick={onCancel} type="button" variant="ghost">
+          {t("books.cancelAction")}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -216,104 +332,32 @@ export default function BooksApp() {
     );
   }
 
-  const showForm = creating || editing != null;
-
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">{t("books.intro")}</p>
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{t("books.title")}</h2>
-        {!showForm && (
+        {!creating && (
           <Button onClick={startCreate} type="button" variant="outline">
             {t("books.newBook")}
           </Button>
         )}
       </div>
 
-      {showForm && (
-        <div className="space-y-4 rounded-lg border p-4">
-          <h3 className="font-medium">
-            {editing ? t("books.editBook") : t("books.newBook")}
-          </h3>
-          <AdminInput
-            label={t("books.nameLabel")}
-            onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-              setForm({...form, title: event.target.value})}
-            value={form.title}
-          />
-          <AdminInput
-            label={t("books.authorLabel")}
-            onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-              setForm({...form, author: event.target.value})}
-            value={form.author}
-          />
-          <AdminInput
-            label={t("books.coverLabel")}
-            onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-              setForm({...form, cover: event.target.value})}
-            value={form.cover}
-          />
-          <div className="grid gap-1 text-sm">
-            <span className="font-medium">{t("books.wordCountLabel")}</span>
-            <span className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-              {editing ? `${editing.wordCount} ${t("books.wordCountUnit")}` : "—"}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {t("books.wordCountDerivedHint")}
-            </span>
-          </div>
-          <AdminSelect
-            label={t("books.categoryLabel")}
-            onChange={(option) =>
-              setForm({...form, categoryId: option.value})}
-            options={categoryOptions}
-            value={categoryOptions.find(({value}) => value === form.categoryId)
-              ?? categoryOptions[0]}
-          />
-          <AdminSelect
-            label={t("books.serialStatusLabel")}
-            onChange={(option) =>
-              setForm({...form, serialStatus: option.value})}
-            options={statusOptions}
-            value={statusOptions.find(({value}) => value === form.serialStatus)
-              ?? statusOptions[0]}
-          />
-          <AdminSelect
-            label={t("books.statusLabel")}
-            onChange={(option) =>
-              setForm({...form, status: Number(option.value)})}
-            options={visibilityOptions}
-            value={visibilityOptions.find(
-              ({value}) => Number(value) === form.status,
-            ) ?? visibilityOptions[0]}
-          />
-          <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="book-description">
-              {t("books.descriptionLabel")}
-            </label>
-            <textarea
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              id="book-description"
-              onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-                setForm({...form, description: event.target.value})}
-              rows={4}
-              value={form.description}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button disabled={saving} onClick={() => void save()} type="button">
-              {t("books.saveAction")}
-            </Button>
-            <Button
-              onClick={cancel}
-              type="button"
-              variant="ghost"
-            >
-              {t("books.cancelAction")}
-            </Button>
-          </div>
-        </div>
+      {creating && (
+        <BookForm
+          categoryOptions={categoryOptions}
+          editing={null}
+          form={form}
+          onCancel={cancel}
+          onSave={() => void save()}
+          saving={saving}
+          setForm={setForm}
+          statusOptions={statusOptions}
+          title={t("books.newBook")}
+          visibilityOptions={visibilityOptions}
+        />
       )}
 
       {categories.length > 0 && (
@@ -343,66 +387,89 @@ export default function BooksApp() {
         </div>
       )}
 
-      {visibleBooks.length === 0 && !showForm && (
+      {visibleBooks.length === 0 && !creating && (
         <p className="text-sm text-muted-foreground">
           {categoryFilter ? t("books.emptyCategory") : t("books.empty")}
         </p>
       )}
 
-      <div className="divide-y rounded-lg border">
-        {visibleBooks.map((book) => (
-          <div
-            className="flex flex-wrap items-center justify-between gap-3 p-3"
-            key={book.id}
-          >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">
-                  {book.title || t("books.untitled")}
-                </span>
-                {book.isPrimary && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                    {t("books.primaryBadge")}
-                  </span>
+      <div className="rounded-lg border">
+        {visibleBooks.map((book) => {
+          const isEditingThis = editing?.id === book.id;
+          return (
+            <div
+              className={isEditingThis ? "" : "border-b last:border-b-0"}
+              key={book.id}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {book.title || t("books.untitled")}
+                    </span>
+                    {book.isPrimary && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                        {t("books.primaryBadge")}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {book.status === STATUSES.PUBLISHED
+                        ? t("books.published")
+                        : t("books.draft")}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {book.author || "—"} · {book.categoryName || t("books.noCategory")}
+                    {" · "}
+                    {book.serialStatus === "finished"
+                      ? t("books.finished")
+                      : t("books.serializing")}
+                    {book.wordCount != null && ` · ${book.wordCount}`}
+                    {` · ${book.chapterCount} ${t("books.chapterCount")}`}
+                  </div>
+                </div>
+                {!isEditingThis && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => startEdit(book)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {t("books.editBook")}
+                    </Button>
+                    {!book.isPrimary && (
+                      <Button
+                        onClick={() => setConfirming(book)}
+                        size="sm"
+                        type="button"
+                        variant="destructive"
+                      >
+                        {t("books.deleteAction")}
+                      </Button>
+                    )}
+                  </div>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  {book.status === STATUSES.PUBLISHED
-                    ? t("books.published")
-                    : t("books.draft")}
-                </span>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {book.author || "—"} · {book.categoryName || t("books.noCategory")}
-                {" · "}
-                {book.serialStatus === "finished"
-                  ? t("books.finished")
-                  : t("books.serializing")}
-                {book.wordCount != null && ` · ${book.wordCount}`}
-                {` · ${book.chapterCount} ${t("books.chapterCount")}`}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => startEdit(book)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {t("books.editBook")}
-              </Button>
-              {!book.isPrimary && (
-                <Button
-                  onClick={() => setConfirming(book)}
-                  size="sm"
-                  type="button"
-                  variant="destructive"
-                >
-                  {t("books.deleteAction")}
-                </Button>
+              {isEditingThis && (
+                <div className="border-t bg-muted/30 p-4">
+                  <BookForm
+                    categoryOptions={categoryOptions}
+                    editing={book}
+                    form={form}
+                    onCancel={cancel}
+                    onSave={() => void save()}
+                    saving={saving}
+                    setForm={setForm}
+                    statusOptions={statusOptions}
+                    title={t("books.editBook")}
+                    visibilityOptions={visibilityOptions}
+                  />
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {confirming && (

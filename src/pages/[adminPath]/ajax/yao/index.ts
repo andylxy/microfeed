@@ -1,3 +1,12 @@
+/**
+ * 中药 board read端点 + actions.
+ *
+ * `GET ?bookId=[&deleted=1]` returns the book picker plus that book's 中药 board
+ * (the recycle view when `deleted=1`). Writes live in sibling action files —
+ * `action.ts` (add / update / soft-delete, all POST) and `restore.ts` — because
+ * this project routes admin verbs per-file; an `export const PUT` on `index.ts`
+ * is not routed. Guards live on the handler module.
+ */
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
@@ -7,11 +16,9 @@ import type {VolumeDb} from "@/server/feed/extVolume";
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
-/**
- * `GET ?bookId=<id>` returns the book picker plus that book's 中药 (yao) board.
- * Without `bookId` only the picker is returned. The board is read-only; each row
- * links out to the item editor.
- */
+const KIND = "yao";
+
+/** `GET ?bookId=<id>[&deleted=1]` — picker only when `bookId` is absent. */
 export const GET: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(
     locals,
@@ -22,10 +29,13 @@ export const GET: APIRoute = async ({locals, request}) => {
   if (guard) return guard;
   const url = new URL(request.url);
   const bookId = url.searchParams.get("bookId") ?? "";
+  const includeDeleted = url.searchParams.get("deleted") === "1";
   try {
     const db = env.FEED_DB as unknown as VolumeDb;
-    const books = await listTcmEntryBooks(db, "yao");
-    const board = bookId ? await listTcmEntryBoard(db, bookId, "yao") : null;
+    const books = await listTcmEntryBooks(db, KIND);
+    const board = bookId
+      ? await listTcmEntryBoard(db, bookId, KIND, includeDeleted)
+      : null;
     return jsonResponse(
       {board, books},
       {headers: {"cache-control": "private, no-store"}},

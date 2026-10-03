@@ -3,6 +3,7 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import AdminShell from "@/layouts/AdminShell.astro";
 import AliasesApp from "@/components/admin/aliases/AliasesApp";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {hasPermission} from "@/server/rbac/guard";
@@ -29,6 +30,10 @@ const canManage = hasPermission(
   Astro.locals,
   PERMISSION_CODES.CONTENT_ALIAS_MANAGE,
 );
+// Page size for the alias table's footer paging comes from the same Settings →
+// Items "每页条目数" setting the items list and the volume/fang boards use.
+const webSettings = feedContent.settings?.webGlobalSettings ?? {};
+const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
 ---
 
 <AdminShell
@@ -38,7 +43,7 @@ const canManage = hasPermission(
   {onboardingResult}
   pageTitle={translate("pageTitle.aliases", adminLanguage)}
 >
-  <AliasesApp canManage={canManage} client:only="react">
+  <AliasesApp canManage={canManage} client:only="react" {itemsPerPage}>
     <AdminPageFallback slot="fallback" kind="list" />
   </AliasesApp>
 </AdminShell>

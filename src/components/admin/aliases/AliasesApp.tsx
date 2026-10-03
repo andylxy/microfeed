@@ -1,5 +1,9 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {PlusIcon} from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+} from "lucide-react";
 
 import {
   AdminCollectionError,
@@ -7,6 +11,7 @@ import {
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
+import {DEFAULT_ITEMS_PER_PAGE} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 interface AliasRow {
@@ -23,6 +28,7 @@ interface AliasesResponse {
 
 interface Props {
   canManage?: boolean;
+  itemsPerPage?: number;
 }
 
 /**
@@ -37,12 +43,13 @@ interface Props {
  *
  * All writes need `content:alias:manage`.
  */
-export default function AliasesApp({canManage = false}: Props) {
+export default function AliasesApp({canManage = false, itemsPerPage}: Props) {
   const {t} = useTranslation();
   const [aliases, setAliases] = useState<AliasRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
   // Form mode: `null` = closed; `add` = new; `edit` = edit manual (uses id);
   // `override` = override a derived/hidden alias (POST, no id).
   const [mode, setMode] = useState<"add" | "edit" | "override" | null>(null);
@@ -179,6 +186,19 @@ export default function AliasesApp({canManage = false}: Props) {
     );
   }, [aliases, query]);
 
+  // Client-side paging, same as the fang board: the whole list loads in one
+  // request and we slice it so a large alias table doesn't render at once.
+  // Page size is sourced from Settings → Items "每页条目数"
+  // (webGlobalSettings.itemsPerPage), passed in as `itemsPerPage`; the constant
+  // is only a fallback when the prop is absent.
+  const pageSize = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = filtered.slice(
+    safePage * pageSize,
+    (safePage + 1) * pageSize,
+  );
+
   const formTitle =
     mode === "edit"
       ? t("aliases.editTitle")
@@ -212,7 +232,10 @@ export default function AliasesApp({canManage = false}: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input
           className="w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setPage(0);
+          }}
           placeholder={t("aliases.searchPlaceholder")}
           type="search"
           value={query}
@@ -273,7 +296,7 @@ export default function AliasesApp({canManage = false}: Props) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.map((row) => (
+              {pageRows.map((row) => (
                 <tr key={(row.id ?? `d-${row.bieming}`)}>
                   <td className="px-4 py-2">{row.bieming}</td>
                   <td className="px-4 py-2">{row.name}</td>
@@ -355,6 +378,37 @@ export default function AliasesApp({canManage = false}: Props) {
             </tbody>
           </table>
         </section>
+      )}
+
+      {filtered.length > 0 && totalPages > 1 && (
+        <nav
+          aria-label={t("volumes.paginationAria")}
+          className="mt-6 flex items-center justify-center gap-2"
+        >
+          <Button
+            disabled={safePage === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <ChevronLeftIcon aria-hidden="true" />
+            {t("volumes.previous")}
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {t("volumes.pageIndicator", {current: safePage + 1, total: totalPages})}
+          </span>
+          <Button
+            disabled={safePage >= totalPages - 1}
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("volumes.next")}
+            <ChevronRightIcon aria-hidden="true" />
+          </Button>
+        </nav>
       )}
     </div>
   );

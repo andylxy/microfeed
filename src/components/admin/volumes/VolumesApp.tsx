@@ -27,6 +27,19 @@ import type {
   VolumeChapter,
 } from "@/shared/ExtVolume";
 
+// Chapter status labels mirror the item edit page (EditItemApp) so the two
+// admin views never disagree about what a status means. Previously unlisted
+// chapters were shown as "已发布"; now every status renders its true label.
+const CHAPTER_STATUS_LABEL_KEYS: Record<number, string> = {
+  [STATUSES.PUBLISHED]: "items.statusPublished",
+  [STATUSES.UNLISTED]: "items.statusUnlisted",
+  [STATUSES.UNPUBLISHED]: "items.statusUnpublished",
+};
+
+function chapterStatusLabelKey(status: number): string {
+  return CHAPTER_STATUS_LABEL_KEYS[status] ?? "items.statusUnpublished";
+}
+
 interface CategoryOption {
   id: string;
   name: string;
@@ -496,10 +509,7 @@ export default function VolumesApp({itemsPerPage}: Props) {
                         {row.chapter.title}
                       </a>
                       <span className="text-xs text-muted-foreground">
-                        {row.chapter.status === STATUSES.PUBLISHED
-                          || row.chapter.status === STATUSES.UNLISTED
-                          ? t("volumes.published")
-                          : t("volumes.draft")}
+                        {t(chapterStatusLabelKey(row.chapter.status))}
                       </span>
                       {/*
                         The chapter's whole audit trail — every recorded change,

@@ -6,6 +6,7 @@ import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {hasPermission} from "@/server/rbac/guard";
 import {requirePagePermission} from "@/server/rbac/page-guard";
 
 const adminLanguage = adminLanguageFromRequest(Astro.request);
@@ -18,6 +19,9 @@ const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_TERM
 if (denied) {
   return denied;
 }
+// Write controls need `content:term:manage` — endpoint-enforced, surfaced here so
+// a read-only account doesn't see buttons that would 403.
+const canManage = hasPermission(Astro.locals, PERMISSION_CODES.CONTENT_TERM_MANAGE);
 // Page size for the board's footer paging comes from the same Settings → Items
 // setting the items list and the volume/fang boards use.
 const webSettings = feedContent.settings?.webGlobalSettings ?? {};
@@ -31,7 +35,13 @@ const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
   {onboardingResult}
   pageTitle={translate("pageTitle.term", adminLanguage)}
 >
-  <TcmEntryBoardApp client:only="react" itemsPerPage={itemsPerPage} namespace="term" kind="term">
+  <TcmEntryBoardApp
+    canManage={canManage}
+    client:only="react"
+    itemsPerPage={itemsPerPage}
+    kind="term"
+    namespace="term"
+  >
     <AdminPageFallback slot="fallback" kind="list" />
   </TcmEntryBoardApp>
 </AdminShell>
