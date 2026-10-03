@@ -430,6 +430,65 @@ SELECT count(*) FROM items i JOIN site_search_documents d ON d.content_id=i.id
 故改 section 标题**不会**破 golden —— 这正是 r16/r17/r18 三连改标题仍零 MISMATCH 的根因，也反证了 r15 那次回归**只**来自篇章/名词标题（当时脚本没限定 `tcm_kind='section'`，把它们也动了）。
 结论：**只动 section 标题 → 无需跑 golden；动 chapter/term 标题 → 必跑 golden**。
 
+### 4.13 ⚠️ App `GetAllZhongYao` = 601 味（172 + 经疏 429），不是「172 的数据缺口」
+**先认清事实**（2026-10-03 golden 601 条逐一核对）：netcore 该端点返回 **601** 味，构成为
+- **172 味**：本经+别录，来自源 `Yao` 表 → 本地「中药」容器频道 `4KbG9bDqdz3` 的 `tcm_kind='yao'`；
+- **429 味**：**从《神农本草经疏》书里提取**（本地 `OsOP62cyp3j`，1040 个 `section` 条目），与 Yao 一起下发。
+
+所以「172 vs 601」**不是源数据缺失**（源 dump `Yao.sql` 确实只有 172，但 netcore 的 601 味其正文本来就在经疏书里），而是**端点复刻不全**。
+⚠️ 别再去 `Yao.sql` 里找那 429 味——找不到是正常的。**《神农本草经・(人纪)》`ZhuBd0Vj7kl` 几乎不贡献**（429 条文本标记全是「经疏+本经」）。
+
+**合并规则（App 端「相同药加换行合并」）**
+- 172 中有 **112** 味经疏也有 → `172正文 + "\r\n\r\n$q{《神农本草经疏》}" + 经疏正文`（`$q{}` 后 **0 空格**）；
+- 429 味（仅经疏）→ `"  $u{药名}\r\n$q{《神农本草经疏》}    " + 经疏正文`（`$q{}` 后恒 **4 空格**）；
+- 顺序：172 块（本经序）在前，429 块在后。
+
+**新增 yao 的四种存在性组合（已逐个实测，行为符合预期）**
+
+| 场景 | 端点行为 | 总数 |
+|---|---|---|
+| 经疏有同名条目 | 显示 + **自动合并**经疏正文 | 601（吸收 429 段同名位） |
+| **经疏/人纪都没有**（新增药纯自带本经内容） | ✅ **正常显示**，正文就是它自己的本经+别录，不合并、不报错 | 601→**602** |
+| 药只在**人纪**有、经疏没有 | ✅ 正常显示，**不合并人纪**——这是**正确行为**，见下 | 601→602 |
+| 锚点外的经疏药条 | 不显示（有意边界，见下） | 601 |
+
+⚠️ **人纪（`ZhuBd0Vj7kl`）永不参与合并，这不是漏实现**：现有 172 味里 **55 味经疏查不到、其中 18 味在人纪有**（鼠妇/白石脂/天雄/蛴螬/泽漆/甘李根白皮/新绛/芫花/败酱/蜘蛛/乌头/薤白/蜀漆/秦皮/鸡子黄/荛花/梓白皮/禹余粮），**实测 golden 这 18 条全部不含人纪内容**（0 条含经疏合并标记、0 条含"人纪"字样）→ netcore 就是不合并人纪。别"顺手"把人纪加进合并源，会直接破 golden。
+
+**新增 yao 只需它自己带 `tcm_kind='yao'` + `status=1`**，端点无需改代码即生效；两本草书都没有该药时，退化为纯本经+别录单段显示（这是正确且完整的降级）。
+
+**为什么 172 的合并是动态规则、429 却是静态锚点（2026-10-03 改造实测，勿退回静态映射）**
+- **合并层已动态化**：某味 172 药「该不该补经疏」由可推导规则决定——① 该药名在经疏书命中某个药条（`JINGSHU_NAME_ALIAS` 兜异名写法）；② 该药条**没被另一个 429 药认领**。若被别的 429 认领（172「橘皮」与 429「陈皮」同属经疏「3、陈皮,橘皮」条），netcore 只把经疏正文发给 429 那个名字，172 侧不补。**新增 yao 无需改代码即自动合并**；新增 yao 若恰好与 429 锚点同名（如「铁锈」），它升为 172 条并吸收经疏、429 段跳过它，**总数不变、内容不丢**。
+  实测该规则精确复现 golden 的 112 条合并（`橘皮/薯蓣/虻虫/曲/鸡屎白/苏叶` 6 条正确地不合并）。已删除原静态映射 `zhongyao-append-map.ts`（避免第二事实源漂移）。
+- **429 层必须保留静态锚点**：netcore 的 429 是**策展清单**（从经疏 904 条精选），**已实测无法用规则还原**——按「部名章节」规则得 609（多82缺74）、宽松关键词规则得 746（多出的`崩中/难产/妊娠恶阻`是症状词非药名，被「人部」误匹配妇人门章节）。故 `JINGSHU_ONLY_YAO_NAMES` 锁定已确认名单。**新增经疏药条**若要下发，需把药名加入该锚点后重跑 `gen_429_anchor.mjs`——这是有意的能力边界，不是bug。
+
+**踩坑：经疏条目的 HTML 段分隔符不统一**——经疏用 `</p><p>`（首段无换行）连接段，而 `rawParagraphText` 的正则要求 `</p>` 后必须跟换行 → 会整段失配、**把 `</p><p>` 当正文吞进输出**。故新增 `jingshuParagraphText()`（逐块抓 `<p>…</p>`、CRLF 拼接）。
+⚠️ **172 的渲染仍走 `rawParagraphText`（已与 netcore 字节对齐，勿动）**。
+
+**验收现状**（`yarn typecheck` 0 errors；端点 200）：名字集合 **601 完全一致**、顺序 **601/601 一致**；文本完全一致 69/ 仅空白差异 531（`\n` vs `\r\n`、空行——本地 import 丢失原始空行/换行，属**已知保真限制**，内容逐字相同）/ 内容差异 1（石蜜，源 dump 与 netcore 活动库出入 → `known-data-drift`）。`compare.mts` 的 `compareYao` 已从 known-adaptation 放行改为**真实比对**。
+**改这个端点后必跑** `compare.mts`（`GetAllZhongYao` 现为真比对，任何回归会直接报 MISMATCH）；新增 yao/经疏条目后用 `.scratch/tcm-import/verify_dynamic.mjs` 可离线验证「601 基线+ 增量场景」是否符合预期。
+
+### 4.14 ⚠️ 中药 / 名词看板的写操作（2026-10-03 加 CRUD，两个必踩坑）
+
+`/admin/yao/`、`/admin/term/` 原本是**只读**看板（只有 GET，行链到条目编辑页）。现已支持**新增 / 改名 / 改正文 / 发布↔草稿 / 软删 + 回收站恢复**，实现见 `src/server/admin/tcm-entry-handlers.ts` + `ajax/{yao,term}/action.ts`。
+
+**与别名对照的本质差异**：别名对照的本体在 `ext_tcm_aliases`（items 只读派生，手工行合并覆盖）；**中药/名词的本体就是 `items`**，所以 CRUD 直接写 `items`，**不建 ext 辅助表**。
+- 新增条目 id **自动生成**（用户拍板；手填易重复出错）＝沿用 `volume-handlers.newItemId()` 同款 11 位 base62 `crypto.getRandomValues` + 唯一性重试。**不要用 `build.ts` 的 `tcmId()`**——它依赖模块级 `idOwner` 与 node:crypto，worker 端不可用。
+- 软删 `status=3`（用户拍板）：方剂 `fangYaoList[].yaoId` 可能仍引用它，硬删会变悬空。
+
+**坑 1 — 本项目 admin 动词按「文件」路由，不是按 HTTP 动词。**
+`ajax/*/index.ts` 只挂 GET；写操作必须**单独文件**（范式见 `ajax/volumes/assign.ts`）。**在 `index.ts` 上 `export const PUT` 不会被路由**（404，POST/DELETE 正常）——按标准 REST 写 PUT 会得到「200 但其实没进我的 handler」的假象，排查极耗时。做法：`action.ts` 一个文件收 POST，用 body 里的 `action: "add"|"update"|"delete"` 分派；恢复是逆向动词，另开 `restore.ts`。（`ajax/aliases/index.ts` 同样是 GET-only。）
+
+**坑 2 — ⚠️ 写 `items.data` 禁用 `recordContentChange`。**
+它是**审核流**函数：会存 pending 快照，随后 `pinToLastApproved` 用 `writeItemContent` 把该快照**覆盖回 `items.data`**，静默回滚本次编辑；而它**故意保留 status 列**。症状极具迷惑性：**「发布状态能改、药名/正文永远改不动」**（`run()` 还报 `success:true, changed_db:true`，请求内复读也是新值，出请求就回滚）。
+看板写已定稿 → 直接用导出的 **`writeItemContent(db, itemId, dataJson)`**（顺带刷新 `content_text`/`review_status`/`pub_date` 派生列）；只改 `status` 列时普通 `UPDATE items SET status=?` 即可。
+（`volume-handlers` 也调 `recordContentChange` 却没暴露此坑——它只改 `title`/`volume` 标签，pin 会保留。）
+
+**坑 3 — Workers 运行时 `request.clone().json()` 不可靠**（会得到 null）。要按动作分派就**只读一次 body**，把已解析对象用 `xxxWith(context, body)` 传给 handler（工厂函数同时导出 `APIRoute` 包装与带 body 的版本）。
+
+**权限三处同步**（漏一处即红）：`Constants.ts` 的 `CONTENT_YAO_MANAGE`/`CONTENT_TERM_MANAGE` + `seed.ts` 的 `RBAC_PERMISSIONS` + 迁移 `0079_ext_tcm_yao_term_manage_permissions.sql`（权限 id 必须 `permissionId()` 推导，否则 bootstrapAdmin 500）。editor 授 manage，readonly 保持只读。菜单行沿用 0077 已有的 `m_yao`/`m_term`，只**追加** manage 码到 `ext_menu_permissions`。
+
+**验收**：typecheck 0 errors；`i18n:check` 2220/2220；RBAC 4 套 42/42；dev 实测中药+名词双份全链路（新增/重名 409/改名改正文/转草稿/软删/回收站/恢复）；golden 全端点零 MISMATCH（`GetAllZhongYao` 仍 601、`GetAllMingCi` 仍 17）。
+
 ## 5. 本地环境 & 部署陷阱（动手前必读）
 
 - **admin 全页 500（裸 500）**：`/` 返回 200 但 `/admin/*` 全返回裸 `500` ⇒ 不是业务代码问题，是强杀 dev 进程树导致 **Vite 依赖预构建缓存损坏**（`.vite/deps_ssr/` 缺文件，admin 走 SSR）。修法：杀 dev → `mv node_modules/.vite node_modules/.stale/vite-<ts>`（用 mv 不用 rm，绕开 safe-delete 闸）+ 同样移走 `.astro` → `run_in_background` 重启 `manage dev`。重启后首访触发重新预构建。
@@ -441,7 +500,8 @@ SELECT count(*) FROM items i JOIN site_search_documents d ON d.content_id=i.id
   ```
   判据：`dist/server/wrangler.json` 的 `topLevelName` 应为实例名、`database_id` 应为 `a7188289-…`。
 - **dev 重启跨调用回收 + 70s 冷启动**：`manage dev` 起的进程跨 Bash 调用会被回收，所以"起服务 + 轮询 + 抓页面"必须**在同一次调用内**完成（`nohup ... &` 后轮询等 `astro ready` + `Local http://localhost:4321/`），冷启动到可响应约 **70 秒**，只等 25s 会误判没起来。常驻起法 = `run_in_background` 跑 `./node_modules/.bin/yarn manage dev --local --instance ctwh-881019-xyz`（见 `dev-local-server.bat` 同款命令）。
-- **⚠️ 起 dev 必须带 `CODEBUDDY_SAFE_DELETE_ENABLED=0`**（2026-09-30）：Vite 重优化要删的 `node_modules/.vite/deps_temp_*` 超 50 文件 → safe-delete 闸抛错 → **dev server 崩溃**；崩溃后页面报 `file does not exist at .../deps_ssr/<dep>.js`（marked.js 等）。**表象像依赖不兼容，真因是闸杀死优化器——别去加 `optimizeDeps.exclude`**。修法：`export CODEBUDDY_SAFE_DELETE_ENABLED=0` 后重启；必要时先 `mv node_modules/.vite .vite-old-<ts>`。
+- **⚠️ 起 dev 必须带 `CODEBUDDY_SAFE_DELETE_ENABLED=0`**（2026-09-30）：Vite 重优化要删的 `node_modules/.vite/deps_temp_*` 超 50 文件 → safe-delete 闸抛错 → **dev server 崩溃**；崩溃后页面报 `file does not exist at .../deps_ssr/<dep>.js`（`astro_compiler-runtime.js` / marked.js 等）。**表象像依赖不兼容，真因是闸杀死优化器——别去加 `optimizeDeps.exclude`**。修法：`export CODEBUDDY_SAFE_DELETE_ENABLED=0` 后重启；必要时先 `mv node_modules/.vite node_modules/.vite-broken-<ts>-*`。
+  **判据（2026-10-03 实测，40 秒定位）**：文件不存在 **且** `deps_ssr/_metadata.json` 的 `optimized` 里也没登记该依赖 → 确认优化器中途被杀（登记缺失即被杀）；若文件缺失但 metadata **有**登记 → 是hash 漂移的另一种问题，先重启再谈其他。停进程要按**命令行**筛 `yarn manage dev`/`manage-cli`/`tsx`/`astro.mjs dev` 四层，禁止按进程名一刀切。**完整规则以 `AGENTS.md` 的「Vite 依赖缓存目录（`.vite*`）管理」章节为准**（含目录清单与恢复三步）；`.vite-old-*`/`.vite-stale-*`/`.vite-broken-*` 均属一次性产物，**任务结束前必须删净**（单个 20–160MB，残留数个即占数百 MB）。
 - **主题激活一致性（公开页样式）**：公开站首页 / 书页样式取决于**激活主题**而非内容。本地若丢失 `feed-zh`（带 ADR-0010 画布色的 `--mf-page-bg`），样式会与远程全不对；排查本地≠远程页面样式时**先比激活主题**（`theme_state.active_theme_id`）。TCM 前端展示要求 `feed-zh` **≥ 0.1.35**（`manage theme install ./themes/feed-zh --local --instance <n>` → `theme activate <id>`）。
 - **本地实例现状（2026-10-01 起）**：`ctwh-881019-xyz` 本地库已导入 **13 部书中 10 部**：桂林古本（31/984/329）+ 9 部新书（9040000/10001/10002/9050000/20100000/20200000/20300000/9020000/400100，见 `ctwh-books/books.json`）+ 全局 yao 172 / term 17。全库 tcm 计数：chapter 447 / section 8066 / fang 804 / yao 172 / term 17；活跃频道 14 个。**3 部源无正文跳过**（100100/9010000/9030000）。**per-book 导入带方剂的书后必须重跑 `import-yao.mjs --apply`**：build.ts 把书方剂引用的 yao 写进容器 `tcmyao00001`（本地无此频道），且 yao 的 11 位 id 与中药库相同 → INSERT OR REPLACE 会把中药库 yao 的 book_id 改到悬空容器（2026-10-01 实测 164 条被挪走，重跑 import-yao 归位）。远端仍是权威全集；需要全量可 `.scratch/backups/resync-remote-to-local.sh` 拉回（停服务后跑）。
 
@@ -510,3 +570,5 @@ curl --noproxy '*' -s -L -b ck.txt "http://localhost:4321/admin/ajax/items?limit
 | 22 | 方剂编辑页「归属书本」显示容器「方剂」而非真实书（475 方 book_id+口袋 bookId=tcmfang0001）；且「引用此方剂的条文」跨书混入其它书同名方的引用（桂枝汤全局 122 条跨 3 书） | 容器布局（build.ts 导入管线）与参照布局（桂林古本 329 方 book_id=真实书）混存。**数据修正**：`.scratch/investigate-fang/fix-fang-book.mjs --apply` 把 475 方 book_id+口袋 bookId 同步搬到 `sourceBookId`（113/202/111/49 按 book 分布，与 golden 遗留差异①计数吻合；幂等，改前 cp 备份）；**代码**：`fang-references.ts` 接受 `bookId` 参数（`AND book_id=?`，缺省全局=向后兼容），`FangEditor` 新 prop `bookId`（传 `microfeed.sourceBookId`）——每本书的编辑页只引用本书条文。**回归**：§4.3.5 归属 SQL 应 0 | `.scratch/investigate-fang/fix-fang-book.mjs` / `src/pages/[adminPath]/ajax/tcm/fang-references.ts` / `FangEditor.tsx`（2026-10-01 第十三轮） |
 | 25 | **方剂「药味组成」大面积为空**（桂林古本 322/329 空、金匮·人纪 47/49 空、伤寒·人纪 2/111 空），后台编辑页与 App `standardYaoList` 都拿不到药 | 根因：`build.ts` 组成**只认 `FangBody` 表**，而源 dump 的 FangBody 对这几本书几乎没行——组成其实写在 `Fang.FangText` 的 `$u{药名}$w{剂量}` 标记里（`YaoCount` 与标记数吻合）。**修复**：`FangBody` 缺行时按书号白名单 `FANG_TEXT_FALLBACK_BOOK_NOS={9040000,9050000,1001000}` 从正文回退解析。**⚠️ 解析器铁律（ADR-03）**：标记可嵌套、源含脏括号，**禁止**单层正则 `/\$u\{([^}]*)\}/`——实测三形态并存：分离式 `$u{药}{w}$`（788 行）、嵌套式 `$u{药$w{量}}`（5 行，外层 `}` 常缺失）、脏括号 `$w{四两|  $u{人参`（15 行）。要**括号配对 + 三重容错**（换行/新标记起始/连续空格 处截断）。**范围铁律**：只取组成段——截断到「上X味」之前（无则首段）；以源 YaoCount 为判据 481 首实测：全段命中 436、首段 449、截到「上X味」前 **451**。因为其后是煎服法/加减法，`$u{}` 不是组成（小青龙汤全段会虚增到 18 味）。**按名查药不做 +1 补偿**（`+1` 只针对 `FangBody.YaoID` 的 0-based 引用）。成效：桂林古本 7→323、金匮人纪 2→48、伤寒人纪 109→110；宋版不变（其 3 首空方源标「(佚)」「方未见。」，正文 0 标记，**真无数据**）。**⚠️ 这会打破 1001000 的 golden 对齐**（netcore 仅 7 首有 `standardYaoList`）→ 2026-10-03 用户拍板「数据完整性优先」故纳入 | `scripts/import-ctwh/build.ts`（`parseFangTextIngredients` / `readMarkerBody` / `yaoIdByName` / `lookupYaoIdByName`）/ 回归 `tests/unit/tcm-import.test.ts`（2026-10-03） |
 | 26 | **repour 带方剂的书后 `fangYaoList.yaoId` 悬空**，只能靠每次重跑 `import-yao.mjs` 掩盖 | 根因（第二个真缺陷）：`onlyBookYaoIds` 存的是 `FangBody.YaoID`（**0-based**），却按 `Yao.YaoId`（真实 id）去查 → 差 1，单书导入会**漏掉真被引用 的药、却导入「序号少一位」的错药**。修复：与 `fangYaoList` 的 `+1` 补偿保持一致（同样 +1 + `yaoSourceIdSet` 成员检查），并把回退解析新引用的药同步加进集合。修复后**悬空 = 0** | `scripts/import-ctwh/build.ts`（2026-10-03） |
+| 27 | App `GetAllZhongYao` 只有 **172** 味，netcore 实有 **601** 味（缺 429）；**且后续新增 yao 也要能自动显示+自动合并** | **不是数据缺口，是端点复刻不全**：netcore 601 = 172（本经+别录，`中药` 容器 `tcm_kind='yao'`）+ **429 从《神农本草经疏》书(`OsOP62cyp3j`)提取**，同名药以 `\r\n\r\n$q{《神农本草经疏》}` 合并（112 味）；429 味格式 `"  $u{名}\r\n$q{《神农本草经疏》}    "`（`$q{}` 后恒 4 空格）。**人纪 `ZhuBd0Vj7kl` 几乎不贡献**。**分层设计**：合并层**动态推导**（经疏有同名条目且未被别的 429 认领→自动合并，新增 yao 免改代码；新增 yao 若与 429 同名则吸收经疏、429 段跳过，总数不变不丢内容）→ 精确复现 112 条；429 层**保留静态锚点** `zhongyao-anchor.ts`（netcore 策展清单，**已实测无法用规则还原**：部名章节规则 609、宽松规则 746，故只能锁定名单，新增经疏药条需重跑 `gen_429_anchor.mjs`）。别名按标题全逗号名建索引（`伏龙肝`独立/`灶心土`不在601）；异名兜底 `神曲→曲`、`鸡爪三棱→草三棱根`、`葶苈子→葶苈`。**踩坑**：经疏 HTML 用 `</p><p>`（首段无换行），`rawParagraphText` 会失配吞标签 → 新增 `jingshuParagraphText()`（逐块抓 CRLF 拼）；**172 仍走 `rawParagraphText`（字节对齐勿动）**。⚠️ 合并条件曾写反（`claimed.get(entry) !== name`）导致 6 条该不合并的被合并 → 正确为「无人认领**或**认领者是自己」才合并 | `src/server/tcm/reads.ts` `getAppAllYao`/`jingshuYaoText`(返回 `{text,entry}`) + `zhongyao-anchor.ts`（`.scratch/tcm-import/gen_429_anchor.mjs` 生成）+ 离线验证 `verify_dynamic.mjs` / **正文见 §4.13**（2026-10-03） |
+| 28 | 中药/名词看板要能**增删改**（原只读） | 新增/改名/改正文/发布↔草稿/**软删 status=3 + 回收站恢复**（方剂 `yaoId` 可能仍引用，硬删会悬空）。**与别名对照的本质差异**：别名本体在 `ext_tcm_aliases`，**中药/名词本体就是 `items`** → 直接写 items、不建 ext 表。新增 id **自动生成**（`newItemId()` 同款 base62，**勿用 `build.ts` 的 `tcmId()`**：依赖 node:crypto + 模块级 idOwner，worker 不可用）。⚠️ **三个坑**：①本项目 admin 动词**按文件路由**，`index.ts` 只挂 GET，`export const PUT` **不被路由**（404）→ 用 `action.ts`(POST + `action` 字段) + `restore.ts`；②⚠️**写 `items.data` 禁用 `recordContentChange`**（审核流函数会存 pending 快照 → `pinToLastApproved` 覆盖回 data、**故意保留 status** → 症状「发布能改、药名正文永远改不动」，且 `run()` 报 success）→ 直接用导出的 **`writeItemContent`**（顺带刷 `content_text`/`review_status`/`pub_date`）；③Workers 里 `request.clone().json()` 不可靠，读一次 body 用 `xxxWith(ctx, body)` 传下去 | `src/server/admin/tcm-entry-handlers.ts`（`tcmEntryEndpoints` 工厂）+ `ajax/{yao,term}/{index,action,restore}.ts` + `TcmEntryBoardApp.tsx` + 迁移 `0079`（权限 id 须 `permissionId()` 推导）/ **正文见 §4.14**（2026-10-03） |
