@@ -289,6 +289,8 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.RBAC,
       ADMIN_MENU_CODES.USERS,
       ADMIN_MENU_CODES.RBAC_AUDIT,
+      ADMIN_MENU_CODES.DEVICES,
+      ADMIN_MENU_CODES.APP_VERSIONS,
     ]);
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});

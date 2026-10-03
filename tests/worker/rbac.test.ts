@@ -214,25 +214,58 @@ describe("requirePermission decision branches", () => {
 });
 
 describe("requireAppVersion", () => {
-  it("skips the gate when no App-Version header (web admin)", () => {
-    const request = new Request("https://x/ajax", {method: "POST"});
-    expect(requireAppVersion(request)).toBeNull();
+  // The gate now reads `ext_app_version.min_version_code` instead of a hardcoded
+  // constant, and only applies to the App content namespace (ADR-0005 / §6.4).
+  const APP_URL = "https://x/api/AppBookRequest/GetNav/";
+
+  beforeEach(async () => {
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare("DELETE FROM ext_app_rollout"),
+      env.FEED_DB.prepare(
+        "UPDATE ext_app_version SET min_version_code = 10 WHERE id = 1",
+      ),
+    ]);
   });
 
-  it("returns 426 for an app version below the minimum", () => {
-    const request = new Request("https://x/ajax", {
-      method: "POST",
-      headers: {"app-version": "0.9.0"},
-    });
-    expect(requireAppVersion(request)?.status).toBe(426);
+  it("returns 426 when the app-version header is missing", async () => {
+    const request = new Request(APP_URL, {method: "GET"});
+    expect((await requireAppVersion(env.FEED_DB, request))?.status).toBe(426);
   });
 
-  it("allows an app version at or above the minimum", () => {
-    const request = new Request("https://x/ajax", {
-      method: "POST",
+  it("returns 426 for a non-integer app-version header", async () => {
+    const request = new Request(APP_URL, {
       headers: {"app-version": "1.0.0"},
+      method: "GET",
     });
-    expect(requireAppVersion(request)).toBeNull();
+    expect((await requireAppVersion(env.FEED_DB, request))?.status).toBe(426);
+  });
+
+  it("returns 426 for an app version below the floor", async () => {
+    const request = new Request(APP_URL, {
+      headers: {"app-version": "9"},
+      method: "GET",
+    });
+    expect((await requireAppVersion(env.FEED_DB, request))?.status).toBe(426);
+  });
+
+  it("allows an app version at or above the floor", async () => {
+    const request = new Request(APP_URL, {
+      headers: {"app-version": "10"},
+      method: "GET",
+    });
+    expect(await requireAppVersion(env.FEED_DB, request)).toBeNull();
+  });
+
+  it("does not gate admin/ajax requests (no app-version header)", async () => {
+    const request = new Request("https://x/ajax/feed", {method: "POST"});
+    const result = await requireRbac(
+      {authUser: {id: "u1"}, rbacPermissions: new Set(["*"])},
+      "content:book:delete",
+      request,
+      env.FEED_DB,
+      {skipReplay: true},
+    );
+    expect(result).toBeNull();
   });
 });
 
@@ -287,19 +320,22 @@ describe("requireRbac combined gate", () => {
     expect(result?.status).toBe(403);
   });
 
-  it("returns 426 for an outdated app version before checking permissions", async () => {
+  it("does not apply the app-version gate to admin endpoints (ADR-0005)", async () => {
+    // The version gate now lives in the middleware's App-content branch only.
+    // An admin/AJAX request carries no `app-version` header, so it must reach the
+    // permission step instead of being 426'd.
     const request = new Request("https://x/ajax", {
       method: "POST",
       headers: {"app-version": "0.9.0"},
     });
     const result = await requireRbac(
-      {rbacPermissions: new Set(["*"])},
+      {authUser: {id: "u1"}, rbacPermissions: new Set(["*"])},
       "content:book:delete",
       request,
       env.FEED_DB,
       {skipReplay: true},
     );
-    expect(result?.status).toBe(426);
+    expect(result).toBeNull();
   });
 });
 
@@ -365,8 +401,10 @@ describe("RBAC catalog integrity", () => {
     // 17 since 0075 added `content:alias:manage` — editors maintain the alias list.
     // 19 since 0077 added `content:yao:read` + `content:term:read` — the herb and
     // term boards are read-only too (rows link out to the item editor).
+    // 21 since 0079 added `content:yao:manage` + `content:term:manage` — the
+    // boards own their rows' identity / publishing state, which is content work.
     // Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(19);
+    expect(editorCount?.c).toBe(21);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -430,8 +468,9 @@ describe("RBAC administration", () => {
     // 14 since 0069 added `content:annotation-markers:read`; 15 since 0073 added
     // `content:fang:read`; 16 since 0074 added `content:alias:read`; 17 since 0075
     // added `content:alias:manage`; 19 since 0077 added `content:yao:read` +
-    // `content:term:read`.
-    expect(editor?.permissions).toHaveLength(19);
+    // `content:term:read`; 21 since 0079 added `content:yao:manage` +
+    // `content:term:manage`.
+    expect(editor?.permissions).toHaveLength(21);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

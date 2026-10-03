@@ -1,6 +1,7 @@
 import {
   BookIcon,
   Code2Icon,
+  DownloadIcon,
   FileCode2Icon,
   FileTextIcon,
   HistoryIcon,
@@ -12,6 +13,7 @@ import {
   PillIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  SmartphoneIcon,
   TagsIcon,
   UploadIcon,
   UsersIcon,
@@ -49,6 +51,8 @@ const MENU_ICONS: Record<string, typeof HomeIcon> = {
   upload: UploadIcon,
   users: UsersIcon,
   webhook: WebhookIcon,
+  smartphone: SmartphoneIcon,
+  download: DownloadIcon,
 };
 
 const FALLBACK_MENU_ICON = ListIcon;

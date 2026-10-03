@@ -64,6 +64,72 @@ export async function accountIsBlocked(
 }
 
 /**
+ * The device identity carried by a request, or `null` when absent/invalid.
+ *
+ * The header is attacker-controlled, so it is validated before it can reach the
+ * device table: an unbounded or exotic value must never be upserted as a device
+ * identity (B15). An invalid header is treated as absent — the web admin sends
+ * no device header at all, so this only affects API clients.
+ */
+export function deviceIdFromRequest(request: Request): string | null {
+  const header = request.headers.get("x-device-id");
+  return header !== null &&
+      header.length <= 64 &&
+      /^[A-Za-z0-9_-]+$/.test(header)
+    ? header
+    : null;
+}
+
+/**
+ * Is the device behind this request revoked for this account?
+ *
+ * Split out of {@link resolveRbacContext} so the App content path
+ * (`/api/AppBookRequest/*`) can enforce revocation too — that path never called
+ * `resolveRbacContext`, which left "revoked" devices still reading data
+ * (ADR-0006).
+ */
+export async function isDeviceRevoked(
+  db: D1Database,
+  userId: string,
+  request: Request,
+): Promise<boolean> {
+  const deviceId = deviceIdFromRequest(request);
+  if (!deviceId) return false;
+  const device = await db
+    .prepare(
+      "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
+    )
+    .bind(userId, deviceId)
+    .first<{status: string}>();
+  return Boolean(device && device.status === "revoked");
+}
+
+/**
+ * Upsert the device behind this request for this account.
+ *
+ * ⚠️ `ON CONFLICT … DO UPDATE SET last_seen_at` deliberately updates **only**
+ * `last_seen_at`. Writing `status = 'active'` here would silently lift a
+ * revocation on the next request (CONTEXT「设备登记」不变量).
+ */
+export async function registerUserDevice(
+  db: D1Database,
+  userId: string,
+  request: Request,
+): Promise<void> {
+  const deviceId = deviceIdFromRequest(request);
+  if (!deviceId) return;
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO ext_user_devices (user_id, device_id, last_seen_at, status, created_at)
+       VALUES (?, ?, ?, 'active', ?)
+       ON CONFLICT(user_id, device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+    )
+    .bind(userId, deviceId, now, now)
+    .run();
+}
+
+/**
  * Resolve the full RBAC context for an authenticated session and, when the
  * caller supplies an `X-Device-Id` header, upsert the device row.
  *
@@ -90,37 +156,9 @@ export async function resolveRbacContext(
     mustChangePassword = true;
   }
 
-  let deviceRevoked = false;
-  // B15: the header is attacker-controlled, so validate it before it reaches
-  // the device table — an unbounded or exotic value must not be upserted as a
-  // device identity. An invalid header is treated as absent (the web admin
-  // sends no device header at all, so this only affects API clients).
-  const headerDeviceId = request.headers.get("x-device-id");
-  const deviceId = headerDeviceId !== null &&
-      headerDeviceId.length <= 64 &&
-      /^[A-Za-z0-9_-]+$/.test(headerDeviceId)
-    ? headerDeviceId
-    : null;
-  if (deviceId) {
-    const device = await db
-      .prepare(
-        "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
-      )
-      .bind(userId, deviceId)
-      .first<{status: string}>();
-    if (device && device.status === "revoked") {
-      deviceRevoked = true;
-    }
-    const now = new Date().toISOString();
-    await db
-      .prepare(
-        `INSERT INTO ext_user_devices (user_id, device_id, last_seen_at, status, created_at)
-         VALUES (?, ?, ?, 'active', ?)
-         ON CONFLICT(user_id, device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
-      )
-      .bind(userId, deviceId, now, now)
-      .run();
-  }
+  // Revocation is checked before the upsert, so a revoked device stays revoked.
+  const deviceRevoked = await isDeviceRevoked(db, userId, request);
+  await registerUserDevice(db, userId, request);
 
   return {permissions, mustChangePassword, deviceRevoked, banned};
 }

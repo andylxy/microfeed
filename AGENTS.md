@@ -119,7 +119,8 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
 - 为每个变更或新增的端点添加契约与运行时测试。验证生成的参考格式仍描述同
   一个文档，然后在发布前运行 `yarn lint:openapi` 和 `yarn check`。
 
-- **豁免：移动端专用通道 `/api/AppBookRequest/*` 不注册进 OpenAPI 契约。**
+- **豁免：移动端专用通道 `/api/AppBookRequest/*` 与 `/api/app/version` 不注册进
+  OpenAPI 契约。**
   该命名空间是本项目对旧 .NET 后端 `AppBookRequest` 接口的 1:1 移植（路径与
   响应 JSON 逐字节对齐，App 只换 baseUrl、零改码），属于 App 与后端之间的
   **内部通道**，并非面向公众的 feed API；其响应信封 `{code,data,msg}` 与字段
@@ -128,6 +129,11 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
   而 App 通道是 legacy 兼容通道。运行时覆盖由 `tcm-app-routes.test.ts` 与
   `tcm-app-reads.test.ts` / `tcm-app-auth.test.ts` 提供，不应在 `OpenApiDocument.ts`
   中重复登记以免污染公开 API 文档。
+  `GET /api/app/version`（App 升级描述符：最新/最低版本码、下载地址、MD5、
+  更新日志）属同一类：它由 App 调用、匿名可访问、只服务于客户端升级收敛，不是
+  面向公众的 feed 契约。它**独立于** AppBookRequest 命名空间（不在
+  `/api/AppBookRequest/*` 前缀下），故此处显式点名。其运行时契约由
+  `tests/worker/app-version-routes.test.ts` 与 `tests/unit/app-version.test.ts` 锁定。
 
 ## 前端组件
 

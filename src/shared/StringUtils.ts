@@ -495,6 +495,14 @@ export const ADMIN_URLS = {
   /** 恢复一个被软删的中药 / 名词条目。 */
   ajaxTcmEntryRestore: (kind: string) =>
     adminUrl(`ajax/${kind}/restore`, browserAdminPath()),
+  /** 设备总览（跨账号），以及吊销 / 恢复单台设备。 */
+  ajaxDevices: () => adminUrl("ajax/devices", browserAdminPath()),
+  ajaxDeviceRevoke: () => adminUrl("ajax/devices/revoke", browserAdminPath()),
+  ajaxDeviceRestore: () => adminUrl("ajax/devices/restore", browserAdminPath()),
+  /** 版本配置 + 灰度规则：读取与保存。 */
+  ajaxAppVersions: () => adminUrl("ajax/app-versions", browserAdminPath()),
+  ajaxAppVersionsSave: () =>
+    adminUrl("ajax/app-versions/save", browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),

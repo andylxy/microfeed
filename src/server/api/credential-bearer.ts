@@ -29,6 +29,8 @@ import {
 } from "@/server/auth/login-throttle";
 import {
   accountIsBlocked,
+  isDeviceRevoked,
+  registerUserDevice,
   RBAC_WILDCARD,
   resolveUserPermissions,
 } from "@/server/rbac/resolve";
@@ -41,6 +43,7 @@ const THROTTLE_KEY_SUFFIX = ":/api/bearer";
 
 export type CredentialBearerDecision =
   | {kind: "allow"; attribution: ApiAttribution}
+  | {kind: "deviceRevoked"}
   | {kind: "forbidden"; attribution: ApiAttribution}
   | {kind: "notFound"}
   | {kind: "reference"}
@@ -91,6 +94,25 @@ export async function decideLoginCredentialApiRequest(
   if (await accountIsBlocked(database, verified.userId)) {
     return {kind: "unauthorized"};
   }
+
+  // Device registration + revocation for login-credential API calls (ADR-0006).
+  // This path never called `resolveRbacContext`, so without these two calls an
+  // App device never reached the admin board, and a revoked device kept reading
+  // data.
+  //
+  // Scope note: this is deliberately **not** narrowed to `/api/AppBookRequest/*`.
+  // Revocation is a property of the calling *device*, so applying it on every
+  // credential-backed integration path keeps one device from being blocked on
+  // the App content endpoints while still reading through `/api/content/*` with
+  // the same credential. The admin branch already behaves this way for every
+  // admin request (`resolveRbacContext`). Callers that send no `x-device-id`
+  // (everyone today except the App) are unaffected.
+  //
+  // Revocation is checked before the upsert so a revoked row stays revoked.
+  if (await isDeviceRevoked(database, verified.userId, request)) {
+    return {kind: "deviceRevoked"};
+  }
+  await registerUserDevice(database, verified.userId, request);
 
   // The credential authenticates the user; `requiredApiPermission` decides what
   // the user may do. After A1 every integration path maps to a code, so a `null`

@@ -29,7 +29,12 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {RBAC_WILDCARD} from "./resolve";
+import {
+  compareVersionCode,
+  parseAppVersionCode,
+  resolveMinVersionForRequest,
+} from "@/server/app-version/resolve";
+import {deviceIdFromRequest, RBAC_WILDCARD} from "./resolve";
 import {checkReplay} from "./replay";
 import {type PermissionCode} from "@/shared/Constants";
 
@@ -46,27 +51,40 @@ export interface RbacLocals {
   rbacBanned?: boolean;
 }
 
-const MIN_SUPPORTED_APP_VERSION = "1.0.0";
-
-/** App-Version < minimum -> 426. Web admin sends no header, so it is skipped. */
-export function requireAppVersion(request: Request): Response | null {
-  const header = request.headers.get("app-version");
-  if (!header) return null;
-  if (compareVersion(header, MIN_SUPPORTED_APP_VERSION) < 0) {
-    return new Response("App version too low", {status: 426});
+/**
+ * The App version gate (ADR-0005 / ADR-0008). Applies **only** to the App
+ * content namespace `/api/AppBookRequest/*` — the web admin sends no
+ * `app-version` header and must never be gated.
+ *
+ * Resolution (spec §6.4):
+ *  - header present and integer `>= floor` → allow (`null`);
+ *  - header present but `< floor` → 426;
+ *  - **header missing or non-integer → 426** (an old client, or a stripped
+ *    header — the force-upgrade target is exactly "sends no header").
+ *
+ * The floor comes from `resolveMinVersionForRequest`, so grayscale rules apply
+ * once `userId`/`deviceId` are known. The pre-auth call site (before the login
+ * credential is verified) passes neither, so only the global floor and `all`
+ * rules apply there; a second call after authentication adds device/user/percent
+ * rules (spec §6.4 "地板前判 + 灰度后判").
+ */
+export async function requireAppVersion(
+  db: D1Database,
+  request: Request,
+  context: {userId?: string | null} = {},
+): Promise<Response | null> {
+  const {minVersionCode} = await resolveMinVersionForRequest(db, {
+    deviceId: deviceIdFromRequest(request),
+    userId: context.userId ?? null,
+  });
+  const headerCode = parseAppVersionCode(request.headers.get("app-version"));
+  if (
+    headerCode !== null &&
+    compareVersionCode(headerCode, minVersionCode) >= 0
+  ) {
+    return null;
   }
-  return null;
-}
-
-function compareVersion(a: string, b: string): number {
-  const pa = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const pb = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(pa.length, pb.length);
-  for (let i = 0; i < length; i++) {
-    const delta = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (delta !== 0) return delta;
-  }
-  return 0;
+  return new Response("App version too low", {status: 426});
 }
 
 /**
@@ -91,7 +109,13 @@ export function requireAccountAccess(
   }
 
   if (locals.rbacDeviceRevoked) {
-    return new Response("Unauthorized", {status: 401});
+    // Distinguish "this device was revoked" from "session expired / not signed
+    // in" (ADR-0003): the App keys off `X-Device-Revoked` to show "此设备已被
+    // 管理员禁用" instead of looping through the login dialog forever.
+    return new Response("Unauthorized", {
+      headers: {"X-Device-Revoked": "1"},
+      status: 401,
+    });
   }
 
   if (locals.rbacMustChangePassword && !options.exemptFromMustChange) {
@@ -194,6 +218,14 @@ export function withRbacGuard(handler: APIRoute, code: PermissionCode): APIRoute
   };
 }
 
+/**
+ * Gate for a protected admin endpoint: replay -> permission.
+ *
+ * The app-version gate is deliberately **absent** here: it applies only to the
+ * App content namespace `/api/AppBookRequest/*` and is enforced in
+ * `middleware.ts` (ADR-0005). Admin and AJAX callers send no `app-version`
+ * header, so gating them would 426 the whole dashboard.
+ */
 export async function requireRbac(
   locals: RbacLocals,
   code: PermissionCode,
@@ -201,9 +233,6 @@ export async function requireRbac(
   db: D1Database,
   options: {exemptFromMustChange?: boolean; skipReplay?: boolean} = {},
 ): Promise<Response | null> {
-  const version = requireAppVersion(request);
-  if (version) return version;
-
   if (!options.skipReplay) {
     const replay = await checkReplay(db, request);
     if (replay) return replay;
@@ -217,10 +246,10 @@ export async function requireRbac(
 
 /**
  * Gate for an endpoint that needs a live account but no specific permission:
- * version -> replay -> account. Mirrors {@link requireRbac} so the anti-replay
- * and app-version ordering stay identical; only the permission step is dropped.
- * Used by the self-service login-credential endpoints, where the caller is
- * acting on their own account and therefore needs no grant.
+ * replay -> account. Mirrors {@link requireRbac} so the anti-replay ordering
+ * stays identical; only the permission step is dropped. Used by the
+ * self-service login-credential endpoints, where the caller is acting on their
+ * own account and therefore needs no grant.
  */
 export async function requireAuthenticatedRbac(
   locals: RbacLocals,
@@ -228,9 +257,6 @@ export async function requireAuthenticatedRbac(
   db: D1Database,
   options: {exemptFromMustChange?: boolean; skipReplay?: boolean} = {},
 ): Promise<Response | null> {
-  const version = requireAppVersion(request);
-  if (version) return version;
-
   if (!options.skipReplay) {
     const replay = await checkReplay(db, request);
     if (replay) return replay;

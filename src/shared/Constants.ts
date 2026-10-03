@@ -200,6 +200,8 @@ export const ADMIN_MENU_CODES = {
   ALIASES: 'aliases',
   YAO: 'yao',
   TERM: 'term',
+  DEVICES: 'devices',
+  APP_VERSIONS: 'app_versions',
 } as const;
 
 /**
@@ -249,6 +251,13 @@ export const PERMISSION_CODES = {
   CONTENT_YAO_MANAGE: 'content:yao:manage',
   CONTENT_TERM_READ: 'content:term:read',
   CONTENT_TERM_MANAGE: 'content:term:manage',
+  // Device management + app version/rollout administration. Both boards live
+  // under the account group (`group_account`) and are admin-only: `:read` opens
+  // the board, `:manage` unlocks revoke/restore and version/rollout writes.
+  SYSTEM_DEVICE_READ: 'system:device:read',
+  SYSTEM_DEVICE_MANAGE: 'system:device:manage',
+  SYSTEM_APP_VERSION_READ: 'system:app-version:read',
+  SYSTEM_APP_VERSION_MANAGE: 'system:app-version:manage',
   WILDCARD: '*',
 } as const;
 

@@ -58,6 +58,7 @@ import {
   type RbacBoard,
   type RbacUserBoard,
 } from "@/shared/Rbac";
+import type {AdminDeviceRow} from "@/shared/AppDeviceVersion";
 
 export type {RbacBoard, RbacBoardRole, RbacUser, RbacUserBoard} from "@/shared/Rbac";
 
@@ -275,6 +276,43 @@ export async function readRbacUserDevices(
 export type DeviceMutationResult =
   | {ok: true}
   | {ok: false; reason: "unknownUser" | "unknownDevice"};
+
+/**
+ * Every device across every account, for the admin device board (spec §6.1).
+ *
+ * The board is the "remote device management" control plane: unlike
+ * {@link readRbacUserDevices} (one account's own devices), this joins
+ * `auth_user` so an operator can see *whose* device a row is. `ext_user_devices`
+ * is keyed by `(user_id, device_id)` — revocation is per-account, not global
+ * (ADR-0001) — so `userId` must travel with every row.
+ *
+ * Read-only, and deliberately **unbounded**: spec §1 asks for the full device
+ * list, and the board pages it client-side (the same pattern every other admin
+ * board uses). `ext_user_devices` grows one row per account-device pair, so the
+ * row count tracks real users, not traffic. `status` optionally filters to
+ * `active` / `revoked`.
+ */
+export async function readAllDevices(
+  db: D1Database,
+  options: {status?: string | null} = {},
+): Promise<AdminDeviceRow[]> {
+  const clause = options.status ? "WHERE d.status = ?" : "";
+  const binds: unknown[] = options.status ? [options.status] : [];
+  const rows = await db
+    .prepare(
+      `SELECT d.device_id AS deviceId, d.user_id AS userId,
+              COALESCE(u.displayUsername, u.username) AS username,
+              u.email AS email, d.status AS status,
+              d.last_seen_at AS lastSeenAt, d.created_at AS createdAt
+       FROM ext_user_devices d
+       JOIN auth_user u ON u.id = d.user_id
+       ${clause}
+       ORDER BY d.last_seen_at DESC`,
+    )
+    .bind(...binds)
+    .all<AdminDeviceRow>();
+  return rows.results ?? [];
+}
 
 /**
  * Revoke one device (Gap E producer, ADR D-010 step 3). The middleware reads

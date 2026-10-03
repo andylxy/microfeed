@@ -178,6 +178,15 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
   const builtInAuthEnabled = builtInAdminAuthEnabled(
     env.MICROFEED_ADMIN_AUTH_MODE,
   );
+
+  // Public App version endpoint (ADR-0005 / §6.5). It is anonymous, exempt from
+  // the version gate (an old client needs it precisely to learn that it must
+  // upgrade), and deliberately served before canonicalisation so the app's exact
+  // `/api/app/version` URL does not take a 308 round-trip to a trailing slash.
+  if (pathname === "/api/app/version" || pathname === "/api/app/version/") {
+    return next();
+  }
+
   const canonicalPath = isBetterAuthPath(pathname)
     ? pathname
     : canonicalPathname(pathname);
@@ -230,11 +239,16 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       return next();
     }
     // Content endpoints: anti-replay first (the app sends `X-Timestamp` /
-    // `X-Nonce`, de-duplicated in `ext_replay_nonces`), then the API auth block
-    // below requires the `app:mobile:access` RBAC code via the caller's login
-    // credential (`mflc_…`).
+    // `X-Nonce`, de-duplicated in `ext_replay_nonces`), then the version gate,
+    // then the API auth block below requires the `app:mobile:access` RBAC code
+    // via the caller's login credential (`mflc_…`).
     const replay = await checkReplay(env.FEED_DB, context.request);
     if (replay) return replay;
+    // Version gate, stage 1 (ADR-0005): before authentication only the global
+    // floor and `all` rules are known. A missing / non-integer `app-version`
+    // header is a 426 — that is the force-upgrade target, not an edge case.
+    const versionGate = await requireAppVersion(env.FEED_DB, context.request);
+    if (versionGate) return versionGate;
   }
 
   if (pathname.startsWith("/api/")) {
@@ -285,6 +299,18 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
           pathname,
         );
       }
+      if (result.kind === "deviceRevoked") {
+        // 401 + `X-Device-Revoked: 1` so the app shows "此设备已被管理员禁用"
+        // instead of looping through the login dialog (ADR-0003 / ADR-0006).
+        return addLegacyApiDeprecationHeaders(
+          new Response("Unauthorized", {
+            headers: {"X-Device-Revoked": "1"},
+            status: 401,
+          }),
+          context.url,
+          pathname,
+        );
+      }
       if (result.kind === "forbidden") {
         await writeApiAccessLog(
           db,
@@ -301,6 +327,14 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       attribution = result.attribution;
+      // Version gate, stage 2 (ADR-0005): the caller is now identified, so the
+      // grayscale device/user/percent rules layer on top of the global floor.
+      if (pathname.startsWith("/api/AppBookRequest/")) {
+        const postAuthGate = await requireAppVersion(db, context.request, {
+          userId: attribution.userId,
+        });
+        if (postAuthGate) return postAuthGate;
+      }
     } else {
       // Legacy bearer path — unchanged, except that the novel content read API
       // (ADR-0006) is login-credential-only: a legacy bearer key carries just
@@ -400,13 +434,9 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       pathname,
     );
   } else if (isAdminPathname(pathname, adminPath)) {
-    // Version gate runs first, ahead of auth and RBAC (ADR-001 D-010: the gate
-    // belongs in the middleware). Web admin sends no `App-Version` header and is
-    // skipped, so the browser dashboard is untouched.
-    const versionGate = requireAppVersion(context.request);
-    if (versionGate) {
-      return versionGate;
-    }
+    // No app-version gate here: it applies only to the App content namespace
+    // `/api/AppBookRequest/*` (ADR-0005). The browser dashboard sends no
+    // `app-version` header and must never be 426'd.
     const loginPath = adminUrl("login", adminPath);
     const passwordSetupPath = isAdminPasswordSetupPath(pathname, adminPath);
     const credentialLoginPath = isAdminCredentialLoginPath(pathname, adminPath);

@@ -68,6 +68,12 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:yao:manage", name: "中药维护"},
   {code: "content:term:read", name: "名词查看"},
   {code: "content:term:manage", name: "名词维护"},
+  // Device management + app version/rollout administration (migration 0082).
+  // `:read` opens the board, `:manage` unlocks revoke/restore and version writes.
+  {code: "system:device:read", name: "设备查看"},
+  {code: "system:device:manage", name: "设备管理"},
+  {code: "system:app-version:read", name: "版本查看"},
+  {code: "system:app-version:manage", name: "版本管理"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
