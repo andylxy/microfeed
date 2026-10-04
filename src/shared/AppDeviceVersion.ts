@@ -59,6 +59,28 @@ export function isRolloutScope(value: unknown): value is AppRolloutScope {
 }
 
 /**
+ * 哪些 scope 允许 `force = 1`（硬阻）。
+ *
+ * **只有 `user` 不允许**，因为「强制升级」需要两个调用点对同一次请求给出一致判断，而它们
+ * 能拿到的身份不同：
+ *
+ * | 调用点 | 鉴权 | 能解析出的身份 |
+ * |---|---|---|
+ * | 内容门（`middleware` 鉴权后） | 已鉴权 | `userId` + `deviceId` |
+ * | 版本提示端点 `GET /api/app/version` | **匿名** | 只有 `deviceId` |
+ *
+ * `user` 规则对后者的可见性为零。若允许 `user` + `force = 1`，管理员就能建出一条
+ * 「命中即 426、但客户端永远看不到 force」的规则 → App 弹出**可关闭**的升级框 →
+ * 用户关掉后内容仍被 426 拦 → 反复循环且无任何解释（票据 23）。
+ *
+ * 需要「只对某个用户硬拦」时改用 `device` scope 精确指定其设备：口径天然一致。
+ * 换言之 `user` scope 只剩「软提示」一种用法。
+ */
+export function canForceRolloutScope(scope: AppRolloutScope): boolean {
+  return scope !== "user";
+}
+
+/**
  * 按 scope 归一化并校验 `target`。
  *
  * 服务端保存与前端表单共用，避免两处各写一遍规则而漂移：

@@ -2,14 +2,13 @@ import {useCallback, useEffect, useMemo, useState} from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   PencilIcon,
 } from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import AdminInput from "@/components/admin/shared/AdminInput";
-import {
+import {Button} from "@/components/ui/button";
+import AdminPagination, {
   paginate,
 } from "@/components/admin/shared/AdminPagination";
 import AdminSelect, {

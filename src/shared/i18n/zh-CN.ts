@@ -1976,6 +1976,7 @@ export const zhCN: TranslationKey = {
     force: "强制",
     forceYes: "强制",
     forceNo: "可选",
+    forceUnsupportedScope: "「指定用户」无法强制升级：版本检查接口是匿名的，拿不到用户身份。若要强制，请改用「指定设备」精确指定。",
   },
   pageTitle: {
     home: "首页",

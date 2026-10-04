@@ -11,6 +11,7 @@ import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
 import {
   APP_ROLLOUT_SCOPES,
+  canForceRolloutScope,
   normalizeRolloutTarget,
   DEFAULT_APP_VERSION_CONFIG,
   type AppRolloutRule,
@@ -360,10 +361,14 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
                         // `all` carries no target; switching to it must clear
                         // whatever was there, or the saved row keeps a
                         // meaningless target.
-                        patchRule(rule.id, {
-                          scope,
-                          target: scope === "all" ? null : rule.target,
-                        });
+                        const next = {scope, target: scope === "all" ? null : rule.target};
+                        // 切到不支持强制的 scope 时把 force 归位：否则这条规则带着
+                        // 非法组合走到保存，才被服务端拒 400（票据 23）。
+                        if (!canForceRolloutScope(scope) && rule.force) {
+                          patchRule(rule.id, {...next, force: false});
+                          return;
+                        }
+                        patchRule(rule.id, next);
                       }}
                       value={rule.scope}
                     >
@@ -404,16 +409,26 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
                   <td className="px-4 py-2">
                     <select
                       className="rounded-md border bg-background px-2 py-1 text-sm"
-                      disabled={!canManage}
+                      disabled={!canManage || !canForceRolloutScope(rule.scope)}
                       onChange={(event) =>
                         patchRule(rule.id, {
                           force: event.target.value === "1",
                         })}
+                      title={
+                        canForceRolloutScope(rule.scope)
+                          ? undefined
+                          : t("appVersions.forceUnsupportedScope")
+                      }
                       value={rule.force ? "1" : "0"}
                     >
                       <option value="1">{t("appVersions.forceYes")}</option>
                       <option value="0">{t("appVersions.forceNo")}</option>
                     </select>
+                    {!canForceRolloutScope(rule.scope) && (
+                      <p className="mt-1 max-w-40 text-xs text-muted-foreground">
+                        {t("appVersions.forceUnsupportedScope")}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right">
                     {canManage && (

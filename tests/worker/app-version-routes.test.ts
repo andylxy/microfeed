@@ -118,6 +118,32 @@ describe("app version configuration", () => {
       {force: false, minVersionCode: 5, scope: "all", target: null},
     ])).toEqual({ok: true});
   });
+
+  it("rejects force=1 on a user rule, which the anonymous version endpoint cannot honour", async () => {
+    // 票据 23：版本提示端点是匿名的，只解析 deviceId，userId 恒为 null。若允许
+    // `user` + 硬阻，内容门会 426 而客户端读到 force=false → 弹**可关闭**的升级框 →
+    // 用户关掉后内容仍被拦，无限循环。故 `user` 只允许软提示。
+    expect(await saveRolloutRules(db, [
+      {force: true, minVersionCode: 25, scope: "user", target: "HtX1Xs9sap4Ghoqyn3SMuH1tpShgquPv"},
+    ])).toEqual({ok: false, reason: "invalidRule"});
+
+    // 同一 target 改成软提示即接受 —— user scope 只剩这一个用法。
+    expect(await saveRolloutRules(db, [
+      {force: false, minVersionCode: 25, scope: "user", target: "HtX1Xs9sap4Ghoqyn3SMuH1tpShgquPv"},
+    ])).toEqual({ok: true});
+
+    // 想要「只对某个用户硬拦」的正确姿势是 device scope（两个调用点口径一致）。
+    expect(await saveRolloutRules(db, [
+      {force: true, minVersionCode: 25, scope: "device", target: "ae1701fc8e6c429e9a845d52e14ea179"},
+    ])).toEqual({ok: true});
+
+    // 其余 scope 的强制能力不受影响。
+    for (const scope of ["all", "percent"] as const) {
+      expect(await saveRolloutRules(db, [
+        {force: true, minVersionCode: 25, scope, target: scope === "all" ? null : "50"},
+      ])).toEqual({ok: true});
+    }
+  });
 });
 
 describe("version gate on the App content namespace", () => {
@@ -135,19 +161,22 @@ describe("version gate on the App content namespace", () => {
 
   it("takes the strictest hard rule across scopes and skips device-scoped ones without a device", async () => {
     // 优先级 device > user > percent > all（spec §6.3）。
+    // 注意 user scope 只能是软提示（票据 23），故这里用 percent 承载「比全局地板更严」
+    // 那一档；user 的优先级改由下面单独的软规则用例覆盖。
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 5});
     await saveRolloutRules(db, [
       {force: true, minVersionCode: 10, scope: "all", target: null},
-      {force: true, minVersionCode: 20, scope: "user", target: "u-1"},
+      {force: true, minVersionCode: 20, scope: "percent", target: "100"},
       {force: true, minVersionCode: 30, scope: "device", target: "dev-1"},
     ]);
     expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1", userId: "u-1"}))
       .toEqual({minVersionCode: 30});
     expect(await resolveMinVersionForRequest(db, {deviceId: "dev-x", userId: "u-1"}))
       .toEqual({minVersionCode: 20});
-    // 没有 deviceId：device 规则被跳过，只剩 user 规则与全局地板。
+    // 没有 deviceId：device 与 percent 规则都被跳过；`all` 无需设备身份，仍生效（10），
+    // 并压过全局地板 5。
     expect(await resolveMinVersionForRequest(db, {userId: "u-1"}))
-      .toEqual({minVersionCode: 20});
+      .toEqual({minVersionCode: 10});
 
     // percent=100 覆盖所有设备；没有 deviceId 时 percent 规则整体不参与。
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
@@ -157,6 +186,19 @@ describe("version gate on the App content namespace", () => {
     expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1"}))
       .toEqual({minVersionCode: 25});
     expect(await resolveMinVersionForRequest(db)).toEqual({minVersionCode: 0});
+  });
+
+  it("matches a user rule for the content gate but never raises a floor from it", async () => {
+    // user scope 只剩软提示一个用法（票据 23），所以它对地板**永远不可见**——
+    // 这条用例把这个「不可见」钉死：将来若有人让 user 参与抬地板，这条会红。
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+    expect(await saveRolloutRules(db, [
+      {force: false, minVersionCode: 30, scope: "user", target: "u-1"},
+    ])).toEqual({ok: true});
+    expect(await resolveMinVersionForRequest(db, {userId: "u-1"}))
+      .toEqual({minVersionCode: 0});
+    expect(await resolveMinVersionForRequest(db, {userId: "other"}))
+      .toEqual({minVersionCode: 0});
   });
 
   it("does not 426 a client that only a soft rule would cover", async () => {

@@ -1980,6 +1980,7 @@ export const en = {
     force: "Force",
     forceYes: "Forced",
     forceNo: "Optional",
+    forceUnsupportedScope: '"Specific user" cannot be force-upgraded: the version check endpoint is anonymous and cannot resolve the user. Use "Specific device" to target it exactly.',
   },
   pageTitle: {
     home: "Home",

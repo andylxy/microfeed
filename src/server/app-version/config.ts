@@ -15,6 +15,7 @@
  */
 
 import {
+  canForceRolloutScope,
   isRolloutScope,
   normalizeRolloutTarget,
   type AppRolloutRule,
@@ -199,6 +200,12 @@ export async function saveRolloutRules(
     if (force !== true && force !== false && force !== 0 && force !== 1) {
       // force 必须显式给。缺省成 1（硬阻）意味着：前端或脚本一次漏字段，就能把真实用户
       // 全部 426 —— 后果落在用户身上、原因却在校验之外，宁可拒收（AGENTS.md 行为：不静默兜底）。
+      return {ok: false, reason: "invalidRule"};
+    }
+    // `user` + 强制是被明确禁止的组合：版本提示端点是匿名的、拿不到 userId，
+    // 这条规则对它不可见 → App 收到 426 却读到 force=false → 弹可关闭的升级框 →
+    // 用户关掉后内容仍被拦，无限循环（票据 23）。
+    if (!canForceRolloutScope(scope) && (force === true || force === 1)) {
       return {ok: false, reason: "invalidRule"};
     }
     normalized.push({
