@@ -2252,6 +2252,7 @@ export const en = {
       invalidUserAssignment: "Send an account id and the list of role codes to grant.",
       unknownUser: "That account does not exist.",
       unknownDevice: "That device does not exist for this account.",
+      missingDeviceIdentity: "Send a device id and the account id it belongs to.",
       lastSuperAdmin: "This is the last account holding super_admin, so that role cannot be removed.",
       forbidden: "You do not have permission to open this page.",
       invalidName: "Enter a display name.",

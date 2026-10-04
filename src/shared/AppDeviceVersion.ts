@@ -10,12 +10,15 @@
  */
 
 /** One row of the cross-account device board (`/admin/devices/`). */
+/** 设备行状态：与 `ext_user_devices.status` 的取值一致（票据 03）。 */
+export type AdminDeviceStatus = "active" | "revoked";
+
 export interface AdminDeviceRow {
   deviceId: string;
   userId: string;
   username: string | null;
   email: string | null;
-  status: string;
+  status: AdminDeviceStatus;
   lastSeenAt: string | null;
   createdAt: string | null;
 }

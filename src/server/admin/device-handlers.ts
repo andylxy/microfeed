@@ -37,7 +37,7 @@ export function deviceMutationRoute(action: DeviceMutationAction): APIRoute {
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
     const deviceId = typeof body?.deviceId === "string" ? body.deviceId.trim() : "";
     if (!userId || !deviceId) {
-      return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
+      return localizedError(request, "errors.rbac.missingDeviceIdentity", 400);
     }
     const result = await mutate(env.FEED_DB, userId, deviceId, {
       action: `device.${action}`,

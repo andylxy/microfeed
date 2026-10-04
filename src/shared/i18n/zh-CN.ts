@@ -2248,6 +2248,7 @@ export const zhCN: TranslationKey = {
       invalidUserAssignment: "请提供账号 id 与要授予的角色代码列表。",
       unknownUser: "该账号不存在。",
       unknownDevice: "该账号下不存在这个设备。",
+      missingDeviceIdentity: "请提供设备 id 与它所属的账号 id。",
       lastSuperAdmin: "这是最后一个持有 super_admin 的账号，该角色不能移除。",
       forbidden: "你没有权限打开这个页面。",
       invalidName: "请填写显示名称。",

@@ -107,6 +107,17 @@ describe("app version configuration", () => {
       target: "50",
     });
   });
+
+  it("rejects a rule that omits force instead of defaulting to a hard block", async () => {
+    // 缺 force 曾经默认成 1（硬阻）：前端或脚本一次漏字段，就能把真实用户全部 426，
+    // 而原因落在校验之外。宁可拒收。
+    expect(await saveRolloutRules(db, [{minVersionCode: 5, scope: "all", target: null}]))
+      .toEqual({ok: false, reason: "invalidRule"});
+    // 显式给出 force 才接受。
+    expect(await saveRolloutRules(db, [
+      {force: false, minVersionCode: 5, scope: "all", target: null},
+    ])).toEqual({ok: true});
+  });
 });
 
 describe("version gate on the App content namespace", () => {
@@ -118,14 +129,34 @@ describe("version gate on the App content namespace", () => {
     await saveRolloutRules(db, [
       {force: true, minVersionCode: 30, scope: "device", target: "dev-1"},
     ]);
-    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1"})).toEqual({
-      force: true,
-      minVersionCode: 30,
-    });
-    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-2"})).toEqual({
-      force: true,
-      minVersionCode: 5,
-    });
+    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1"})).toEqual({minVersionCode: 30});
+    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-2"})).toEqual({minVersionCode: 5});
+  });
+
+  it("takes the strictest hard rule across scopes and skips device-scoped ones without a device", async () => {
+    // 优先级 device > user > percent > all（spec §6.3）。
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 5});
+    await saveRolloutRules(db, [
+      {force: true, minVersionCode: 10, scope: "all", target: null},
+      {force: true, minVersionCode: 20, scope: "user", target: "u-1"},
+      {force: true, minVersionCode: 30, scope: "device", target: "dev-1"},
+    ]);
+    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1", userId: "u-1"}))
+      .toEqual({minVersionCode: 30});
+    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-x", userId: "u-1"}))
+      .toEqual({minVersionCode: 20});
+    // 没有 deviceId：device 规则被跳过，只剩 user 规则与全局地板。
+    expect(await resolveMinVersionForRequest(db, {userId: "u-1"}))
+      .toEqual({minVersionCode: 20});
+
+    // percent=100 覆盖所有设备；没有 deviceId 时 percent 规则整体不参与。
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+    await saveRolloutRules(db, [
+      {force: true, minVersionCode: 25, scope: "percent", target: "100"},
+    ]);
+    expect(await resolveMinVersionForRequest(db, {deviceId: "dev-1"}))
+      .toEqual({minVersionCode: 25});
+    expect(await resolveMinVersionForRequest(db)).toEqual({minVersionCode: 0});
   });
 
   it("does not 426 a client that only a soft rule would cover", async () => {
@@ -136,10 +167,7 @@ describe("version gate on the App content namespace", () => {
     await saveRolloutRules(db, [
       {force: false, minVersionCode: 30, scope: "all", target: null},
     ]);
-    expect(await resolveMinVersionForRequest(db)).toEqual({
-      force: false,
-      minVersionCode: 0,
-    });
+    expect(await resolveMinVersionForRequest(db)).toEqual({minVersionCode: 0});
     expect(
       await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "10"}})),
     ).toBeNull();
@@ -215,10 +243,7 @@ describe("public /api/app/version endpoint", () => {
       request: new Request(VERSION_URL, {headers: {"app-version": "19"}}),
     } as never);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      force: false,
-      minVersionCode: 18,
-    });
+    expect(await response.json()).toMatchObject({minVersionCode: 18});
   });
 
   it("reports force=true when the caller sends no app-version at all", async () => {
@@ -238,13 +263,13 @@ describe("public /api/app/version endpoint", () => {
     const withoutHeader = await appVersionGet({
       request: new Request(VERSION_URL),
     } as never);
-    expect(await withoutHeader.json()).toMatchObject({force: false, minVersionCode: 0});
+    expect(await withoutHeader.json()).toMatchObject({minVersionCode: 0});
 
     // 同一地板下，低于某个"假想地板"的版本号同样不该被强制。
     const withHeader = await appVersionGet({
       request: new Request(VERSION_URL, {headers: {"app-version": "3"}}),
     } as never);
-    expect(await withHeader.json()).toMatchObject({force: false, minVersionCode: 0});
+    expect(await withHeader.json()).toMatchObject({minVersionCode: 0});
   });
 });
 
@@ -347,10 +372,7 @@ describe("rollout rules through the admin endpoint", () => {
     } as never);
     expect(saved.status).toBe(200);
     expect(await readRolloutRules(db)).toHaveLength(1);
-    expect(await resolveMinVersionForRequest(db)).toEqual({
-      force: true,
-      minVersionCode: 15,
-    });
+    expect(await resolveMinVersionForRequest(db)).toEqual({minVersionCode: 15});
     expect(
       (await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "10"}})))?.status,
     ).toBe(426);
@@ -375,10 +397,7 @@ describe("rollout rules through the admin endpoint", () => {
     } as never);
     expect(replaced.status).toBe(200);
     expect(await readRolloutRules(db)).toHaveLength(1);
-    expect(await resolveMinVersionForRequest(db)).toEqual({
-      force: false,
-      minVersionCode: 0,
-    });
+    expect(await resolveMinVersionForRequest(db)).toEqual({minVersionCode: 0});
     expect(
       await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "10"}})),
     ).toBeNull();

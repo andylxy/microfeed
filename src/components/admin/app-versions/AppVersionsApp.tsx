@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 
 import {
   AdminCollectionError,
@@ -36,8 +36,6 @@ interface Props {
  */
 type DraftRule = Omit<AppRolloutRule, "id"> & {id: number};
 
-/** Stable negative ids for rows that do not exist in the database yet. */
-let nextDraftId = -1;
 
 /**
  * App version board (`/admin/app-versions/`). Edits the singleton
@@ -53,6 +51,8 @@ let nextDraftId = -1;
 export default function AppVersionsApp({canManage = false, itemsPerPage}: Props) {
   const {t} = useTranslation();
   const [config, setConfig] = useState<AppVersionConfig>(DEFAULT_APP_VERSION_CONFIG);
+  // 仅用于「尚未保存」的草稿行；真实规则以数据库 id 为准。
+  const draftId = useRef(-1);
   const [rules, setRules] = useState<DraftRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +130,9 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
       ...prev,
       {
         force: true,
-        id: nextDraftId--,
+        // 未入库的行用组件内递减的负数 id 临时标识；放在模块级会让多个实例共享计数器，
+        // 且热重载后并不稳定（与旧注释的说法相反）。
+        id: draftId.current--,
         minVersionCode: 0,
         scope: "all" as AppRolloutScope,
         target: null,

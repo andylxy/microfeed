@@ -16,7 +16,6 @@
 
 import {
   APP_ROLLOUT_SCOPES,
-  DEFAULT_APP_VERSION_CONFIG,
   type AppRolloutRule,
   type AppRolloutScope,
   type AppVersionConfig,
@@ -37,10 +36,11 @@ interface AppVersionRow {
 }
 
 /**
- * Read the singleton configuration row. Falls back to
- * {@link DEFAULT_APP_VERSION_CONFIG} when the row is absent (e.g. a database
- * that has not run migration 0080 yet) rather than throwing — the gate treats a
- * missing config as `min_version_code = 0`, i.e. "do not force".
+ * 读取单行配置。
+ *
+ * 该行由迁移 0080 播种，因此**行缺失或字段非法一律直接抛出**（AGENTS.md 行为：就地崩溃，
+ * 不静默兜底）。表不存在时 SQL 本身就会抛；行缺失说明迁移被改过或被手工删过，
+ * 此时回落默认值会让「未配置」与「配置坏了」长得一模一样，排查时无从下手。
  */
 export async function readAppVersionConfig(
   db: D1Database,
@@ -57,16 +57,28 @@ export async function readAppVersionConfig(
        FROM ext_app_version WHERE id = 1`,
     )
     .first<AppVersionRow>();
-  if (!row) return {...DEFAULT_APP_VERSION_CONFIG};
+  if (!row) {
+    throw new Error("ext_app_version 缺少 id=1 的配置行（迁移 0080 应已播种）");
+  }
   return {
+    // 可空列用 ?? "" 是列契约本身允许 null，不属于错误兜底。
     downloadUrl: row.downloadUrl ?? "",
-    latestVersionCode: Number(row.latestVersionCode) || 0,
+    latestVersionCode: requiredNonNegativeInt(row.latestVersionCode, "ext_app_version.latest_version_code"),
     latestVersionName: row.latestVersionName ?? "",
     md5: row.md5 ?? "",
-    minVersionCode: Number(row.minVersionCode) || 0,
+    minVersionCode: requiredNonNegativeInt(row.minVersionCode, "ext_app_version.min_version_code"),
     updateLog: row.updateLog ?? "",
     updatedAt: row.updatedAt ?? null,
   };
+}
+
+/** 整数字段必须是非负整数；`|| 0` 会把 NaN 悄悄变成 0，把配置损坏伪装成「没配置」。 */
+function requiredNonNegativeInt(value: unknown, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${label} 不是合法的非负整数：${String(value)}`);
+  }
+  return parsed;
 }
 
 function nonNegativeInt(value: unknown): number | null {
@@ -152,13 +164,20 @@ export async function readRolloutRules(db: D1Database): Promise<AppRolloutRule[]
       minVersionCode: number;
       force: number;
     }>();
-  return (rows.results ?? []).map((row) => ({
-    force: Number(row.force) === 1,
-    id: Number(row.id),
-    minVersionCode: Number(row.minVersionCode) || 0,
-    scope: (ROLLOUT_SCOPES.has(row.scope) ? row.scope : "all") as AppRolloutScope,
-    target: row.target,
-  }));
+  return (rows.results ?? []).map((row) => {
+    if (!ROLLOUT_SCOPES.has(row.scope)) {
+      // 未知 scope 必须报错：静默当成 `all` 会让这条规则匹配**所有**设备（放大力度），
+      // 静默丢掉则规则形同不存在——两者都比报错危险（AGENTS.md 行为：不静默兜底）。
+      throw new Error(`未知的灰度 scope：${row.scope}`);
+    }
+    return {
+      force: Number(row.force) === 1,
+      id: Number(row.id),
+      minVersionCode: requiredNonNegativeInt(row.minVersionCode, "ext_app_rollout.min_version_code"),
+      scope: row.scope as AppRolloutScope,
+      target: row.target,
+    };
+  });
 }
 
 /** Replace the whole rule set atomically (the board edits it as one list). */
@@ -186,8 +205,14 @@ export async function saveRolloutRules(
     } else if (target === null) {
       return {ok: false, reason: "invalidRule"};
     }
+    const force = rule.force;
+    if (force !== true && force !== false && force !== 0 && force !== 1) {
+      // force 必须显式给。缺省成 1（硬阻）意味着：前端或脚本一次漏字段，就能把真实用户
+      // 全部 426 —— 后果落在用户身上、原因却在校验之外，宁可拒收（AGENTS.md 行为：不静默兜底）。
+      return {ok: false, reason: "invalidRule"};
+    }
     normalized.push({
-      force: rule.force === false || rule.force === 0 ? 0 : 1,
+      force: force === true || force === 1 ? 1 : 0,
       minVersionCode,
       scope: scope as AppRolloutScope,
       target,

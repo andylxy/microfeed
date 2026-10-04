@@ -8,12 +8,12 @@
  *   device (exact) > user (exact) > percent (hash) > all
  *   floor = max(matched rules WHERE force = 1, ext_app_version.min_version_code)
  *
- * Two semantics worth naming (ADR-0008):
- *  - a violation of the **global floor** is always a hard block (`force = true`),
- *    even if a grayscale rule with `force = 0` also matched — the floor is not
- *    negotiable;
- *  - a grayscale rule *above* the floor may be soft (`force = 0`), i.e. "please
- *    update" rather than "you must update".
+ * 关键语义（ADR-0008 / ADR-0009）：地板 = max(全局 min_version_code, 命中且 force=1 的规则)，
+ * `force=0` 的软规则只提示、不抬地板。
+ *
+ * 本函数**只回答"地板是多少"**，不回答"要不要强制"：内容门按地板判 426；
+ * 而 `/api/app/version` 的 `force` 是**面向调用方**的另一套判定（还要看请求头是否缺版本），
+ * 由那个端点自己算。两者刻意不合并——合并过就会出现"软提示被硬化成不可关闭"。
  *
  * The version gate is **not a security boundary**: a client can forge a high
  * `app-version` and bypass 426. Real security is the login credential + RBAC.
@@ -59,10 +59,8 @@ export function hashDevicePercent(deviceId: string): number {
 }
 
 export interface ResolvedMinVersion {
-  /** The effective floor for this request. */
+  /** 该请求的最终地板：max(全局 min_version_code, 命中且 force=1 的规则)。 */
   minVersionCode: number;
-  /** `true` when falling below the floor is a hard block (426, not closable). */
-  force: boolean;
 }
 
 export interface VersionGateContext {
@@ -120,8 +118,5 @@ export async function resolveMinVersionForRequest(
     0,
   );
   const minVersionCode = Math.max(hardRuleFloor, globalFloor);
-  if (minVersionCode <= 0) return {force: false, minVersionCode: 0};
-
-  // A non-zero hard floor is a hard block by construction.
-  return {force: true, minVersionCode};
+  return {minVersionCode};
 }
