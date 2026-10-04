@@ -1,7 +1,10 @@
 -- 0081_ext_app_rollout.sql
 --
 -- 灰度强制升级规则（spec §5.2 / §6.3）。解析顺序 device > user > percent > all，
--- 最终地板取 max(命中规则, ext_app_version.min_version_code)（ADR-0002）。
+-- 最终地板取 max(命中且 force=1 的规则, ext_app_version.min_version_code)（ADR-0002 / ADR-0009）。
+-- 只有硬规则抬地板；force=0 的软规则对内容门不可见，也不影响 /api/app/version 的 force
+-- （该 force 只看硬地板，且地板为 0 时为 false）。软规则的提示作用由
+-- 「latestVersionCode > 本机」承担（ADR-0009）。
 --
 -- scope 取值：
 --   'all'     —— 全体生效（MVP 只用这一种 + 全局地板）

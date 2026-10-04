@@ -6,7 +6,7 @@
  * hard block?* It layers grayscale rules over the global floor:
  *
  *   device (exact) > user (exact) > percent (hash) > all
- *   floor = max(matched rules, ext_app_version.min_version_code)
+ *   floor = max(matched rules WHERE force = 1, ext_app_version.min_version_code)
  *
  * Two semantics worth naming (ADR-0008):
  *  - a violation of the **global floor** is always a hard block (`force = true`),
@@ -33,10 +33,12 @@ export function compareVersionCode(a: number, b: number): number {
 /**
  * Parse the `app-version` header into an integer `versionCode`.
  *
- * Returns `null` for a missing, empty, signed, or non-integer value — the gate
- * treats `null` as "below the floor" so an old client that does not send the
- * header (or an attacker stripping it) cannot slip past the force-upgrade
- * (ADR-0005).
+ * Returns `null` for a missing, empty, signed, or non-integer value. `null` means
+ * "the client told us nothing usable", and the gate treats it as *below the floor*
+ * — but **only when a floor is configured** (`minVersionCode > 0`). With no floor
+ * the version gate is off entirely (ticket 20), so a header-less client is not
+ * punished for being old; forcing an upgrade is done by *raising the floor*
+ * (ADR-0005 / ADR-0008).
  */
 export function parseAppVersionCode(header: string | null): number | null {
   if (header === null) return null;

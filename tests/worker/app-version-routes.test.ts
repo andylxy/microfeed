@@ -2,6 +2,7 @@ import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {GET as appVersionGet} from "@/pages/api/app/version";
+import {POST as appVersionsSave} from "@/pages/[adminPath]/ajax/app-versions/save";
 import {readAllDevices} from "@/server/admin/rbac-handlers";
 import {
   readAppVersionConfig,
@@ -16,6 +17,7 @@ import {
   isDeviceRevoked,
   registerUserDevice,
 } from "@/server/rbac/resolve";
+import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**
  * DB-backed tests for the device/version surface (spec §6.1–§6.5).
@@ -143,6 +145,19 @@ describe("version gate on the App content namespace", () => {
     ).toBeNull();
   });
 
+  it("keeps the gate off when no floor is configured", async () => {
+    // 没配地板 = 没有版本策略：`min_version_code = 0` 读作「不强制升级」
+    // （migrations/0080）。缺 `app-version` 头的请求必须落到鉴权层，不能被 426
+    // （票据 20）——强制旧版升级靠抬高地板，不靠惩罚缺头（ADR-0008）。
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+    await saveRolloutRules(db, []);
+
+    expect(await requireAppVersion(db, new Request(APP_URL))).toBeNull();
+    expect(
+      await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "1"}})),
+    ).toBeNull();
+  });
+
   it("426s a missing, non-integer or too-low app-version header", async () => {
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 10});
 
@@ -213,6 +228,24 @@ describe("public /api/app/version endpoint", () => {
     } as never);
     expect(await response.json()).toMatchObject({force: true});
   });
+
+  it("reports force=false when no floor is configured, even with no app-version", async () => {
+    // 地板为 0 = 未配置强制升级（migrations/0080）。此时无论调用方**是否**上报版本都不该被
+    // 强制 —— 与内容门 requireAppVersion「地板 <= 0 关门」同一语义（票据 20）。
+    // 否则会出现「后端没开强制升级，老客户端却弹不可关闭的升级框」。
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+
+    const withoutHeader = await appVersionGet({
+      request: new Request(VERSION_URL),
+    } as never);
+    expect(await withoutHeader.json()).toMatchObject({force: false, minVersionCode: 0});
+
+    // 同一地板下，低于某个"假想地板"的版本号同样不该被强制。
+    const withHeader = await appVersionGet({
+      request: new Request(VERSION_URL, {headers: {"app-version": "3"}}),
+    } as never);
+    expect(await withHeader.json()).toMatchObject({force: false, minVersionCode: 0});
+  });
 });
 
 describe("device registration and revocation", () => {
@@ -279,5 +312,91 @@ describe("device registration and revocation", () => {
     const expired = requireAccountAccess({authUser: null});
     expect(expired?.status).toBe(401);
     expect(expired?.headers.get("X-Device-Revoked")).toBeNull();
+  });
+});
+
+/**
+ * The board posts the whole rule set to `ajax/app-versions/save`. That wiring
+ * existed with no caller before the rule editor (ticket 13), so it is pinned
+ * here end-to-end: what the UI sends is what the gate then enforces.
+ */
+describe("rollout rules through the admin endpoint", () => {
+  function manageLocals() {
+    return {
+      authUser: {id: "u_version_admin"},
+      rbacPermissions: new Set<string>([PERMISSION_CODES.SYSTEM_APP_VERSION_MANAGE]),
+    };
+  }
+
+  function saveRequest(body: unknown): Request {
+    return new Request("https://feed.example.com/admin/ajax/app-versions/save/", {
+      body: JSON.stringify(body),
+      headers: {"content-type": "application/json"},
+      method: "POST",
+    });
+  }
+
+  it("a hard rule raises the floor and the gate blocks below it", async () => {
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+
+    const saved = await appVersionsSave({
+      locals: manageLocals(),
+      request: saveRequest({
+        rules: [{force: true, minVersionCode: 15, scope: "all", target: null}],
+      }),
+    } as never);
+    expect(saved.status).toBe(200);
+    expect(await readRolloutRules(db)).toHaveLength(1);
+    expect(await resolveMinVersionForRequest(db)).toEqual({
+      force: true,
+      minVersionCode: 15,
+    });
+    expect(
+      (await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "10"}})))?.status,
+    ).toBe(426);
+  });
+
+  it("replacing a hard rule with a soft one drops the floor back to 0", async () => {
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
+    await appVersionsSave({
+      locals: manageLocals(),
+      request: saveRequest({
+        rules: [{force: true, minVersionCode: 15, scope: "all", target: null}],
+      }),
+    } as never);
+
+    // The save is a whole-set replace: posting one soft rule must leave exactly
+    // one rule behind, and the floor it no longer raises.
+    const replaced = await appVersionsSave({
+      locals: manageLocals(),
+      request: saveRequest({
+        rules: [{force: false, minVersionCode: 30, scope: "all", target: null}],
+      }),
+    } as never);
+    expect(replaced.status).toBe(200);
+    expect(await readRolloutRules(db)).toHaveLength(1);
+    expect(await resolveMinVersionForRequest(db)).toEqual({
+      force: false,
+      minVersionCode: 0,
+    });
+    expect(
+      await requireAppVersion(db, new Request(APP_URL, {headers: {"app-version": "10"}})),
+    ).toBeNull();
+  });
+
+  it("rejects an invalid rule and a caller without the manage code", async () => {
+    const bad = await appVersionsSave({
+      locals: manageLocals(),
+      request: saveRequest({
+        rules: [{force: true, minVersionCode: 5, scope: "percent", target: "150"}],
+      }),
+    } as never);
+    expect(bad.status).toBe(400);
+
+    const denied = await appVersionsSave({
+      locals: {authUser: {id: "u_no"}, rbacPermissions: new Set<string>()},
+      request: saveRequest({rules: []}),
+    } as never);
+    expect(denied.status).toBe(403);
   });
 });

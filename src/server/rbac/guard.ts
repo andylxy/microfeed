@@ -56,11 +56,16 @@ export interface RbacLocals {
  * content namespace `/api/AppBookRequest/*` — the web admin sends no
  * `app-version` header and must never be gated.
  *
- * Resolution (spec §6.4):
- *  - header present and integer `>= floor` → allow (`null`);
- *  - header present but `< floor` → 426;
- *  - **header missing or non-integer → 426** (an old client, or a stripped
- *    header — the force-upgrade target is exactly "sends no header").
+ * 判定规则（spec §6.4）：
+ *  - **地板 `<= 0` → 版本门关闭**（返回 `null`）。没配地板就等于没有版本策略：
+ *    `min_version_code = 0` 的语义是「不强制升级」（见 migrations/0080 注释），
+ *    此时不发 `app-version` 头的请求应落到鉴权层，**不能**被 426（票据 20）。
+ *  - 头存在且为整数、`>= 地板` → 放行（`null`）；
+ *  - 头存在但 `< 地板` → 426；
+ *  - **地板 > 0 时，头缺失或非整数 → 426**（旧客户端，或被人剥掉头——强制升级
+ *    的目标正是「不发头」的那批，见 ADR-0005）。
+ *
+ * 强制旧版升级一律靠「抬高地板」实现，而不是靠惩罚缺头（ADR-0008）。
  *
  * The floor comes from `resolveMinVersionForRequest`, so grayscale rules apply
  * once `userId`/`deviceId` are known. The pre-auth call site (before the login
@@ -77,6 +82,9 @@ export async function requireAppVersion(
     deviceId: deviceIdFromRequest(request),
     userId: context.userId ?? null,
   });
+  // 地板为 0 = 未配置强制升级，版本门整体关闭（migrations/0080：0 表示不强制升级）。
+  // 强制旧版升级靠「抬高地板」实现，不是靠惩罚缺头（ADR-0008 / 票据 20）。
+  if (minVersionCode <= 0) return null;
   const headerCode = parseAppVersionCode(request.headers.get("app-version"));
   if (
     headerCode !== null &&
