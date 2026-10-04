@@ -1,16 +1,14 @@
 import {useCallback, useEffect, useState} from "react";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from "lucide-react";
 
 import {
   AdminCollectionError,
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
-import {Button} from "@/components/ui/button";
+import AdminPagination, {
+  paginate,
+} from "@/components/admin/shared/AdminPagination";
 import {useTranslation} from "@/client/i18n";
-import {DEFAULT_ITEMS_PER_PAGE, STATUSES} from "@/shared/Constants";
+import {STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {FangBoard, FangRow} from "@/shared/ExtVolume";
 
@@ -38,7 +36,6 @@ interface Props {
  * status editing, so this page stays read-only.
  */
 export default function FangsApp({itemsPerPage}: Props) {
-  const pageSize = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);
   const {t} = useTranslation();
   const [books, setBooks] = useState<{id: string; title: string}[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -87,9 +84,11 @@ export default function FangsApp({itemsPerPage}: Props) {
   // toward `itemsPerPage`. The whole list still loads in one request; paging is
   // a client-side slice so a large book's rows don't render at once.
   const fangs = board?.fangs ?? [];
-  const totalPages = Math.max(1, Math.ceil(fangs.length / pageSize));
-  const safePage = Math.min(page, totalPages - 1);
-  const pageFangs = fangs.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  const {pageRows: pageFangs, safePage, totalPages} = paginate(
+    fangs,
+    itemsPerPage,
+    page,
+  );
 
   if (loading && books.length === 0) {
     return <AdminCollectionLoading label={t("fangs.title")} />;
@@ -231,34 +230,11 @@ export default function FangsApp({itemsPerPage}: Props) {
       )}
 
       {board?.book && totalPages > 1 && (
-        <nav
-          aria-label={t("volumes.paginationAria")}
-          className="mt-6 flex items-center justify-center gap-2"
-        >
-          <Button
-            disabled={safePage === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <ChevronLeftIcon aria-hidden="true" />
-            {t("volumes.previous")}
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {t("volumes.pageIndicator", {current: safePage + 1, total: totalPages})}
-          </span>
-          <Button
-            disabled={safePage >= totalPages - 1}
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("volumes.next")}
-            <ChevronRightIcon aria-hidden="true" />
-          </Button>
-        </nav>
+        <AdminPagination
+          onChange={setPage}
+          page={safePage}
+          totalPages={totalPages}
+        />
       )}
     </div>
   );

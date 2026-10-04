@@ -1,17 +1,15 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  PlusIcon,
-} from "lucide-react";
+import {PlusIcon} from "lucide-react";
 
 import {
   AdminCollectionError,
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
+import AdminPagination, {
+  paginate,
+} from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
-import {DEFAULT_ITEMS_PER_PAGE} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 interface AliasRow {
@@ -191,12 +189,10 @@ export default function AliasesApp({canManage = false, itemsPerPage}: Props) {
   // Page size is sourced from Settings → Items "每页条目数"
   // (webGlobalSettings.itemsPerPage), passed in as `itemsPerPage`; the constant
   // is only a fallback when the prop is absent.
-  const pageSize = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages - 1);
-  const pageRows = filtered.slice(
-    safePage * pageSize,
-    (safePage + 1) * pageSize,
+  const {pageRows, safePage, totalPages} = paginate(
+    filtered,
+    itemsPerPage,
+    page,
   );
 
   const formTitle =
@@ -381,34 +377,11 @@ export default function AliasesApp({canManage = false, itemsPerPage}: Props) {
       )}
 
       {filtered.length > 0 && totalPages > 1 && (
-        <nav
-          aria-label={t("volumes.paginationAria")}
-          className="mt-6 flex items-center justify-center gap-2"
-        >
-          <Button
-            disabled={safePage === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <ChevronLeftIcon aria-hidden="true" />
-            {t("volumes.previous")}
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {t("volumes.pageIndicator", {current: safePage + 1, total: totalPages})}
-          </span>
-          <Button
-            disabled={safePage >= totalPages - 1}
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("volumes.next")}
-            <ChevronRightIcon aria-hidden="true" />
-          </Button>
-        </nav>
+        <AdminPagination
+          onChange={setPage}
+          page={safePage}
+          totalPages={totalPages}
+        />
       )}
     </div>
   );

@@ -9,6 +9,9 @@ import {
 
 import {showToast} from "@/client/ToastUtils";
 import AdminInput from "@/components/admin/shared/AdminInput";
+import {
+  paginate,
+} from "@/components/admin/shared/AdminPagination";
 import AdminSelect, {
   type AdminSelectOption,
 } from "@/components/admin/shared/AdminSelect";
@@ -16,10 +19,9 @@ import {
   AdminCollectionError,
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
-import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
-import {DEFAULT_ITEMS_PER_PAGE, STATUSES} from "@/shared/Constants";
+import {STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
   VolumeBoard,
@@ -80,7 +82,6 @@ interface Props {
 }
 
 export default function VolumesApp({itemsPerPage}: Props) {
-  const groupsPerPage = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);
   const {t} = useTranslation();
   const [books, setBooks] = useState<VolumeBookOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -173,7 +174,7 @@ export default function VolumesApp({itemsPerPage}: Props) {
   const readOnly = board?.readOnly === true;
 
   // Client-side paging over a flattened row list: one header row per volume,
-  // then one row per chapter, counted together toward `groupsPerPage`. `safePage`
+  // then one row per chapter, counted together toward the per-page size. `safePage`
   // keeps the view valid if an edit (e.g. a volume merge) shrinks the row count.
   const rows = useMemo<BoardRow[]>(() => {
     const out: BoardRow[] = [];
@@ -191,14 +192,9 @@ export default function VolumesApp({itemsPerPage}: Props) {
     return out;
   }, [board]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / groupsPerPage));
-  const safePage = Math.min(page, totalPages - 1);
   // Slice rows for the current page; volume headers keep their global
   // `groupIndex` so the up/down volume reorder still works.
-  const pageRows = rows.slice(
-    safePage * groupsPerPage,
-    (safePage + 1) * groupsPerPage,
-  );
+  const {pageRows, safePage, totalPages} = paginate(rows, itemsPerPage, page);
 
   const applyAssign = () => {
     if (!bookId || selected.length === 0) return;
@@ -532,35 +528,13 @@ export default function VolumesApp({itemsPerPage}: Props) {
           )}
         </div>
       )}
-      {board?.book && totalPages > 1 && (
-        <nav
-          aria-label={t("volumes.paginationAria")}
-          className="mt-6 flex items-center justify-center gap-2"
-        >
-          <Button
-            disabled={saving || safePage === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <ChevronLeftIcon aria-hidden="true" />
-            {t("volumes.previous")}
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {t("volumes.pageIndicator", {current: safePage + 1, total: totalPages})}
-          </span>
-          <Button
-            disabled={saving || safePage >= totalPages - 1}
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t("volumes.next")}
-            <ChevronRightIcon aria-hidden="true" />
-          </Button>
-        </nav>
+      {board?.book && (
+        <AdminPagination
+          disabled={saving}
+          onChange={setPage}
+          page={safePage}
+          totalPages={totalPages}
+        />
       )}
     </div>
   );

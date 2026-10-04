@@ -44,10 +44,15 @@ interface Props {
   page: number;
   totalPages: number;
   onChange: (page: number) => void;
+  /**
+   * 额外的禁用条件（例如「保存进行中」）。翻页按钮在该状态下不可点。
+   * 没有它，调用方就只能把整段分页器各抄一份——那正是本组件要消除的重复。
+   */
+  disabled?: boolean;
 }
 
 /** 底部分页器。只有一页时什么都不渲染。 */
-export default function AdminPagination({page, totalPages, onChange}: Props) {
+export default function AdminPagination({disabled, page, totalPages, onChange}: Props) {
   const {t} = useTranslation();
   if (totalPages <= 1) return null;
   return (
@@ -56,7 +61,7 @@ export default function AdminPagination({page, totalPages, onChange}: Props) {
       className="mt-6 flex items-center justify-center gap-2"
     >
       <Button
-        disabled={page === 0}
+        disabled={disabled || page === 0}
         onClick={() => onChange(Math.max(0, page - 1))}
         size="sm"
         type="button"
@@ -69,7 +74,7 @@ export default function AdminPagination({page, totalPages, onChange}: Props) {
         {t("volumes.pageIndicator", {current: page + 1, total: totalPages})}
       </span>
       <Button
-        disabled={page >= totalPages - 1}
+        disabled={disabled || page >= totalPages - 1}
         onClick={() => onChange(Math.min(totalPages - 1, page + 1))}
         size="sm"
         type="button"
