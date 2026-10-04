@@ -11,6 +11,7 @@ import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
 import {
   APP_ROLLOUT_SCOPES,
+  normalizeRolloutTarget,
   DEFAULT_APP_VERSION_CONFIG,
   type AppRolloutRule,
   type AppRolloutScope,
@@ -148,28 +149,22 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
 
   /**
    * 发送前先归一化并校验。服务端也会校验（返回 400），但为了「百分比必须在 0–100」
-   * 走一趟网络，体验上更差。
+   * 走一趟网络，体验上更差。归一化规则复用 `normalizeRolloutTarget` —— 与服务端
+   * 同一份实现，避免两边规则漂移。
    */
   const saveRules = useCallback(async () => {
     const normalised: Array<Omit<AppRolloutRule, "id">> = [];
     for (const rule of rules) {
-      const target = rule.scope === "all" ? null : (rule.target ?? "").trim();
-      if (rule.scope !== "all" && !target) {
+      const target = normalizeRolloutTarget(rule.scope, rule.target);
+      if (!target.ok) {
         setRulesError(t("appVersions.invalidRule"));
         return;
-      }
-      if (rule.scope === "percent") {
-        const percent = Number.parseInt(target ?? "", 10);
-        if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-          setRulesError(t("appVersions.invalidRule"));
-          return;
-        }
       }
       normalised.push({
         force: rule.force,
         minVersionCode: rule.minVersionCode,
         scope: rule.scope,
-        target,
+        target: target.value,
       });
     }
 

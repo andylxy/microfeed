@@ -1,18 +1,17 @@
 /**
- * Shared DTOs for the device-management + app-version feature.
+ * 设备管理 + 版本升级特性的跨端 DTO。
  *
- * These shapes cross the server/client boundary — the AJAX handlers serialise
- * them and the admin React components deserialise them — so they live in
- * `src/shared/` (the runtime-neutral layer both sides may import) instead of
- * being declared twice and drifting apart (AGENTS.md「源码架构」).
+ * 这些形状跨越服务端/客户端边界——AJAX 处理器负责序列化，管理后台 React 组件负责反序列化——
+ * 所以统一放在 `src/shared/`（两端都可导入的运行时中立层），而不是各写一份然后各自漂移
+ * （AGENTS.md「源码架构」）。
  *
- * Runtime-neutral on purpose: no D1, no `cloudflare:workers`, no DOM.
+ * 运行时中立是刻意的：不依赖 D1、不依赖 `cloudflare:workers`、不碰 DOM。
  */
 
-/** One row of the cross-account device board (`/admin/devices/`). */
 /** 设备行状态：与 `ext_user_devices.status` 的取值一致（票据 03）。 */
 export type AdminDeviceStatus = "active" | "revoked";
 
+/** 设备总览（`/admin/devices/`）的一行，跨全部账号。 */
 export interface AdminDeviceRow {
   deviceId: string;
   userId: string;
@@ -23,7 +22,7 @@ export interface AdminDeviceRow {
   createdAt: string | null;
 }
 
-/** The singleton app-version configuration row (`ext_app_version`, `id = 1`). */
+/** 版本配置单行（`ext_app_version`，`id = 1`）。 */
 export interface AppVersionConfig {
   latestVersionCode: number;
   latestVersionName: string;
@@ -35,9 +34,8 @@ export interface AppVersionConfig {
 }
 
 /**
- * Sensible defaults for the singleton row: what the server returns when the row
- * is missing (fresh, unmigrated DB) and what the admin board starts from. Shared
- * so the two cannot drift.
+ * 单行的缺省值：管理后台表单的初始状态用。
+ * 注意**不是**服务端的兜底——服务端读不到行会直接抛错（配置损坏必须暴露，不能伪装成"未配置"）。
  */
 export const DEFAULT_APP_VERSION_CONFIG: AppVersionConfig = {
   downloadUrl: "",
@@ -49,15 +47,47 @@ export const DEFAULT_APP_VERSION_CONFIG: AppVersionConfig = {
   updatedAt: null,
 };
 
-/**
- * The grayscale rollout scopes (`ext_app_rollout.scope`). Single source of truth
- * for the server's validation set and the admin board's label lookup.
- */
+/** 灰度规则的作用域（`ext_app_rollout.scope`），唯一事实来源。 */
 export const APP_ROLLOUT_SCOPES = ["all", "user", "device", "percent"] as const;
 
 export type AppRolloutScope = (typeof APP_ROLLOUT_SCOPES)[number];
 
-/** One grayscale rule (`ext_app_rollout`). */
+/** scope 取值是否合法——服务端校验、前端下拉与标签映射共用同一份判定。 */
+export function isRolloutScope(value: unknown): value is AppRolloutScope {
+  return typeof value === "string"
+    && (APP_ROLLOUT_SCOPES as readonly string[]).includes(value);
+}
+
+/**
+ * 按 scope 归一化并校验 `target`。
+ *
+ * 服务端保存与前端表单共用，避免两处各写一遍规则而漂移：
+ * - `all`：不需要 target，一律归 `null`；
+ * - `percent`：0–100 的整数百分比（不含 `+5`、` 5 `、`1000` 这类写法）；
+ * - `user` / `device`：非空的 userId / deviceId。
+ */
+export function normalizeRolloutTarget(
+  scope: AppRolloutScope,
+  target: unknown,
+): {ok: true; value: string | null} | {ok: false} {
+  if (scope === "all") {
+    return {ok: true, value: null};
+  }
+  const trimmed = typeof target === "string" ? target.trim() : "";
+  if (trimmed === "") {
+    return {ok: false};
+  }
+  if (scope === "percent") {
+    if (!/^\d{1,3}$/.test(trimmed)) {
+      return {ok: false};
+    }
+    const percent = Number.parseInt(trimmed, 10);
+    return percent <= 100 ? {ok: true, value: String(percent)} : {ok: false};
+  }
+  return {ok: true, value: trimmed};
+}
+
+/** 一条灰度规则（`ext_app_rollout`）。 */
 export interface AppRolloutRule {
   id: number;
   scope: AppRolloutScope;
@@ -67,8 +97,8 @@ export interface AppRolloutRule {
 }
 
 /**
- * Body of `POST /ajax/app-versions/save`: either half may be omitted, so the
- * board can save the config form and the rollout table independently.
+ * `POST /ajax/app-versions/save` 的请求体：两半都可单独提交，
+ * 这样后台能把「版本表单」和「灰度表格」分开保存。
  */
 export interface AppVersionSavePayload {
   config?: Partial<AppVersionConfig>;

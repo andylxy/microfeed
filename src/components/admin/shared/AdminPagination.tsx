@@ -5,26 +5,25 @@ import {useTranslation} from "@/client/i18n";
 import {DEFAULT_ITEMS_PER_PAGE} from "@/shared/Constants";
 
 /**
- * Client-side paging for admin boards, in one place.
+ * 管理后台各面板共用的客户端分页，收在一处。
  *
- * Every admin list/board loads its rows in a single request and slices them
- * client-side, with the page size coming from Settings → Items "每页条目数"
- * (`webGlobalSettings.itemsPerPage`, passed down as a prop). Both the slice and
- * the footer pager were copied per board; this module is the shared version.
+ * 每个 admin 列表/面板都是一次请求取回全部行，再在客户端切片，每页条数来自
+ * 设置 → Items「每页条目数」（`webGlobalSettings.itemsPerPage`，作为 prop 往下传）。
+ * 切片逻辑和底部分页器原先是每个面板各抄一份；本模块是共享版本。
  *
- * `DEFAULT_ITEMS_PER_PAGE` is only a fallback for when the prop is absent — the
- * normal path is the setting (AGENTS.md「管理后台列表页」).
+ * `DEFAULT_ITEMS_PER_PAGE` 只是 prop 缺失时的兜底 —— 正常路径是那个设置项
+ * （AGENTS.md「管理后台列表页」）。
  */
 
 export interface PageSlice<Row> {
-  /** The rows to render for the requested page (clamped into range). */
+  /** 要渲染的那一页的行（已夹到合法范围内）。 */
   pageRows: Row[];
-  /** The requested page clamped to `0..totalPages - 1`. */
+  /** 夹到 `0..totalPages - 1` 的请求页码。 */
   safePage: number;
   totalPages: number;
 }
 
-/** Slice `rows` into the page `page` (zero-based), clamped into range. */
+/** 把 `rows` 切成第 `page` 页（从 0 开始），并夹到合法范围内。 */
 export function paginate<Row>(
   rows: Row[],
   itemsPerPage: number | undefined,
@@ -41,13 +40,13 @@ export function paginate<Row>(
 }
 
 interface Props {
-  /** Zero-based current page. */
+  /** 当前页码，从 0 开始。 */
   page: number;
   totalPages: number;
   onChange: (page: number) => void;
 }
 
-/** Footer pager. Renders nothing when there is only one page. */
+/** 底部分页器。只有一页时什么都不渲染。 */
 export default function AdminPagination({page, totalPages, onChange}: Props) {
   const {t} = useTranslation();
   if (totalPages <= 1) return null;

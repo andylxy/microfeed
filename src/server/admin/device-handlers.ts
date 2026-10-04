@@ -1,13 +1,10 @@
 /**
- * Route factory for the two device mutations on the device board
- * (`/admin/devices/`).
+ * 设备面板（`/admin/devices/`）上两个设备变更动作的路由工厂。
  *
- * Revoke and restore differ only in which function they call and which audit
- * action they record, so they share one handler here and the route files stay
- * thin (AGENTS.md「源码架构」: routes coordinate, server modules hold logic).
- * Both require `system:device:manage`; `revokeUserDevice` / `restoreUserDevice`
- * themselves live next to the rest of the device data access in
- * `rbac-handlers.ts`.
+ * 吊销与恢复只差「调用哪个函数」和「记哪条审计动作」，所以它们在这里共用一个
+ * handler，让路由文件保持轻薄（AGENTS.md「源码架构」：路由只做协调，逻辑放在
+ * server 模块里）。两者都要求 `system:device:manage`；`revokeUserDevice` /
+ * `restoreUserDevice` 本身与其余设备数据访问放在一起，位于 `rbac-handlers.ts`。
  */
 
 import {env} from "cloudflare:workers";
@@ -20,7 +17,7 @@ import {PERMISSION_CODES} from "@/shared/Constants";
 
 export type DeviceMutationAction = "revoke" | "restore";
 
-/** `POST {userId, deviceId}` -> `{ok: true}`, or a localized 4xx. */
+/** `POST {userId, deviceId}` -> `{ok: true}`，或一个本地化的 4xx。 */
 export function deviceMutationRoute(action: DeviceMutationAction): APIRoute {
   const mutate = action === "revoke" ? revokeUserDevice : restoreUserDevice;
   return async ({locals, request}) => {

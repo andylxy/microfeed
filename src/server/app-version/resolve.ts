@@ -1,9 +1,8 @@
 /**
- * Version-gate resolution (spec §6.3 / §6.4, ADR-0002 / ADR-0005 / ADR-0008).
+ * 版本门解析（spec §6.3 / §6.4，ADR-0002 / ADR-0005 / ADR-0008）。
  *
- * `resolveMinVersionForRequest` answers one question for one request: *what is
- * the minimum `versionCode` this caller must be on, and is falling below it a
- * hard block?* It layers grayscale rules over the global floor:
+ * `resolveMinVersionForRequest` 为一个请求回答一个问题：*这个调用方至少得在哪个
+ * `versionCode` 上，低于它算不算硬阻？* 它把灰度规则叠加在全局地板之上：
  *
  *   device (exact) > user (exact) > percent (hash) > all
  *   floor = max(matched rules WHERE force = 1, ext_app_version.min_version_code)
@@ -15,13 +14,13 @@
  * 而 `/api/app/version` 的 `force` 是**面向调用方**的另一套判定（还要看请求头是否缺版本），
  * 由那个端点自己算。两者刻意不合并——合并过就会出现"软提示被硬化成不可关闭"。
  *
- * The version gate is **not a security boundary**: a client can forge a high
- * `app-version` and bypass 426. Real security is the login credential + RBAC.
+ * 版本门**不是安全边界**：客户端可以伪造一个很高的 `app-version` 来绕过 426。
+ * 真正的安全边界是登录凭证 + RBAC。
  */
 
 import {readAppVersionConfig, readRolloutRules} from "./config";
 
-/** Integer comparison, normalised to -1 / 0 / 1 (ADR-0002: no dotted compare). */
+/** 整数比较，归一化到 -1 / 0 / 1（ADR-0002：不做点分号式比较）。 */
 export function compareVersionCode(a: number, b: number): number {
   const left = Number.isFinite(a) ? a : 0;
   const right = Number.isFinite(b) ? b : 0;
@@ -31,14 +30,12 @@ export function compareVersionCode(a: number, b: number): number {
 }
 
 /**
- * Parse the `app-version` header into an integer `versionCode`.
+ * 把 `app-version` 请求头解析成整数 `versionCode`。
  *
- * Returns `null` for a missing, empty, signed, or non-integer value. `null` means
- * "the client told us nothing usable", and the gate treats it as *below the floor*
- * — but **only when a floor is configured** (`minVersionCode > 0`). With no floor
- * the version gate is off entirely (ticket 20), so a header-less client is not
- * punished for being old; forcing an upgrade is done by *raising the floor*
- * (ADR-0005 / ADR-0008).
+ * 缺失、空、带符号或非整数一律返回 `null`。`null` 的含义是"客户端没给出可用的东西"，
+ * 版本门会把它当作*低于地板*——但**仅当确实配置了地板时**（`minVersionCode > 0`）。
+ * 没有地板时版本门完全关闭（票据 20），所以没带请求头的客户端不会因为版本旧而受罚；
+ * 强制升级是靠*抬高地板*做到的（ADR-0005 / ADR-0008）。
  */
 export function parseAppVersionCode(header: string | null): number | null {
   if (header === null) return null;
@@ -48,7 +45,7 @@ export function parseAppVersionCode(header: string | null): number | null {
   return Number.isSafeInteger(value) ? value : null;
 }
 
-/** Deterministic 0..99 bucket for a device id (FNV-1a 32-bit, backend-only). */
+/** 设备 id 的确定性 0..99 分桶（FNV-1a 32-bit，仅后端使用）。 */
 export function hashDevicePercent(deviceId: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < deviceId.length; i++) {
@@ -69,18 +66,16 @@ export interface VersionGateContext {
 }
 
 /**
- * Resolve the effective floor + force flag for one request.
+ * 解析单个请求的实际地板（只返回 `minVersionCode`，不含 `force`）。
  *
- * `userId` / `deviceId` may be absent (the MVP pre-auth gate only knows the
- * global floor); device/user/percent rules are then skipped.
+ * `userId` / `deviceId` 可以缺失（MVP 的 pre-auth 版本门只知道全局地板）；
+ * 这时 device/user/percent 规则都会被跳过。
  *
- * ⚠️ **Only hard requirements contribute to `minVersionCode`.** A matched rule
- * with `force = 0` is a *soft prompt*: it must not raise the floor, because the
- * floor is what the content gate 426s on — letting a soft rule raise it would
- * hard-block content for exactly the clients the rule only meant to nudge
- * (ADR-0008 §5: 软提示仅适用于地板之上的灰度). Soft rules are therefore invisible
- * here; they are reported through `/api/app/version`'s caller-aware `force`
- * (see `src/pages/api/app/version.ts`).
+ * ⚠️ **只有硬性要求才计入 `minVersionCode`。** 命中但 `force = 0` 的规则是*软提示*：
+ * 它不能抬高地板，因为内容门正是按地板判 426 —— 让软规则去抬地板，等于对那些规则
+ * 本来只想顺带提醒一下的客户端硬阻内容（ADR-0008 §5：软提示仅适用于地板之上的灰度）。
+ * 所以软规则在这里是隐形的；它们通过 `/api/app/version` 那个面向调用方的 `force`
+ * 来上报（见 `src/pages/api/app/version.ts`）。
  */
 export async function resolveMinVersionForRequest(
   db: D1Database,
@@ -111,8 +106,7 @@ export async function resolveMinVersionForRequest(
     }
   });
 
-  // The global floor is hard by definition; a grayscale rule is hard only when
-  // it says so (`force = 1`).
+  // 全局地板按定义就是硬的；灰度规则只有自己声明了（`force = 1`）才算硬。
   const hardRuleFloor = matched.reduce(
     (max, rule) => (rule.force ? Math.max(max, rule.minVersionCode) : max),
     0,

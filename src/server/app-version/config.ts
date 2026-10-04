@@ -1,21 +1,22 @@
 /**
- * App version configuration + rollout rules (spec §6.2).
+ * App 版本配置 + 灰度规则（spec §6.2）。
  *
- * Two tables back the `/admin/app-versions/` control plane:
- *  - `ext_app_version` — a single global row (`id = 1`): the latest release and
- *    the global `min_version_code` floor.
- *  - `ext_app_rollout` — grayscale rules (`all` / `user` / `device` / `percent`)
- *    layered on top of that floor (see `./resolve.ts`).
+ * 两张表支撑 `/admin/app-versions/` 这个控制面：
+ *  - `ext_app_version` —— 全局单行（`id = 1`）：最新版本号与全局
+ *    `min_version_code` 地板。
+ *  - `ext_app_rollout` —— 灰度规则（`all` / `user` / `device` / `percent`），
+ *    叠加在该地板之上（见 `./resolve.ts`）。
  *
- * Both are read by the public `GET /api/app/version` endpoint and by the version
- * gate `requireAppVersion`; this module is the only writer.
+ * 两者都会被公开端点 `GET /api/app/version` 和版本门 `requireAppVersion` 读取；
+ * 本模块是唯一的写入方。
  *
- * Writes validate before touching the database and return a discriminated result
- * instead of throwing, so the AJAX layer can answer 400 without a try/catch.
+ * 写入先校验再动数据库，并以可辨识结果（discriminated result）返回而不是抛错，
+ * 这样 AJAX 层不用 try/catch 就能回 400。
  */
 
 import {
-  APP_ROLLOUT_SCOPES,
+  isRolloutScope,
+  normalizeRolloutTarget,
   type AppRolloutRule,
   type AppRolloutScope,
   type AppVersionConfig,
@@ -88,12 +89,11 @@ function nonNegativeInt(value: unknown): number | null {
 }
 
 /**
- * Update the singleton row (inserting it if a pre-0080 DB has none).
+ * 更新这张单行（若 pre-0080 的库里没有则插入）。
  *
- * Fields omitted from `payload` keep their stored value, so a caller can patch
- * one field (e.g. only raise `minVersionCode`) without resending the rest — a
- * partial payload must not silently fail validation and leave the old row in
- * place.
+ * `payload` 里省略的字段保留已存的值，这样调用方可以只 patch 一个字段
+ * （例如只抬高 `minVersionCode`）而不必重发其余部分 —— 局部 payload 绝不能
+ * 悄悄没过校验、却把旧行留在原地。
  */
 export async function saveAppVersionConfig(
   db: D1Database,
@@ -148,9 +148,7 @@ export async function saveAppVersionConfig(
   return {ok: true};
 }
 
-/** Validation set, derived from the shared scope list so the two cannot drift. */
-const ROLLOUT_SCOPES: ReadonlySet<string> = new Set<string>(APP_ROLLOUT_SCOPES);
-
+/** 读出全部灰度规则；scope 合法性由 shared 的 `isRolloutScope` 统一判定。 */
 export async function readRolloutRules(db: D1Database): Promise<AppRolloutRule[]> {
   const rows = await db
     .prepare(
@@ -165,7 +163,7 @@ export async function readRolloutRules(db: D1Database): Promise<AppRolloutRule[]
       force: number;
     }>();
   return (rows.results ?? []).map((row) => {
-    if (!ROLLOUT_SCOPES.has(row.scope)) {
+    if (!isRolloutScope(row.scope)) {
       // 未知 scope 必须报错：静默当成 `all` 会让这条规则匹配**所有**设备（放大力度），
       // 静默丢掉则规则形同不存在——两者都比报错危险（AGENTS.md 行为：不静默兜底）。
       throw new Error(`未知的灰度 scope：${row.scope}`);
@@ -180,7 +178,7 @@ export async function readRolloutRules(db: D1Database): Promise<AppRolloutRule[]
   });
 }
 
-/** Replace the whole rule set atomically (the board edits it as one list). */
+/** 原子地整体替换规则集（后台把它当一个列表来编辑）。 */
 export async function saveRolloutRules(
   db: D1Database,
   rules: unknown,
@@ -191,20 +189,12 @@ export async function saveRolloutRules(
     if (typeof raw !== "object" || raw === null) return {ok: false, reason: "invalidRule"};
     const rule = raw as Record<string, unknown>;
     const scope = String(rule.scope ?? "");
-    if (!ROLLOUT_SCOPES.has(scope)) return {ok: false, reason: "invalidRule"};
+    if (!isRolloutScope(scope)) return {ok: false, reason: "invalidRule"};
     const minVersionCode = nonNegativeInt(rule.minVersionCode);
     if (minVersionCode === null) return {ok: false, reason: "invalidRule"};
-    let target: string | null = rule.target == null ? null : String(rule.target).trim();
-    if (target === "") target = null;
-    if (scope === "all") {
-      target = null;
-    } else if (scope === "percent") {
-      const percent = nonNegativeInt(target);
-      if (percent === null || percent > 100) return {ok: false, reason: "invalidRule"};
-      target = String(percent);
-    } else if (target === null) {
-      return {ok: false, reason: "invalidRule"};
-    }
+    // target 的归一化规则由 shared 提供，与前端表单共用一份（避免两处规则漂移）。
+    const target = normalizeRolloutTarget(scope, rule.target);
+    if (!target.ok) return {ok: false, reason: "invalidRule"};
     const force = rule.force;
     if (force !== true && force !== false && force !== 0 && force !== 1) {
       // force 必须显式给。缺省成 1（硬阻）意味着：前端或脚本一次漏字段，就能把真实用户
@@ -215,7 +205,7 @@ export async function saveRolloutRules(
       force: force === true || force === 1 ? 1 : 0,
       minVersionCode,
       scope: scope as AppRolloutScope,
-      target,
+      target: target.value,
     });
   }
   const statements = [db.prepare("DELETE FROM ext_app_rollout")];
