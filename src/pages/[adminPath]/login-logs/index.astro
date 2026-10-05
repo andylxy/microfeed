@@ -1,0 +1,43 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import LoginLogsApp from "@/components/admin/login-logs/LoginLogsApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// Guarded with the same code its menu row binds (`system:login-log:read`).
+// The board is read-only (an audit trail), so there is no `:manage` gate here —
+// the code exists to mirror the governance permission pair for role editing.
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_LOGIN_LOG_READ,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+// Page size comes from Settings → Items "每页条目数", same as the other boards.
+const webSettings = feedContent.settings?.webGlobalSettings ?? {};
+const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.LOGIN_LOGS}
+  documentTitle={translate("pageDocumentTitle.loginLogs", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.loginLogs", adminLanguage)}
+>
+  <LoginLogsApp {itemsPerPage} client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </LoginLogsApp>
+</AdminShell>
