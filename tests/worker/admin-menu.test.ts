@@ -292,6 +292,7 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.DEVICES,
       ADMIN_MENU_CODES.APP_VERSIONS,
       ADMIN_MENU_CODES.LOGIN_LOGS,
+      ADMIN_MENU_CODES.ANNOUNCEMENTS,
     ]);
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});

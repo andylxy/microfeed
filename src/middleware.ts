@@ -179,11 +179,20 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     env.MICROFEED_ADMIN_AUTH_MODE,
   );
 
-  // Public App version endpoint (ADR-0005 / §6.5). It is anonymous, exempt from
-  // the version gate (an old client needs it precisely to learn that it must
-  // upgrade), and deliberately served before canonicalisation so the app's exact
-  // `/api/app/version` URL does not take a 308 round-trip to a trailing slash.
-  if (pathname === "/api/app/version" || pathname === "/api/app/version/") {
+  // Public App endpoints (ADR-0005 / §6.5). They are anonymous and deliberately
+  // served before canonicalisation, so the app's exact URLs do not take a 308
+  // round-trip to a trailing slash. Returning here also skips the `/api/` auth
+  // block below, which is what actually keeps them anonymous — `/api/app/version`
+  // must stay reachable for a client that is itself below the floor (it is how
+  // such a client learns it must upgrade), and `announcements` is the broadcast
+  // notice channel (DESIGN §5.3), which must reach those same clients. Neither
+  // is subject to the version gate, which only guards `/api/AppBookRequest/*`.
+  if (
+    pathname === "/api/app/version" ||
+    pathname === "/api/app/version/" ||
+    pathname === "/api/app/announcements" ||
+    pathname === "/api/app/announcements/"
+  ) {
     return next();
   }
 

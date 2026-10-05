@@ -203,6 +203,7 @@ export const ADMIN_MENU_CODES = {
   DEVICES: 'devices',
   APP_VERSIONS: 'app_versions',
   LOGIN_LOGS: 'login_logs',
+  ANNOUNCEMENTS: 'announcements',
 } as const;
 
 /**
@@ -265,6 +266,10 @@ export const PERMISSION_CODES = {
   // cannot (it keeps a single overwritten row per device).
   SYSTEM_LOGIN_LOG_READ: 'system:login-log:read',
   SYSTEM_LOGIN_LOG_MANAGE: 'system:login-log:manage',
+  // App 消息通知（Announcements，migration 0086/0087）。`:read` 打开公告管理板，
+  // `:manage` 解锁增删改/过期。治理类，挂在 group_account。
+  SYSTEM_ANNOUNCEMENT_READ: 'system:announcement:read',
+  SYSTEM_ANNOUNCEMENT_MANAGE: 'system:announcement:manage',
   WILDCARD: '*',
 } as const;
 

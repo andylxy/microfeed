@@ -79,6 +79,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // and rbac.test.ts keep the two in lockstep.
   {code: "system:login-log:read", name: "登录日志查看"},
   {code: "system:login-log:manage", name: "登录日志管理"},
+  // App 消息通知（Announcements，migration 0087）。Mirror of PERMISSION_CODES in
+  // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
+  {code: "system:announcement:read", name: "公告查看"},
+  {code: "system:announcement:manage", name: "公告管理"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
