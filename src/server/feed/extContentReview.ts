@@ -1,4 +1,5 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
+import {SETTINGS_CATEGORIES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import {msToRFC3339} from "@/shared/TimeUtils";
 import {
@@ -58,8 +59,6 @@ export interface PendingChapter {
   lastSubmittedAt: number | null;
   /** Field-level changes of the newest unconfirmed version. */
   changes: FieldChange[];
-  /** Set when the chapter still exists; null if it was deleted meanwhile. */
-  exists: boolean;
 }
 
 const INSERT_REVIEW = `INSERT INTO ext_content_review (
@@ -218,13 +217,47 @@ export interface ContentChangeParams {
   reason?: string | null;
   reviewStatus?: string | null;
   /**
-   * Whether this change opens a pending version. Default true.
+   * Force the review decision instead of reading the `contentReview` setting.
    *
-   * Review actions themselves (restoring a version, applying an approved
-   * correction) are already decisions — opening another pending version for
-   * them would mean a decision needs re-deciding, forever.
+   * Omit it for normal content changes — the setting decides, and with review
+   * off (the default) the change is recorded in the audit trail and nothing else.
+   * Pass `false` for review actions themselves (restoring a version, applying an
+   * approved correction): they are already decisions, so opening another pending
+   * version for them would mean a decision needs re-deciding, forever.
    */
   openReview?: boolean;
+}
+
+/**
+ * Is the content-review gate on for this instance?
+ *
+ * Stored as a JSON blob under `settings.category = 'contentReview'`; an absent
+ * row — the default — means OFF.
+ *
+ * This is read at the single content-change seam rather than by each caller.
+ * The earlier design pushed the decision onto callers, and only the dashboard
+ * editor remembered it: the content write API (`createItem` / `updateItem` /
+ * `deleteItem`) and the volume board queued every change even with the switch
+ * off, so the review queue kept filling up on an instance that had review
+ * disabled.
+ */
+async function contentReviewEnabled(db: AuditDb): Promise<boolean> {
+  try {
+    const row = await db.prepare(
+      "SELECT data FROM settings WHERE category = ? LIMIT 1",
+    ).bind(SETTINGS_CATEGORIES.CONTENT_REVIEW).first() as
+      | Record<string, unknown>
+      | null;
+    if (!row) return false;
+    const parsed = JSON.parse(String(row["data"] ?? "")) as {
+      enabled?: unknown;
+    };
+    return parsed.enabled === true;
+  } catch {
+    // An unreadable settings row must not gate content: fail open (record the
+    // change, open no version) rather than queue every edit on a parse accident.
+    return false;
+  }
 }
 
 /**
@@ -266,6 +299,10 @@ export async function recordContentChange(
   });
 
   if (params.openReview === false) return null;
+  // No explicit decision -> the instance setting decides. Review is OFF by
+  // default: the audit row written above is the whole record, and the change
+  // takes effect immediately (no pending version, no pin-to-approved gate).
+  if (params.openReview !== true && !await contentReviewEnabled(db)) return null;
 
   const id = randomShortUUID();
   const now = Date.now();
@@ -334,11 +371,16 @@ function titleOf(data: Record<string, unknown>): string {
 /**
  * The review queue: chapters with unconfirmed versions, oldest first. Each row
  * carries the newest unconfirmed change so the queue can show what is waiting.
+ *
+ * Joined to `items` deliberately: a pending version whose chapter no longer
+ * exists can never be confirmed or rejected, so it is not a queue entry — it is
+ * residue from a delete that bypassed this chain. Listing it would ask a
+ * reviewer to act on something that is not there.
  */
 export async function listPendingChapters(db: AuditDb): Promise<PendingChapter[]> {
   const result = await db.prepare(
-    "SELECT * FROM ext_content_review WHERE status = 'pending' " +
-      "ORDER BY submitted_at ASC, rowid ASC",
+    "SELECT r.* FROM ext_content_review r JOIN items i ON i.id = r.item_id " +
+      "WHERE r.status = 'pending' ORDER BY r.submitted_at ASC, r.rowid ASC",
   ).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   const byItem = new Map<string, ContentReview[]>();
@@ -354,16 +396,16 @@ export async function listPendingChapters(db: AuditDb): Promise<PendingChapter[]
     const row = await db.prepare(
       "SELECT data FROM items WHERE id = ?",
     ).bind(itemId).first() as Record<string, unknown> | null;
-    const data = row ? parseJson<Record<string, unknown>>(row.data, {}) : null;
+    if (!row) continue;
+    const data = parseJson<Record<string, unknown>>(row.data, {});
     const last = reviews[reviews.length - 1]!;
     chapters.push({
       changes: last.changes,
-      exists: data != null,
       itemId,
       lastSubmittedAt: last.submittedAt,
       lastSubmittedBy: last.submittedBy,
       pendingCount: reviews.length,
-      title: data ? titleOf(data) : "",
+      title: titleOf(data),
     });
   }
   return chapters;

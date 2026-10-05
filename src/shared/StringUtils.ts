@@ -503,6 +503,11 @@ export const ADMIN_URLS = {
   ajaxAppVersions: () => adminUrl("ajax/app-versions", browserAdminPath()),
   ajaxAppVersionsSave: () =>
     adminUrl("ajax/app-versions/save", browserAdminPath()),
+  /** 历史包（R2 里上传过的 APK）：列表与删除。 */
+  ajaxAppVersionsApks: () =>
+    adminUrl("ajax/app-versions/apks", browserAdminPath()),
+  /** 登录时间日志：按 日/周/月/最近三个月/半年/年 读取（ADR-0002）。 */
+  ajaxLoginLogs: () => adminUrl("ajax/login-logs", browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),

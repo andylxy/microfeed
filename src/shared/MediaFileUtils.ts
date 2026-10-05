@@ -40,6 +40,33 @@ export const ALLOWED_MEDIA_UPLOAD_TYPES: ReadonlySet<string> = new Set([
 // A4: single-PUT R2 size ceiling (100 MiB), aligned with R2's per-object limit.
 export const MAX_MEDIA_UPLOAD_BYTES = 100 * 1024 * 1024;
 
+// APK（Android 安装包）：App 升级包走同一条 R2 通道（管理后台「版本管理」页的上传）。
+// 浏览器对 `.apk` 通常报 `application/vnd.android.package-archive`，识别不出时退化成
+// `application/octet-stream`。
+export const APK_CONTENT_TYPES: ReadonlySet<string> = new Set([
+  "application/vnd.android.package-archive",
+  "application/octet-stream",
+]);
+
+/**
+ * 上传白名单判定：**签名与 PUT 两处共用**，避免两条规则各自漂移。
+ *
+ * `objectKey` 参与判定是刻意的：`application/octet-stream` 是通用类型，直接塞进
+ * `ALLOWED_MEDIA_UPLOAD_TYPES` 等于开了万能通行证（A4 的整个意义就没了），
+ * 所以只在**对象键以 `.apk` 结尾**时放行它。
+ *
+ * 空 content-type 仍然放行（与既有语义一致）：服务端会以 `attachment` 下发。
+ */
+export function isAllowedMediaUploadType(
+  contentType: string,
+  objectKey: string,
+): boolean {
+  if (!contentType) return true;
+  const type = contentType.toLowerCase();
+  if (ALLOWED_MEDIA_UPLOAD_TYPES.has(type)) return true;
+  return objectKey.toLowerCase().endsWith(".apk") && APK_CONTENT_TYPES.has(type);
+}
+
 export function isInlineSafeMediaType(contentType: string): boolean {
   const type = (contentType.split(";")[0] ?? "").trim().toLowerCase();
   if (!type) return false;

@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {
   ALLOWED_MEDIA_UPLOAD_TYPES,
+  isAllowedMediaUploadType,
   isInlineSafeMediaType,
   MAX_MEDIA_UPLOAD_BYTES,
   mediaContentDisposition,
@@ -31,6 +32,35 @@ describe("A4 media upload allowlist", () => {
 
   it("caps uploads at the R2 single-PUT ceiling", () => {
     expect(MAX_MEDIA_UPLOAD_BYTES).toBe(100 * 1024 * 1024);
+  });
+});
+
+describe("upload allowlist with the object key (APK exception)", () => {
+  it("accepts the APK types for a *.apk key", () => {
+    // 浏览器对 .apk 常报前者，识别不出时退化成后者。
+    expect(
+      isAllowedMediaUploadType("application/vnd.android.package-archive", "development/app/x.apk"),
+    ).toBe(true);
+    expect(
+      isAllowedMediaUploadType("application/octet-stream", "development/app/x.apk"),
+    ).toBe(true);
+    // 大小写不敏感（签名与 PUT 两处共用，规则必须一致）。
+    expect(isAllowedMediaUploadType("APPLICATION/OCTET-STREAM", "APP/X.APK")).toBe(true);
+  });
+
+  it("does NOT let octet-stream become a universal pass", () => {
+    // 这是关键回归点：若把 octet-stream 直接塞进白名单，A4 的整套白名单就废了。
+    expect(isAllowedMediaUploadType("application/octet-stream", "media/x.bin")).toBe(false);
+    expect(
+      isAllowedMediaUploadType("application/vnd.android.package-archive", "media/x.zip"),
+    ).toBe(false);
+  });
+
+  it("keeps the existing behaviour for the plain allowlist", () => {
+    expect(isAllowedMediaUploadType("image/png", "media/x.png")).toBe(true);
+    expect(isAllowedMediaUploadType("text/html", "media/x.html")).toBe(false);
+    // 空 content-type 仍然放行（服务端会以 attachment 下发）。
+    expect(isAllowedMediaUploadType("", "media/x")).toBe(true);
   });
 });
 

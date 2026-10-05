@@ -33,7 +33,6 @@ interface QueueItem {
   lastSubmittedBy: string | null;
   lastSubmittedAt: number | null;
   changes: FieldChange[];
-  exists: boolean;
 }
 
 const ACTOR = "admin";
@@ -130,11 +129,6 @@ export default function ReviewQueueApp() {
               {item.lastSubmittedAt && (
                 <span className="text-xs text-muted-foreground">
                   {formatAdminTimestamp(item.lastSubmittedAt)}
-                </span>
-              )}
-              {!item.exists && (
-                <span className="text-xs text-destructive">
-                  {t("review.chapterMissing")}
                 </span>
               )}
             </div>

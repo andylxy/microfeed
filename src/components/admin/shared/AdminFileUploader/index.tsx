@@ -15,6 +15,13 @@ interface AdminFileUploaderProps {
   handleChange: (file: File) => void;
   name: string;
   onDisabledClick?: () => void;
+  /**
+   * 文件被拒（扩展名不在 `types` 里）时回调。
+   *
+   * 不传时保持既有行为：**静默忽略**。调用方传入即可给出提示 —— 否则用户拖错文件
+   * 时既不上传也没反馈，看起来像拖拽坏了。
+   */
+  onRejected?: (file: File) => void;
   types?: string[];
 }
 
@@ -36,6 +43,7 @@ export default function AdminFileUploader({
   handleChange,
   name,
   onDisabledClick,
+  onRejected,
   types = [],
 }: AdminFileUploaderProps) {
   const generatedId = useId().replaceAll(":", "");
@@ -46,9 +54,15 @@ export default function AdminFileUploader({
     .join(",");
 
   const selectFile = (file: File | undefined) => {
-    if (!disabled && file && acceptsFile(file, types)) {
-      handleChange(file);
+    if (disabled || !file) {
+      return;
     }
+    if (acceptsFile(file, types)) {
+      handleChange(file);
+      return;
+    }
+    // 类型不符：不静默丢弃，交给调用方决定要不要提示。
+    onRejected?.(file);
   };
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>) => {

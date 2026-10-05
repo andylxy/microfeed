@@ -127,6 +127,9 @@ export async function registerUserDevice(
     )
     .bind(userId, deviceId, now, now)
     .run();
+  // 登录日志**不**在这里写：本函数在每个鉴权请求上都会跑，在那里计数会把「登录次数」
+  // 变成「请求次数」，而且它在身份验证之后、覆盖不到未登录启动。写入点已改到
+  // App 的版本检查（`GET /api/app/version`，需求 3 追加）——见 login-log.ts。
 }
 
 /**

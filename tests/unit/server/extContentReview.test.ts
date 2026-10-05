@@ -11,6 +11,7 @@ import {
   type AuditDbPreparedStatement,
 } from "@/server/feed/extContentReview";
 import {listItemAuditRows, rebuildItemVersion} from "@/server/feed/extReview";
+import {SETTINGS_CATEGORIES} from "@/shared/Constants";
 
 type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
@@ -97,8 +98,28 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
       reviewed_at INTEGER,
       reason TEXT
     );
+    CREATE TABLE settings (
+      category TEXT PRIMARY KEY,
+      data TEXT
+    );
   `);
+  // The fixture represents an instance with the review gate ON: the chain tests
+  // below are about checkpoint cadence, pinning and confirm/reject, not about
+  // the switch. `setReviewEnabled` flips this row for the switch's own tests —
+  // and with no row at all the gate is OFF (the production default).
+  database.prepare("INSERT INTO settings (category, data) VALUES (?, ?)").run(
+    SETTINGS_CATEGORIES.CONTENT_REVIEW,
+    JSON.stringify({enabled: true}),
+  );
   return {database, db: new SqliteAuditDb(database)};
+}
+
+/** Flip the `contentReview` switch in the fixture's settings row. */
+function setReviewEnabled(database: DatabaseSync, enabled: boolean): void {
+  database.prepare("UPDATE settings SET data = ? WHERE category = ?").run(
+    JSON.stringify({enabled}),
+    SETTINGS_CATEGORIES.CONTENT_REVIEW,
+  );
 }
 
 /**
@@ -367,6 +388,77 @@ describe("content review chain", () => {
     });
     // The audit row is written, but no version waits for confirmation —
     // otherwise a decision would need re-deciding forever.
+    expect(await listPendingChapters(db)).toHaveLength(0);
+  });
+});
+
+describe("content review switch", () => {
+  it("records the change but opens no version when the switch is off", async () => {
+    const {database, db} = emptyDatabase();
+    setReviewEnabled(database, false);
+    writeItem(database, "chap1", v1);
+
+    const change = await recordContentChange(db, {
+      action: "edit",
+      after: v2,
+      before: v1,
+      itemId: "chap1",
+    });
+
+    expect(change).toBeNull();
+    expect(await listPendingChapters(db)).toHaveLength(0);
+    // The change is still on the record — "off" means no gate, not no history.
+    const audit = database.prepare(
+      "SELECT COUNT(*) AS c FROM ext_content_audit WHERE item_id = ?",
+    ).get("chap1") as {c: number};
+    expect(audit.c).toBeGreaterThan(0);
+  });
+
+  it("treats a missing settings row as off", async () => {
+    const {database, db} = emptyDatabase();
+    database.prepare("DELETE FROM settings WHERE category = ?")
+      .run(SETTINGS_CATEGORIES.CONTENT_REVIEW);
+    writeItem(database, "chap1", v1);
+
+    expect(await recordContentChange(db, {
+      action: "edit",
+      after: v2,
+      before: v1,
+      itemId: "chap1",
+    })).toBeNull();
+    expect(await listPendingChapters(db)).toHaveLength(0);
+  });
+
+  it("still opens a version when a caller forces openReview", async () => {
+    const {database, db} = emptyDatabase();
+    setReviewEnabled(database, false);
+    writeItem(database, "chap1", v1);
+
+    expect(await recordContentChange(db, {
+      action: "edit",
+      after: v2,
+      before: v1,
+      itemId: "chap1",
+      openReview: true,
+    })).not.toBeNull();
+    expect(await listPendingChapters(db)).toHaveLength(1);
+  });
+
+  it("omits a pending version whose chapter no longer exists", async () => {
+    const {database, db} = emptyDatabase();
+    writeItem(database, "chap1", v1);
+    await recordContentChange(db, {
+      action: "edit",
+      after: v2,
+      before: v1,
+      itemId: "chap1",
+    });
+    expect(await listPendingChapters(db)).toHaveLength(1);
+
+    // A delete that bypassed this chain (raw SQL, an import, a bulk cleanup)
+    // leaves the pending row behind. It can never be confirmed, so the queue
+    // must not list it as something to act on.
+    database.prepare("DELETE FROM items WHERE id = ?").run("chap1");
     expect(await listPendingChapters(db)).toHaveLength(0);
   });
 });

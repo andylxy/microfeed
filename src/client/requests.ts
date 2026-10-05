@@ -47,7 +47,18 @@ function uploadFile(file: any, cdnFilename: any, onProgress: any, onUploaded: an
         xhr.addEventListener("load", () => {
           const mediaUrl = `${mediaBaseUrl}/${cdnFilename}`;
           if (xhr.status >= 200 && xhr.status < 300) {
-            onUploaded(mediaUrl, arrayBuffer);
+            // R2 单段 PUT 返回的 ETag **就是内容的 MD5**（S3 语义，本地实测一致：
+            // etag == md5）。把它一并交给调用方，需要 md5 的场景（如「版本管理」页
+            // 上传 APK）就不必再对 20MB 算一遍哈希。`httpEtag` 带引号，这里去掉。
+            let etag: string | null = null;
+            try {
+              const raw = JSON.parse(xhr.responseText)?.etag;
+              const unquoted = String(raw ?? "").replace(/^"|"$/g, "");
+              etag = unquoted || null;
+            } catch {
+              // 非 JSON 响应（代理/旧后端）：etag 留空，由调用方决定是否自己算。
+            }
+            onUploaded(mediaUrl, arrayBuffer, etag);
           } else if (onFailure) {
             onFailure({
               response: {

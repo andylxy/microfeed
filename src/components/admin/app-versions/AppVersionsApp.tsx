@@ -1,5 +1,11 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 
+import {CloudUploadIcon} from "lucide-react";
+
+import Requests from "@/client/requests";
+import {formatAdminTimestamp} from "@/client/admin-date-format";
+import FileUploader from "@/components/admin/shared/AdminFileUploader";
+
 import {
   AdminCollectionError,
   AdminCollectionLoading,
@@ -12,13 +18,15 @@ import {useTranslation} from "@/client/i18n";
 import {
   APP_ROLLOUT_SCOPES,
   canForceRolloutScope,
+  isCurrentDownloadTarget,
   normalizeRolloutTarget,
   DEFAULT_APP_VERSION_CONFIG,
   type AppRolloutRule,
   type AppRolloutScope,
   type AppVersionConfig,
+  type UploadedApk,
 } from "@/shared/AppDeviceVersion";
-import {ADMIN_URLS} from "@/shared/StringUtils";
+import {ADMIN_URLS, humanFileSize, randomHex} from "@/shared/StringUtils";
 
 interface BoardResponse {
   config?: AppVersionConfig;
@@ -64,6 +72,46 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
   const [saved, setSaved] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
   const [page, setPage] = useState(0);
+  // APK 上传（走与「条目 → 媒体文件」同一条 R2 通道）
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
+  // 历史包（R2 里上传过的 APK）。R2 是唯一事实来源，不建表。
+  const [apks, setApks] = useState<UploadedApk[]>([]);
+  const [apksLoading, setApksLoading] = useState(true);
+  const [apksError, setApksError] = useState<string | null>(null);
+  const [busyApkKey, setBusyApkKey] = useState<string | null>(null);
+
+  // 定义在 uploadApk 之前：上传成功后要刷新列表，而 useCallback 的依赖数组在渲染期求值，
+  // 引用后面才声明的 const 会踩 TDZ。
+  const loadApks = useCallback(async () => {
+    setApksLoading(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxAppVersionsApks());
+      const data = await response.json().catch(() => ({})) as {
+        apks?: UploadedApk[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? t("appVersions.apkHistoryLoadFailed"));
+      }
+      setApks(Array.isArray(data.apks) ? data.apks : []);
+      setApksError(null);
+    } catch (loadError) {
+      setApksError(
+        loadError instanceof Error
+          ? loadError.message
+          : t("appVersions.apkHistoryLoadFailed"),
+      );
+    } finally {
+      setApksLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void loadApks();
+  }, [loadApks]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +138,107 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * 上传 APK 到 R2，并把**下载地址与 MD5 自动填进表单**。
+   *
+   * 复用「条目 → 媒体文件」那条既有通道（`Requests.upload` → 取签名 URL → PUT 到
+   * `/media-upload/<key>`），所以存储、鉴权、大小上限、公开 URL 规则与媒体文件完全一致，
+   * 没有第二套上传实现。
+   *
+   * MD5 来自 R2 返回的 ETag —— 单段 PUT 的 ETag **就是内容的 MD5**（本地实测一致），
+   * 因此不必再对几十 MB 的包算一遍哈希。
+   *
+   * 只填表单、**不自动保存**：抬高 `min_version_code` 会强制升级所有旧客户端（spec §12 铁律），
+   * 必须由人看一眼再点保存。
+   */
+  const uploadApk = useCallback((file: File) => {
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+    setUploadNote(null);
+    // 命名沿用媒体通道的约定（`media/…`、`images/…`），前缀 `app/`；
+    // 保留原文件名的可读部分，便于在 bucket 里辨认是哪个包。
+    const base = (file.name.split(/[\\/]/).pop() ?? "app")
+      .replace(/\.[^.]*$/u, "")
+      .replace(/[^A-Za-z0-9._-]/gu, "_")
+      .slice(0, 48) || "app";
+    const objectKey = `app/${base}-${randomHex(8)}.apk`;
+    // 两种失败（PUT 失败、取签名 URL 失败）对用户是同一件事，共用一个处理。
+    const onUploadFailed = () => {
+      setUploading(false);
+      setUploadError(t("appVersions.uploadFailed"));
+    };
+
+    Requests.upload(
+      file,
+      objectKey,
+      (percentage: number) => setUploadProgress(percentage),
+      (mediaUrl: string, _buffer: unknown, etag: string | null) => {
+        // `mediaUrl` 形如 `development/app/xxx.apk`（R2 对象键），
+        // 公开地址 = 站点 `/media/<对象键>`。
+        const publicPath = `/media/${mediaUrl}`;
+        setConfig((prev) => ({
+          ...prev,
+          downloadUrl: new URL(publicPath, window.location.origin).toString(),
+          // 服务端没回 MD5 时必须**清空**而不是沿用旧值：旧值属于上一个包，
+          // 留着会与刚上传的包不匹配 → App 下载后 md5 校验失败（比留空更难查）。
+          md5: etag ?? "",
+        }));
+        setUploading(false);
+        setUploadProgress(1);
+        setUploadNote(
+          etag
+            ? t("appVersions.uploadDone")
+            : t("appVersions.uploadDoneNoMd5"),
+        );
+        // 新包要立刻出现在「历史包」里，否则用户以为没传上去。
+        void loadApks();
+      },
+      onUploadFailed,
+      onUploadFailed,
+    );
+  }, [loadApks, t]);
+
+  /** 把某个历史包的地址与 MD5 填回表单（**不自动保存**，与上传后一致）。 */
+  const reuseApk = useCallback((apk: UploadedApk) => {
+    setConfig((prev) => ({
+      ...prev,
+      // 与上传后填的是同一种地址：站点 `/media/<对象键>`。
+      downloadUrl: new URL(`/media/${apk.key}`, window.location.origin).toString(),
+      md5: apk.md5,
+    }));
+    setUploadError(null);
+    setUploadNote(t("appVersions.apkReused", {name: apk.name}));
+  }, [t]);
+
+  const removeApk = useCallback(async (apk: UploadedApk) => {
+    if (!window.confirm(t("appVersions.apkDeleteConfirm", {name: apk.name}))) {
+      return;
+    }
+    setBusyApkKey(apk.key);
+    setApksError(null);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxAppVersionsApks(), {
+        body: JSON.stringify({key: apk.key}),
+        headers: {"content-type": "application/json"},
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({})) as {error?: string};
+      if (!response.ok) {
+        throw new Error(data.error ?? t("appVersions.apkDeleteFailed"));
+      }
+      await loadApks();
+    } catch (deleteError) {
+      setApksError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("appVersions.apkDeleteFailed"),
+      );
+    } finally {
+      setBusyApkKey(null);
+    }
+  }, [loadApks, t]);
 
   const saveConfig = useCallback(async () => {
     setBusy(true);
@@ -285,6 +434,49 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
           {textField(t("appVersions.downloadUrl"), "downloadUrl")}
           {textField(t("appVersions.md5"), "md5")}
         </div>
+        {/* APK 上传：与「条目 → 媒体文件」用**同一套**上传件（`lh-upload-wrapper` +
+            `lh-upload-box`，见 MediaManager / AdminImageUploaderApp），所以外观与交互跟其他页面一致；
+            盒子按内容撑开，不占满整行。上传后自动填下载地址与 MD5。
+            只填表单、不自动保存 —— 抬高地板会强制升级所有旧客户端（spec §12 铁律）。 */}
+        <div className="grid gap-2">
+          <div className="lh-upload-wrapper">
+            <FileUploader
+              classes="lh-upload-fileinput"
+              disabled={!canManage || uploading}
+              handleChange={uploadApk}
+              name="apkUploader"
+              // 拖/选到非 .apk 时给一句提示：否则既不上传也没反馈，看起来像控件坏了。
+              onRejected={() => {
+                setUploadNote(null);
+                setUploadError(t("appVersions.uploadWrongType"));
+              }}
+              types={["apk"]}
+            >
+              {/* 尺寸刻意给足：`w-72 h-24`（288×96）—— 翻倍了原来的投放区，
+                  同时 `h-24` 与「媒体文件」页那个上传盒同高，视觉上是一套。
+                  显式定尺寸而不是靠 padding 撑：padding 撑不出确定的投放面积。 */}
+              <div className="lh-upload-box inline-flex h-24 w-72 items-center justify-center gap-2 text-sm text-brand-light">
+                <CloudUploadIcon className="w-4" />
+                <span>
+                  {uploading
+                    ? t("appVersions.uploading", {
+                      percent: Math.round(uploadProgress * 100),
+                    })
+                    : t("appVersions.chooseApk")}
+                </span>
+              </div>
+            </FileUploader>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("appVersions.uploadHint")}
+          </p>
+          {uploadError && (
+            <p className="text-xs text-destructive">{uploadError}</p>
+          )}
+          {uploadNote && (
+            <p className="text-xs text-muted-foreground">{uploadNote}</p>
+          )}
+        </div>
         <label className="grid gap-1 text-sm">
           <span className="text-muted-foreground">
             {t("appVersions.updateLog")}
@@ -313,6 +505,97 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
             </span>
           )}
         </div>
+      </section>
+
+      {/* 历史包：R2 里上传过的 APK。R2 是唯一事实来源（不建表），
+          「当前在用」由 `downloadUrl` 比对得出（`isCurrentDownloadTarget`，两端同一份实现）。 */}
+      <section className="overflow-hidden rounded-[14px] border bg-card shadow-xs">
+        <header className="border-b bg-muted/40 px-4 py-2">
+          <h2 className="text-sm font-medium">{t("appVersions.apkHistory")}</h2>
+        </header>
+        {apksError && (
+          <p className="px-4 py-3 text-xs text-destructive">{apksError}</p>
+        )}
+        {apks.length === 0 ? (
+          <p className="p-8 text-center text-sm text-muted-foreground">
+            {apksLoading
+              ? t("appVersions.apkHistoryLoading")
+              : t("appVersions.apkHistoryEmpty")}
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">
+                  {t("appVersions.apkName")}
+                </th>
+                <th className="px-4 py-2 font-medium">
+                  {t("appVersions.apkSize")}
+                </th>
+                <th className="px-4 py-2 font-medium">
+                  {t("appVersions.apkUploadedAt")}
+                </th>
+                <th className="px-4 py-2 font-medium">
+                  {t("appVersions.md5")}
+                </th>
+                <th className="px-4 py-2 font-medium" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {apks.map((apk) => {
+                const inUse = isCurrentDownloadTarget(config.downloadUrl, apk.key);
+                return (
+                  <tr key={apk.key} className={inUse ? "bg-muted/40" : undefined}>
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs">{apk.name}</span>
+                      {inUse && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {t("appVersions.apkInUse")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {humanFileSize(apk.size)}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {formatAdminTimestamp(apk.uploadedAt)}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs">
+                      {apk.md5.slice(0, 8)}…
+                    </td>
+                    <td className="px-4 py-2">
+                      {canManage && (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            disabled={busyApkKey === apk.key}
+                            onClick={() => reuseApk(apk)}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            {t("appVersions.apkReuse")}
+                          </Button>
+                          <Button
+                            disabled={busyApkKey === apk.key || inUse}
+                            onClick={() => void removeApk(apk)}
+                            size="sm"
+                            title={inUse
+                              ? t("appVersions.apkDeleteBlocked")
+                              : undefined}
+                            type="button"
+                            variant="ghost"
+                          >
+                            {t("appVersions.apkDelete")}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-[14px] border bg-card shadow-xs">

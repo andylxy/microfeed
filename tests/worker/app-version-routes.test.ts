@@ -40,6 +40,9 @@ async function reset(): Promise<void> {
         "latest_version_name = '1.5', download_url = '', file_md5 = '', update_log = '' WHERE id = 1",
     ),
     db.prepare("DELETE FROM ext_user_devices"),
+    // 版本端点现在会写登录日志（需求 3 追加），任何调用它的用例都会留下行，
+    // 所以每个用例前都要清干净，否则计数会跨用例累加。
+    db.prepare("DELETE FROM ext_app_login_log"),
     db.prepare('DELETE FROM "auth_user"'),
   ]);
 }
@@ -459,5 +462,58 @@ describe("rollout rules through the admin endpoint", () => {
       request: saveRequest({rules: []}),
     } as never);
     expect(denied.status).toBe(403);
+  });
+});
+
+/**
+ * 需求 3 追加：登录日志的写入点是**版本检查**（匿名端点），不是设备登记。
+ *
+ * 前者能覆盖未登录启动（「找出启动过的 App」要的正是这个），后者在每个鉴权请求上
+ * 都会跑——在那里计数会把「登录次数」变成「请求次数」。这两个方向都要钉住：
+ * 检查要记、登记不许记。
+ */
+describe("login log write point", () => {
+  async function loginRows(): Promise<
+    Array<{deviceId: string; loginCount: number; userId: string | null}>
+  > {
+    const result = await db.prepare(
+      "SELECT device_id AS deviceId, login_count AS loginCount, user_id AS userId " +
+        "FROM ext_app_login_log ORDER BY device_id",
+    ).all();
+    return (result.results ?? []) as never;
+  }
+
+  it("records one login per check, counting repeats", async () => {
+    const check = () =>
+      appVersionGet({
+        request: new Request(VERSION_URL, {headers: {"x-device-id": "dev-login"}}),
+      } as never);
+
+    await check();
+    expect(await loginRows()).toEqual([
+      {deviceId: "dev-login", loginCount: 1, userId: null},
+    ]);
+
+    // 第二次检查：同一行累加，不新增行（每天 1 条不变）。
+    await check();
+    expect(await loginRows()).toEqual([
+      {deviceId: "dev-login", loginCount: 2, userId: null},
+    ]);
+  });
+
+  it("records nothing without a device header", async () => {
+    await appVersionGet({request: new Request(VERSION_URL)} as never);
+    expect(await loginRows()).toEqual([]);
+  });
+
+  it("does not record a login from device registration alone", async () => {
+    // ext_user_devices.user_id 外键指向 auth_user，先落账号。
+    await seedUser("u-login");
+    await registerUserDevice(
+      env.FEED_DB,
+      "u-login",
+      new Request(VERSION_URL, {headers: {"x-device-id": "dev-reg"}}),
+    );
+    expect(await loginRows()).toEqual([]);
   });
 });

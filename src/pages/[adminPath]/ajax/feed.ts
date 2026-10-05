@@ -137,10 +137,9 @@ export async function updateAdminFeed(
         after: afterItem as Record<string, unknown>,
         before: (beforeItem ?? {}) as Record<string, unknown>,
         itemId: updatedItemId,
-        // Review off: the audit trail still records the change, but no pending
-        // version opens and the pin-to-approved gate never runs — a save takes
-        // effect immediately (openReview === false skips exactly those).
-        openReview: reviewWasEnabled ? undefined : false,
+        // No `openReview` here on purpose: whether a change opens a pending
+        // version is decided by the `contentReview` setting at the seam
+        // (`recordContentChange`), so every write path agrees by construction.
       });
     }
   }

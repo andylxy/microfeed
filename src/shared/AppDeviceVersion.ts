@@ -47,6 +47,43 @@ export const DEFAULT_APP_VERSION_CONFIG: AppVersionConfig = {
   updatedAt: null,
 };
 
+/**
+ * 版本管理页上传过的 APK（R2 对象）。用于「历史包」列表：看得见、能复用、能删。
+ *
+ * `md5` 直接取 R2 的 **ETag** —— 单段 PUT 的 ETag 就是内容的 MD5（本地实测一致），
+ * 所以列举时不必把每个对象读回来重算哈希。
+ */
+export interface UploadedApk {
+  /** R2 对象键，含环境前缀（如 `production/app/xxx.apk`）。 */
+  key: string;
+  /** 展示用文件名（键的最后一段）。 */
+  name: string;
+  /** 内容 MD5（= R2 ETag）。 */
+  md5: string;
+  size: number;
+  /** ISO 时间串。 */
+  uploadedAt: string;
+}
+
+/**
+ * 这个键是不是**当前下载地址指向的包**？
+ *
+ * 删除前必须问这一句：旧客户端可能缓存过那个 URL，删掉它等于让那批用户升级时下不到包。
+ * 用「URL 路径以键结尾」判定，而不是要求严格相等 —— 下载地址允许带 CDN 域名。
+ *
+ * 放在 shared 是因为**两端都要用**：服务端据此拒绝删除，前端据此禁用按钮并高亮当前行。
+ */
+export function isCurrentDownloadTarget(
+  downloadUrl: string,
+  key: string,
+): boolean {
+  const trimmed = downloadUrl.trim();
+  if (!trimmed || !key) {
+    return false;
+  }
+  return trimmed === key || trimmed.endsWith(`/${key}`);
+}
+
 /** 灰度规则的作用域（`ext_app_rollout.scope`），唯一事实来源。 */
 export const APP_ROLLOUT_SCOPES = ["all", "user", "device", "percent"] as const;
 

@@ -202,6 +202,7 @@ export const ADMIN_MENU_CODES = {
   TERM: 'term',
   DEVICES: 'devices',
   APP_VERSIONS: 'app_versions',
+  LOGIN_LOGS: 'login_logs',
 } as const;
 
 /**
@@ -258,6 +259,12 @@ export const PERMISSION_CODES = {
   SYSTEM_DEVICE_MANAGE: 'system:device:manage',
   SYSTEM_APP_VERSION_READ: 'system:app-version:read',
   SYSTEM_APP_VERSION_MANAGE: 'system:app-version:manage',
+  // App login-time log (ADR-0002, migration 0084). Records one row per device
+  // per calendar day so the board can answer "which devices showed up in the
+  // last week / three months / year", which `ext_user_devices.last_seen_at`
+  // cannot (it keeps a single overwritten row per device).
+  SYSTEM_LOGIN_LOG_READ: 'system:login-log:read',
+  SYSTEM_LOGIN_LOG_MANAGE: 'system:login-log:manage',
   WILDCARD: '*',
 } as const;
 

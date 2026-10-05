@@ -8,7 +8,7 @@ import {
 } from "@/server/media/storage";
 import {normalizeObjectKey, verifySignedUpload} from "@/server/media/uploads";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
-import {ALLOWED_MEDIA_UPLOAD_TYPES} from "@/shared/MediaFileUtils";
+import {isAllowedMediaUploadType} from "@/shared/MediaFileUtils";
 import {translate} from "@/shared/i18n";
 
 const corsHeaders = {
@@ -53,8 +53,9 @@ export const PUT: APIRoute = async ({params, request, url}) => {
     );
   }
   // A4: the signed `contentType` is authentic; reject anything outside the
-  // upload allowlist before any bytes are stored.
-  if (contentType && !ALLOWED_MEDIA_UPLOAD_TYPES.has(contentType.toLowerCase())) {
+  // upload allowlist before any bytes are stored. The key participates in the
+  // decision so `application/octet-stream` is only accepted for `*.apk`.
+  if (contentType && !isAllowedMediaUploadType(contentType, objectKey)) {
     return new Response(
       translate(
         "errors.media.unsupportedContentType",

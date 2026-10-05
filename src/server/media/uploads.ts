@@ -1,7 +1,7 @@
 import {mediaPrefix} from "@/server/media/R2Utils";
 import {AppError} from "@/shared/errors";
 import {
-  ALLOWED_MEDIA_UPLOAD_TYPES,
+  isAllowedMediaUploadType,
   MAX_MEDIA_UPLOAD_BYTES,
 } from "@/shared/MediaFileUtils";
 import type {SignedUpload, UploadRequest} from "@/types";
@@ -102,7 +102,7 @@ export async function createSignedUpload(
   if (input.size !== undefined && input.size > MAX_MEDIA_UPLOAD_BYTES) {
     throw new AppError("errors.media.fileTooLarge", 413);
   }
-  if (contentType && !ALLOWED_MEDIA_UPLOAD_TYPES.has(contentType.toLowerCase())) {
+  if (contentType && !isAllowedMediaUploadType(contentType, objectKey)) {
     throw new AppError("errors.media.unsupportedContentType", 415);
   }
   const signingKey = await importSigningKey(runtimeEnv.UPLOAD_SIGNING_KEY);
