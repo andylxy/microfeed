@@ -127,3 +127,12 @@ src/worker-configuration.d.ts
 # 均为机器生成，忽略之；保留 golden/*.mts 等比对工具与根级 .md 设计文档。
 .scratch/tcm-import/golden/*/
 .scratch/tcm-import/golden/report*.json
+
+# 本地调试脚本/截图与记忆文件不入库，避免污染功能分支历史。
+# 注意：.scratch/ 与 .workbuddy/memory/ 下已有被追踪的历史文件（如 golden/*.mts、历史 memory 日志），
+# gitignore 只阻止“新增的未追踪文件”被加入，已追踪文件不受影响。
+.scratch/
+.workbuddy/memory/
+.workbuddy-ai/memory/
+.scratch_*.xml
+dev-local.bat.bak-*
