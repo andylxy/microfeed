@@ -506,7 +506,7 @@ export const ADMIN_URLS = {
   /** 历史包（R2 里上传过的 APK）：列表与删除。 */
   ajaxAppVersionsApks: () =>
     adminUrl("ajax/app-versions/apks", browserAdminPath()),
-  /** 登录时间日志：按 日/周/月/最近三个月/半年/年 读取（ADR-0002）。 */
+  /** 登录时间日志：按起止时间读取（ADR-0002）。 */
   ajaxLoginLogs: () => adminUrl("ajax/login-logs", browserAdminPath()),
   /** 公告管理：按标签读取列表，以及新建/编辑/改状态。 */
   ajaxAnnouncements: () => adminUrl("ajax/announcements", browserAdminPath()),

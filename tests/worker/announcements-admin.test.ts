@@ -263,6 +263,35 @@ describe("admin announcements save endpoint", () => {
     const response = await callPost({nonsense: true});
     expect(response.status).toBe(400);
   });
+
+  it("stores LF when the admin submits CRLF from a textarea", async () => {
+    // 全链路：后台 textarea 用 Enter 换行 → 浏览器提交 CRLF → 端点 → 入库。
+    // 断言库里是 \n：TextView 遇到 \r 会多渲染一个空行。
+    const response = await callPost({
+      create: {
+        title: "多行公告",
+        body: "第一段\r\n\r\n第二段",
+        status: ANNOUNCEMENT_STATUS.PUBLISHED,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {row: {id: number; body: string}};
+    expect(body.row.body).toBe("第一段\n\n第二段");
+    expect(body.row.body).not.toContain("\r");
+
+    // 再读库确认（响应经过了 JSON 转义，读库更直接）。
+    const stored = await getAnnouncement(db, body.row.id);
+    expect(stored?.body).toBe("第一段\n\n第二段");
+  });
+
+  it("keeps a single newline as one line break", async () => {
+    // 只有一个换行时不能变成两个空行。
+    const response = await callPost({
+      create: {title: "单换行", body: "上\r\n下", status: ANNOUNCEMENT_STATUS.PUBLISHED},
+    });
+    const body = (await response.json()) as {row: {body: string}};
+    expect(body.row.body).toBe("上\n下");
+  });
 });
 
 describe("announcement validation (pure)", () => {

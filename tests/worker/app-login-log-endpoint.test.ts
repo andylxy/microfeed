@@ -10,9 +10,9 @@ import {PERMISSION_CODES} from "@/shared/Constants";
  *
  * The DB-level dedup and window logic is covered in `app-login-log.test.ts`;
  * what only this file can catch is the HTTP surface — a missing
- * `system:login-log:read` guard, a range parameter that silently falls back to
- * "day" (an operator would think they were looking at a year), and a response
- * that stops carrying the window it was asked for.
+ * `system:login-log:read` guard, a bound that silently falls back to "unlimited"
+ * (an operator would think they were looking at one day), and a response that
+ * stops carrying the window it was asked for.
  */
 
 const ORIGIN = "https://feed.example.com";
@@ -34,9 +34,17 @@ async function seedUser(id: string): Promise<void> {
     .run();
 }
 
-function call(range: string | null) {
+/** 包含 NOW 当天的窗口，等价于原先的「日」标签。 */
+const DAY_WINDOW = {
+  from: String(NOW - DAY),
+  to: String(NOW + DAY),
+};
+
+function call(search: Record<string, string> = {}) {
   const url = new URL(`${ORIGIN}/admin/ajax/login-logs`);
-  if (range !== null) url.searchParams.set("range", range);
+  for (const [key, value] of Object.entries(search)) {
+    url.searchParams.set(key, value);
+  }
   return loginLogsGet({
     locals: reader,
     request: new Request(url.toString()),
@@ -55,7 +63,7 @@ describe("GET /admin/ajax/login-logs", () => {
   it("refuses an unauthenticated caller", async () => {
     const response = await loginLogsGet({
       locals: {},
-      request: new Request(`${ORIGIN}/admin/ajax/login-logs?range=day`),
+      request: new Request(`${ORIGIN}/admin/ajax/login-logs`),
     } as never);
     expect(response.status).toBe(401);
   });
@@ -66,49 +74,72 @@ describe("GET /admin/ajax/login-logs", () => {
         authUser: {id: "u-login-log"},
         rbacPermissions: new Set([PERMISSION_CODES.SYSTEM_DEVICE_READ]),
       },
-      request: new Request(`${ORIGIN}/admin/ajax/login-logs?range=day`),
+      request: new Request(`${ORIGIN}/admin/ajax/login-logs`),
     } as never);
     expect(response.status).toBe(403);
   });
 
-  it("defaults to the day window when no range is given", async () => {
-    const response = await call(null);
+  it("leaves both bounds open when none are given", async () => {
+    // 不传任何界限 = 「全区间」，而不是「拒绝」：这是合理的默认（旧版默认最近 1 天，
+    // 反而更容易让人误以为日志只有一天的量）。行数上限由 LOGIN_LOG_MAX_ROWS 兜住。
+    await recordLoginLog(env.FEED_DB, "u-login-log", "today", NOW);
+    await recordLoginLog(
+      env.FEED_DB,
+      "u-login-log",
+      "long-ago",
+      NOW - 900 * DAY,
+    );
+    const response = await call();
     expect(response.status).toBe(200);
-    const body = await response.json() as {range: string; days: number};
-    expect(body.range).toBe("day");
-    expect(body.days).toBe(1);
+    const body = (await response.json()) as {rows: {deviceId: string}[]};
+    expect(body.rows.map((row) => row.deviceId).sort()).toEqual([
+      "long-ago",
+      "today",
+    ]);
   });
 
-  it("serves each of the six ADR-0002 tags with its own window", async () => {
+  it("returns only the devices inside the requested window", async () => {
     await recordLoginLog(env.FEED_DB, "u-login-log", "today", NOW);
-    await recordLoginLog(env.FEED_DB, "u-login-log", "six-months-ago", NOW - 170 * DAY);
+    await recordLoginLog(
+      env.FEED_DB,
+      "u-login-log",
+      "six-months-ago",
+      NOW - 170 * DAY,
+    );
 
-    const expected: Record<string, {days: number; ids: string[]}> = {
-      day: {days: 1, ids: ["today"]},
-      week: {days: 7, ids: ["today"]},
-      month: {days: 30, ids: ["today"]},
-      quarter: {days: 90, ids: ["today"]},
-      halfYear: {days: 182, ids: ["six-months-ago", "today"]},
-      year: {days: 365, ids: ["six-months-ago", "today"]},
-    };
+    const today = (await (
+      await call(DAY_WINDOW)
+    ).json()) as {rows: {deviceId: string}[]};
+    expect(today.rows.map((row) => row.deviceId)).toEqual(["today"]);
 
-    for (const [range, want] of Object.entries(expected)) {
-      const response = await call(range);
-      expect(response.status).toBe(200);
-      const body = await response.json() as {
-        range: string;
-        days: number;
-        rows: {deviceId: string; userName: string | null}[];
-      };
-      expect(body.range).toBe(range);
-      expect(body.days).toBe(want.days);
-      expect(body.rows.map((row) => row.deviceId).sort()).toEqual(want.ids);
-    }
+    const year = (await (
+      await call({from: String(NOW - 365 * DAY), to: String(NOW + DAY)})
+    ).json()) as {rows: {deviceId: string}[]};
+    expect(year.rows.map((row) => row.deviceId).sort()).toEqual([
+      "six-months-ago",
+      "today",
+    ]);
+  });
+
+  it("treats the upper bound as exclusive, as listLoginLogs does", async () => {
+    // 半开区间 `[from, to)` 的意义：查「某一天」把 to 填到那天之后即可，
+    // 不必纠结当天最后一秒；若上界是闭区间，填到同一时刻的行会被漏掉。
+    await recordLoginLog(env.FEED_DB, "u-login-log", "at-boundary", NOW);
+
+    const past = (await (
+      await call({from: String(NOW - DAY), to: String(NOW + 1)})
+    ).json()) as {rows: {deviceId: string}[]};
+    expect(past.rows.map((row) => row.deviceId)).toEqual(["at-boundary"]);
+
+    const exactly = (await (
+      await call({from: String(NOW - DAY), to: String(NOW)})
+    ).json()) as {rows: {deviceId: string}[]};
+    expect(exactly.rows).toEqual([]);
   });
 
   it("joins the account so an operator can tell who was on which device", async () => {
     await recordLoginLog(env.FEED_DB, "u-login-log", "device-1", NOW);
-    const body = await (await call("day")).json() as {
+    const body = (await (await call(DAY_WINDOW)).json()) as {
       rows: {
         userId: string | null;
         userName: string | null;
@@ -132,19 +163,25 @@ describe("GET /admin/ajax/login-logs", () => {
       .bind("Renamed", "u-login-log")
       .run();
     await recordLoginLog(env.FEED_DB, "u-login-log", "device-1", NOW);
-    const body = await (await call("day")).json() as {
+    const body = (await (await call(DAY_WINDOW)).json()) as {
       rows: {userName: string | null}[];
     };
     expect(body.rows[0]?.userName).toBe("Renamed");
   });
 
-  it("rejects an unknown tag with 400 instead of quietly showing a day", async () => {
-    const response = await call("decade");
+  it("rejects a non-numeric bound with 400 instead of quietly ignoring it", async () => {
+    // 「传了但看不懂」绝不能等同「没传」：后者是整段放开，看板会假称全区间。
+    expect((await call({from: "yesterday"})).status).toBe(400);
+    expect((await call({to: "tomorrow"})).status).toBe(400);
+  });
+
+  it("rejects a window whose start is later than its end", async () => {
+    const response = await call({from: String(NOW), to: String(NOW - DAY)});
     expect(response.status).toBe(400);
   });
 
   it("never caches the response", async () => {
-    const response = await call("day");
+    const response = await call(DAY_WINDOW);
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 });

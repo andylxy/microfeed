@@ -103,6 +103,14 @@ const DOMAIN_RULES: DomainRule[] = [
     read: "app:mobile:access",
     write: "app:mobile:access",
   },
+  // App 搜索权限端点（`GET /api/app/search-permission`，DESIGN §5.2）。与
+  // AppBookRequest 同属移动端集成面，只要求单一 `app:mobile:access` 门；该端点
+  // 自身再按用户角色判定 `app:search:global` / `app:search:book`（见端点处理器）。
+  {
+    prefix: "app/search-permission",
+    read: "app:mobile:access",
+    write: "app:mobile:access",
+  },
 ];
 
 function requiredCode(rule: DomainRule, method: string): string {

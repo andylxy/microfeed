@@ -119,8 +119,8 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
 - 为每个变更或新增的端点添加契约与运行时测试。验证生成的参考格式仍描述同
   一个文档，然后在发布前运行 `yarn lint:openapi` 和 `yarn check`。
 
-- **豁免：移动端专用通道 `/api/AppBookRequest/*`、`/api/app/version` 与
-  `/api/app/announcements` 不注册进 OpenAPI 契约。**
+- **豁免：移动端专用通道 `/api/AppBookRequest/*`、`/api/app/version`、
+  `/api/app/announcements` 与 `/api/app/search-permission` 不注册进 OpenAPI 契约。**
   该命名空间是本项目对旧 .NET 后端 `AppBookRequest` 接口的 1:1 移植（路径与
   响应 JSON 逐字节对齐，App 只换 baseUrl、零改码），属于 App 与后端之间的
   **内部通道**，并非面向公众的 feed API；其响应信封 `{code,data,msg}` 与字段
@@ -139,6 +139,13 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
   它同样独立于 AppBookRequest 命名空间，故一并显式点名。其运行时契约由
   `tests/worker/app-announcement-endpoint.test.ts` 锁定，数据层过滤/过期/排序由
   `tests/worker/app-announcement.test.ts` 覆盖。
+  `GET /api/app/search-permission`（App 冷启动时拉取「当前账号是否有搜索权限」的
+  `{global,book}` 两个布尔）同属这一类：只由 App 调用、需登录（`app:mobile:access`
+  门 + 二次 Bearer 校验）、服务于客户端搜索入口的开启/禁用判定，不是面向公众的 feed
+  资源。它同样独立于 AppBookRequest 命名空间，故一并显式点名。其运行时契约由
+  `tests/worker/app-search-permission.test.ts` 锁定，失败关闭（`fail-closed`）语义由该
+  测试覆盖（角色不命中 = 200 双 false 有效答案；凭证问题 = 401；DB 异常 = 500 而非双
+  false）。
 
 ## 前端组件
 

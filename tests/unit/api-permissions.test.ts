@@ -19,6 +19,7 @@ import {apiPathDetails, isIntegrationApiPath} from "@/server/api/access";
 import {requiredApiPermission} from "@/server/api/api-permissions";
 import {API_BASE_PATH, LEGACY_API_BASE_PATH} from "@/shared/ApiVersion";
 import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
+import {canonicalPathname} from "@/shared/StringUtils";
 
 const HTTP_METHODS = ["get", "post", "put", "delete", "patch"] as const;
 
@@ -141,5 +142,44 @@ describe("mobile app namespace (/api/AppBookRequest/…)", () => {
     expect(
       requiredApiPermission("/api/AppBookRequest/GetProjectInfo/", "GET"),
     ).toBeNull();
+  });
+});
+
+describe("app search-permission endpoint (/api/app/search-permission/)", () => {
+  it("is an integration path under the legacy base", () => {
+    // 断言的是**中间件真正派发的形态**：鉴权前 `canonicalPathname` 会给无扩展名
+    // 路径补尾斜杠并 308，所以注册与断言都必须用带斜杠的形态。
+    // 早期版本这里断言无斜杠形态，测试全绿而线上 404 —— 断言必须跟着真实链路走。
+    expect(isIntegrationApiPath("/api/app/search-permission/")).toBe(true);
+    expect(apiPathDetails("/api/app/search-permission/")).toEqual({
+      canonicalPath: "/api/v1/app/search-permission/",
+      kind: "integration",
+      legacy: false,
+    });
+  });
+
+  it("survives the canonical trailing-slash redirect the middleware applies", () => {
+    // 回归：客户端请求无斜杠形态时，中间件 308 到带斜杠形态。若后端只认无斜杠，
+    // 重定向后的请求在 apiPathDetails 里无一分支命中 → not-found(404)，
+    // app:mobile:access 门形同虚设。这里锁死「重定向后仍是 integration + 仍需权限码」。
+    const requested = "/api/app/search-permission";
+    const dispatched = canonicalPathname(requested);
+    expect(dispatched).toBe("/api/app/search-permission/");
+    expect(isIntegrationApiPath(dispatched)).toBe(true);
+    expect(requiredApiPermission(dispatched, "GET")).toBe("app:mobile:access");
+  });
+
+  it("requires the app:mobile:access code at the path level", () => {
+    // The per-code search decision (global/book) is made by the handler; the
+    // middleware only enforces that the caller may use the mobile app at all.
+    expect(requiredApiPermission("/api/app/search-permission/", "GET")).toBe(
+      "app:mobile:access",
+    );
+  });
+
+  it("carries no deprecation headers (the /api/v1 successor does not exist)", () => {
+    // legacy:false → 中间件不会加 Deprecation / Link rel="successor-version"，
+    // 避免把客户端指向并不存在的 /api/v1/app/search-permission/。
+    expect(apiPathDetails("/api/app/search-permission/")?.legacy).toBe(false);
   });
 });

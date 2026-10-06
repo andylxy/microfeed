@@ -83,6 +83,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:announcement:read", name: "公告查看"},
   {code: "system:announcement:manage", name: "公告管理"},
+  // App 搜索权限（Search Permission，migration 0088）。App 能力权限，不进菜单，
+  // 由 group_other/unmapped 兜底组承接；运营在「角色管理」页挂到角色叶子即开放搜索。
+  {code: "app:search:global", name: "搜索-首页"},
+  {code: "app:search:book", name: "搜索-书内"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];

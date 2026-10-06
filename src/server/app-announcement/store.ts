@@ -22,6 +22,7 @@
 export {
   ANNOUNCEMENT_STATUS,
   ANNOUNCEMENT_SETTABLE_STATUSES,
+  normalizeMultilineText,
   ANNOUNCEMENT_STATUS_LABEL_KEYS,
   announcementStatusLabelKey,
   isAnnouncementTab,
@@ -58,6 +59,7 @@ import type {
 import {
   ANNOUNCEMENT_FETCH_LIMIT,
   ANNOUNCEMENT_STATUS,
+  normalizeMultilineText,
 } from "@/shared/AppAnnouncement";
 
 /**
@@ -170,7 +172,9 @@ export async function createAnnouncement(
 ): Promise<AnnouncementRow> {
   const status = draft.status ?? ANNOUNCEMENT_STATUS.DRAFT;
   const priority = draft.priority ?? 0;
-  const body = draft.body ?? "";
+  // 入库前统一换行：textarea 提交 CRLF，原样存会让移动端多出空行（详见 normalizeMultilineText）。
+  const title = normalizeMultilineText(draft.title);
+  const body = normalizeMultilineText(draft.body);
   const {validFrom, validTo} = normalizeWindow(draft.validFrom, draft.validTo);
   await db
     .prepare(
@@ -178,7 +182,7 @@ export async function createAnnouncement(
          (title, body, status, priority, valid_from, valid_to, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     )
-    .bind(draft.title, body, status, priority, validFrom, validTo, now, now)
+    .bind(title, body, status, priority, validFrom, validTo, now, now)
     .run();
   const row = await db
     .prepare("SELECT last_insert_rowid() AS id")
@@ -204,8 +208,12 @@ export async function updateAnnouncement(
   const current = await getAnnouncement(db, id);
   if (!current) return null;
 
-  const title = update.title ?? current.title;
-  const body = update.body ?? current.body;
+  // 先规范化再比较：库里存 LF、客户端送 CRLF 时，若拿原始值比较会把「只有行尾差异」
+  // 判定为内容变更 → version 每次 +1 → 客户端每次都重弹同一条公告。
+  const title =
+    update.title === undefined ? current.title : normalizeMultilineText(update.title);
+  const body =
+    update.body === undefined ? current.body : normalizeMultilineText(update.body);
   // 不写 `as AnnouncementStatus`：status 列在 D1 里是 INTEGER，读出来就是 number。
   // 断言只会把「可能是越界值」伪装成「已校验」，而 bind() 本就接受 number。
   const status: number = update.status ?? current.status;
@@ -216,9 +224,8 @@ export async function updateAnnouncement(
     current,
   );
 
-  const contentChanged =
-    (update.title !== undefined && update.title !== current.title) ||
-    (update.body !== undefined && update.body !== current.body);
+  // 规范化后的值与库中值相同即视为「内容未变」，version 不动。
+  const contentChanged = title !== current.title || body !== current.body;
   const nextVersion = contentChanged ? current.version + 1 : current.version;
 
   await db

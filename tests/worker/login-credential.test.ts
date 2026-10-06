@@ -525,6 +525,74 @@ describe("sessionless API bearer", () => {
     );
     expect(loginPath.kind).toBe("notFound");
   });
+
+  it("gates the search-permission endpoint on app:mobile:access", async () => {
+    // The search-permission endpoint (DESIGN §5.2) is an integration path that
+    // requires `app:mobile:access` at the path level; the per-code global/book
+    // decision happens in the handler. No bearer → unauthorized; a credential
+    // whose account holds no mobile access → forbidden; a wildcard account
+    // (super_admin) clears the path gate → allow.
+    await seedUser("u_search_none");
+    const plain = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_search_none",
+    });
+    const denied = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/app/search-permission/`, {
+        headers: {authorization: `Bearer ${plain.secret}`},
+      }),
+      "/api/app/search-permission/",
+    );
+    expect(denied.kind).toBe("forbidden");
+
+    await seedUser("u_search_ok");
+    await grantRole("u_search_ok", "r_super_admin");
+    const admin = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_search_ok",
+    });
+    const allowed = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/app/search-permission/`, {
+        headers: {authorization: `Bearer ${admin.secret}`},
+      }),
+      "/api/app/search-permission/",
+    );
+    expect(allowed.kind).toBe("allow");
+
+    const noBearer = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/app/search-permission/`),
+      "/api/app/search-permission/",
+    );
+    expect(noBearer.kind).toBe("unauthorized");
+  });
+
+  it("throttles the search-permission endpoint per client address (429)", async () => {
+    // 票据 0002 验收的三态齐全：无 Bearer → 401 / 缺 app:mobile:access → 403 /
+    // 被限流 → 429。限流按 client address 计入，只有**无法解析**的 token 才算
+    // 一次爆破失败（见 credential-bearer.ts），所以这里连打错误 token。
+    let kind = "";
+    for (
+      let attempt = 0;
+      attempt < LOGIN_THROTTLE_MAX_ATTEMPTS + 2;
+      attempt += 1
+    ) {
+      const result = await decideLoginCredentialApiRequest(
+        env.FEED_DB,
+        new Request(`${ORIGIN}/api/app/search-permission/`, {
+          headers: {
+            authorization: "Bearer mflc_wrong",
+            "cf-connecting-ip": "203.0.113.91",
+          },
+        }),
+        "/api/app/search-permission/",
+      );
+      kind = result.kind;
+    }
+    expect(kind).toBe("throttled");
+  });
 });
 
 describe("login credential usage tracking", () => {

@@ -1,5 +1,5 @@
 /**
- * 登录时间日志（ADR-0002）的跨端 DTO 与时间标签定义。
+ * 登录时间日志（ADR-0002）的跨端 DTO 与时间窗口定义。
  *
  * 这些形状跨越服务端/客户端边界——`ajax/login-logs` 负责序列化，
  * `LoginLogsApp` 负责反序列化——所以统一放在 `src/shared/`
@@ -9,17 +9,17 @@
  * 运行时中立是刻意的：不依赖 D1、不依赖 `cloudflare:workers`、不碰 DOM。
  */
 
-/** 六个预设筛选窗口（ADR-0002 的「时间标签」）。`day` 键是接口参数值。 */
-export const LOGIN_LOG_RANGES = {
-  day: 1,
-  week: 7,
-  month: 30,
-  quarter: 90,
-  halfYear: 182,
-  year: 365,
-} as const;
-
-export type LoginLogRange = keyof typeof LOGIN_LOG_RANGES;
+/**
+ * 日期时间窗口：毫秒时间戳，比较区间为半开区间 `[fromMs, toMs)`。
+ *
+ * 缺省的一端表示这一侧不设限——运维只想看「某天之后」时，不必再补一个人为的
+ * 截止值。服务端把毫秒换算成 `login_at`（ISO 字符串）后再比较，**不**用
+ * `log_date`（UTC 日历日字符串）直接比，后者会在跨时区场景错位。
+ */
+export interface LoginLogWindow {
+  fromMs?: number | null;
+  toMs?: number | null;
+}
 
 /**
  * 登录日志看板的返回上限。
@@ -29,23 +29,20 @@ export type LoginLogRange = keyof typeof LOGIN_LOG_RANGES;
  */
 export const LOGIN_LOG_MAX_ROWS = 500;
 
-export const LOGIN_LOG_RANGE_KEYS = Object.keys(
-  LOGIN_LOG_RANGES,
-) as LoginLogRange[];
-
-export function isLoginLogRange(value: string): value is LoginLogRange {
-  return Object.prototype.hasOwnProperty.call(LOGIN_LOG_RANGES, value);
-}
-
 /**
  * 一行登录日志（每设备每自然日一行）。
  *
  * `loginAt` 是当天**最后一次**登录时间；`loginCount` 是当天登录**次数**
  * （需求 3 追加：每个 App 版本检查算一次登录）。
  *
- * ⚠️ `userId` / `userName` / `userEmail` 可空，而且**现在真的会为空**：写入方是匿名的
- * `/api/app/version`（App 冷启动的版本检查），未登录的启动同样要留下痕迹——这正是
- * 「找出启动过的 App」这条需求的关键。带了 Bearer 的检查会解析出用户并写入 `userId`。
+ * ⚠️ `userName` / `userEmail` 可空：`auth_user` 里的 `username` 与
+ * `displayUsername` 都可以为空（真实库里大多数账号只有邮箱），所以**不能**把
+ * 「没有用户名」当成「没有账号」——这正是看板一度把整列显示成「未登录」的原因。
+ * 显示方必须落到 `userId` 上（与设备看板 `{@link AdminDeviceRow}` 的
+ * `username ?? userId` 同一个办法）。
+ *
+ * `userId` 为 null 表示这条日志确实出自匿名启动；只有当设备表里有该设备的
+ * 绑定账号时才会被回查填补，见 {@link listLoginLogs}。
  */
 export interface LoginLogRow {
   deviceId: string;

@@ -59,6 +59,10 @@ function integrationSuffix(suffix: string, legacy: boolean): boolean {
     /^channels\/[^/]+\/$/u.test(suffix) ||
     suffix === "media_files/presigned_urls/" ||
     APP_BOOK_REQUEST_CONTENT_SUFFIXES.has(suffix) ||
+    // App 搜索权限端点（`GET /api/app/search-permission`，DESIGN §5.2）由
+    // `apiPathDetails` 前置分支单独处理（要报 `legacy: false`），此处不重复登记。
+    // 注意它带尾斜杠：中间件在鉴权前先跑 `canonicalPathname` 并 308 到带斜杠形态，
+    // 真正被派发的路径是 `/api/app/search-permission/`。
     (!legacy && (
       // Novel content read API (ADR-0006). Registered inside this guard on
       // purpose: a legacy `/api/content/*` caller then falls through to
@@ -88,6 +92,20 @@ export function apiPathDetails(pathname: string): ApiPathDetails | null {
     return integrationSuffix(suffix, false)
       ? {canonicalPath: `${API_BASE_PATH}${suffix}`, kind: "integration", legacy: false}
       : null;
+  }
+
+  // Same treatment for the search-permission endpoint. It sits under the legacy
+  // `/api/` base like the rest of the app surface, but `/api/v1/app/search-permission`
+  // does not exist, so reporting `legacy: true` would attach deprecation headers
+  // (Deprecation / Link rel="successor-version") pointing at a 404 successor and
+  // break `Prefer: handling=prefers-repr`-style clients. Matched before the base
+  // loop for the same reason as AppBookRequest above.
+  if (pathname === `${LEGACY_API_BASE_PATH}app/search-permission/`) {
+    return {
+      canonicalPath: `${API_BASE_PATH}app/search-permission/`,
+      kind: "integration",
+      legacy: false,
+    };
   }
 
   const bases = [

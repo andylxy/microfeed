@@ -135,6 +135,21 @@ export const ANNOUNCEMENT_PRIORITY_MAX = 1000;
 export const ANNOUNCEMENT_MAX_ROWS = 200;
 
 /**
+ * 把多行文本里的 CRLF / 孤立 CR 统一成 LF。
+ *
+ * <p>后台正文是 `<textarea>`，浏览器提交 CRLF。原样入库会让移动端 `TextView`
+ * 把一个换行渲染成两行；还会让 `updateAnnouncement` 每次保存都判定为「内容变了」，
+ * version 反复 +1，公告反复重弹。规范化须在比较之前做。
+ * JSON 序列化时 `\n` 自动转义、客户端 Gson 自动还原，两端无需额外处理。</p>
+ */
+export function normalizeMultilineText(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+  return value.replace(/\r\n?/g, "\n");
+}
+
+/**
  * 公开端点单次最多下发多少条生效公告。
  *
  * <p>防超大 payload（DESIGN §6.4）。客户端另有 {@code K=3} 的展示上限，

@@ -270,6 +270,11 @@ export const PERMISSION_CODES = {
   // `:manage` 解锁增删改/过期。治理类，挂在 group_account。
   SYSTEM_ANNOUNCEMENT_READ: 'system:announcement:read',
   SYSTEM_ANNOUNCEMENT_MANAGE: 'system:announcement:manage',
+  // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
+  // 不是后台页面权限，因此不进 ext_menu / ext_menu_permissions，由 group_other /
+  // unmapped 兜底组承接。运营在既有「角色管理」页把码挂到角色叶子即可开放搜索。
+  APP_SEARCH_GLOBAL: 'app:search:global',
+  APP_SEARCH_BOOK: 'app:search:book',
   WILDCARD: '*',
 } as const;
 

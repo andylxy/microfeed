@@ -7,6 +7,7 @@ import {
   getAnnouncement,
   listActiveAnnouncements,
   listAdminAnnouncements,
+  normalizeMultilineText,
   setStatus,
   updateAnnouncement,
   type AnnouncementDraft,
@@ -207,5 +208,66 @@ describe("listAdminAnnouncements tabs", () => {
     const row = await getAnnouncement(db, id);
     expect(row?.title).toBe("round");
     expect(row?.body).toBe("xyz");
+  });
+});
+
+describe("公告正文的换行规范化（提示窗口优化第 4 条）", () => {
+  it("normalizes CRLF to LF so mobile does not render doubled line breaks", () => {
+    // 后台 textarea 提交的是 CRLF；原样入库会让移动端 TextView 把一个换行
+    // 渲染成两行（多出空行），运营看到的排版与用户看到的不一致。
+    expect(normalizeMultilineText("第一行\r\n第二行")).toBe("第一行\n第二行");
+    // 孤立的 CR（老 Mac 风格）也要归一。
+    expect(normalizeMultilineText("第一行\r第二行")).toBe("第一行\n第二行");
+    // 已经是 LF 的不能被动过。
+    expect(normalizeMultilineText("第一行\n第二行")).toBe("第一行\n第二行");
+    // 连续多个换行按原样保留（运营有意留空行）。
+    expect(normalizeMultilineText("a\r\n\r\nb")).toBe("a\n\nb");
+    // 空值安全。
+    expect(normalizeMultilineText(null)).toBe("");
+    expect(normalizeMultilineText(undefined)).toBe("");
+    expect(normalizeMultilineText("")).toBe("");
+  });
+
+  it("stores the body with LF only", async () => {
+    const created = await createAnnouncement(
+      db,
+      {title: "换行", body: "第一行\r\n第二行", status: ANNOUNCEMENT_STATUS.PUBLISHED},
+      NOW,
+    );
+    const row = await getAnnouncement(db, created.id);
+    expect(row?.body).toBe("第一行\n第二行");
+    expect(row?.body).not.toContain("\r");
+  });
+
+  it("does not bump version when an update only differs by CRLF", async () => {
+    // 回归防护：库里已存 LF，textarea 再次提交 CRLF 时，若拿原始值比较会把
+    // 「只有行尾差异」判定为「内容变了」→ version 每次 +1 → 客户端每次都重弹同一条公告。
+    // 注意：create 用纯 LF、update 用真 CRLF，二者语义相同但字节不同，
+    // 只有 normalize 真的生效，version 才保持 1（删掉 normalize 此测试会红）。
+    const created = await createAnnouncement(
+      db,
+      {title: "标题", body: "第一行\n第二行", status: ANNOUNCEMENT_STATUS.PUBLISHED},
+      NOW,
+    );
+    // 模拟 textarea 再次提交（CRLF），内容语义完全没变。
+    const updated = await updateAnnouncement(db, created.id, {
+      title: "标题",
+      body: "第一行\r\n第二行",
+    });
+    expect(updated?.version).toBe(1);
+  });
+
+  it("still bumps version when the body genuinely changes", async () => {
+    const created = await createAnnouncement(
+      db,
+      {title: "标题", body: "正文", status: ANNOUNCEMENT_STATUS.PUBLISHED},
+      NOW,
+    );
+    const updated = await updateAnnouncement(db, created.id, {
+      title: "标题",
+      body: "改过的正文",
+    });
+    expect(updated?.version).toBe(2);
+    expect(updated?.body).toBe("改过的正文");
   });
 });
