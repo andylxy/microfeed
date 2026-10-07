@@ -11,6 +11,28 @@
 
 export const RBAC_WILDCARD = "*";
 
+/**
+ * The permission rule, in one place: a permission set allows a code when it
+ * contains the code itself, or the wildcard.
+ *
+ * Every authorization decision reads this — the admin guard (`hasPermission` in
+ * `guard.ts`), the sessionless credential API (`credential-bearer.ts`) and the
+ * App search-permission resolver (`app-search-permission/resolve.ts`) all call
+ * it. Keeping the rule in one function is what stops those paths from drifting
+ * apart: a change to the wildcard semantics (or a future deny layer) lands once
+ * and applies everywhere, instead of silently diverging between three copies.
+ *
+ * A missing/empty set allows nothing, so a `null` set is deny-by-default.
+ */
+export function permissionsInclude(
+  permissions: ReadonlySet<string> | null | undefined,
+  code: string,
+): boolean {
+  return (
+    Boolean(permissions?.has(RBAC_WILDCARD)) || Boolean(permissions?.has(code))
+  );
+}
+
 export async function resolveUserPermissions(
   db: D1Database,
   userId: string,
@@ -35,6 +57,15 @@ export async function resolveUserPermissions(
 
 export interface RbacResolved {
   permissions: Set<string>;
+  /**
+   * Whether the account is flagged for a forced password change
+   * (`ext_user_security.must_change_password`).
+   *
+   * ⚠️ **Dormant today**: no code path writes the flag to 1 — migration 0042
+   * cleared every row, and this deployment does not force a change on first
+   * sign-in. The guard keeps its 428 branch so the gate is already wired if that
+   * policy returns, but nothing can currently trigger it.
+   */
   mustChangePassword: boolean;
   deviceRevoked: boolean;
   banned: boolean;

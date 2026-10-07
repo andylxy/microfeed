@@ -11,6 +11,11 @@
  *   6. code in permission set                  -> ALLOW
  *   7. otherwise                               -> 403
  *
+ * ⚠️ Step 4 is **dormant** today: nothing writes `must_change_password = 1`
+ * (migration 0042 cleared every row, and this deployment does not force a change
+ * on first sign-in). The branch is kept so the gate is already in place if that
+ * policy returns — see `RbacResolved.mustChangePassword` in `resolve.ts`.
+ *
  * Steps 2-4 come before 5-6 on purpose: a super_admin whose device was revoked
  * must be kicked out, and one who must change their password must be stopped,
  * exactly like any other account.
@@ -34,7 +39,7 @@ import {
   parseAppVersionCode,
   resolveMinVersionForRequest,
 } from "@/server/app-version/resolve";
-import {deviceIdFromRequest, RBAC_WILDCARD} from "./resolve";
+import {deviceIdFromRequest, permissionsInclude} from "./resolve";
 import {checkReplay} from "./replay";
 import {type PermissionCode} from "@/shared/Constants";
 
@@ -146,12 +151,7 @@ export function requireAccountAccess(
  * no-session short-circuit.
  */
 export function hasPermission(locals: RbacLocals, code: string): boolean {
-  const permissions = locals.rbacPermissions;
-  if (permissions?.has(RBAC_WILDCARD)) {
-    return true;
-  }
-
-  return Boolean(permissions?.has(code));
+  return permissionsInclude(locals.rbacPermissions, code);
 }
 
 export function requirePermission(

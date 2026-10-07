@@ -30,8 +30,8 @@ import {
 import {
   accountIsBlocked,
   isDeviceRevoked,
+  permissionsInclude,
   registerUserDevice,
-  RBAC_WILDCARD,
   resolveUserPermissions,
 } from "@/server/rbac/resolve";
 import {LOGIN_CREDENTIAL_PREFIX} from "@/shared/LoginCredential";
@@ -114,6 +114,13 @@ export async function decideLoginCredentialApiRequest(
   }
   await registerUserDevice(database, verified.userId, request);
 
+  // Account gates on this path are banned + device-revoked (above). The fourth
+  // gate — `must_change_password` -> 428 — is deliberately **not** applied: a
+  // sessionless API caller has no way to complete an interactive password
+  // change, so the gate would only wall it off. It is dormant regardless
+  // (nothing sets the flag; see `RbacResolved` in `resolve.ts`), while the admin
+  // session path still enforces it for interactive users.
+  //
   // The credential authenticates the user; `requiredApiPermission` decides what
   // the user may do. After A1 every integration path maps to a code, so a `null`
   // here means the path is outside the mapped set — deny it (fail-closed) rather
@@ -127,8 +134,7 @@ export async function decideLoginCredentialApiRequest(
     userId: verified.userId,
   };
   const granted =
-    permissionCode !== null &&
-    (permissions.has(RBAC_WILDCARD) || permissions.has(permissionCode));
+    permissionCode !== null && permissionsInclude(permissions, permissionCode);
   if (!granted) {
     return {kind: "forbidden", attribution};
   }

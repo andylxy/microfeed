@@ -17,7 +17,7 @@
 
 import {providedLoginCredentialBearer} from "@/server/auth/credential-login";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
-import {RBAC_WILDCARD, resolveUserPermissions} from "@/server/rbac/resolve";
+import {permissionsInclude, resolveUserPermissions} from "@/server/rbac/resolve";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**
@@ -66,9 +66,8 @@ export async function resolveSearchPermission(
     return failed("解析用户权限", error);
   }
 
-  // 多角色用户的权限是并集，`*` 通配短路。
-  const has = (code: string): boolean =>
-    permissions.has(code) || permissions.has(RBAC_WILDCARD);
+  // 多角色用户的权限是并集，`*` 通配短路；判定规则与其余鉴权路径共用同一实现。
+  const has = (code: string): boolean => permissionsInclude(permissions, code);
 
   return {
     kind: "ok",
