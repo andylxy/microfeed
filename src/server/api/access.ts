@@ -41,7 +41,7 @@ const APP_BOOK_REQUEST_PREFIX = "/api/AppBookRequest/";
  * (login, replaceToken, captcha) and its config dictionaries are deliberately
  * absent: they stay anonymous (see `src/middleware.ts`).
  */
-const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
+export const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
   "AppBookRequest/GetNav/",
   "AppBookRequest/GetBookChapter/",
   "AppBookRequest/GetChapterContent/",
@@ -51,6 +51,61 @@ const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
   "AppBookRequest/GetAllMingCi/",
   "AppBookRequest/GetTipsStyleConfig/",
 ]);
+
+/**
+ * The mobile route registry the middleware canonicalises case-insensitively
+ * under `/api/AppBookRequest/`. Two things share this namespace and they play
+ * different roles:
+ *  - `APP_BOOK_REQUEST_CONTENT_SUFFIXES` is the **auth authority**: the
+ *    middleware's fail-open decision (`!isIntegrationApiPath(pathname) → next()`)
+ *    keys off it, so a content route absent from that set is served anonymously.
+ *  - This registry is the **canonicalisation authority** only (it maps any-cased
+ *    route names to their canonical casing before dispatch).
+ * Every entry here must therefore be either a content route (present in the
+ * suffix set) or an explicitly anonymous pre-auth / config route (login,
+ * replaceToken, captcha, project/login/about info). The regression test in
+ * `tests/unit/api-permissions.test.ts` enumerates the actual handler files under
+ * `src/pages/api/AppBookRequest/` and fails CI if any route is neither a content
+ * route nor explicitly anonymous — that silent gap is the fail-open risk called
+ * out in ADR-0011 D2. Kept here (not in `middleware.ts`) so unit tests can
+ * import it without pulling in the Astro / cloudflare:workers runtime the
+ * middleware module depends on.
+ */
+export const APP_BOOK_REQUEST_ROUTES = [
+  "GetNav",
+  "GetBookChapter",
+  "GetChapterContent",
+  "GetBookIdFang",
+  "GetAllZhongYao",
+  "GetAliaZhongYao",
+  "GetAllMingCi",
+  "GetTipsStyleConfig",
+  "GetProjectInfo",
+  "GetLoginInfo",
+  "getAboutInfo",
+  "getPicCaptcha",
+  "login",
+  "replaceToken",
+] as const;
+
+export const APP_BOOK_REQUEST_CANONICAL = new Map(
+  APP_BOOK_REQUEST_ROUTES.map((route) => [route.toLowerCase(), route]),
+);
+
+/**
+ * Normalise a `/api/AppBookRequest/<Name>[/…]` path to its canonical route
+ * casing so integration-path registration, RBAC and the audit log all see one
+ * name. Returns the input unchanged when it is not under the App prefix or the
+ * route name is unknown.
+ */
+export function canonicalAppBookRequestPath(pathname: string): string {
+  const prefix = "/api/AppBookRequest/";
+  if (!pathname.startsWith(prefix)) return pathname;
+  const [name, ...tail] = pathname.slice(prefix.length).split("/");
+  const canonical = APP_BOOK_REQUEST_CANONICAL.get((name ?? "").toLowerCase());
+  if (!canonical) return pathname;
+  return `${prefix}${canonical}${tail.length > 0 ? `/${tail.join("/")}` : ""}`;
+}
 
 function integrationSuffix(suffix: string, legacy: boolean): boolean {
   return suffix === "feed/" ||

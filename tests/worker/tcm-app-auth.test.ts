@@ -5,6 +5,7 @@ import {createAdminRbacUser} from "@/server/admin/rbac-handlers";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
 import {appLogin, appReplaceToken} from "@/server/tcm/app-auth";
+import {POST as appLoginPost} from "@/pages/api/AppBookRequest/login";
 import {
   emptyPicCaptcha,
   getAppAboutInfo,
@@ -65,6 +66,8 @@ beforeEach(async () => {
     db.prepare("DELETE FROM auth_session"),
     db.prepare("DELETE FROM ext_user_security"),
     db.prepare("DELETE FROM ext_user_roles"),
+    db.prepare("DELETE FROM ext_user_devices"),
+    db.prepare("DELETE FROM ext_auth_throttle"),
     db.prepare('DELETE FROM "auth_user"'),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
@@ -75,6 +78,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await db.batch([
     db.prepare("DELETE FROM ext_login_credentials"),
+    db.prepare("DELETE FROM ext_auth_throttle"),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
   ]);
@@ -182,6 +186,57 @@ describe("App login (ticket 12)", () => {
   });
 });
 
+describe("App login throttle (ADR-0011 D1 / ticket 12 限流)", () => {
+  const LOGIN_URL = "https://app.example.com/api/AppBookRequest/login";
+
+  function loginRequest(ip: string): Request {
+    return new Request(LOGIN_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": ip,
+      },
+      body: JSON.stringify({UserName: "throttle-probe", Password: "irrelevant"}),
+    });
+  }
+
+  it("returns 429 on the 6th attempt from one IP within the 60s window", async () => {
+    const ip = "203.0.113.77";
+    // 隔离：清掉该 IP 的限流计数，避免跨用例累加。
+    await db
+      .prepare("DELETE FROM ext_auth_throttle WHERE key = ?")
+      .bind(`auth:${ip}:/api/AppBookRequest/login`)
+      .run();
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await appLoginPost({request: loginRequest(ip)} as never);
+      statuses.push(res.status);
+    }
+
+    // 前 5 次穿透限流走到登录逻辑（返回 200 信封），第 6 次被限流返回 429。
+    expect(statuses.slice(0, 5).every((s) => s !== 429)).toBe(true);
+    expect(statuses.filter((s) => s === 429).length).toBe(1);
+
+    // 窗口内继续请求仍 429，且带 retry-after 头。
+    const throttled = await appLoginPost({request: loginRequest(ip)} as never);
+    expect(throttled.status).toBe(429);
+    expect(throttled.headers.get("retry-after")).not.toBeNull();
+  });
+
+  it("does not throttle when the client address is absent", async () => {
+    const res = await appLoginPost({
+      request: new Request(LOGIN_URL, {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({UserName: "x", Password: "y"}),
+      }),
+    } as never);
+    // 无 IP 时跳过 IP 维度（B13 决策），不会误拦（走登录逻辑返回 200 信封）。
+    expect(res.status).not.toBe(429);
+  });
+});
+
 describe("App site config (ticket 13)", () => {
   it("maps project info from the primary channel", async () => {
     await seedPrimaryChannel({
@@ -226,5 +281,71 @@ describe("App site config (ticket 13)", () => {
       ValidCodeReqNo: "",
       IsCode: false,
     });
+  });
+});
+
+/** 取刚通过后台建出的用户 id（createAccount 派生 username / email）。 */
+async function createdUserId(account: string): Promise<string> {
+  const row = await db
+    .prepare('SELECT id FROM "auth_user" WHERE username = ? OR email = ?')
+    .bind(account.toLowerCase(), `${account.toLowerCase()}@example.com`)
+    .first<{id: string}>();
+  if (!row) throw new Error(`user not found: ${account}`);
+  return row.id;
+}
+
+describe("App replaceToken enforces ban/revoke (ADR-0011 D3)", () => {
+  async function loginAs(account: string, password: string): Promise<{token: string; userId: string}> {
+    await createAccount({account, name: account, password});
+    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: account,
+      Password: password,
+    }) as Record<string, unknown>;
+    return {token: payload.Token as string, userId: await createdUserId(account)};
+  }
+
+  it("refreshes a normal token (control)", async () => {
+    const {token} = await loginAs("d3normal", "secret1");
+    const refreshed = await appReplaceToken(db, appRequest(
+      "/api/AppBookRequest/replaceToken",
+      {headers: {authorization: `Bearer ${token}`}},
+    )) as Record<string, unknown>;
+    expect(refreshed.Token).toBe(token);
+  });
+
+  it("rejects a banned account", async () => {
+    const {token, userId} = await loginAs("d3banned", "secret1");
+    await db.prepare('UPDATE "auth_user" SET banned = 1 WHERE id = ?').bind(userId).run();
+    const result = await appReplaceToken(db, appRequest(
+      "/api/AppBookRequest/replaceToken",
+      {headers: {authorization: `Bearer ${token}`}},
+    ));
+    expect(result).toBe("账号已被封禁");
+  });
+
+  it("rejects a revoked device", async () => {
+    const {token, userId} = await loginAs("d3revoked", "secret1");
+    await db.prepare(
+      "INSERT INTO ext_user_devices (user_id, device_id, status, last_seen_at, created_at) " +
+        "VALUES (?, ?, 'revoked', '2024-01-01', '2024-01-01')",
+    ).bind(userId, "d3-device-1").run();
+    const result = await appReplaceToken(db, appRequest(
+      "/api/AppBookRequest/replaceToken",
+      {headers: {authorization: `Bearer ${token}`, "x-device-id": "d3-device-1"}},
+    ));
+    expect(result).toBe("设备已被吊销");
+  });
+
+  it("lets a non-revoked device through", async () => {
+    const {token, userId} = await loginAs("d3active", "secret1");
+    await db.prepare(
+      "INSERT INTO ext_user_devices (user_id, device_id, status, last_seen_at, created_at) " +
+        "VALUES (?, ?, 'active', '2024-01-01', '2024-01-01')",
+    ).bind(userId, "d3-device-2").run();
+    const refreshed = await appReplaceToken(db, appRequest(
+      "/api/AppBookRequest/replaceToken",
+      {headers: {authorization: `Bearer ${token}`, "x-device-id": "d3-device-2"}},
+    )) as Record<string, unknown>;
+    expect(refreshed.Token).toBe(token);
   });
 });

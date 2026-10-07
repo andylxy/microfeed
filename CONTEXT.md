@@ -39,3 +39,21 @@ _Avoid_: 部分权限码
 **通配权限**：
 代表全部管理能力的特殊权限，只属于超级管理员角色，不能授予普通角色。
 _Avoid_: 全选、根权限
+
+## App 移动端通道
+
+**移动端登录凭证（mflc_）**：
+复用 better-auth 校验口令后签发的、绑定该用户的登录凭证（区别于设备级密钥与 OAuth API Key）。App 带其作为 Bearer，服务端经 `credential-bearer` → 用户 → 角色 → `app:mobile:access` 授权。
+_Avoid_: 设备密钥、AccessKey、content:read API Key（旧后端体系，本仓未移植）
+
+**App 内容端点（集成路径）**：
+`/api/AppBookRequest/*` 中需登录的 8 个内容接口（GetNav / GetBookChapter / GetChapterContent / GetBookIdFang / GetAllZhongYao / GetAliaZhongYao / GetAllMingCi / GetTipsStyleConfig），由 `APP_BOOK_REQUEST_CONTENT_SUFFIXES` 登记，匿名不可达。
+_Avoid_: 私有端点
+
+**App pre-auth 端点（匿名）**：
+`/api/AppBookRequest/*` 中无需登录的接口（login / replaceToken / getPicCaptcha / GetProjectInfo / GetLoginInfo / getAboutInfo），刻意匿名，等同旧后端行为。
+_Avoid_: 公开端点（易与站点公开资源混淆）
+
+**反向白名单**：
+App 命名空间的安全模型（实为 fail-open）：「未登记进集成清单即视为匿名」。名称「反向」仅指登记方向与常规白名单相反；其风险是新增敏感端点若漏登记会静默公开，以回归测试约束，不翻转为 fail-closed。
+_Avoid_: 白名单（方向相反）

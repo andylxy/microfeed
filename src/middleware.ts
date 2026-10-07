@@ -39,6 +39,7 @@ import {isAdminCredentialLoginPath} from "@/server/auth/credential-login";
 import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
+  canonicalAppBookRequestPath,
   decideApiRequest,
   isIntegrationApiPath,
   providedApiKey,
@@ -142,35 +143,6 @@ function wantsJson(request: Request, pathname: string): boolean {
  * — never by re-dispatching early, which would skip this middleware and with it
  * the auth checks.
  */
-const APP_BOOK_REQUEST_ROUTES = [
-  "GetNav",
-  "GetBookChapter",
-  "GetChapterContent",
-  "GetBookIdFang",
-  "GetAllZhongYao",
-  "GetAliaZhongYao",
-  "GetAllMingCi",
-  "GetTipsStyleConfig",
-  "GetProjectInfo",
-  "GetLoginInfo",
-  "getAboutInfo",
-  "getPicCaptcha",
-  "login",
-  "replaceToken",
-] as const;
-
-const APP_BOOK_REQUEST_CANONICAL = new Map(
-  APP_BOOK_REQUEST_ROUTES.map((route) => [route.toLowerCase(), route]),
-);
-
-function canonicalAppBookRequestPath(pathname: string): string {
-  const prefix = "/api/AppBookRequest/";
-  if (!pathname.startsWith(prefix)) return pathname;
-  const [name, ...tail] = pathname.slice(prefix.length).split("/");
-  const canonical = APP_BOOK_REQUEST_CANONICAL.get((name ?? "").toLowerCase());
-  if (!canonical) return pathname;
-  return `${prefix}${canonical}${tail.length > 0 ? `/${tail.join("/")}` : ""}`;
-}
 
 const handleRequest = defineMiddleware(async (context, next) => {  let {pathname} = context.url;
   let authSessionHeaders: Headers | undefined;

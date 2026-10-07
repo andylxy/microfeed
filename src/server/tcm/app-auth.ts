@@ -21,6 +21,7 @@ import {
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
 import type {LoginCredentialRecord} from "@/shared/LoginCredential";
+import {accountIsBlocked, isDeviceRevoked} from "@/server/rbac/resolve";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
 type MicrofeedRuntimeEnv = Parameters<typeof createMicrofeedAuth>[0];
@@ -170,6 +171,16 @@ export async function appReplaceToken(
   const verified = await verifyLoginCredentialToken(database, token);
   if (!verified) {
     return "凭证无效或已过期";
+  }
+  // ADR-0011 D3：刷新令牌必须复用封禁/吊销检查（与 credential-bearer.ts:94/112
+  // 一致）。内容端点虽已拦截封禁/吊销，但 replaceToken 此前是匿名直达的预认证通道，
+  // 会让吊销设备续发新 Token 继续读。命中返回错误字符串（App 端按 data 类型判定失败，
+  // 信封恒为 200，与 login 同形）。
+  if (await accountIsBlocked(database, verified.userId)) {
+    return "账号已被封禁";
+  }
+  if (await isDeviceRevoked(database, verified.userId, request)) {
+    return "设备已被吊销";
   }
   const user = await findAuthUserById(database, verified.userId);
   const account = user?.username ?? user?.email ?? "";

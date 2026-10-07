@@ -15,7 +15,15 @@
 
 import {describe, expect, it} from "vitest";
 
-import {apiPathDetails, isIntegrationApiPath} from "@/server/api/access";
+import {readdirSync} from "node:fs";
+import {fileURLToPath} from "node:url";
+
+import {
+  apiPathDetails,
+  isIntegrationApiPath,
+  APP_BOOK_REQUEST_ROUTES,
+  APP_BOOK_REQUEST_CONTENT_SUFFIXES,
+} from "@/server/api/access";
 import {requiredApiPermission} from "@/server/api/api-permissions";
 import {API_BASE_PATH, LEGACY_API_BASE_PATH} from "@/shared/ApiVersion";
 import {OPENAPI_DOCUMENT} from "@/shared/OpenApiDocument";
@@ -181,5 +189,99 @@ describe("app search-permission endpoint (/api/app/search-permission/)", () => {
     // legacy:false → 中间件不会加 Deprecation / Link rel="successor-version"，
     // 避免把客户端指向并不存在的 /api/v1/app/search-permission/。
     expect(apiPathDetails("/api/app/search-permission/")?.legacy).toBe(false);
+  });
+});
+
+describe("AppBookRequest route registry is fail-open-safe (ADR-0011 D2)", () => {
+  // Routes that are deliberately anonymous (pre-auth / config). The middleware
+  // skips the /api/ auth block for any AppBookRequest path that is NOT an
+  // integration path, so these MUST be explicitly listed — an unlisted addition
+  // would silently become anonymous (fail-open). This set is the human-owned
+  // counterpart to `APP_BOOK_REQUEST_ROUTES`; the assertions below pin the two
+  // together so a new route can never land in a gap.
+  const ANONYMOUS = new Set([
+    "login",
+    "replaceToken",
+    "getPicCaptcha",
+    "GetProjectInfo",
+    "GetLoginInfo",
+    "getAboutInfo",
+  ]);
+  const ANONYMOUS_LOWER = new Set([...ANONYMOUS].map((name) => name.toLowerCase()));
+
+  // `APP_BOOK_REQUEST_CONTENT_SUFFIXES` preserves the canonical (mixed-case)
+  // route casing; `isIntegrationApiPath` only matches that exact casing, because
+  // the middleware canonicalises the path before dispatching. So the path probe
+  // uses the original-case names, while the set-membership checks compare
+  // case-insensitively (the registry itself is case-insensitive at runtime).
+  const CONTENT_PREFIX = "AppBookRequest/";
+  const contentNames = [...APP_BOOK_REQUEST_CONTENT_SUFFIXES].map((suffix) =>
+    suffix.slice(CONTENT_PREFIX.length, -1),
+  );
+  const contentLower = new Set(contentNames.map((name) => name.toLowerCase()));
+  const routesLower = new Set(APP_BOOK_REQUEST_ROUTES.map((route) => route.toLowerCase()));
+
+  it("every registered route is content (auth-required) or explicitly anonymous", () => {
+    for (const route of routesLower) {
+      expect(
+        contentLower.has(route) || ANONYMOUS_LOWER.has(route),
+        `route "${route}" is neither a content route (in APP_BOOK_REQUEST_CONTENT_SUFFIXES) nor an explicitly anonymous pre-auth/config route`,
+      ).toBe(true);
+    }
+  });
+
+  it("content and anonymous sets partition the registry exactly (no silent gap)", () => {
+    for (const route of contentLower) {
+      expect(ANONYMOUS_LOWER.has(route), `${route} is both content and anonymous`).toBe(false);
+    }
+    for (const route of routesLower) {
+      expect(
+        contentLower.has(route) || ANONYMOUS_LOWER.has(route),
+        `${route} is in the registry but neither content nor anonymous`,
+      ).toBe(true);
+    }
+    for (const route of ANONYMOUS_LOWER) {
+      expect(routesLower.has(route), `${route} is anonymous but missing from the registry`).toBe(true);
+    }
+    for (const route of contentLower) {
+      expect(routesLower.has(route), `${route} is a content suffix but missing from the registry`).toBe(true);
+    }
+  });
+
+  it("classifies each route the way the middleware will", () => {
+    for (const name of contentNames) {
+      expect(isIntegrationApiPath(`/api/AppBookRequest/${name}/`)).toBe(true);
+    }
+    for (const name of ANONYMOUS) {
+      expect(isIntegrationApiPath(`/api/AppBookRequest/${name}/`)).toBe(false);
+    }
+  });
+
+  // The runtime fail-open decision keys off `APP_BOOK_REQUEST_CONTENT_SUFFIXES`
+  // (see `middleware.ts`: `!isIntegrationApiPath(pathname) → next()`), NOT this
+  // registry. So the real D2 gap is a handler file that exists under
+  // `src/pages/api/AppBookRequest/` yet is absent from the content suffix set —
+  // it would be served anonymously. Enumerate the on-disk handlers so that gap
+  // fails CI, and pin the registry to exactly that set.
+  const HANDLER_DIR = fileURLToPath(
+    new URL("../../src/pages/api/AppBookRequest", import.meta.url),
+  );
+  const handlerRoutes = readdirSync(HANDLER_DIR)
+    .filter((name) => name.endsWith(".ts"))
+    .map((name) => name.slice(0, -".ts".length));
+
+  it("every on-disk handler is content (auth-required) or explicitly anonymous", () => {
+    for (const route of handlerRoutes) {
+      const lower = route.toLowerCase();
+      expect(
+        contentLower.has(lower) || ANONYMOUS_LOWER.has(lower),
+        `handler ${route}.ts is neither a content route (in APP_BOOK_REQUEST_CONTENT_SUFFIXES → auth) nor an explicitly anonymous pre-auth/config route — the middleware would serve it anonymously (fail-open)`,
+      ).toBe(true);
+    }
+  });
+
+  it("the registry and the on-disk handlers are the same set", () => {
+    const handlers = handlerRoutes.map((name) => name.toLowerCase()).sort();
+    expect(handlers).toEqual([...routesLower].sort());
   });
 });
