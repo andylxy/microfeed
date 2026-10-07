@@ -8,7 +8,8 @@
 --   NULL            -> public menu, visible to anyone signed in (the home entry)
 --   a permission code-> visible only to accounts holding that code
 -- A menu binds at most one code on purpose. When a destination genuinely needs
--- several, create a combined permission code and bind that instead — see
+-- several, the role editor maps the page to them in `ext_menu_permissions`
+-- (many-to-many); the visibility gate still binds one — see
 -- .scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md.
 --
 -- The permission codes referenced below are seeded by migration 0040 (the six
