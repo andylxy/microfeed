@@ -3,6 +3,7 @@ import {SETTINGS_CATEGORIES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import {msToRFC3339} from "@/shared/TimeUtils";
 import {
+  auditInsertStatement,
   computeDiff,
   countCheckpoints,
   countAuditRecords,
@@ -13,6 +14,7 @@ import {
   type ActorType,
   type AuditAction,
   type AuditDb,
+  type AuditDbPreparedStatement,
   type FieldChange,
   type ItemData,
 } from "@/server/feed/extContentAudit";
@@ -24,16 +26,22 @@ export type {AuditDb, AuditDbPreparedStatement} from "@/server/feed/extContentAu
 /**
  * The content-review chain.
  *
- * Everything that changes a chapter goes through {@link recordContentChange}:
- * it writes the audit row (field-level diff + periodic checkpoints, ADR-0003)
- * **and** opens a pending version holding the pre-change snapshot. The queue is
- * then "chapters with unconfirmed versions", and rejecting one actually puts the
- * chapter back instead of just relabelling it.
+ * 内容变更的统一规划原语是 {@link planContentChange}：它读齐判定所需状态，产出
+ * 「审计行（字段级 diff + 周期检查点，ADR-0003）+ 开启 review 时的待审版本行 +
+ * 回拨语句」，**但不提交**——调用方把这些语句与 item 写入并成同一批
+ * `db.batch()`，让 item 与审计原子地同批生效（W5 修复的 item↔audit 不一致窗口）。
  *
- * This exists because the previous model was a label with no chain behind it:
- * nothing ever set `reviewStatus = 'submitted'`, there was no submit action, and
- * the queue read the live body — so content could change after entering review
- * and a rejection could not undo anything.
+ * 队列即「带未确认版本的章节」；拒绝一个版本会把章节回拨到上次已批准内容，
+ * 标签之外的正文也一并回拨。
+ *
+ * 这条链存在的原因：旧模型只有标签、背后没有链——没有任何地方把
+ * `reviewStatus` 置为 `submitted`，没有提交动作，队列还直接读线上正文，于是内容
+ * 进了 review 还能改、拒绝也无法撤销。
+ *
+ * {@link recordContentChange} 是 {@link planContentChange} 的自提交薄封装：拿到
+ * 计划后立即逐条 `run()`。它留给「不并入更大批次」的调用方用；当前所有单条
+ * 内容变更路径（items/service.ts、ajax/feed.ts）都已改走 planContentChange + 批
+ * 提交，故该封装暂无在仓内调用方，仅作为非批式回退保留。
  */
 
 export type ReviewStatus = "pending" | "approved" | "rejected";
@@ -95,39 +103,80 @@ function toReview(row: Record<string, unknown>): ContentReview {
  * captured by the earliest still-pending version. No-op when nothing is pending
  * (everything confirmed), and when the item is already at that content.
  */
-async function pinToLastApproved(db: AuditDb, itemId: string): Promise<boolean> {
+/** `items.data` 存的是 item 去掉那 6 个合成键之后的 JSON，见
+ *  `FeedDb._putItemToContentStatement` 的解构。用于和快照做「内容是否已一致」的比较。 */
+function storedItemDataJson(item: Record<string, unknown>): string {
+  const {
+    contentText: _contentText,
+    createdAtMs: _createdAtMs,
+    id: _id,
+    pubDateMs: _pubDateMs,
+    status: _status,
+    updatedAtMs: _updatedAtMs,
+    ...data
+  } = item;
+  return JSON.stringify(data);
+}
+
+/**
+ * 规划「把公开内容按回最后一次已批准状态」的语句，返回 null 表示无需回拨。
+ *
+ * 全部状态都在批前读里定下来：本行的版本行此刻还没插入，所以「最早 pending」要么是
+ * 更早那次留下的，要么就是本次快照（`currentSnapshotJson`）——两种情况都能在这里
+ * 判定，于是这条 UPDATE 可以和 item 写、审计写一起进同一个批次。
+ */
+async function planPinToLastApproved(
+  db: AuditDb,
+  itemId: string,
+  currentSnapshotJson: string,
+  after: Record<string, unknown>,
+): Promise<AuditDbPreparedStatement | null> {
   const pending = await db.prepare(
     "SELECT snapshot_data FROM ext_content_review WHERE item_id = ? " +
       "AND status = 'pending' ORDER BY submitted_at ASC, rowid ASC LIMIT 1",
   ).bind(itemId).first() as Record<string, unknown> | null;
-  if (!pending) return false;
-
-  const row = await db.prepare("SELECT data FROM items WHERE id = ?")
-    .bind(itemId).first() as Record<string, unknown> | null;
-  if (!row) return false;
-
-  const approvedRaw = String(pending.snapshot_data ?? "");
-  if (!approvedRaw || String(row.data ?? "") === approvedRaw) return false;
+  const approvedRaw = pending
+    ? String(pending.snapshot_data ?? "")
+    : currentSnapshotJson;
+  if (!approvedRaw || storedItemDataJson(after) === approvedRaw) return null;
 
   // `items.data` carries its own `status` field alongside the `status` column.
   // Restoring the snapshot would rewind that copy and make a published chapter
   // look unpublished again (draft-only enforcement and the public feed both read
   // it), so the gate only holds back CONTENT — status stays as it is now.
   let approved = approvedRaw;
-  const current = await db.prepare(
-    "SELECT status FROM items WHERE id = ?",
-  ).bind(itemId).first() as Record<string, unknown> | null;
-  if (current && current.status != null) {
+  const currentStatus = after["status"];
+  if (currentStatus != null) {
     try {
       const parsed = JSON.parse(approvedRaw) as Record<string, unknown>;
-      parsed.status = current.status;
+      parsed.status = currentStatus;
       approved = JSON.stringify(parsed);
     } catch {
       // Unparseable snapshot: leave it exactly as stored rather than guessing.
     }
   }
 
-  await writeItemContent(db, itemId, approved);
+  return writeItemContentStatement(db, itemId, approved);
+}
+
+/**
+ * 把章节按回最后一次已批准状态（自带提交）。
+ *
+ * 与 `planContentChange` 里的回拨共用同一套判定，只是这里没有「本次快照」——
+ * 拒审之后若已无 pending，就什么都不做。
+ */
+async function pinToLastApproved(db: AuditDb, itemId: string): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT data, status FROM items WHERE id = ?",
+  ).bind(itemId).first() as Record<string, unknown> | null;
+  if (!row) return false;
+  const data = parseJson<Record<string, unknown>>(row["data"], {});
+  const pin = await planPinToLastApproved(db, itemId, "", {
+    ...data,
+    status: row["status"],
+  });
+  if (!pin) return false;
+  await pin.run();
   return true;
 }
 
@@ -146,23 +195,22 @@ interface DerivedColumns {
  * holding a change back still answered searches with the pending body, and
  * confirming one never refreshed the search text at all.
  */
-export async function writeItemContent(
+export function writeItemContentStatement(
   db: AuditDb,
   itemId: string,
   dataJson: string,
-): Promise<void> {
+): AuditDbPreparedStatement {
   const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
   const derived = parseDerivedColumns(dataJson);
 
   if (!derived) {
     // Unparseable content: still write it, but leave the mirrors untouched
     // rather than blanking search text on a guess.
-    await db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
-      .bind(dataJson, timestamp, itemId).run();
-    return;
+    return db.prepare("UPDATE items SET data = ?, updated_at = ? WHERE id = ?")
+      .bind(dataJson, timestamp, itemId);
   }
 
-  await db.prepare(
+  return db.prepare(
     "UPDATE items SET data = ?, content_text = ?, content_text_updated_at = ?, " +
       "review_status = ?, pub_date = COALESCE(?, pub_date), updated_at = ? " +
       "WHERE id = ?",
@@ -174,7 +222,16 @@ export async function writeItemContent(
     derived.pubDate,
     timestamp,
     itemId,
-  ).run();
+  );
+}
+
+/** 写回正文（自带提交）。要并进更大的批次时用 `writeItemContentStatement`。 */
+export async function writeItemContent(
+  db: AuditDb,
+  itemId: string,
+  dataJson: string,
+): Promise<void> {
+  await writeItemContentStatement(db, itemId, dataJson).run();
 }
 
 /** Re-derive the columns that mirror `items.data`. Null when it will not parse. */
@@ -265,17 +322,27 @@ async function contentReviewEnabled(db: AuditDb): Promise<boolean> {
  *
  * A change that alters nothing records nothing — there is no version to review.
  */
-export async function recordContentChange(
+/** 一次内容变更要提交的语句，外加它开启的待审版本（未开启 review 时为 null）。 */
+export interface ContentChangePlan {
+  statements: AuditDbPreparedStatement[];
+  review: ContentReview | null;
+}
+
+/**
+ * 规划一次内容变更：读齐判定所需的状态，产出「审计行 +（review 开启时）版本行 +
+ * 回拨语句」。调用方决定何时提交——并进更大的批次，就与 item 写入同批生效。
+ */
+export async function planContentChange(
   db: AuditDb,
   params: ContentChangeParams,
-): Promise<ContentReview | null> {
+): Promise<ContentChangePlan> {
   const {itemId, before, after} = params;
-  if (!itemId) return null;
+  if (!itemId) return {statements: [], review: null};
   const changes = computeDiff(
     before as ItemData,
     after as ItemData,
   );
-  if (changes.length === 0) return null;
+  if (changes.length === 0) return {statements: [], review: null};
 
   // Keep the audit chain restorable: a snapshot whenever the item has none yet
   // (first row, or the first edit after a legacy chain).
@@ -285,7 +352,7 @@ export async function recordContentChange(
     ? true
     : shouldCheckpoint(existingCount, AUDIT_CHECKPOINT_INTERVAL);
 
-  await recordAudit(db, {
+  const statements: AuditDbPreparedStatement[] = [auditInsertStatement(db, {
     action: params.action,
     actorId: params.actorId ?? null,
     actorType: params.actorType ?? "author",
@@ -296,13 +363,15 @@ export async function recordContentChange(
     itemId,
     reason: params.reason ?? null,
     reviewStatus: params.reviewStatus ?? readReviewStatus(after),
-  });
+  })];
 
-  if (params.openReview === false) return null;
+  if (params.openReview === false) return {statements, review: null};
   // No explicit decision -> the instance setting decides. Review is OFF by
-  // default: the audit row written above is the whole record, and the change
+  // default: the audit row planned above is the whole record, and the change
   // takes effect immediately (no pending version, no pin-to-approved gate).
-  if (params.openReview !== true && !await contentReviewEnabled(db)) return null;
+  if (params.openReview !== true && !await contentReviewEnabled(db)) {
+    return {statements, review: null};
+  }
 
   const id = randomShortUUID();
   const now = Date.now();
@@ -313,7 +382,7 @@ export async function recordContentChange(
   // review, with every field showing as added.
   const snapshot = Object.keys(before).length === 0 ? after : before;
 
-  await db.prepare(INSERT_REVIEW).bind(
+  statements.push(db.prepare(INSERT_REVIEW).bind(
     id,
     itemId,
     JSON.stringify(changes),
@@ -323,9 +392,9 @@ export async function recordContentChange(
     params.actorId ?? null,
     now,
     params.reason ?? null,
-  ).run();
+  ));
 
-  // Gate: the caller has already written `after` to items.data, which would put
+  // Gate: the caller is about to write `after` to items.data, which would put
   // unconfirmed content on the public site. Pin the item back to the last
   // approved content — that is the snapshot of the EARLIEST pending version, so
   // several queued changes do not leak either.
@@ -335,20 +404,46 @@ export async function recordContentChange(
   // rewind the status copy inside `data` and make published chapters look like
   // drafts again (draft-only enforcement and the public feed both read it).
   const touchesStatus = changes.some((change) => change.path === "status");
-  if (!touchesStatus) await pinToLastApproved(db, itemId);
+  if (!touchesStatus) {
+    const pin = await planPinToLastApproved(
+      db,
+      itemId,
+      JSON.stringify(snapshot),
+      after,
+    );
+    if (pin) statements.push(pin);
+  }
 
   return {
-    action: params.action,
-    changes,
-    id,
-    itemId,
-    reason: params.reason ?? null,
-    reviewedAt: null,
-    reviewedBy: null,
-    status: "pending",
-    submittedAt: now,
-    submittedBy: params.actorId ?? null,
+    statements,
+    review: {
+      action: params.action,
+      changes,
+      id,
+      itemId,
+      reason: params.reason ?? null,
+      reviewedAt: null,
+      reviewedBy: null,
+      status: "pending",
+      submittedAt: now,
+      submittedBy: params.actorId ?? null,
+    },
   };
+}
+
+/**
+ * 记录一次内容变更（自带提交）。
+ *
+ * 未改动内容的版本不产生审计记录——没有可供评审的版本。
+ * 要把它并进更大的批次（与 item 写入同批生效）时用 `planContentChange`。
+ */
+export async function recordContentChange(
+  db: AuditDb,
+  params: ContentChangeParams,
+): Promise<ContentReview | null> {
+  const plan = await planContentChange(db, params);
+  for (const statement of plan.statements) await statement.run();
+  return plan.review;
 }
 
 /** Every pending version of one chapter, oldest first. */

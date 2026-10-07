@@ -58,43 +58,29 @@ export function chapterWordCount(data: Record<string, unknown>): number {
   return 0;
 }
 
-function parseData(value: unknown): Record<string, unknown> {
-  if (typeof value !== "string") return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object"
-      ? parsed as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function pocketOf(data: Record<string, unknown>): Record<string, unknown> {
-  const pocket = data["_microfeed"];
-  return pocket && typeof pocket === "object"
-    ? pocket as Record<string, unknown>
-    : {};
-}
-
 /**
  * Word count per book, summed over its published chapters.
  *
- * Membership is resolved in JavaScript because D1 rejects the nested
- * `json_extract(data, '$._microfeed.bookId')` path form (see `getBookChapters`).
+ * 按 D1 官方建议只投影所需列（bookId 表达式 + content_text），并分页流式读取，
+ * 不再整行加载 `data` 大对象。字数仍按正文现算（content_text 即正文明文），
+ * 不引入会漂移的派生列。
  */
 export async function bookWordCounts(db: WordCountDb): Promise<Map<string, number>> {
-  const result = await db.prepare(
-    "SELECT data FROM items WHERE status = ?",
-  ).bind(STATUSES.PUBLISHED).all();
-  const rows = Array.isArray(result.results) ? result.results : [];
   const totals = new Map<string, number>();
-  for (const row of rows) {
-    const data = parseData(row["data"]);
-    const bookId = pocketOf(data)["bookId"];
-    if (typeof bookId !== "string" || !bookId.trim()) continue;
-    const key = bookId.trim();
-    totals.set(key, (totals.get(key) ?? 0) + chapterWordCount(data));
+  const PAGE = 500;
+  for (let offset = 0; ; offset += PAGE) {
+    const result = await db.prepare(
+      "SELECT json_extract(data, '$._microfeed.bookId') AS bookId, content_text " +
+        "FROM items WHERE status = ? LIMIT ? OFFSET ?",
+    ).bind(STATUSES.PUBLISHED, PAGE, offset).all();
+    const rows = Array.isArray(result.results) ? result.results : [];
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      const bookId = typeof row["bookId"] === "string" ? (row["bookId"] as string).trim() : "";
+      if (!bookId) continue;
+      totals.set(bookId, (totals.get(bookId) ?? 0) + countBodyText(row["content_text"]));
+    }
+    if (rows.length < PAGE) break;
   }
   return totals;
 }

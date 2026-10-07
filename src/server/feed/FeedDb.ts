@@ -1,4 +1,5 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
+import {D1_MAX_BOUND_PARAMS} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import {ITEM_CONTENT_TEXT_REVISION} from "@/shared/ItemSearch";
 import {
@@ -81,6 +82,63 @@ function getItemJson(itemObj: any) {
   };
 }
 
+/**
+ * 这个查询构造器允许写进 SQL 的标识符：表名、WHERE 列名和 ORDER BY 列名。
+ * 所有**值**（含游标与 LIMIT）一律用占位符绑定。非标识符出现在这些位置，说明调用方
+ * 把数据传成了名字，此时直接拒绝，避免拼出不安全的语句。
+ */
+const SQL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** D1 每条语句最多 100 个绑定参数；`IN (...)` 是调用方数组唯一可能越界的地方。 */
+const MAX_BOUND_PARAMS = D1_MAX_BOUND_PARAMS;
+
+/** feed 列表真正用到的 `items` 列——`getItemJson` 只读这 7 个。其余 6 列
+ *  （`content_text_updated_at` / `content_text_revision` / `review_status` /
+ *  `book_id` / `tcm_kind` / `tcm_parent_id`）不必拉。`content_text` 必须留，
+ *  它是公开 JSON 接口约定的一部分。 */
+const ITEM_FEED_COLUMNS = [
+  "id",
+  "status",
+  "data",
+  "pub_date",
+  "created_at",
+  "updated_at",
+  "content_text",
+] as const;
+
+function assertSqlIdentifier(value: unknown, context: string): string {
+  if (typeof value !== "string" || !SQL_IDENTIFIER.test(value)) {
+    throw new Error(
+      `FeedDb: refusing to interpolate unsafe SQL identifier (${context}): ` +
+        `${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
+/** `column` 或 `column ASC|DESC`，两部分都由构造器掌握。 */
+function assertOrderByColumn(value: unknown): string {
+  const parts = String(value).trim().split(/\s+/);
+  const column = assertSqlIdentifier(parts[0], "orderBy column");
+  if (parts.length === 1) return column;
+  const direction = parts[1]?.toUpperCase();
+  if (parts.length === 2 && (direction === "ASC" || direction === "DESC")) {
+    return `${column} ${direction}`;
+  }
+  throw new Error(
+    `FeedDb: refusing unsafe ORDER BY: ${JSON.stringify(value)}`,
+  );
+}
+
+function assertLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(
+      `FeedDb: refusing non-integer LIMIT: ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
 export default class FeedDb {
   [member: string]: any;
 
@@ -116,8 +174,10 @@ export default class FeedDb {
     keyValuePairs: any,
     ignoreConflicts: any = false,
   ) {
-    let sql = `INSERT${ignoreConflicts ? " OR IGNORE" : ""} INTO ${table}`;
-    const colList = Object.keys(keyValuePairs)
+    let sql = `INSERT${ignoreConflicts ? " OR IGNORE" : ""} INTO ` +
+      assertSqlIdentifier(table, "table");
+    const colList = Object.keys(keyValuePairs).map((key) =>
+      assertSqlIdentifier(key, "insert column"))
     const bindList = Object.values(keyValuePairs);
     const placeholderList = bindList.map(() => '?');
     sql = `${sql} (${colList.join(', ')}) VALUES (${placeholderList.join(', ')})`;
@@ -125,18 +185,18 @@ export default class FeedDb {
   }
 
   getUpdateSql(table: any, queryKwargs: any, keyValuePairs: any) {
-    let sql = `UPDATE ${table} SET`;
+    let sql = `UPDATE ${assertSqlIdentifier(table, "table")} SET`;
     const setList = ['updated_at = ?'];
     const bindList = [(new Date()).toISOString()];
     Object.keys(keyValuePairs).forEach((key: any) => {
-      setList.push(`${key} = ?`);
+      setList.push(`${assertSqlIdentifier(key, "update column")} = ?`);
       bindList.push(keyValuePairs[key]);
     });
     sql = `${sql} ${setList.join(', ')}`;
     if (queryKwargs && Object.keys(queryKwargs).length > 0) {
       const queryKeys: any[] = [];
       Object.keys(queryKwargs).forEach((queryKey: any) => {
-        queryKeys.push(`${queryKey}=?`);
+        queryKeys.push(`${assertSqlIdentifier(queryKey, "update filter")}=?`);
         bindList.push(queryKwargs[queryKey]);
       })
       sql = `${sql} WHERE ${queryKeys.join(' AND ')}`;
@@ -155,24 +215,25 @@ export default class FeedDb {
     const setList = ['updated_at = ?'];
     const updateBindList = [timestamp];
     Object.keys(keyValuePairs).forEach((key: any) => {
-      setList.push(`${key} = ?`);
+      setList.push(`${assertSqlIdentifier(key, "upsert column")} = ?`);
       updateBindList.push(keyValuePairs[key]);
     });
     updateSql = `${updateSql} ${setList.join(', ')}`;
 
-    let insertSql = `INSERT INTO ${table}`;
+    let insertSql = `INSERT INTO ${assertSqlIdentifier(table, "table")}`;
     const insertKeyValuePairs = {
       created_at: timestamp,
       updated_at: timestamp,
       ...queryKwargs,
       ...keyValuePairs,
     };
-    const colList = Object.keys(insertKeyValuePairs)
+    const colList = Object.keys(insertKeyValuePairs).map((key) =>
+      assertSqlIdentifier(key, "upsert column"))
     const insertBindList = Object.values(insertKeyValuePairs);
     const placeholderList = insertBindList.map(() => '?');
     insertSql = `${insertSql} (${colList.join(', ')}) VALUES (${placeholderList.join(', ')})`;
 
-    const sql = `${insertSql} ON CONFLICT(${primaryKey}) DO ${updateSql}`;
+    const sql = `${insertSql} ON CONFLICT(${assertSqlIdentifier(primaryKey, "conflict key")}) DO ${updateSql}`;
     return this.FEED_DB.prepare(sql).bind(...insertBindList, ...updateBindList);
   }
 
@@ -273,13 +334,19 @@ export default class FeedDb {
   ) {
     const batchStatements: any[] = [];
     things.forEach((thing: any) => {
-      let sql = thing.sql ?? `SELECT * FROM ${thing.table}`;
+      // `thing.columns` 让调用方只取用得上的列；不设则保持 `SELECT *`。
+      const from = assertSqlIdentifier(thing.table, "table");
+      let sql = thing.sql ?? (Array.isArray(thing.columns) && thing.columns.length > 0
+        ? `SELECT ${thing.columns
+            .map((column: unknown) => assertSqlIdentifier(column, "column"))
+            .join(", ")} FROM ${from}`
+        : `SELECT * FROM ${from}`);
       const whereList: any[] = [];
       const bindList: any[] = [];
       if (thing.queryKwargs) {
         Object.keys(thing.queryKwargs).forEach((kwargKey: any) => {
           const kwargKeyComponents = kwargKey.split('__');
-          const key = kwargKeyComponents[0];
+          const key = assertSqlIdentifier(kwargKeyComponents[0], "query column");
           let op = '==';
           if (kwargKeyComponents.length > 0 &&
             ['!=', '>', '<', '>=', '<=', '==', 'in'].includes(kwargKeyComponents[1])) {
@@ -295,6 +362,12 @@ export default class FeedDb {
               : [];
             if (inValues.length === 0) {
               whereList.push('1 == 0');
+            } else if (inValues.length > MAX_BOUND_PARAMS) {
+              // 每个值一个占位符：超过 100 会越过 D1 的绑定参数上限，整条语句都会失败。
+              throw new Error(
+                `FeedDb: ${inValues.length} values for \`${key} IN (...)\` ` +
+                  `exceeds the ${MAX_BOUND_PARAMS}-parameter limit`,
+              );
             } else {
               bindList.push(...inValues);
               whereList.push(`${key} ${op} (${inValues.map(() => '?').join(',')})`);
@@ -309,8 +382,9 @@ export default class FeedDb {
         sql = `${sql} WHERE ${whereList.join(' AND ')}`;
       }
       if (thing.cursor) {
-        const cursorClause = `(${thing.cursor.column} ${thing.cursor.timestampOp} ? OR (` +
-          `${thing.cursor.column} == ? AND id ${thing.cursor.idOp} ?))`;
+        const cursorColumn = assertSqlIdentifier(thing.cursor.column, "cursor column");
+        const cursorClause = `(${cursorColumn} ${thing.cursor.timestampOp} ? OR (` +
+          `${cursorColumn} == ? AND id ${thing.cursor.idOp} ?))`;
         sql = `${sql}${whereList.length > 0 ? " AND" : " WHERE"} ${cursorClause}`;
         bindList.push(
           thing.cursor.timestamp,
@@ -319,10 +393,10 @@ export default class FeedDb {
         );
       }
       if (thing.orderBy && thing.orderBy.length > 0) {
-        sql = `${sql} ORDER BY ${thing.orderBy.join(',')}`
+        sql = `${sql} ORDER BY ${thing.orderBy.map(assertOrderByColumn).join(',')}`
       }
       if (thing.limit) {
-        sql = `${sql} LIMIT ${thing.limit}`;
+        sql = `${sql} LIMIT ${assertLimit(thing.limit)}`;
       }
       batchStatements.push(
         this.FEED_DB.prepare(sql).bind(...bindList)
@@ -530,6 +604,7 @@ export default class FeedDb {
       itemJson = await this._getContent(
         [{
           table: 'items',
+          columns: ITEM_FEED_COLUMNS,
           ...fetchItemsParams,
           limit: queryLimit,
           pageLimit,

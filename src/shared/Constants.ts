@@ -19,6 +19,8 @@ export const SETTINGS_CATEGORIES = {
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
 export const MAX_ITEMS_PER_PAGE = 300;
+/** D1 单条语句最多 100 个绑定参数（Cloudflare 平台上限）。 */
+export const D1_MAX_BOUND_PARAMS = 100;
 export const ITEMS_SORT_ORDERS = {
   OLDEST_FIRST: 'oldest_first',
   NEWEST_FIRST: 'newest_first',

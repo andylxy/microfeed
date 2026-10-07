@@ -115,27 +115,18 @@ export const createAliasEndpoint: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.aliases.invalidInput", 400);
   }
   const now = Date.now();
-  const existing = await env.FEED_DB
-    .prepare("SELECT id FROM ext_tcm_aliases WHERE bieming = ?")
-    .bind(bieming)
-    .first<{id: string}>();
-  if (existing) {
-    // Upsert: editing an existing override, or overriding a hidden directive.
-    await env.FEED_DB
-      .prepare(
-        "UPDATE ext_tcm_aliases SET name = ?, deleted = 0, updated_at_ms = ? WHERE id = ?",
-      )
-      .bind(name, now, existing.id)
-      .run();
-  } else {
-    await env.FEED_DB
-      .prepare(
-        "INSERT INTO ext_tcm_aliases " +
-          "(id, bieming, name, created_at_ms, updated_at_ms, deleted) VALUES (?, ?, ?, ?, ?, 0)",
-      )
-      .bind(crypto.randomUUID(), bieming, name, now, now)
-      .run();
-  }
+  // 一条 upsert 覆盖「新建」与「改已有覆盖 / 取消隐藏」两种情况，省掉先查后写的
+  // 往返与竞态窗口（`bieming` 上有 UNIQUE 约束）。
+  await env.FEED_DB
+    .prepare(
+      "INSERT INTO ext_tcm_aliases " +
+        "(id, bieming, name, created_at_ms, updated_at_ms, deleted) " +
+        "VALUES (?, ?, ?, ?, ?, 0) " +
+        "ON CONFLICT(bieming) DO UPDATE SET " +
+        "name = excluded.name, deleted = 0, updated_at_ms = excluded.updated_at_ms",
+    )
+    .bind(crypto.randomUUID(), bieming, name, now, now)
+    .run();
   return jsonResponse({aliases: await listAliases(env.FEED_DB)});
 };
 

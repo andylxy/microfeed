@@ -261,6 +261,9 @@ export async function listPages(
     clauses.push("(updated_at < ? OR (updated_at = ? AND id < ?))");
     bindings.push(cursor.updatedAt, cursor.updatedAt, cursor.id);
   }
+  // 这里保持 `SELECT *`：返回的 `PageRecord` 带 content_html / content_text，而公开
+  // API 的 `content_text` 是必填字段（OpenApiDocument），收窄等于改接口约定。后台列表另有
+  // `listAdminPageSummaries`（已裁列）。见 ADR-0002 D4。
   const result = await database.FEED_DB.prepare(`
     SELECT * FROM pages
     WHERE ${clauses.join(" AND ")}
@@ -673,8 +676,13 @@ export async function navigationPages(
   database: D1Database,
   request: Request,
 ): Promise<PageNavigationEntry[]> {
+  // 导航只用到标题、顺序、链接这些元数据，不拉 content_html / content_text 两个大字段
+  // ——这个查询在每个公开页面的 header 里都会跑，正文与它无关。
   const result = await database.prepare(`
-    SELECT * FROM pages
+    SELECT id, slug, title, navigation_label, navigation_order,
+           status, show_in_navigation, created_at, updated_at, published_at,
+           meta_description
+    FROM pages
     WHERE status = ? AND show_in_navigation = 1
     ORDER BY navigation_order ASC, title COLLATE NOCASE ASC, id ASC
   `).bind(STATUSES.PUBLISHED).all();

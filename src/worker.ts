@@ -1,9 +1,7 @@
 import {handle} from "@astrojs/cloudflare/handler";
 
 import {processWebhookMessage, type WebhookQueueMessage} from "@/server/webhooks/delivery";
-import {
-  runWebhookScheduledMaintenance,
-} from "@/server/webhooks/events";
+import {runScheduledMaintenance} from "@/server/maintenance";
 
 export default {
   fetch(request, runtimeEnv, context) {
@@ -24,7 +22,6 @@ export default {
     }
   },
   async scheduled(controller, runtimeEnv) {
-    if (!runtimeEnv.WEBHOOK_QUEUE) return;
-    await runWebhookScheduledMaintenance(runtimeEnv, controller.scheduledTime);
+    await runScheduledMaintenance(runtimeEnv, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env, WebhookQueueMessage>;

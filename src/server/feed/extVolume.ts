@@ -1,4 +1,4 @@
-import {STATUSES} from "@/shared/Constants";
+import {D1_MAX_BOUND_PARAMS, STATUSES} from "@/shared/Constants";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import type {
   VolumeBoard,
@@ -244,6 +244,38 @@ async function buildTcmVolumeBoard(
     ? chapterResult.results
     : [];
 
+  // 一次取回所有篇章下的条文（按 D1 单语句参数上限分片），再在内存里按所属篇章
+  // 分组；此前是每个篇章各查一次，篇章一多就是 N 次往返。排序键与单篇章查询完全
+  // 一致，分组后每个篇章内部的相对顺序不变。
+  const chapterIds = chapterRows.map((row) => asText(row.id));
+  const sectionsByParent = new Map<string, Array<Record<string, unknown>>>();
+  const chunkSize = D1_MAX_BOUND_PARAMS - 1;
+  for (let i = 0; i < chapterIds.length; i += chunkSize) {
+    const chunk = chapterIds.slice(i, i + chunkSize);
+    const sectionResult = await db.prepare(
+      "SELECT id, status, data, pub_date, tcm_parent_id FROM items " +
+        "WHERE tcm_parent_id IN (" + chunk.map(() => "?").join(",") + ") " +
+        "AND status != ? " +
+        // 条文(sections)按 receiptNo 排序；yao/term 这类没有 receiptNo 的条目
+        // 退回到 `no`（与书页目录 getTcmBookEntries 的排序键一致），否则 receiptNo
+        // 全为 NULL 会退化为按 id（哈希序）乱排。
+        // P2: ORDER BY 以 tcm_parent_id 打头，命中 0094 的 items_section_order 索引
+        // （tcm_parent_id, COALESCE(...), id）——消除 `USE TEMP B-TREE FOR ORDER BY`。
+        // 调用方取回后按 tcm_parent_id 重新分组、只保留组内相对顺序，故全局序改为
+        // 先按 parent 不改变任何篇章内部条文顺序（正确性不变）。
+        "ORDER BY tcm_parent_id, " +
+          "COALESCE(json_extract(data, '$._microfeed.receiptNo'), json_extract(data, '$._microfeed.no')), id",
+    ).bind(...chunk, STATUSES.DELETED).all();
+    for (const row of (Array.isArray(sectionResult.results)
+      ? sectionResult.results
+      : [])) {
+      const parent = asText(row.tcm_parent_id);
+      const list = sectionsByParent.get(parent) ?? [];
+      list.push(row);
+      sectionsByParent.set(parent, list);
+    }
+  }
+
   const groups: VolumeGroup[] = [];
   for (const chapterRow of chapterRows) {
     const data = safeParseJson(chapterRow.data);
@@ -255,17 +287,7 @@ async function buildTcmVolumeBoard(
       ? data._microfeed as Record<string, unknown>
       : {};
 
-    const sectionResult = await db.prepare(
-      "SELECT id, status, data, pub_date FROM items " +
-        "WHERE tcm_parent_id = ? AND status != ? " +
-        // 条文(sections)按 receiptNo 排序；yao/term 这类没有 receiptNo 的条目
-        // 回落到 `no`（与书页目录 getTcmBookEntries 的排序键一致），否则 receiptNo
-        // 全为 NULL 会退化为按 id（哈希序）乱排。
-        "ORDER BY COALESCE(json_extract(data, '$._microfeed.receiptNo'), json_extract(data, '$._microfeed.no')), id",
-    ).bind(chapterId, STATUSES.DELETED).all();
-    const sectionRows = Array.isArray(sectionResult.results)
-      ? sectionResult.results
-      : [];
+    const sectionRows = sectionsByParent.get(chapterId) ?? [];
     const chapters: VolumeChapter[] = sectionRows.map((row, index) => {
       const sectionData = safeParseJson(row.data);
       return {

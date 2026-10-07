@@ -182,28 +182,34 @@ export function roleId(code: string): string {
 
 /** Idempotent seed (used by tests and as the documented catalog reference). */
 export async function seedRbac(db: D1Database): Promise<void> {
+  // 合成一个批次：目录很小，但此前逐行写入不是原子的——中途失败会留下只填了一半的目录。
+  const statements: D1PreparedStatement[] = [];
   for (const permission of RBAC_PERMISSIONS) {
-    await db
-      .prepare(
-        "INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES (?, ?, ?)",
-      )
-      .bind(permissionId(permission.code), permission.code, permission.name)
-      .run();
+    statements.push(
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES (?, ?, ?)",
+        )
+        .bind(permissionId(permission.code), permission.code, permission.name),
+    );
   }
   for (const role of RBAC_ROLES) {
-    await db
-      .prepare(
-        "INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES (?, ?, ?)",
-      )
-      .bind(roleId(role.code), role.code, role.name)
-      .run();
-    for (const code of role.permissions) {
-      await db
+    statements.push(
+      db
         .prepare(
-          "INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES (?, ?)",
+          "INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES (?, ?, ?)",
         )
-        .bind(roleId(role.code), permissionId(code))
-        .run();
+        .bind(roleId(role.code), role.code, role.name),
+    );
+    for (const code of role.permissions) {
+      statements.push(
+        db
+          .prepare(
+            "INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES (?, ?)",
+          )
+          .bind(roleId(role.code), permissionId(code)),
+      );
     }
   }
+  if (statements.length > 0) await db.batch(statements);
 }

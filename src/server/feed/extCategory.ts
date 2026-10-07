@@ -1,5 +1,5 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
-import {STATUSES} from "@/shared/Constants";
+import {D1_MAX_BOUND_PARAMS, STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import {
@@ -301,20 +301,20 @@ export async function deleteCategory(
   db: CategoryDb,
   id: string,
 ): Promise<boolean> {
-  const result = await db.prepare(
-    "DELETE FROM ext_category WHERE id = ?",
-  ).bind(id).run();
-  // B19: deleting a category used to leave dangling references — child
-  // categories kept a parent_id that no longer resolved, and channels kept a
-  // `genre` pointing at the deleted row. Detach both so nothing references a
-  // category that no longer exists.
-  await db.prepare(
-    "UPDATE ext_category SET parent_id = NULL WHERE parent_id = ?",
-  ).bind(id).run();
-  await db.prepare(
-    "UPDATE channels SET genre = NULL WHERE genre = ?",
-  ).bind(id).run();
-  return result.success;
+  // B19：删除分类曾经会留下悬空引用——子分类的 parent_id 不再能解析，频道还留着
+  // 指向已删行的 `genre`。这里把两者都解开，让任何引用都不再指向已不存在的分类。
+  // 三次写入合成一个批次既保证原子性（此前中途失败会留下「父已删、子成孤儿」），
+  // 也省掉两次往返。
+  const [result] = await (db as unknown as D1Database).batch([
+    db.prepare("DELETE FROM ext_category WHERE id = ?").bind(id),
+    db.prepare(
+      "UPDATE ext_category SET parent_id = NULL WHERE parent_id = ?",
+    ).bind(id),
+    db.prepare(
+      "UPDATE channels SET genre = NULL WHERE genre = ?",
+    ).bind(id),
+  ] as unknown as D1PreparedStatement[]) as CategoryDbRunResult[];
+  return Boolean(result?.success);
 }
 
 /** Persist an explicit display order. `ids` is the full category id list, in
@@ -323,11 +323,13 @@ export async function reorderCategories(
   db: CategoryDb,
   ids: string[],
 ): Promise<void> {
-  for (let i = 0; i < ids.length; i++) {
-    await db.prepare(
-      "UPDATE ext_category SET sort = ? WHERE id = ?",
-    ).bind(i, ids[i]).run();
-  }
+  if (ids.length === 0) return;
+  // 一个批次代替 N 次往返——`ids` 是完整的分类列表。
+  await (db as unknown as D1Database).batch(
+    ids.map((id, i) =>
+      db.prepare("UPDATE ext_category SET sort = ? WHERE id = ?").bind(i, id),
+    ) as unknown as D1PreparedStatement[],
+  );
 }
 
 export async function setCategoryVisible(
@@ -596,20 +598,38 @@ export async function getTcmBookChapters(
     ? chapterResult.results
     : [];
 
+  // 一次（分片）查询取回所有篇章的条文，取代每个篇章各查一次——此前一本 N 篇章的书
+  // 要发 N 次往返。排序键与单篇章查询一致（receiptNo、id），分组后每个篇章内部的
+  // 相对顺序不变。每片最多 D1_MAX_BOUND_PARAMS - 1 个 id，把 `status != ?` 那 1 个
+  // 绑定参数也留在上限之内。
+  const sectionsByParent = new Map<string, Array<Record<string, any>>>();
+  const chapterIds = chapterRows.map((row) => String(row.id));
+  const chunkSize = D1_MAX_BOUND_PARAMS - 1;
+  for (let i = 0; i < chapterIds.length; i += chunkSize) {
+    const chunk = chapterIds.slice(i, i + chunkSize);
+    const sectionResult = await db.prepare(
+      "SELECT id, data, pub_date, tcm_parent_id FROM items " +
+        "WHERE tcm_kind = 'section' AND tcm_parent_id IN (" +
+        chunk.map(() => "?").join(",") + ") AND status != ? " +
+        "ORDER BY json_extract(data, '$._microfeed.receiptNo'), id",
+    ).bind(...chunk, STATUSES.DELETED).all();
+    for (const row of (Array.isArray(sectionResult.results)
+      ? sectionResult.results
+      : [])) {
+      const parent = String(row.tcm_parent_id ?? "");
+      const list = sectionsByParent.get(parent) ?? [];
+      list.push(row);
+      sectionsByParent.set(parent, list);
+    }
+  }
+
   const catalog: Array<Record<string, any>> = [];
   for (const chapterRow of chapterRows) {
     const chapterData = safeParseJson(chapterRow.data);
     const volumeName = typeof chapterData.title === "string" && chapterData.title
       ? chapterData.title
       : "未命名篇章";
-    const sectionResult = await db.prepare(
-      "SELECT id, data, pub_date FROM items WHERE tcm_parent_id = ? " +
-        "AND tcm_kind = 'section' AND status != ? " +
-        "ORDER BY json_extract(data, '$._microfeed.receiptNo'), id",
-    ).bind(String(chapterRow.id), STATUSES.DELETED).all();
-    const sectionRows = Array.isArray(sectionResult.results)
-      ? sectionResult.results
-      : [];
+    const sectionRows = sectionsByParent.get(String(chapterRow.id)) ?? [];
 
     for (const [index, row] of sectionRows.entries()) {
       const data = safeParseJson(row.data);

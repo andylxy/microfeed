@@ -1,4 +1,4 @@
-import {chapterWordCount} from "@/server/feed/bookWordCount";
+import {countBodyText} from "@/server/feed/bookWordCount";
 import {STATUSES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import type {
@@ -87,18 +87,23 @@ function firstAuthorName(data: Record<string, unknown>): string {
 async function bookStats(
   db: BookDb,
 ): Promise<{chapters: Map<string, number>; words: Map<string, number>}> {
-  const result = await db.prepare(
-    "SELECT data FROM items WHERE status != ?",
-  ).bind(STATUSES.DELETED).all();
-  const rows = Array.isArray(result.results) ? result.results : [];
   const chapters = new Map<string, number>();
   const words = new Map<string, number>();
-  for (const row of rows) {
-    const data = safeParseJson(row.data);
-    const bookId = asText(microfeedOf(data).bookId).trim();
-    if (!bookId) continue;
-    chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
-    words.set(bookId, (words.get(bookId) ?? 0) + chapterWordCount(data));
+  const PAGE = 500;
+  for (let offset = 0; ; offset += PAGE) {
+    const result = await db.prepare(
+      "SELECT json_extract(data, '$._microfeed.bookId') AS bookId, content_text " +
+        "FROM items WHERE status != ? LIMIT ? OFFSET ?",
+    ).bind(STATUSES.DELETED, PAGE, offset).all();
+    const rows = Array.isArray(result.results) ? result.results : [];
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      const bookId = asText(row.bookId).trim();
+      if (!bookId) continue;
+      chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
+      words.set(bookId, (words.get(bookId) ?? 0) + countBodyText(row.content_text));
+    }
+    if (rows.length < PAGE) break;
   }
   return {chapters, words};
 }

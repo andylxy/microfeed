@@ -206,4 +206,70 @@ describe("item search migration and normalization", () => {
       "SELECT COUNT(*) AS count FROM pages WHERE id = 'system-404'",
     ).get()).toEqual({count: 0});
   });
+
+  it("skips FTS rewrites when an item update leaves search columns unchanged", async () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(await migration("0001_initial.sql"));
+    database.exec(await migration("0009_item_search.sql"));
+    database.exec(await migration("0013_pages_search_site_files.sql"));
+    database.exec(await migration("0014_default_not_found_page.sql"));
+    database.exec(await migration("0090_search_trigger_skip_unchanged_fts.sql"));
+
+    database.prepare(
+      "INSERT INTO items (id, status, data, content_text, pub_date, updated_at) " +
+        "VALUES (?, 1, ?, ?, ?, ?)",
+    ).run(
+      "search-item",
+      JSON.stringify({title: "Alpha", image: "cover.png"}),
+      "plain body",
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+    );
+
+    // 只改 data 里与标题无关的字段（卷标签）以及 updated_at：FTS 语料
+    // （title/content_text）没动，但搜索文档的元数据（updated_at）必须照常刷新。
+    database.prepare(
+      "UPDATE items SET data = json_set(data, '$._microfeed.volume', ?), " +
+        "updated_at = ? WHERE id = ?",
+    ).run("volume-1", "2026-02-02T00:00:00.000Z", "search-item");
+    expect(database.prepare(
+      "SELECT content_id FROM site_search_exact WHERE site_search_exact MATCH ?",
+    ).all("Alpha")).toEqual([{content_id: "search-item"}]);
+    expect(database.prepare(
+      "SELECT COUNT(*) AS count FROM site_search_exact",
+    ).get()).toEqual({count: 1});
+    expect(database.prepare(
+      "SELECT title, updated_at FROM site_search_documents " +
+        "WHERE content_type = 'item' AND content_id = 'search-item'",
+    ).get()).toEqual({
+      title: "Alpha",
+      updated_at: "2026-02-02T00:00:00.000Z",
+    });
+
+    // 改标题：FTS 语料必须重建。
+    database.prepare(
+      "UPDATE items SET data = json_set(data, '$.title', ?), updated_at = ? " +
+        "WHERE id = ?",
+    ).run("Beta", "2026-03-03T00:00:00.000Z", "search-item");
+    expect(database.prepare(
+      "SELECT content_id FROM site_search_exact WHERE site_search_exact MATCH ?",
+    ).all("Beta")).toEqual([{content_id: "search-item"}]);
+    expect(database.prepare(
+      "SELECT COUNT(*) AS count FROM site_search_exact WHERE site_search_exact MATCH ?",
+    ).all("Alpha")[0]).toEqual({count: 0});
+
+    // 软删会移除 FTS 行；复活会重新加回。
+    database.prepare(
+      "UPDATE items SET status = 3, updated_at = ? WHERE id = ?",
+    ).run("2026-04-04T00:00:00.000Z", "search-item");
+    expect(database.prepare(
+      "SELECT COUNT(*) AS count FROM site_search_exact",
+    ).get()).toEqual({count: 0});
+    database.prepare(
+      "UPDATE items SET status = 1, updated_at = ? WHERE id = ?",
+    ).run("2026-05-05T00:00:00.000Z", "search-item");
+    expect(database.prepare(
+      "SELECT COUNT(*) AS count FROM site_search_exact",
+    ).get()).toEqual({count: 1});
+  });
 });

@@ -34,6 +34,12 @@ beforeEach(async () => {
   await database._updateOrAddSetting({
     access: {currentPolicy: "public"},
   }, "access");
+  // 本文件校验「内容审核闸门」行为（updateItem 的编辑须被回拨、content_text 跟随已确认
+  // 正文），故让实例默认开启闸门——与单测 fixtures 一致（SETTINGS_CATEGORIES.CONTENT_REVIEW
+  // 缺行即 OFF，生产默认）。此前未开启导致这两条闸门断言在 worker 夹具里恒失败（与改动无关）。
+  await env.FEED_DB.prepare(
+    "INSERT OR REPLACE INTO settings (category, data) VALUES (?, ?)",
+  ).bind("contentReview", JSON.stringify({enabled: true})).run();
 });
 
 afterEach(async () => {

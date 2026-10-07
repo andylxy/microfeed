@@ -4,7 +4,7 @@ import type {APIRoute} from "astro";
 import FeedDb from "@/server/feed/FeedDb";
 import {
   listPendingChapters,
-  recordContentChange,
+  planContentChange,
   rejectChapterVersions,
 } from "@/server/feed/extContentReview";
 import type {AuditDb} from "@/server/feed/extContentAudit";
@@ -116,33 +116,24 @@ export async function updateAdminFeed(
         });
       }
     }
-    await commitMutationWithWebhookEvents(
-      runtimeEnv,
+  if (updatedItemId && updatedFeed.item) {
+    const plan = await planContentChange(database.FEED_DB as unknown as AuditDb, {
+      action: "edit",
+      actorType: "author",
+      after: updatedFeed.item as Record<string, unknown>,
+      before: (beforeItem ?? {}) as Record<string, unknown>,
+      itemId: updatedItemId,
+    });
+    statements.push(...(plan.statements as unknown as D1PreparedStatement[]));
+  }
+  await commitMutationWithWebhookEvents(
+    runtimeEnv,
       request,
       statements,
       events,
       {origin: webMcpInteraction ? "webmcp" : "dashboard"},
     );
   });
-  // novel-cms audit trail: the dashboard editor persists through putContent
-  // directly (it does not call updateItem), so the seam must record here too.
-  // A brand-new item (no beforeItem) is recorded as a checkpoint so version 1
-  // stays recoverable; an existing item follows the normal checkpoint cadence.
-  if (updatedItemId && updatedFeed.item) {
-    const afterItem = await database.getItemById(updatedItemId);
-    if (afterItem) {
-      await recordContentChange(database.FEED_DB as unknown as AuditDb, {
-        action: "edit",
-        actorType: "author",
-        after: afterItem as Record<string, unknown>,
-        before: (beforeItem ?? {}) as Record<string, unknown>,
-        itemId: updatedItemId,
-        // No `openReview` here on purpose: whether a change opens a pending
-        // version is decided by the `contentReview` setting at the seam
-        // (`recordContentChange`), so every write path agrees by construction.
-      });
-    }
-  }
   // Turning review OFF is the moment queued changes die: every still-pending
   // version is rejected (its content never reaches the live body — the pin
   // already held it back), and the reject actions land in the audit trail.

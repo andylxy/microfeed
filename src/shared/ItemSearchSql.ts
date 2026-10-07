@@ -59,6 +59,10 @@ BEGIN
 END;
 CREATE TRIGGER IF NOT EXISTS site_search_documents_after_update
 AFTER UPDATE ON site_search_documents
+WHEN OLD.title IS NOT NEW.title
+  OR OLD.content_text IS NOT NEW.content_text
+  OR OLD.content_type IS NOT NEW.content_type
+  OR OLD.content_id IS NOT NEW.content_id
 BEGIN
   DELETE FROM site_search_exact WHERE rowid = OLD.id;
   DELETE FROM site_search_title_trigram WHERE rowid = OLD.id;
@@ -97,7 +101,7 @@ CREATE TRIGGER IF NOT EXISTS items_site_search_after_update
 AFTER UPDATE ON items
 BEGIN
   DELETE FROM site_search_documents
-  WHERE content_type = 'item' AND content_id = OLD.id;
+  WHERE content_type = 'item' AND content_id = OLD.id AND NEW.status = 3;
   INSERT INTO site_search_documents (
     content_type, content_id, status, title, content_text,
     published_at, updated_at, image
@@ -107,7 +111,14 @@ BEGIN
     COALESCE(json_extract(NEW.data, '$.title'), ''),
     NEW.content_text, NEW.pub_date, NEW.updated_at,
     json_extract(NEW.data, '$.image')
-  WHERE NEW.status != 3;
+  WHERE NEW.status != 3
+  ON CONFLICT(content_type, content_id) DO UPDATE SET
+    status = excluded.status,
+    title = excluded.title,
+    content_text = excluded.content_text,
+    published_at = excluded.published_at,
+    updated_at = excluded.updated_at,
+    image = excluded.image;
 END;
 CREATE TRIGGER IF NOT EXISTS items_site_search_after_delete
 AFTER DELETE ON items
@@ -131,7 +142,8 @@ CREATE TRIGGER IF NOT EXISTS pages_site_search_after_update
 AFTER UPDATE ON pages
 BEGIN
   DELETE FROM site_search_documents
-  WHERE content_type = 'page' AND content_id = OLD.id;
+  WHERE content_type = 'page' AND content_id = OLD.id
+    AND (NEW.status = 3 OR NEW.slug = '404' COLLATE NOCASE);
   INSERT INTO site_search_documents (
     content_type, content_id, status, title, content_text,
     published_at, updated_at, image
@@ -139,7 +151,14 @@ BEGIN
   SELECT
     'page', NEW.id, NEW.status, NEW.title, NEW.content_text,
     NEW.published_at, NEW.updated_at, NULL
-  WHERE NEW.status != 3 AND NEW.slug != '404' COLLATE NOCASE;
+  WHERE NEW.status != 3 AND NEW.slug != '404' COLLATE NOCASE
+  ON CONFLICT(content_type, content_id) DO UPDATE SET
+    status = excluded.status,
+    title = excluded.title,
+    content_text = excluded.content_text,
+    published_at = excluded.published_at,
+    updated_at = excluded.updated_at,
+    image = excluded.image;
 END;
 CREATE TRIGGER IF NOT EXISTS pages_site_search_after_delete
 AFTER DELETE ON pages

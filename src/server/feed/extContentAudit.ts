@@ -229,14 +229,14 @@ const INSERT_AUDIT = `INSERT INTO ext_content_audit (
  * full snapshot); recording a checkpoint without one would make
  * `rebuildFromCheckpoint` unable to restore the version, so we refuse it.
  */
-export async function recordAudit(
+export function auditInsertStatement(
   db: AuditDb,
   params: RecordAuditParams,
-): Promise<void> {
+): AuditDbPreparedStatement {
   if (params.isCheckpoint && params.checkpointData == null) {
     throw new Error("extContentAudit: a checkpoint row must include checkpointData");
   }
-  await db
+  return db
     .prepare(INSERT_AUDIT)
     .bind(
       randomShortUUID(),
@@ -250,8 +250,15 @@ export async function recordAudit(
       params.isCheckpoint ? 1 : 0,
       params.reviewStatus ?? null,
       params.reason ?? null,
-    )
-    .run();
+    );
+}
+
+/** 记录一条审计行（自带提交）。要把它并进更大的批次时用 `auditInsertStatement`。 */
+export async function recordAudit(
+  db: AuditDb,
+  params: RecordAuditParams,
+): Promise<void> {
+  await auditInsertStatement(db, params).run();
 }
 
 const COUNT_AUDIT = `SELECT COUNT(*) AS c FROM ext_content_audit WHERE item_id = ?`;

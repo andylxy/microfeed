@@ -215,17 +215,26 @@ export async function saveRolloutRules(
       target: target.value,
     });
   }
-  const statements = [db.prepare("DELETE FROM ext_app_rollout")];
-  for (const rule of normalized) {
-    statements.push(
-      db
-        .prepare(
-          `INSERT INTO ext_app_rollout (scope, target, min_version_code, force)
-           VALUES (?, ?, ?, ?)`,
-        )
-        .bind(rule.scope, rule.target, rule.minVersionCode, rule.force),
+  // D1 单个批次最多 1000 条语句；把插入分片，规则一多也能写入，不会被拒绝。
+  // DELETE 随第一个分片一起提交（没有规则时单独提交）。
+  const CHUNK = 500;
+  const inserts = normalized.map((rule) =>
+    db
+      .prepare(
+        `INSERT INTO ext_app_rollout (scope, target, min_version_code, force)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .bind(rule.scope, rule.target, rule.minVersionCode, rule.force));
+  const batches: D1PreparedStatement[][] = [];
+  for (let i = 0; i < inserts.length; i += CHUNK) {
+    const chunk = inserts.slice(i, i + CHUNK);
+    batches.push(
+      i === 0 ? [db.prepare("DELETE FROM ext_app_rollout"), ...chunk] : chunk,
     );
   }
-  await db.batch(statements);
+  if (batches.length === 0) {
+    batches.push([db.prepare("DELETE FROM ext_app_rollout")]);
+  }
+  for (const batch of batches) await db.batch(batch);
   return {ok: true};
 }

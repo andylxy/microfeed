@@ -37,20 +37,32 @@ class SqliteDb implements WordCountDb {
   }
 }
 
+function contentTextOf(chapter: Record<string, unknown>): string {
+  if (typeof chapter.content_text === "string") return chapter.content_text;
+  const description = chapter.description;
+  return typeof description === "string" ? description.replace(/<[^>]+>/g, "") : "";
+}
+
 function databaseWith(chapters: Array<Record<string, unknown>>): WordCountDb {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     CREATE TABLE items (
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
+      content_text TEXT,
       status INTEGER NOT NULL
     );
   `);
   const insert = database.prepare(
-    "INSERT INTO items (id, data, status) VALUES (?, ?, ?)",
+    "INSERT INTO items (id, data, content_text, status) VALUES (?, ?, ?, ?)",
   );
   chapters.forEach((chapter, index) => {
-    insert.run(`chap${index}`, JSON.stringify(chapter), Number(chapter.status ?? 1));
+    insert.run(
+      `chap${index}`,
+      JSON.stringify(chapter),
+      contentTextOf(chapter),
+      Number(chapter.status ?? 1),
+    );
   });
   return new SqliteDb(database);
 }

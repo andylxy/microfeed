@@ -457,6 +457,7 @@ export async function getAppBookFang(
     );
     const {results} = await db
       .prepare(
+        // `json_extract(...)` 与迁移 0092 的表达式索引同形，过滤走索引。
         "SELECT id, data FROM items " +
           "WHERE tcm_kind = 'fang' AND status = 1 " +
           "AND json_extract(data, '$._microfeed.sourceBookId') = ? " +
@@ -716,10 +717,13 @@ export async function getDerivedYaoAliases(
         add(token, name);
       }
     }
+    // R4: 改用 `> ''`；`!= ''` 在 SQLite 里用不上 bieMing 表达式索引第二列，只剩
+    // `tcm_kind=?` 前缀仍会全扫描；`> ''` 才是可用范围边界，命中 0093 的
+    // items_bie_ming 索引（见迁移文件 EXPLAIN 说明）。
     const sectionRows = await db
       .prepare(
         "SELECT data FROM items WHERE tcm_kind = 'section' AND status != 3 " +
-          "AND json_extract(data, '$._microfeed.bieMing') != ''",
+          "AND json_extract(data, '$._microfeed.bieMing') > ''",
       )
       .all();
     for (const row of sectionRows.results ?? []) {
