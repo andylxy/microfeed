@@ -12,9 +12,12 @@ import {PERMISSION_CODES} from "../../src/shared/Constants";
  * would show a link that 403s, or hide a page the account may open.
  *
  * The menu rows live in migrations (0041 seeded them; 0050 groups them, and
- * later feature migrations add rows and delete them again), so this reads every
- * migration that touches `ext_menu` — inserts and deletes — rather than from a
- * second list — or a single file — that could go stale.
+ * later feature migrations add rows, re-parent them and delete them again), so
+ * this replays every migration that touches `ext_menu` — inserts, updates and
+ * deletes, in order — rather than reading a second list, or a single file, that
+ * could go stale. Replaying the updates matters: most `parent_code`s are set by
+ * `UPDATE` (0050 re-parents every 0041 page), so reading only the inserts left
+ * those rows parentless and silently skipped the "hangs off a group" check.
  */
 
 const PAGES = join("src", "pages", "[adminPath]");
@@ -27,39 +30,10 @@ interface MenuRow {
 }
 
 /** Every migration file, oldest first. */
-function migrationSql(): string {
+function migrationNames(): string[] {
   return readdirSync("migrations")
     .filter((name) => name.endsWith(".sql"))
-    .sort()
-    .map((name) => readFileSync(join("migrations", name), "utf8"))
-    .join("\n");
-}
-
-/** Menu-row inserts, oldest first. The precise table pattern keeps
- *  `ext_menu_permissions` inserts out of the match. */
-function menuMigrationSql(): string {
-  const insertsMenuRow = /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+ext_menu\s*\(/u;
-  return readdirSync("migrations")
-    .filter((name) => name.endsWith(".sql"))
-    .sort()
-    .map((name) => readFileSync(join("migrations", name), "utf8"))
-    .filter((sql) => insertsMenuRow.test(sql))
-    .join("\n");
-}
-
-/**
- * Menu codes a later migration deletes (migration 0064 dropped the duplicate
- * RBAC board page). A row that is gone must stop being required to have a page,
- * and its code must stop being treated as "bound" — otherwise removing a page
- * would fail this file instead of the menu's own consistency check.
- */
-function deletedMenuCodes(): Set<string> {
-  const codes = new Set<string>();
-  const byCode = /DELETE\s+FROM\s+ext_menu\s+WHERE\s+code\s*=\s*'(?<code>[^']+)'/gu;
-  for (const match of migrationSql().matchAll(byCode)) {
-    if (match.groups?.code) codes.add(match.groups.code);
-  }
-  return codes;
+    .sort();
 }
 
 /** `NULL` (or an empty literal) stays null; a quoted literal loses its quotes. */
@@ -69,7 +43,72 @@ function nullableLiteral(raw: string | undefined): string | null {
 }
 
 /**
- * Menu rows from every migration that inserts one.
+ * Apply the `SET …` clause of an `UPDATE ext_menu` to one row.
+ *
+ * Only the columns this test reads are tracked; `sort`, `icon` and `is_visible`
+ * are ignored on purpose. An assignment whose value is a bare number (e.g.
+ * `sort = 601`) is skipped, which is why the value pattern is `NULL|'…'`.
+ */
+function applyMenuAssignments(row: MenuRow, assignments: string): void {
+  for (const assignment of assignments.split(",")) {
+    const parsed = /^\s*(?<column>[a-z_]+)\s*=\s*(?<value>NULL|'[^']*')\s*$/iu
+      .exec(assignment);
+    const column = parsed?.groups?.column;
+    if (!column) continue;
+    const value = nullableLiteral(parsed?.groups?.value);
+    if (column === "parent_code") row.parentCode = value;
+    else if (column === "permission_code") row.permissionCode = value;
+    else if (column === "path") row.path = value ?? "";
+  }
+}
+
+/**
+ * Apply one `UPDATE ext_menu SET … WHERE …`.
+ *
+ * Two predicate shapes exist across the migrations, and both are modelled: a
+ * single row named by `code` — 0065 appends `AND sort = 503`, a column this
+ * test does not track, so the extra condition is ignored — and a prefix rewrite
+ * of `permission_code` (`SET permission_code = REPLACE(permission_code, 'A',
+ * 'B') WHERE permission_code LIKE 'P%'`; 0067 repairs the codes 0057 renamed).
+ * Anything else throws instead of being skipped: an ignored UPDATE is exactly
+ * how this parser would start comparing pages against a stale menu.
+ */
+function applyMenuUpdate(
+  rows: Map<string, MenuRow>,
+  assignments: string,
+  predicate: string,
+): void {
+  const byCode = /^code\s*=\s*'([^']+)'/iu.exec(predicate);
+  if (byCode) {
+    const row = rows.get(byCode[1] ?? "");
+    if (row) applyMenuAssignments(row, assignments);
+    return;
+  }
+  const prefix = /^permission_code\s+LIKE\s+'([^']*)%'$/iu.exec(predicate);
+  const replace = /^permission_code\s*=\s*REPLACE\(\s*permission_code\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)$/iu
+    .exec(assignments.trim());
+  if (prefix && replace) {
+    const from = replace[1] ?? "";
+    const to = replace[2] ?? "";
+    for (const row of rows.values()) {
+      if (row.permissionCode?.startsWith(prefix[1] ?? "")) {
+        row.permissionCode = row.permissionCode.split(from).join(to);
+      }
+    }
+    return;
+  }
+  throw new Error(
+    `unhandled ext_menu UPDATE: SET ${assignments} WHERE ${predicate}`,
+  );
+}
+
+/**
+ * The menu's final rows, replayed in migration order: an `INSERT` adds rows, an
+ * `UPDATE … SET … WHERE code = '…'` mutates one, a `DELETE … WHERE code = '…'`
+ * removes one. Reading the inserts alone is not enough — 0050 re-parents every
+ * 0041 page with `UPDATE`s, and 0069/0089 move more — so most `parent_code`s
+ * never appear in an `INSERT` and those rows would otherwise parse as roots,
+ * silently skipping the "hangs off a group" check.
  *
  * The `icon` field accepts `NULL` as well as a quoted name on purpose: 0050
  * seeds the group headings with a NULL icon and 0051 fills them in with an
@@ -80,21 +119,33 @@ function nullableLiteral(raw: string | undefined): string | null {
  * tells the two kinds apart.
  */
 function readMenuRows(): MenuRow[] {
-  const sql = menuMigrationSql();
-  const deleted = deletedMenuCodes();
-  const rows: MenuRow[] = [];
+  const rows = new Map<string, MenuRow>();
+  const insert = /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+ext_menu\s*\([^;]*;/giu;
+  const update = /UPDATE\s+ext_menu\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*)/giu;
+  const remove = /DELETE\s+FROM\s+ext_menu\s+WHERE\s+code\s*=\s*'([^']+)'/giu;
   const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?<parent>NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
-  for (const match of sql.matchAll(tuple)) {
-    const code = match.groups?.code ?? "";
-    if (deleted.has(code)) continue;
-    rows.push({
-      code,
-      parentCode: nullableLiteral(match.groups?.parent),
-      path: match.groups?.path ?? "",
-      permissionCode: match.groups?.permCode ?? null,
-    });
+
+  for (const name of migrationNames()) {
+    const sql = readFileSync(join("migrations", name), "utf8");
+    for (const statement of sql.matchAll(insert)) {
+      for (const match of statement[0].matchAll(tuple)) {
+        const code = match.groups?.code ?? "";
+        rows.set(code, {
+          code,
+          parentCode: nullableLiteral(match.groups?.parent),
+          path: match.groups?.path ?? "",
+          permissionCode: match.groups?.permCode ?? null,
+        });
+      }
+    }
+    for (const match of sql.matchAll(update)) {
+      applyMenuUpdate(rows, match[1] ?? "", (match[2] ?? "").trim());
+    }
+    for (const match of sql.matchAll(remove)) {
+      rows.delete(match[1] ?? "");
+    }
   }
-  return rows;
+  return [...rows.values()];
 }
 
 /**
@@ -104,9 +155,9 @@ function readMenuRows(): MenuRow[] {
  * permission, so the page-guard checks must skip it and assert those invariants
  * instead.
  *
- * Note this cannot be derived from the parsed `parent_code`s: 0050 hangs the
- * existing pages off its groups with `UPDATE`s, and this parser only reads
- * `INSERT` tuples, so most parents never appear as a child's `parent_code`.
+ * A group is recognised by the prefix rather than by "is it a parent": the
+ * `parent_code` link is real now that the parser replays the `UPDATE`s, but
+ * deriving the groups from it would couple two checks that are clearer apart.
  */
 const GROUP_CODE_PREFIX = "group_";
 
@@ -188,13 +239,20 @@ describe("menu page guards", () => {
   });
 
   it("hangs every child row off a group row that exists", () => {
+    let parented = 0;
     for (const row of rows) {
       if (row.parentCode === null) continue;
+      parented += 1;
       expect(
         groupSet.has(row.parentCode),
         `${row.code} hangs off ${row.parentCode}, which is not a group row`,
       ).toBe(true);
     }
+    // Almost every page is re-parented by an `UPDATE` (0050), so this is only
+    // non-trivial when the parser replays the updates. Without it `parented`
+    // would be 0 and the loop above would assert nothing — the check this
+    // guard exists for.
+    expect(parented).toBeGreaterThan(20);
   });
 
   it("guards every menu page with the code its menu row binds", () => {

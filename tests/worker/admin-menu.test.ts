@@ -117,6 +117,27 @@ describe("admin menu seed", () => {
     }
   });
 
+  it("maps only menu pages that still exist", async () => {
+    // `ext_menu_permissions` has no foreign key (the menu is data, never the
+    // thing that grants access), so a stale row survives the page it names. It
+    // is harmless — `buildPermissionTree` only looks up pages still in
+    // `ext_menu` — but it is dead data, and nothing else would notice. 0066
+    // cleans its `import_chapters` row up by hand; this is the ratchet that
+    // keeps the next deletion honest.
+    const [menuRows, mappingRows] = await Promise.all([
+      env.FEED_DB.prepare("SELECT code FROM ext_menu").all<{code: string}>(),
+      env.FEED_DB.prepare("SELECT DISTINCT menu_code FROM ext_menu_permissions")
+        .all<{menu_code: string}>(),
+    ]);
+    const codes = new Set((menuRows.results ?? []).map((row) => row.code));
+    for (const row of mappingRows.results ?? []) {
+      expect(
+        codes.has(row.menu_code),
+        `ext_menu_permissions maps unknown page ${row.menu_code}`,
+      ).toBe(true);
+    }
+  });
+
   it("gives every entry a path fragment and an i18n key", async () => {
     const rows = await env.FEED_DB.prepare(
       "SELECT code, path, i18n_key FROM ext_menu WHERE is_visible = 1",
