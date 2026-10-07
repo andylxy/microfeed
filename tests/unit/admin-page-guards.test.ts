@@ -3,6 +3,7 @@ import {join} from "node:path";
 
 import {describe, expect, it} from "vitest";
 
+import {migrationNames, readMigration} from "./support/migrations";
 import {PERMISSION_CODES} from "../../src/shared/Constants";
 
 /**
@@ -29,17 +30,31 @@ interface MenuRow {
   permissionCode: string | null;
 }
 
-/** Every migration file, oldest first. */
-function migrationNames(): string[] {
-  return readdirSync("migrations")
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-}
-
 /** `NULL` (or an empty literal) stays null; a quoted literal loses its quotes. */
 function nullableLiteral(raw: string | undefined): string | null {
   if (!raw || raw === "NULL" || raw === "''") return null;
   return raw.slice(1, -1);
+}
+
+/**
+ * Split a `SET` clause into its assignments on the commas that separate them —
+ * not a comma inside a quoted value, which a plain `split(",")` would break on.
+ */
+function splitAssignments(clause: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const character of clause) {
+    if (character === "'") quoted = !quoted;
+    if (character === "," && !quoted) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  parts.push(current);
+  return parts;
 }
 
 /**
@@ -50,7 +65,7 @@ function nullableLiteral(raw: string | undefined): string | null {
  * `sort = 601`) is skipped, which is why the value pattern is `NULL|'…'`.
  */
 function applyMenuAssignments(row: MenuRow, assignments: string): void {
-  for (const assignment of assignments.split(",")) {
+  for (const assignment of splitAssignments(assignments)) {
     const parsed = /^\s*(?<column>[a-z_]+)\s*=\s*(?<value>NULL|'[^']*')\s*$/iu
       .exec(assignment);
     const column = parsed?.groups?.column;
@@ -126,7 +141,7 @@ function readMenuRows(): MenuRow[] {
   const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?<parent>NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
 
   for (const name of migrationNames()) {
-    const sql = readFileSync(join("migrations", name), "utf8");
+    const sql = readMigration(name);
     for (const statement of sql.matchAll(insert)) {
       for (const match of statement[0].matchAll(tuple)) {
         const code = match.groups?.code ?? "";

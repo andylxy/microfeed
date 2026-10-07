@@ -3,6 +3,7 @@ import {join, relative} from "node:path";
 
 import {describe, expect, it} from "vitest";
 
+import {migrationNames, readMigration} from "./support/migrations";
 import {PERMISSION_CODES} from "../../src/shared/Constants";
 
 /**
@@ -22,7 +23,6 @@ import {PERMISSION_CODES} from "../../src/shared/Constants";
  * lose a real code without this test failing.
  */
 
-const MIGRATIONS = "migrations";
 const ADMIN_PAGES = join("src", "pages", "[adminPath]");
 const AJAX = join(ADMIN_PAGES, "ajax");
 const SERVER_ADMIN = join("src", "server", "admin");
@@ -30,11 +30,8 @@ const SERVER_ADMIN = join("src", "server", "admin");
 /** Every permission code present in `ext_permissions` after all migrations run. */
 function readCatalogCodes(): Set<string> {
   const codes = new Set<string>();
-  const files = readdirSync(MIGRATIONS)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  for (const file of files) {
-    const sql = readFileSync(join(MIGRATIONS, file), "utf8");
+  for (const file of migrationNames()) {
+    const sql = readMigration(file);
     // A later migration may retire codes an earlier one seeded, e.g.
     // `DELETE FROM ext_permissions WHERE code IN (…)` or `… code LIKE 'api:%'`
     // (ADR-0009 dropped the `api:*` family). Migrations run in filename order,
