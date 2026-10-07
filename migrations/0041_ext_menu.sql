@@ -9,7 +9,7 @@
 --   a permission code-> visible only to accounts holding that code
 -- A menu binds at most one code on purpose. When a destination genuinely needs
 -- several, create a combined permission code and bind that instead — see
--- ADR-002-admin-menu-as-data.md.
+-- .scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md.
 --
 -- The permission codes referenced below are seeded by migration 0040 (the six
 -- new ones) and 0031/0035 (the rest). There is deliberately no foreign key: the

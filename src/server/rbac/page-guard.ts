@@ -4,7 +4,8 @@
  * Every menu page must guard itself with **the same permission code its menu row
  * binds** (`ext_menu.permission_code`). If the two drift, an account gets either
  * a link it cannot open (menu visible, page 403) or a page it can reach with no
- * way to navigate to it. See `ADR-002-admin-menu-as-data.md`.
+ * way to navigate to it. See
+ * `.scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md`.
  *
  * The menu being data does NOT make it access control: hiding an entry is
  * presentation, this is enforcement.

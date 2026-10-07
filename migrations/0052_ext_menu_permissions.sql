@@ -11,7 +11,8 @@
 -- table can be extended lazily without hiding anything.
 --
 -- Deliberately no foreign keys: the menu is a UI structure and must never
--- become the thing that grants access (see ADR-002-admin-menu-as-data.md).
+-- become the thing that grants access (see
+-- .scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md).
 --
 -- Idempotent (`INSERT OR IGNORE`) so re-applying migrations is safe.
 
