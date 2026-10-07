@@ -21,6 +21,7 @@ const PAGES = join("src", "pages", "[adminPath]");
 
 interface MenuRow {
   code: string;
+  parentCode: string | null;
   path: string;
   permissionCode: string | null;
 }
@@ -61,21 +62,56 @@ function deletedMenuCodes(): Set<string> {
   return codes;
 }
 
+/** `NULL` (or an empty literal) stays null; a quoted literal loses its quotes. */
+function nullableLiteral(raw: string | undefined): string | null {
+  if (!raw || raw === "NULL" || raw === "''") return null;
+  return raw.slice(1, -1);
+}
+
+/**
+ * Menu rows from every migration that inserts one.
+ *
+ * The `icon` field accepts `NULL` as well as a quoted name on purpose: 0050
+ * seeds the group headings with a NULL icon and 0051 fills them in with an
+ * UPDATE, so a pattern that only accepted a quoted icon silently dropped every
+ * group row from this parser — the group headings were never checked at all,
+ * and the first group row to carry an icon inline (0089) was then read as a
+ * *page* whose path is `''`. Accepting NULL restores them; `isGroupCode` below
+ * tells the two kinds apart.
+ */
 function readMenuRows(): MenuRow[] {
   const sql = menuMigrationSql();
   const deleted = deletedMenuCodes();
   const rows: MenuRow[] = [];
-  const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?:NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
+  const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?<parent>NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
   for (const match of sql.matchAll(tuple)) {
     const code = match.groups?.code ?? "";
     if (deleted.has(code)) continue;
     rows.push({
       code,
+      parentCode: nullableLiteral(match.groups?.parent),
       path: match.groups?.path ?? "",
       permissionCode: match.groups?.permCode ?? null,
     });
   }
   return rows;
+}
+
+/**
+ * The group headings: the `group_`-prefixed rows (0050 — "Codes are prefixed
+ * `group_` because `ext_menu.code` is UNIQUE and the page codes are already
+ * taken"). A group is a heading, not a page: it has no path and binds no
+ * permission, so the page-guard checks must skip it and assert those invariants
+ * instead.
+ *
+ * Note this cannot be derived from the parsed `parent_code`s: 0050 hangs the
+ * existing pages off its groups with `UPDATE`s, and this parser only reads
+ * `INSERT` tuples, so most parents never appear as a child's `parent_code`.
+ */
+const GROUP_CODE_PREFIX = "group_";
+
+function isGroupCode(code: string): boolean {
+  return code.startsWith(GROUP_CODE_PREFIX);
 }
 
 function pageSource(menuPath: string): string {
@@ -117,14 +153,52 @@ function guardedPages(dir: string): Array<{file: string; code: string}> {
 
 describe("menu page guards", () => {
   const rows = readMenuRows();
+  const groupSet = new Set(
+    rows.filter((row) => isGroupCode(row.code)).map((row) => row.code),
+  );
+  /** Rows that are pages, i.e. everything that is not a group heading. */
+  const pages = rows.filter((row) => !groupSet.has(row.code));
 
-  it("parses the seeded menu rows", () => {
+  it("parses the seeded menu rows, group headings included", () => {
     expect(rows.length).toBeGreaterThanOrEqual(16);
     expect(rows.some((row) => row.permissionCode === null)).toBe(true);
+    // 0050 seeds five group headings and 0089 adds `group_operations`. This set
+    // must not be empty: the old pattern required a quoted `icon`, so 0050's
+    // `icon = NULL` group rows were dropped and no group was ever checked.
+    expect([...groupSet].sort()).toEqual([
+      "group_account",
+      "group_content",
+      "group_integration",
+      "group_operations",
+      "group_review",
+      "group_site",
+    ]);
+  });
+
+  it("treats a group heading as a heading, not a page", () => {
+    for (const code of groupSet) {
+      const row = rows.find((entry) => entry.code === code);
+      expect(row, `group ${code} has no row`).toBeDefined();
+      expect(row?.path, `group ${code} must not have a path`).toBe("");
+      expect(
+        row?.permissionCode,
+        `group ${code} must not bind a code`,
+      ).toBeNull();
+    }
+  });
+
+  it("hangs every child row off a group row that exists", () => {
+    for (const row of rows) {
+      if (row.parentCode === null) continue;
+      expect(
+        groupSet.has(row.parentCode),
+        `${row.code} hangs off ${row.parentCode}, which is not a group row`,
+      ).toBe(true);
+    }
   });
 
   it("guards every menu page with the code its menu row binds", () => {
-    for (const row of rows) {
+    for (const row of pages) {
       const source = pageSource(row.path);
       if (row.permissionCode === null) {
         expect(
@@ -142,14 +216,15 @@ describe("menu page guards", () => {
 
   it("never guards a page with a code no menu binds", () => {
     const bound = new Set(
-      rows
+      pages
         .map((row) => row.permissionCode)
         .filter((code): code is string => code !== null),
     );
     const guarded = guardedPages(PAGES);
     // Detail pages (item editor, page editor, …) reuse the code of the menu
-    // they belong to, so there are more guarded files than menu rows.
-    expect(guarded.length).toBeGreaterThan(rows.length);
+    // they belong to, so there are more guarded files than menu pages. Groups
+    // are headings, not pages, so they are not part of the comparison.
+    expect(guarded.length).toBeGreaterThan(pages.length);
     for (const page of guarded) {
       expect(
         bound.has(page.code),

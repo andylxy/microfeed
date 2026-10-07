@@ -149,6 +149,7 @@ export const en = {
       account: "Account",
       content: "Content",
       integration: "Integrations",
+      operations: "Operations",
       review: "Review",
       site: "Site",
     },

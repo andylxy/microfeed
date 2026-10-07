@@ -289,6 +289,7 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.RBAC,
       ADMIN_MENU_CODES.USERS,
       ADMIN_MENU_CODES.RBAC_AUDIT,
+      "group_operations",
       ADMIN_MENU_CODES.DEVICES,
       ADMIN_MENU_CODES.APP_VERSIONS,
       ADMIN_MENU_CODES.LOGIN_LOGS,
@@ -299,5 +300,6 @@ describe("readAdminMenu", () => {
     // A group has no landing page: it links to its first visible child.
     expect(findItem(menu, "group_content")?.url).toBe("/admin/books/");
     expect(findItem(menu, "group_account")?.url).toBe("/admin/rbac/");
+    expect(findItem(menu, "group_operations")?.url).toBe("/admin/devices/");
   });
 });

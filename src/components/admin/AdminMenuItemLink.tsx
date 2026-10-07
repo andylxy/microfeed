@@ -1,4 +1,5 @@
 import {
+  ActivityIcon,
   BookIcon,
   Code2Icon,
   DownloadIcon,
@@ -34,6 +35,7 @@ interface Props {
  * name falls back rather than rendering an empty slot.
  */
 const MENU_ICONS: Record<string, typeof HomeIcon> = {
+  activity: ActivityIcon,
   book: BookIcon,
   "code-2": Code2Icon,
   "file-code-2": FileCode2Icon,

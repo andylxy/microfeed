@@ -151,6 +151,7 @@ export const zhCN: TranslationKey = {
       account: "账户",
       content: "内容",
       integration: "集成",
+      operations: "运营管理",
       review: "审核",
       site: "站点",
     },

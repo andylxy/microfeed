@@ -254,8 +254,9 @@ export const PERMISSION_CODES = {
   CONTENT_TERM_READ: 'content:term:read',
   CONTENT_TERM_MANAGE: 'content:term:manage',
   // Device management + app version/rollout administration. Both boards live
-  // under the account group (`group_account`) and are admin-only: `:read` opens
-  // the board, `:manage` unlocks revoke/restore and version/rollout writes.
+  // under the operations group (`group_operations`, migration 0089) and are
+  // admin-only: `:read` opens the board, `:manage` unlocks revoke/restore and
+  // version/rollout writes.
   SYSTEM_DEVICE_READ: 'system:device:read',
   SYSTEM_DEVICE_MANAGE: 'system:device:manage',
   SYSTEM_APP_VERSION_READ: 'system:app-version:read',
@@ -267,7 +268,7 @@ export const PERMISSION_CODES = {
   SYSTEM_LOGIN_LOG_READ: 'system:login-log:read',
   SYSTEM_LOGIN_LOG_MANAGE: 'system:login-log:manage',
   // App 消息通知（Announcements，migration 0086/0087）。`:read` 打开公告管理板，
-  // `:manage` 解锁增删改/过期。治理类，挂在 group_account。
+  // `:manage` 解锁增删改/过期。治理类，挂在 group_operations（0089 从 group_account 迁出）。
   SYSTEM_ANNOUNCEMENT_READ: 'system:announcement:read',
   SYSTEM_ANNOUNCEMENT_MANAGE: 'system:announcement:manage',
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
