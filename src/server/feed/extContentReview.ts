@@ -38,10 +38,9 @@ export type {AuditDb, AuditDbPreparedStatement} from "@/server/feed/extContentAu
  * `reviewStatus` 置为 `submitted`，没有提交动作，队列还直接读线上正文，于是内容
  * 进了 review 还能改、拒绝也无法撤销。
  *
- * {@link recordContentChange} 是 {@link planContentChange} 的自提交薄封装：拿到
- * 计划后立即逐条 `run()`。它留给「不并入更大批次」的调用方用；当前所有单条
- * 内容变更路径（items/service.ts、ajax/feed.ts）都已改走 planContentChange + 批
- * 提交，故该封装暂无在仓内调用方，仅作为非批式回退保留。
+ * 仓内所有单条内容变更路径（items/service.ts、ajax/feed.ts）都已改走
+ * planContentChange + 批量提交，故不保留自提交薄封装——需要写库时统一用
+ * db.batch() 把 plan 语句与 item 写入并成一批。
  */
 
 export type ReviewStatus = "pending" | "approved" | "rejected";
@@ -424,21 +423,6 @@ export async function planContentChange(
       submittedBy: params.actorId ?? null,
     },
   };
-}
-
-/**
- * 记录一次内容变更（自带提交）。
- *
- * 未改动内容的版本不产生审计记录——没有可供评审的版本。
- * 要把它并进更大的批次（与 item 写入同批生效）时用 `planContentChange`。
- */
-export async function recordContentChange(
-  db: AuditDb,
-  params: ContentChangeParams,
-): Promise<ContentReview | null> {
-  const plan = await planContentChange(db, params);
-  for (const statement of plan.statements) await statement.run();
-  return plan.review;
 }
 
 /** Every pending version of one chapter, oldest first. */

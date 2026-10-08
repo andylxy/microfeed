@@ -1,11 +1,12 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
-import {D1_MAX_BOUND_PARAMS, STATUSES} from "@/shared/Constants";
+import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import {
   bookWordCounts,
   chapterWordCount,
 } from "@/server/feed/bookWordCount";
+import {fetchSectionsByParents} from "@/server/feed/tcmSections";
 // The plain data shapes live in src/shared so the admin React app can use them
 // without importing from src/server (a hard boundary in this repo). Re-exported
 // here so existing server-side imports keep working unchanged.
@@ -598,30 +599,12 @@ export async function getTcmBookChapters(
     ? chapterResult.results
     : [];
 
-  // 一次（分片）查询取回所有篇章的条文，取代每个篇章各查一次——此前一本 N 篇章的书
-  // 要发 N 次往返。排序键与单篇章查询一致（receiptNo、id），分组后每个篇章内部的
-  // 相对顺序不变。每片最多 D1_MAX_BOUND_PARAMS - 1 个 id，把 `status != ?` 那 1 个
-  // 绑定参数也留在上限之内。
-  const sectionsByParent = new Map<string, Array<Record<string, any>>>();
+  // 一次（分片）取回所有篇章的条文，取代每个篇章各查一次——此前一本 N 篇章的书
+  // 要发 N 次往返；排序键以 tcm_parent_id 打头命中 0094 索引，消除 filesort。
   const chapterIds = chapterRows.map((row) => String(row.id));
-  const chunkSize = D1_MAX_BOUND_PARAMS - 1;
-  for (let i = 0; i < chapterIds.length; i += chunkSize) {
-    const chunk = chapterIds.slice(i, i + chunkSize);
-    const sectionResult = await db.prepare(
-      "SELECT id, data, pub_date, tcm_parent_id FROM items " +
-        "WHERE tcm_kind = 'section' AND tcm_parent_id IN (" +
-        chunk.map(() => "?").join(",") + ") AND status != ? " +
-        "ORDER BY json_extract(data, '$._microfeed.receiptNo'), id",
-    ).bind(...chunk, STATUSES.DELETED).all();
-    for (const row of (Array.isArray(sectionResult.results)
-      ? sectionResult.results
-      : [])) {
-      const parent = String(row.tcm_parent_id ?? "");
-      const list = sectionsByParent.get(parent) ?? [];
-      list.push(row);
-      sectionsByParent.set(parent, list);
-    }
-  }
+  const sectionsByParent = await fetchSectionsByParents(db, chapterIds, {
+    tcmKindSection: true,
+  });
 
   const catalog: Array<Record<string, any>> = [];
   for (const chapterRow of chapterRows) {

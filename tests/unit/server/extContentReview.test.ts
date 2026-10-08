@@ -5,7 +5,7 @@ import {
   approveChapterVersions,
   listChapterReviews,
   listPendingChapters,
-  recordContentChange,
+  planContentChange,
   rejectChapterVersions,
   type AuditDb,
   type AuditDbPreparedStatement,
@@ -52,6 +52,17 @@ class SqliteAuditDb implements AuditDb {
   prepare(query: string): AuditDbPreparedStatement {
     return new SqliteStatement(this.database, query);
   }
+}
+
+// 本地回退：把 plan 语句逐条提交。生产路径走 db.batch() 与 item 写同批，
+// 这里只是测试用的非批式等价实现——替代已删除的 recordContentChange 薄封装。
+async function commitChange(
+  db: AuditDb,
+  params: Parameters<typeof planContentChange>[1],
+): Promise<Awaited<ReturnType<typeof planContentChange>>["review"]> {
+  const plan = await planContentChange(db, params);
+  for (const statement of plan.statements) await statement.run();
+  return plan.review;
 }
 
 function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
@@ -165,7 +176,7 @@ describe("content review chain", () => {
     writeItem(database, "chap1", v1);
     writeItem(database, "chap1", v2);
 
-    const review = await recordContentChange(db, {
+    const review = await commitChange(db, {
       action: "edit",
       actorId: "author-1",
       after: v2,
@@ -211,7 +222,7 @@ describe("content review chain", () => {
     // The caller saves `after` first, refreshing the derived columns with the
     // unconfirmed content — exactly what production does.
     writeItem(database, "chap1", after);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after, before, itemId: "chap1",
     });
 
@@ -232,7 +243,7 @@ describe("content review chain", () => {
     writeItem(database, "chap1", v1);
     writeItem(database, "chap1", v2);
 
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after: v2, before: v1, itemId: "chap1",
     });
 
@@ -267,7 +278,7 @@ describe("content review chain", () => {
     };
     writeItem(database, "chap1", before);
     writeItem(database, "chap1", after);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after, before, itemId: "chap1",
     });
 
@@ -282,14 +293,14 @@ describe("content review chain", () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v1);
     writeItem(database, "chap1", v2);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after: v2, before: v1, itemId: "chap1",
     });
     // A second edit before anyone confirms: the queue shows ONE chapter with
     // two pending versions, and the diff belongs to the newest one.
     const v3 = {...v1, title: "第一章 归航"};
     writeItem(database, "chap1", v3);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after: v3, before: v2, itemId: "chap1",
     });
 
@@ -304,7 +315,7 @@ describe("content review chain", () => {
   it("records nothing when the content did not change", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v1);
-    expect(await recordContentChange(db, {
+    expect(await commitChange(db, {
       action: "edit",
       after: {...v1},
       before: v1,
@@ -328,7 +339,7 @@ describe("content review chain", () => {
       description: "<p>新正文</p>",
     };
     writeItem(database, "chap1", after);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after, before, itemId: "chap1",
     });
     // The gate pinned everything back to `before`.
@@ -345,7 +356,7 @@ describe("content review chain", () => {
   it("approving confirms the versions and empties the queue", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v2);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after: v2, before: v1, itemId: "chap1",
     });
 
@@ -361,7 +372,7 @@ describe("content review chain", () => {
   it("rejecting restores the chapter to its pre-change content", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v2);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit", after: v2, before: v1, itemId: "chap1",
     });
 
@@ -379,7 +390,7 @@ describe("content review chain", () => {
   it("does not open a pending version for review decisions", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v2);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "restore",
       after: v2,
       before: v1,
@@ -398,7 +409,7 @@ describe("content review switch", () => {
     setReviewEnabled(database, false);
     writeItem(database, "chap1", v1);
 
-    const change = await recordContentChange(db, {
+    const change = await commitChange(db, {
       action: "edit",
       after: v2,
       before: v1,
@@ -420,7 +431,7 @@ describe("content review switch", () => {
       .run(SETTINGS_CATEGORIES.CONTENT_REVIEW);
     writeItem(database, "chap1", v1);
 
-    expect(await recordContentChange(db, {
+    expect(await commitChange(db, {
       action: "edit",
       after: v2,
       before: v1,
@@ -434,7 +445,7 @@ describe("content review switch", () => {
     setReviewEnabled(database, false);
     writeItem(database, "chap1", v1);
 
-    expect(await recordContentChange(db, {
+    expect(await commitChange(db, {
       action: "edit",
       after: v2,
       before: v1,
@@ -447,7 +458,7 @@ describe("content review switch", () => {
   it("omits a pending version whose chapter no longer exists", async () => {
     const {database, db} = emptyDatabase();
     writeItem(database, "chap1", v1);
-    await recordContentChange(db, {
+    await commitChange(db, {
       action: "edit",
       after: v2,
       before: v1,
