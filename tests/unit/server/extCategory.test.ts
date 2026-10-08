@@ -71,7 +71,8 @@ function databaseWithCategories(): CategoryDb {
     CREATE TABLE items (
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
-      status INTEGER NOT NULL
+      status INTEGER NOT NULL,
+      content_text TEXT NOT NULL DEFAULT ''
     );
     INSERT INTO ext_category (id, name, slug, sort, visible, created_at) VALUES
       ('cat_empty', '空分类', 'empty', 1, 1, 1),
@@ -116,6 +117,7 @@ function databaseWithTcmItems(): CategoryDb {
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
       status INTEGER NOT NULL,
+      content_text TEXT NOT NULL DEFAULT '',
       pub_date TEXT,
       book_id TEXT,
       tcm_kind TEXT,
