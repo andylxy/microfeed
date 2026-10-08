@@ -317,11 +317,6 @@ async function contentReviewEnabled(db: AuditDb): Promise<boolean> {
   }
 }
 
-/**
- * Record one content change: audit row + a pending version to confirm.
- *
- * A change that alters nothing records nothing — there is no version to review.
- */
 /** 一次内容变更要提交的语句，外加它开启的待审版本（未开启 review 时为 null）。 */
 export interface ContentChangePlan {
   statements: AuditDbPreparedStatement[];

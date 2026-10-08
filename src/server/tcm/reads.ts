@@ -494,7 +494,7 @@ export async function getAppBookFang(
             const source = entry as Record<string, unknown>;
             const suffix = str(source.suffix);
             // 旧后端 weight 序列化为字符串；原样下发源值（null/undefined/空 → null），
-            // 用 String() 而非 str()（str 只透传字符串，会把数值 300 变成 ""）。
+            // 这里用 String() 转字符串：str() 只透传字符串，数值 300 会被它转成 ""，故取 String()。
             const weightRaw = source.weight;
             const weightStr = weightRaw === null || weightRaw === undefined ? "" : String(weightRaw);
             const weight = weightStr === "" ? null : weightStr;
@@ -608,7 +608,7 @@ const JINGSHU_NAME_ALIAS: Record<string, string> = {
  *  - 429 味：正文 = `$u{药名}\r\n$q{《神农本草经疏》}` + 经疏正文。
  *
  * **为什么 172 的合并是动态推导的**（新增 yao 无需改代码即可自动合并）：
- *  「某味 172 药该不该补经疏」由一条可推导的规则决定，而非硬编码名单——
+ *  「某味 172 药该不该补经疏」由一条可推导的规则决定，不靠硬编码名单——
  *   ① 该药名在经疏书里命中某个药条（`JINGSHU_NAME_ALIAS` 兜异名写法）；
  *   ② 且该药条**没有**被另一个 429 药认领。若被别的 429 认领（如 172「橘皮」与 429「陈皮」
  *      同属经疏「3、陈皮,橘皮」条），netcore 只把经疏正文发给 429 那个名字，172 侧不补。
