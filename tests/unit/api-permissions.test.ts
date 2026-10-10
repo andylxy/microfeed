@@ -192,6 +192,38 @@ describe("app search-permission endpoint (/api/app/search-permission/)", () => {
   });
 });
 
+describe("app mingci-permission endpoint (/api/app/mingci-permission/)", () => {
+  // 与上面 search-permission 四例一一对应。ADR-0001 §3.3.5 要求本端点严格镜像
+  // search-permission，任何对 search 一侧的改动都应同步到此处。
+  it("is an integration path under the legacy base", () => {
+    expect(isIntegrationApiPath("/api/app/mingci-permission/")).toBe(true);
+    expect(apiPathDetails("/api/app/mingci-permission/")).toEqual({
+      canonicalPath: "/api/v1/app/mingci-permission/",
+      kind: "integration",
+      legacy: false,
+    });
+  });
+
+  it("survives the canonical trailing-slash redirect the middleware applies", () => {
+    const requested = "/api/app/mingci-permission";
+    const dispatched = canonicalPathname(requested);
+    expect(dispatched).toBe("/api/app/mingci-permission/");
+    expect(isIntegrationApiPath(dispatched)).toBe(true);
+    expect(requiredApiPermission(dispatched, "GET")).toBe("app:mobile:access");
+  });
+
+  it("requires the app:mobile:access code at the path level", () => {
+    // 路径级门只管「能不能用 App」；名词解释本身的可见性由 handler 决定。
+    expect(requiredApiPermission("/api/app/mingci-permission/", "GET")).toBe(
+      "app:mobile:access",
+    );
+  });
+
+  it("carries no deprecation headers (the /api/v1 successor does not exist)", () => {
+    expect(apiPathDetails("/api/app/mingci-permission/")?.legacy).toBe(false);
+  });
+});
+
 describe("AppBookRequest route registry is fail-open-safe (ADR-0011 D2)", () => {
   // Routes that are deliberately anonymous (pre-auth / config). The middleware
   // skips the /api/ auth block for any AppBookRequest path that is NOT an

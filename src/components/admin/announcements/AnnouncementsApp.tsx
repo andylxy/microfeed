@@ -365,7 +365,7 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
                     </td>
                     <td className="px-4 py-2 tabular-nums">{row.version}</td>
                     <td className="px-4 py-2 whitespace-nowrap text-xs">
-                      {formatAdminTimestamp(row.updatedAt)}
+                      {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}
                     </td>
                     {canManage && (
                       <td className="px-4 py-2">

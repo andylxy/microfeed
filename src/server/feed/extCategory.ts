@@ -55,7 +55,9 @@ export async function listPublishedBookSamples(
   const nameById = new Map(
     catRows.results.map((r) => [String(r.id), String(r.name)]),
   );
-  const counts = await bookWordCounts(db);
+  // Only these books' chapters are needed; unscoped this walks the whole
+  // published set (~9.5k chapters / ~1.4 MiB) to count a handful of cards.
+  const counts = await bookWordCounts(db, result.results.map((r) => String(r.id)));
   return result.results.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
@@ -378,7 +380,10 @@ export async function listChannelsByGenre(
     // `channels.status` is the numeric STATUSES value, not the status name.
     "SELECT id, data FROM channels WHERE genre = ? AND status = ?",
   ).bind(genre, STATUSES.PUBLISHED).all();
-  const counts = await bookWordCounts(db);
+  // Scope the word-count pass to the books on this page: unscoped it walks the
+  // whole published set (~9.5k chapters / ~1.4 MiB of body text) just to count
+  // a handful of cards.
+  const counts = await bookWordCounts(db, result.results.map((r) => String(r.id)));
   return result.results.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
@@ -488,7 +493,9 @@ export async function getBookById(
           serialStatusLabel: toSerialStatusLabel(microfeed.serialStatus),
         }
       : {}),
-    ...wordCountFields(await bookWordCounts(db), String(row.id)),
+    // Only this book's chapters are needed; counting the whole published set
+    // here cost 20 paged scans and ~1.4 MiB per detail-page load.
+    ...wordCountFields(await bookWordCounts(db, [String(row.id)]), String(row.id)),
     ...(typeof row.genre === "string" ? {genre: row.genre} : {}),
     ...(categoryName ? {categoryName} : {}),
     microfeed,

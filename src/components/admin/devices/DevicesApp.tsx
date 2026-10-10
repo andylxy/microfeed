@@ -212,8 +212,8 @@ export default function DevicesApp({canManage = false, itemsPerPage}: Props) {
                           : t("devices.statusActive")}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">
-                      {row.lastSeenAt ?? "—"}
+                    <td className="px-4 py-2 text-xs whitespace-nowrap text-muted-foreground">
+                      {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : "—"}
                     </td>
                     <td className="px-4 py-2">
                       {canManage && (

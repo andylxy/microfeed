@@ -87,6 +87,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // 由 group_other/unmapped 兜底组承接；运营在「角色管理」页挂到角色叶子即开放搜索。
   {code: "app:search:global", name: "搜索-首页"},
   {code: "app:search:book", name: "搜索-书内"},
+  // 名词解释查看（MingCi View Permission，migration 0096）。G3 全局单开关 → 一个码。
+  // App 能力权限，不进菜单，由 group_other/unmapped 兜底组承接；运营在「角色管理」
+  // 页挂到角色叶子即开放阅读页 `$g{名词解释}` 的底层名词数据（无权限时列表不加载）。
+  {code: "app:mingci:view", name: "名词解释查看"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];

@@ -3,6 +3,7 @@ import {describe, expect, it} from "vitest";
 import {
   buildPermissionTree,
   permissionBranchState,
+  RBAC_MINGCI_PAGE,
   RBAC_OTHER_GROUP,
   RBAC_OTHER_PAGE,
   togglePermissionBranch,
@@ -80,6 +81,61 @@ describe("buildPermissionTree", () => {
       mapping: {...MAPPING, books: ["content:book:read", "ghost"]},
     });
     expect(groups[0]?.pages[0]?.codes).toEqual(["content:book:read"]);
+  });
+});
+
+describe("buildPermissionTree App 能力权限分流（合成 page）", () => {
+  // 三个 App 能力权限：mingci 一条、search 两条。全部 unmapped（无 menu page 承接）。
+  const APP_PERMISSIONS = [
+    {code: "*", name: "Everything"},
+    {code: "app:mingci:view", name: "名词解释查看"},
+    {code: "app:search:global", name: "全局搜索查看"},
+    {code: "app:search:book", name: "书内搜索查看"},
+  ];
+
+  it("routes app:mingci:* to the mingci page, keeps app:search:* in unmapped", () => {
+    const groups = build({permissions: APP_PERMISSIONS, mapping: {}});
+    expect(groups).toEqual([
+      {
+        code: RBAC_OTHER_GROUP,
+        pages: [
+          {code: RBAC_MINGCI_PAGE, codes: ["app:mingci:view"]},
+          {
+            code: RBAC_OTHER_PAGE,
+            codes: ["app:search:book", "app:search:global"],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("omits the mingci page when no app:mingci:* code is in the catalogue", () => {
+    const permissions = APP_PERMISSIONS.filter(
+      (permission) => !permission.code.startsWith("app:mingci:"),
+    );
+    const groups = build({permissions, mapping: {}});
+    expect(groups).toEqual([
+      {
+        code: RBAC_OTHER_GROUP,
+        pages: [
+          {
+            code: RBAC_OTHER_PAGE,
+            codes: ["app:search:book", "app:search:global"],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("omits the whole catch-all group when the catalogue is empty of unmapped codes", () => {
+    // mingci 唯一一条 + 已被 menu page 映射到 books
+    const groups = build({
+      mapping: {books: ["app:mingci:view"]},
+      permissions: [{code: "app:mingci:view", name: "名词解释查看"}],
+    });
+    expect(groups).toEqual([
+      {code: "group_content", pages: [{code: "books", codes: ["app:mingci:view"]}]},
+    ]);
   });
 });
 

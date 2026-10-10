@@ -111,6 +111,14 @@ const DOMAIN_RULES: DomainRule[] = [
     read: "app:mobile:access",
     write: "app:mobile:access",
   },
+  // App 名词解释查看权限端点（`GET /api/app/mingci-permission`，G3 单开关）。与
+  // search-permission 同构：只要求单一 `app:mobile:access` 门；该端点自身再按用户角色
+  // 判定 `app:mingci:view`（见端点处理器）。
+  {
+    prefix: "app/mingci-permission",
+    read: "app:mobile:access",
+    write: "app:mobile:access",
+  },
 ];
 
 function requiredCode(rule: DomainRule, method: string): string {

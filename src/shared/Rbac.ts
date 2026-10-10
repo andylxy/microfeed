@@ -95,6 +95,17 @@ export interface RbacPermissionTreeInput {
 /** Catch-all group / page for codes no menu page maps to. */
 export const RBAC_OTHER_GROUP = "group_other";
 export const RBAC_OTHER_PAGE = "unmapped";
+/** Synthetic page for the App 名词解释查看权限 (`app:mingci:*`); lives inside {@link RBAC_OTHER_GROUP}. */
+export const RBAC_MINGCI_PAGE = "mingci";
+
+/**
+ * Prefix routing table for unmapped App 能力权限：按 code 前缀把 unmapped 桶
+ * 分流到独立的合成 page 上，避免 `unmapped` 混装不相关的能力。加新 App 权限时
+ * 在此表追加一行即可，无需改 `buildPermissionTree`。
+ */
+const OTHER_PAGE_PREFIXES: readonly {code: string; prefix: string}[] = [
+  {code: RBAC_MINGCI_PAGE, prefix: "app:mingci:"},
+];
 
 /**
  * Build the role editor's permission tree: menu groups -> menu pages -> the
@@ -102,9 +113,11 @@ export const RBAC_OTHER_PAGE = "unmapped";
  *
  * Group and page nodes are batch-selection units only; the codes are the real
  * grants. Codes no menu page maps to land in the {@link RBAC_OTHER_GROUP}
- * catch-all, so nothing assignable can become invisible. The wildcard is
- * dropped: it means "everything", so making it tickable here would turn an
- * ordinary role into a super administrator.
+ * catch-all, so nothing assignable can become invisible. Within that group,
+ * {@link OTHER_PAGE_PREFIXES} routes specific App 能力权限 前缀到独立合成 page
+ * （如 `app:mingci:*` → {@link RBAC_MINGCI_PAGE}），剩余留在 {@link RBAC_OTHER_PAGE}。
+ * The wildcard is dropped: it means "everything", so making it tickable here
+ * would turn an ordinary role into a super administrator.
  */
 export function buildPermissionTree(
   input: RbacPermissionTreeInput,
@@ -130,12 +143,19 @@ export function buildPermissionTree(
     if (pages.length > 0) groups.push({code: group.code, pages});
   }
 
-  const other = [...assignable].filter((code) => !mapped.has(code)).sort();
-  if (other.length > 0) {
-    groups.push({
-      code: RBAC_OTHER_GROUP,
-      pages: [{code: RBAC_OTHER_PAGE, codes: other}],
-    });
+  const unmapped = [...assignable].filter((code) => !mapped.has(code)).sort();
+  if (unmapped.length > 0) {
+    const otherPages: RbacPermissionPage[] = [];
+    const routed = new Set<string>();
+    for (const {code: pageCode, prefix} of OTHER_PAGE_PREFIXES) {
+      const codes = unmapped.filter((c) => c.startsWith(prefix)).sort();
+      if (codes.length === 0) continue;
+      for (const c of codes) routed.add(c);
+      otherPages.push({code: pageCode, codes});
+    }
+    const remaining = unmapped.filter((c) => !routed.has(c));
+    if (remaining.length > 0) otherPages.push({code: RBAC_OTHER_PAGE, codes: remaining});
+    if (otherPages.length > 0) groups.push({code: RBAC_OTHER_GROUP, pages: otherPages});
   }
 
   return groups;

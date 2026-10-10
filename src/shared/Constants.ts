@@ -278,6 +278,9 @@ export const PERMISSION_CODES = {
   // unmapped 兜底组承接。运营在既有「角色管理」页把码挂到角色叶子即可开放搜索。
   APP_SEARCH_GLOBAL: 'app:search:global',
   APP_SEARCH_BOOK: 'app:search:book',
+  // 名词解释查看（MingCi View Permission，G3 全局单开关 → 一个码）。App 能力权限，
+  // 不进菜单/后台页面，由 group_other/unmapped 兜底组承接（镜像 APP_SEARCH_* 的处置）。
+  APP_MINGCI_VIEW: 'app:mingci:view',
   WILDCARD: '*',
 } as const;
 

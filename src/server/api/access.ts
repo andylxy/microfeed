@@ -163,6 +163,19 @@ export function apiPathDetails(pathname: string): ApiPathDetails | null {
     };
   }
 
+  // Same treatment for the mingci-permission (noun-explanation view) endpoint.
+  // Mirrors the search-permission branch above: it sits under the legacy `/api/`
+  // base like the rest of the app surface, but `/api/v1/app/mingci-permission`
+  // does not exist, so reporting `legacy: true` would attach deprecation headers
+  // pointing at a 404 successor. Matched before the base loop for the same reason.
+  if (pathname === `${LEGACY_API_BASE_PATH}app/mingci-permission/`) {
+    return {
+      canonicalPath: `${API_BASE_PATH}app/mingci-permission/`,
+      kind: "integration",
+      legacy: false,
+    };
+  }
+
   const bases = [
     {base: API_BASE_PATH, legacy: false},
     {base: LEGACY_API_BASE_PATH, legacy: true},

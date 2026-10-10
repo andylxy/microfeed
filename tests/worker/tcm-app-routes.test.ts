@@ -15,7 +15,6 @@ import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {env} from "cloudflare:workers";
 
 import * as GetAliaZhongYao from "@/pages/api/AppBookRequest/GetAliaZhongYao";
-import * as GetAllMingCi from "@/pages/api/AppBookRequest/GetAllMingCi";
 import * as GetAllZhongYao from "@/pages/api/AppBookRequest/GetAllZhongYao";
 import * as GetBookChapter from "@/pages/api/AppBookRequest/GetBookChapter";
 import * as GetBookIdFang from "@/pages/api/AppBookRequest/GetBookIdFang";
@@ -184,13 +183,16 @@ describe("TCM app route wire contract", () => {
     expect(rows[0]!.standardYaoList[0]!.weight).toBe("300");
   });
 
-  it("GetAllZhongYao / GetAliaZhongYao / GetAllMingCi return envelope + array data", async () => {
-    for (const route of [GetAllZhongYao, GetAliaZhongYao, GetAllMingCi]) {
+  it("GetAllZhongYao / GetAliaZhongYao return envelope + array data", async () => {
+    for (const route of [GetAllZhongYao, GetAliaZhongYao]) {
       const body = await bodyOf(await route.GET(ctx("/api/AppBookRequest/x")));
       expect(body.code).toBe(200);
       expect(Array.isArray(body.data)).toBe(true);
     }
   });
+
+  // GetAllMingCi 现已加服务端纵深防御（需 `app:mingci:view`），单独由
+  // tests/worker/app-mingci-getall.test.ts 覆盖（含码 / 缺码 / 无凭证三类）。
 
   it("GetTipsStyleConfig is deliberately BARE (top-level styles, NOT enveloped)", async () => {
     const res = await GetTipsStyleConfig.GET(ctx("/api/AppBookRequest/GetTipsStyleConfig"));

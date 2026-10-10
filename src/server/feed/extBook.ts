@@ -1,4 +1,9 @@
-import {countBodyText} from "@/server/feed/bookWordCount";
+import {
+  chunkWithinD1BindLimit,
+  countBodyText,
+  IN_CLAUSE_RESERVED_BINDS,
+  PAGE_SIZE,
+} from "@/server/feed/bookWordCount";
 import {STATUSES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import type {
@@ -83,27 +88,55 @@ function firstAuthorName(data: Record<string, unknown>): string {
  *
  * The dashboard counts every chapter that is not soft-deleted, while the public
  * site only counts published ones — the admin needs to see drafts too.
+ *
+ * `bookIds` scopes the pass to the given books, which keeps the `book_id` index
+ * as a real seek instead of the whole-corpus walk. Scoping is sound because
+ * `items.book_id` and the `_microfeed.bookId` tag are kept in lockstep
+ * (verified 9 520/9 520 on the live corpus), so driving the loop from the
+ * column loses nothing. Omitted it falls back to the original whole-corpus
+ * walk — that is intentional for the dashboard, which needs every book.
  */
 async function bookStats(
   db: BookDb,
+  bookIds?: string[],
 ): Promise<{chapters: Map<string, number>; words: Map<string, number>}> {
   const chapters = new Map<string, number>();
   const words = new Map<string, number>();
-  const PAGE = 500;
-  for (let offset = 0; ; offset += PAGE) {
-    const result = await db.prepare(
+  const scoped = bookIds !== undefined;
+  const ids = bookIds
+    ?.map((id) => id.trim())
+    .filter((id) => id.length > 0) ?? [];
+  if (scoped && ids.length === 0) return {chapters, words};
+
+  const chunks = chunkWithinD1BindLimit(ids, IN_CLAUSE_RESERVED_BINDS);
+  // Empty both when unscoped and when `ids` is empty; that single empty chunk
+  // is exactly the original unscoped statement.
+  if (chunks.length === 0) chunks.push([]);
+
+  for (const chunk of chunks) {
+    const placeholders = chunk.map(() => "?").join(",");
+    const sql =
       "SELECT json_extract(data, '$._microfeed.bookId') AS bookId, content_text " +
-        "FROM items WHERE status != ? LIMIT ? OFFSET ?",
-    ).bind(STATUSES.DELETED, PAGE, offset).all();
-    const rows = Array.isArray(result.results) ? result.results : [];
-    if (rows.length === 0) break;
-    for (const row of rows) {
-      const bookId = asText(row.bookId).trim();
-      if (!bookId) continue;
-      chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
-      words.set(bookId, (words.get(bookId) ?? 0) + countBodyText(row.content_text));
+      "FROM items WHERE status != ?" +
+      (placeholders ? ` AND book_id IN (${placeholders})` : "") +
+      " LIMIT ? OFFSET ?";
+    // Every chunk keeps its own OFFSET walk; dropping it would silently
+    // truncate anything past one page.
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const result = await db
+        .prepare(sql)
+        .bind(STATUSES.DELETED, ...chunk, PAGE_SIZE, offset)
+        .all();
+      const rows = Array.isArray(result.results) ? result.results : [];
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        const bookId = asText(row.bookId).trim();
+        if (!bookId) continue;
+        chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
+        words.set(bookId, (words.get(bookId) ?? 0) + countBodyText(row.content_text));
+      }
+      if (rows.length < PAGE_SIZE) break;
     }
-    if (rows.length < PAGE) break;
   }
   return {chapters, words};
 }
@@ -152,6 +185,11 @@ export async function listAdminBooks(db: BookDb): Promise<BookAdmin[]> {
       "WHERE status IS NULL OR status != ? ORDER BY created_at ASC",
   ).bind(STATUSES.DELETED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
+  // Deliberately unscoped: the dashboard wants chapter counts for every book, so
+  // there is nothing to filter by. Passing every book id back in would keep the
+  // same 9,520-row read but force it through `items_book_id` (9,520 index lookups
+  // + row fetches) instead of the cheaper sequential `SCAN items`. `getAdminBook`
+  // below is the case where scoping genuinely pays.
   const stats = await bookStats(db);
   const names = await categoryNames(db);
   return rows.map((row) => toBookAdmin(row, stats, names));
@@ -165,7 +203,9 @@ export async function getAdminBook(
     "SELECT id, data, status, is_primary FROM channels WHERE id = ?",
   ).bind(id).first();
   if (!row) return null;
-  const stats = await bookStats(db);
+  // One book, one book's chapters — the old whole-corpus scan made a single
+  // detail fetch cost the same as loading the whole shelf.
+  const stats = await bookStats(db, [id]);
   const names = await categoryNames(db);
   return toBookAdmin(row, stats, names);
 }

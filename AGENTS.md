@@ -120,7 +120,8 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
   一个文档，然后在发布前运行 `yarn lint:openapi` 和 `yarn check`。
 
 - **豁免：移动端专用通道 `/api/AppBookRequest/*`、`/api/app/version`、
-  `/api/app/announcements` 与 `/api/app/search-permission` 不注册进 OpenAPI 契约。**
+  `/api/app/announcements`、`/api/app/search-permission` 与 `/api/app/mingci-permission`
+  不注册进 OpenAPI 契约。**
   该命名空间是本项目对旧 .NET 后端 `AppBookRequest` 接口的 1:1 移植（路径与
   响应 JSON 逐字节对齐，App 只换 baseUrl、零改码），属于 App 与后端之间的
   **内部通道**，并非面向公众的 feed API；其响应信封 `{code,data,msg}` 与字段
@@ -146,6 +147,16 @@ AI 的职责是：改代码、跑完整验证、给出**精确的 `git add` 路�
   `tests/worker/app-search-permission.test.ts` 锁定，失败关闭（`fail-closed`）语义由该
   测试覆盖（角色不命中 = 200 双 false 有效答案；凭证问题 = 401；DB 异常 = 500 而非双
   false）。
+  `GET /api/app/mingci-permission`（App 冷启动时拉取「当前账号是否能查看名词解释」的
+  单个布尔 `{allowed}`）同属这一类：只由 App 调用、需登录（`app:mobile:access`
+  门 + 二次 Bearer 校验）、服务于客户端名词缓存底表（`GlobalDataHolder.mingCiContentMap`）
+  的加载闸门，不是面向公众的 feed 资源。它同样独立于 AppBookRequest 命名空间，故一并
+  显式点名。其运行时约定由 `tests/worker/app-mingci-permission.test.ts` 锁定，失败关闭
+  （`fail-closed`）语义由该测试覆盖（角色不命中 = 200 `{allowed:false}` 有效答案；凭证
+  问题 = 401；DB 异常 = 500 而非 false；响应一律 `no-store`）。对应的内容端点
+  `GET /api/AppBookRequest/GetAllMingCi` 也复用同一判定做服务端纵深防御（缺码/无凭证/
+  DB 故障均 fail-closed 返回空数组 + `no-store`，不挂 `app:mingci:view` 的 DOMAIN_RULES
+  规则以免缺码返 403），由 `tests/worker/app-mingci-getall.test.ts` 覆盖。
 
 ## 前端组件
 
