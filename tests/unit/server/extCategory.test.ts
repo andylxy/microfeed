@@ -72,7 +72,16 @@ function databaseWithCategories(): CategoryDb {
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
       status INTEGER NOT NULL,
-      content_text TEXT NOT NULL DEFAULT ''
+      content_text TEXT NOT NULL DEFAULT '',
+      book_id TEXT
+    );
+    CREATE TABLE ext_book_stats (
+      book_id            VARCHAR(11) PRIMARY KEY,
+      chapters_published INTEGER NOT NULL DEFAULT 0,
+      words_published    INTEGER NOT NULL DEFAULT 0,
+      chapters_all       INTEGER NOT NULL DEFAULT 0,
+      words_all          INTEGER NOT NULL DEFAULT 0,
+      computed_at_ms     INTEGER NOT NULL DEFAULT 0
     );
     INSERT INTO ext_category (id, name, slug, sort, visible, created_at) VALUES
       ('cat_empty', '空分类', 'empty', 1, 1, 1),

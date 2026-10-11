@@ -1,4 +1,4 @@
-import {D1_MAX_BOUND_PARAMS, STATUSES} from "@/shared/Constants";
+import {STATUSES} from "@/shared/Constants";
 import {bodyToPlainText} from "@/shared/BodyFormat";
 
 /**
@@ -14,11 +14,26 @@ import {bodyToPlainText} from "@/shared/BodyFormat";
  * So: every surface (reader, shelf, category, book detail, dashboard) reads
  * this one derivation, and `data._microfeed.wordCount` becomes a stored
  * artifact of the past rather than something anyone displays.
+ *
+ * ## 为什么这里还有一张物化表
+ *
+ * 「每本书多少字」是**该书所有条目正文字数之和**——一个聚合，不是任何一行的
+ * 字段。本地实测：要产出 13 个数字，必须读 9,506 行正文（首页 9,547 行读、
+ * 后台 9,523 行读，产出都只有 13 个数字）。
+ *
+ * 这是语义决定的，索引修不了：加索引不加不减（9,506 是「**必须**读的行」，不是
+ * 「找不到的行」）；一条 SQL `GROUP BY` 实测 **19,012** 行读，比逐本读更贵；
+ * `ANALYZE` 实测负收益。唯一出路是**不再每次重算**——把答案存进
+ * `ext_book_stats`（迁移 0103），由 `items` 上的触发器做失效，读路径懒自举。
+ *
+ * 稳态下首页/后台各只读 **12 行**；某本书被编辑后，只有那本书重算一次。
  */
 
 export interface WordCountDbPreparedStatement {
   bind(...values: unknown[]): WordCountDbPreparedStatement;
   all(): Promise<{results: Record<string, unknown>[]}>;
+  /** 懒自举要写回物化表，所以这个端口必须能写。 */
+  run(): Promise<unknown>;
 }
 
 /** Structural subset of `BookDb` / `CategoryDb`; both are assignable to it. */
@@ -58,84 +73,275 @@ export function chapterWordCount(data: Record<string, unknown>): number {
   return 0;
 }
 
-/** 每条语句读多少行。没有它，一本书上万章会一次全塞进一个响应里。 */
+/** 每页读多少行。keyset 游标翻页的步长——只影响往返次数，**不影响总行读**。 */
 export const PAGE_SIZE = 500;
 
-/** 与 `IN (...)` 共用同一批绑定的占位符个数：`status` / `LIMIT` / `OFFSET`。 */
-export const IN_CLAUSE_RESERVED_BINDS = 3;
+/**
+ * `items` 上的两种前置谓词，决定这次读走哪个索引。
+ *
+ * - `status = ?`（公开口径）配 `book_id` 走 `items_book_id`，配 rowid 走 `items_status`；
+ * - `status != ?`（后台口径：连草稿一起算）用不上索引前缀，退化为按 rowid 顺序读表。
+ */
+export interface ItemScope {
+  /** 完整谓词片段，只允许 `status = ?` 或 `status != ?`。 */
+  predicate: string;
+  /** 该谓词的绑定值。 */
+  status: number;
+}
+
+/** 公开站口径：只算已发布条目。 */
+export const PUBLISHED_ITEM_SCOPE: ItemScope = {
+  predicate: "status = ?",
+  status: STATUSES.PUBLISHED,
+};
+
+/** 后台口径：连草稿一起算，只排除已软删除。 */
+export const NON_DELETED_ITEM_SCOPE: ItemScope = {
+  predicate: "status != ?",
+  status: STATUSES.DELETED,
+};
 
 /**
- * 把 id 列表切片，保证单条语句不超出 D1 的位置参数上限。
- * `reserved` 是同一条语句里其余绑定的个数。
+ * 把可选的 `bookIds` 归一成「要遍历的目标列表」：`[null]` = 整库一遍，
+ * 具体 id 数组 = 逐本收束，空数组 = 什么都不读（调用方直接返回空结果）。
  */
-export function chunkWithinD1BindLimit(
-  ids: string[],
-  reserved = 0,
-): string[][] {
-  const size = Math.max(1, D1_MAX_BOUND_PARAMS - reserved);
-  const out: string[][] = [];
-  for (let start = 0; start < ids.length; start += size) {
-    out.push(ids.slice(start, start + size));
+export function resolveScopedTargets(
+  bookIds?: string[],
+): Array<string | null> {
+  if (bookIds === undefined) return [null];
+  return bookIds
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+}
+
+/**
+ * 逐行读 `items`，把每一行交给 `visit`。
+ *
+ * **整库（`bookId === null`）：rowid 游标分页，不用 `LIMIT ? OFFSET ?`**
+ * D1 的 `rows_read` 按**步进行数**计费：OFFSET 取第 k 页要先把前 k×PAGE_SIZE 行
+ * 走一遍，总代价随页数**二次方**增长。实测读 9,506 行的表，20 页 OFFSET 累计
+ * **104,506** 行读（表的 11 倍）；同一个结果集换成 rowid 游标只要 **9,506** 行读。
+ * 表越大差距越大——5M 行/日的免费额度下，OFFSET 版首页约 **48 次请求**就耗尽。
+ *
+ * 游标列用 `rowid` 而不是 `id`：`items.id` 是随机短 UUID，按它排序拿不到任何索引
+ * 顺序。`rowid` 是表序，`status = ?` 命中 `items_status (status)`、`status != ?`
+ * 退化为 `INTEGER PRIMARY KEY` 扫描，两种情况下 `rowid > ?` 都是索引范围条件，
+ * 因此**不需要** TEMP B-TREE。
+ *
+ * **单本（`bookId !== null`）：一次读完，不叠分页**
+ * 这本书的条目数就是成本下界，`book_id` 索引 seek 已经落在该下界上。再叠分页只会
+ * 变差：加 `ORDER BY rowid` 会引入临时排序（`items_book_id` 在 `status != ?` 时只
+ * 能用 `book_id` 当前缀，rowid 退化为过滤条件 —— 实测单本 174 → **347** 行读）；
+ * 换成 `LIMIT ? OFFSET ?` 又回到二次方。行的顺序与聚合无关，所以不排序、不分页。
+ */
+export async function forEachItem(
+  db: WordCountDb,
+  scope: ItemScope,
+  bookId: string | null,
+  visit: (row: Record<string, unknown>) => void,
+): Promise<void> {
+  const columns =
+    "status, json_extract(data, '$._microfeed.bookId') AS bookId, content_text";
+
+  if (bookId !== null) {
+    const result = await db
+      .prepare(
+        `SELECT ${columns} FROM items WHERE ${scope.predicate} AND book_id = ?`,
+      )
+      .bind(scope.status, bookId)
+      .all();
+    const rows = Array.isArray(result.results) ? result.results : [];
+    for (const row of rows) visit(row);
+    return;
   }
-  return out;
+
+  const sql = `SELECT rowid AS rid, ${columns} FROM items ` +
+    `WHERE ${scope.predicate} AND rowid > ? ORDER BY rowid LIMIT ?`;
+  let cursor = 0;
+  for (;;) {
+    const result = await db
+      .prepare(sql)
+      .bind(scope.status, cursor, PAGE_SIZE)
+      .all();
+    const rows = Array.isArray(result.results) ? result.results : [];
+    if (rows.length === 0) break;
+    for (const row of rows) visit(row);
+    if (rows.length < PAGE_SIZE) break;
+    const last = rows[rows.length - 1];
+    if (last === undefined) break;
+    cursor = Number(last["rid"]);
+  }
+}
+
+/** 一本书的物化统计。两种口径并存：公开站只算已发布，后台要连草稿一起算。 */
+export interface BookStatRow {
+  bookId: string;
+  /** 公开口径：`status = 1` 的条目数与字数之和。 */
+  chaptersPublished: number;
+  wordsPublished: number;
+  /** 后台口径：`status != 3` 的条目数与字数之和。 */
+  chaptersAll: number;
+  wordsAll: number;
+}
+
+/** 带过期标记的内部行：`computedAtMs === 0` 表示触发器把它标成了过期。 */
+interface StoredStatRow extends BookStatRow {
+  computedAtMs: number;
+}
+
+const STATS_TABLE = "ext_book_stats";
+const STATS_COLUMNS =
+  "book_id, chapters_published, words_published, chapters_all, words_all, computed_at_ms";
+const STATS_UPSERT =
+  `INSERT INTO ${STATS_TABLE} (${STATS_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?) ` +
+  "ON CONFLICT(book_id) DO UPDATE SET " +
+  "chapters_published = excluded.chapters_published, " +
+  "words_published = excluded.words_published, " +
+  "chapters_all = excluded.chapters_all, " +
+  "words_all = excluded.words_all, " +
+  "computed_at_ms = excluded.computed_at_ms";
+
+function asCount(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function stripMarker(row: StoredStatRow): BookStatRow {
+  return {
+    bookId: row.bookId,
+    chaptersPublished: row.chaptersPublished,
+    wordsPublished: row.wordsPublished,
+    chaptersAll: row.chaptersAll,
+    wordsAll: row.wordsAll,
+  };
+}
+
+/**
+ * 重算一本书并写回物化表。
+ *
+ * 走后台口径（`status != 3`）**一遍**，顺带把已发布的那部分拆出来——
+ * 两种口径共用同一次扫描，不必扫两遍。
+ */
+export async function refreshBookStats(
+  db: WordCountDb,
+  bookId: string,
+  computedAtMs = Date.now(),
+): Promise<BookStatRow> {
+  let chaptersPublished = 0;
+  let wordsPublished = 0;
+  let chaptersAll = 0;
+  let wordsAll = 0;
+  await forEachItem(db, NON_DELETED_ITEM_SCOPE, bookId, (row) => {
+    const words = countBodyText(row["content_text"]);
+    chaptersAll += 1;
+    wordsAll += words;
+    if (asCount(row["status"]) === STATUSES.PUBLISHED) {
+      chaptersPublished += 1;
+      wordsPublished += words;
+    }
+  });
+  await db
+    .prepare(STATS_UPSERT)
+    .bind(bookId, chaptersPublished, wordsPublished, chaptersAll, wordsAll, computedAtMs)
+    .run();
+  return {bookId, chaptersPublished, wordsPublished, chaptersAll, wordsAll};
+}
+
+async function selectStoredStats(db: WordCountDb): Promise<StoredStatRow[]> {
+  const result = await db
+    .prepare(`SELECT ${STATS_COLUMNS} FROM ${STATS_TABLE}`)
+    .all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  return rows
+    .map((row) => ({
+      bookId: String(row["book_id"] ?? ""),
+      chaptersPublished: asCount(row["chapters_published"]),
+      wordsPublished: asCount(row["words_published"]),
+      chaptersAll: asCount(row["chapters_all"]),
+      wordsAll: asCount(row["words_all"]),
+      computedAtMs: asCount(row["computed_at_ms"]),
+    }))
+    .filter((row) => row.bookId.length > 0);
+}
+
+/** 表里一行都没有 = 从未建过。补一次全量，之后都走增量。 */
+async function bootstrapAllBooks(
+  db: WordCountDb,
+  stored: Map<string, StoredStatRow>,
+): Promise<void> {
+  const result = await db
+    .prepare(
+      "SELECT DISTINCT book_id FROM items WHERE status != ? AND book_id IS NOT NULL",
+    )
+    .bind(STATUSES.DELETED)
+    .all();
+  const rows = Array.isArray(result.results) ? result.results : [];
+  for (const row of rows) {
+    const bookId = String(row["book_id"] ?? "").trim();
+    if (!bookId) continue;
+    stored.set(bookId, {...await refreshBookStats(db, bookId), computedAtMs: 1});
+  }
+}
+
+const isFresh = (row: StoredStatRow | undefined): row is StoredStatRow =>
+  row !== undefined && row.computedAtMs !== 0;
+
+/**
+ * 读每本书的物化统计。**缺失或过期的书当场重算一次并写回**（懒自举），
+ * 所以新部署不需要回填步骤，触发器标过的过期行也会在第一次被读到时自愈。
+ *
+ * 稳态成本：整表读 = 频道数（本地 13）行。
+ */
+export async function readBookStats(
+  db: WordCountDb,
+  bookIds?: string[],
+): Promise<Map<string, BookStatRow>> {
+  const targets = resolveScopedTargets(bookIds);
+  if (targets.length === 0) return new Map();
+
+  const stored = new Map<string, StoredStatRow>();
+  for (const row of await selectStoredStats(db)) stored.set(row.bookId, row);
+
+  if (targets[0] === null) {
+    if (stored.size === 0) await bootstrapAllBooks(db, stored);
+    for (const [bookId, row] of [...stored]) {
+      if (!isFresh(row)) {
+        stored.set(bookId, {...await refreshBookStats(db, bookId), computedAtMs: 1});
+      }
+    }
+    return new Map(
+      [...stored].map(([bookId, row]) => [bookId, stripMarker(row)]),
+    );
+  }
+
+  const result = new Map<string, BookStatRow>();
+  for (const bookId of targets as string[]) {
+    const row = stored.get(bookId);
+    result.set(
+      bookId,
+      isFresh(row) ? stripMarker(row) : await refreshBookStats(db, bookId),
+    );
+  }
+  return result;
 }
 
 /**
  * Word count per book, summed over its published chapters.
  *
- * 按 D1 官方建议只投影所需列（bookId 表达式 + content_text），并分页流式读取，
- * 不再整行加载 `data` 大对象。字数仍按正文现算（content_text 即正文明文），
- * 不引入会漂移的派生列。
+ * 读 `ext_book_stats` 的物化结果（见文件头「为什么这里还有一张物化表」），
+ * 缺失或过期的书当场重算一次。只返回**有已发布条目**的书——与旧的「扫 items
+ * 按 bookId 分组」口径一致：没有已发布条目的书不会出现在结果里。
  *
- * `bookIds` 把扫描范围从「全库 published」收敛到指定书，走 `items_book_id`
- * 索引（`WHERE status = ? AND book_id IN (...)` 两个谓词都在索引里，规划器才
- * 稳定选它而不是 `items_status_*`）。⚠️ 这个收益依赖 0097 把 `items_book_id`
- * 重建为 `(book_id, status)`；若 0097 被回滚，收束会退化成残余过滤、耗时反而
- * 变差，两处改动必须一起上/一起撤。省略 `bookIds` 时保留原来的全库口径。
- * 传空数组直接返回空 Map，不发起查询——`IN ()` 在 SQLite 里是语法错误。
- *
- * 每片最多 `D1_MAX_BOUND_PARAMS - 3` 个 id：`status` / `LIMIT` / `OFFSET` 已占
- * 3 个绑定位，D1 单条语句最多 100 个位置参数。
+ * `bookIds` 收束到指定书；省略则返回表里所有书。传空数组直接返回空 Map。
  */
 export async function bookWordCounts(
   db: WordCountDb,
   bookIds?: string[],
 ): Promise<Map<string, number>> {
+  const stats = await readBookStats(db, bookIds);
   const totals = new Map<string, number>();
-  const scoped = bookIds !== undefined;
-  const ids = bookIds
-    ?.map((id) => id.trim())
-    .filter((id) => id.length > 0) ?? [];
-  if (scoped && ids.length === 0) return totals;
-
-  const chunks = chunkWithinD1BindLimit(ids, IN_CLAUSE_RESERVED_BINDS);
-  // `chunks` 在「未收束」和「ids 为空」时都是空的；补进的那个空片正好就是
-  // 原本不带 `book_id` 谓词的语句。
-  if (chunks.length === 0) chunks.push([]);
-
-  for (const chunk of chunks) {
-    const placeholders = chunk.map(() => "?").join(",");
-    const sql =
-      "SELECT json_extract(data, '$._microfeed.bookId') AS bookId, content_text " +
-      "FROM items WHERE status = ?" +
-      (placeholders ? ` AND book_id IN (${placeholders})` : "") +
-      " LIMIT ? OFFSET ?";
-    // 每个分片都要有自己的 OFFSET 走读；漏掉会把 PAGE_SIZE 之后的行静默截断。
-    for (let offset = 0; ; offset += PAGE_SIZE) {
-      const result = await db
-        .prepare(sql)
-        .bind(STATUSES.PUBLISHED, ...chunk, PAGE_SIZE, offset)
-        .all();
-      const rows = Array.isArray(result.results) ? result.results : [];
-      for (const row of rows) {
-        const bookId = typeof row["bookId"] === "string"
-          ? (row["bookId"] as string).trim()
-          : "";
-        if (!bookId) continue;
-        totals.set(bookId, (totals.get(bookId) ?? 0) + countBodyText(row["content_text"]));
-      }
-      if (rows.length < PAGE_SIZE) break;
-    }
+  for (const [bookId, row] of stats) {
+    if (row.chaptersPublished > 0) totals.set(bookId, row.wordsPublished);
   }
   return totals;
 }

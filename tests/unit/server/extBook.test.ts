@@ -72,7 +72,17 @@ function emptyDatabase(): SqliteBookDb {
       data TEXT,
       pub_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      content_text TEXT NOT NULL DEFAULT '',
+      book_id TEXT
+    );
+    CREATE TABLE ext_book_stats (
+      book_id            VARCHAR(11) PRIMARY KEY,
+      chapters_published INTEGER NOT NULL DEFAULT 0,
+      words_published    INTEGER NOT NULL DEFAULT 0,
+      chapters_all       INTEGER NOT NULL DEFAULT 0,
+      words_all          INTEGER NOT NULL DEFAULT 0,
+      computed_at_ms     INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE ext_category (
       id VARCHAR(11) PRIMARY KEY,
@@ -145,27 +155,48 @@ function seed(db: SqliteBookDb) {
   );
 
   const insertItem = database.prepare(
-    "INSERT INTO items (id, status, data, pub_date) VALUES (?,?,?,?)",
+    "INSERT INTO items (id, status, data, pub_date, content_text, book_id) " +
+      "VALUES (?,?,?,?,?,?)",
   );
-  insertItem.run("chap1", 1, JSON.stringify({
+  // Mirror the production write path: `content_text` is the body with markup
+  // stripped, `book_id` is the denormalised `_microfeed.bookId` (ADR-0006).
+  // Both are what `bookStats` reads, so the fixture has to carry them.
+  const addItem = (
+    id: string,
+    status: number,
+    data: Record<string, unknown>,
+    pubDate: string,
+  ) => {
+    const description = typeof data.description === "string" ? data.description : "";
+    const pocket = (data._microfeed ?? {}) as Record<string, unknown>;
+    insertItem.run(
+      id,
+      status,
+      JSON.stringify(data),
+      pubDate,
+      description.replace(/<[^>]+>/g, ""),
+      typeof pocket.bookId === "string" ? pocket.bookId : null,
+    );
+  };
+  addItem("chap1", 1, {
     description: "<p>陆尘握紧断剑。</p>",
     title: "第一章",
     _microfeed: {bookId: "book2", chapterNo: 1, wordCount: 999999},
-  }), "2026-03-01 00:00:00");
-  insertItem.run("chap2", 1, JSON.stringify({
+  }, "2026-03-01 00:00:00");
+  addItem("chap2", 1, {
     description: "<p>海面浮起灯火。</p>",
     title: "第二章",
     _microfeed: {bookId: "book2", chapterNo: 2},
-  }), "2026-03-02 00:00:00");
-  insertItem.run("chap3", 1, JSON.stringify({
+  }, "2026-03-02 00:00:00");
+  addItem("chap3", 1, {
     description: "<p>星河入梦。</p>",
     title: "主频道章节",
     _microfeed: {bookId: "primary1", chapterNo: 1},
-  }), "2026-01-01 00:00:00");
+  }, "2026-01-01 00:00:00");
   // A deleted chapter must not be counted.
-  insertItem.run("chap4", 3, JSON.stringify({
+  addItem("chap4", 3, {
     title: "已删除", _microfeed: {bookId: "book2", chapterNo: 3},
-  }), "2026-03-03 00:00:00");
+  }, "2026-03-03 00:00:00");
 }
 
 describe("novel-cms book management", () => {

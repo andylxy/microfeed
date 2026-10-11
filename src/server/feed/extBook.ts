@@ -1,9 +1,4 @@
-import {
-  chunkWithinD1BindLimit,
-  countBodyText,
-  IN_CLAUSE_RESERVED_BINDS,
-  PAGE_SIZE,
-} from "@/server/feed/bookWordCount";
+import {readBookStats} from "@/server/feed/bookWordCount";
 import {STATUSES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import type {
@@ -82,61 +77,30 @@ function firstAuthorName(data: Record<string, unknown>): string {
 }
 
 /**
- * Chapter count and word count per book, in one pass. `_microfeed.bookId` is
- * the only link from a chapter to its book, so membership is resolved in
- * JavaScript.
+ * Chapter count and word count per book.
  *
- * The dashboard counts every chapter that is not soft-deleted, while the public
- * site only counts published ones — the admin needs to see drafts too.
+ * 从 `ext_book_stats`（迁移 0103）读物化结果，**不再扫 `items`**。稳态下整表读
+ * 等于频道数（本地 13）行；缺失或过期的书由 `readBookStats` 当场重算一次并写回。
+ * 过期由 `items` 上的触发器标记，所以写入路径不需要逐处挂钩子。
  *
- * `bookIds` scopes the pass to the given books, which keeps the `book_id` index
- * as a real seek instead of the whole-corpus walk. Scoping is sound because
- * `items.book_id` and the `_microfeed.bookId` tag are kept in lockstep
- * (verified 9 520/9 520 on the live corpus), so driving the loop from the
- * column loses nothing. Omitted it falls back to the original whole-corpus
- * walk — that is intentional for the dashboard, which needs every book.
+ * 为什么要物化：这两个数是**跨行聚合**（该书所有条目之和），不是任何一行的字段。
+ * 本地实测要产出 13 个数字必须读 9,506 行正文——后台书库页 9,523 行读，而该页
+ * 是 `no-store`，没有任何缓存遮挡。加索引与改 SQL 都降不下来（`GROUP BY` 实测
+ * 19,012 行，比逐本读更贵）。
+ *
+ * `bookIds` 收束到指定书；省略则返回表里所有书。调用方应尽量传 ids——
+ * `listAdminBooks` 从 `channels` 拿到书单后回传，连「所有书」都不必再推导。
  */
 async function bookStats(
   db: BookDb,
   bookIds?: string[],
 ): Promise<{chapters: Map<string, number>; words: Map<string, number>}> {
+  const stats = await readBookStats(db, bookIds);
   const chapters = new Map<string, number>();
   const words = new Map<string, number>();
-  const scoped = bookIds !== undefined;
-  const ids = bookIds
-    ?.map((id) => id.trim())
-    .filter((id) => id.length > 0) ?? [];
-  if (scoped && ids.length === 0) return {chapters, words};
-
-  const chunks = chunkWithinD1BindLimit(ids, IN_CLAUSE_RESERVED_BINDS);
-  // Empty both when unscoped and when `ids` is empty; that single empty chunk
-  // is exactly the original unscoped statement.
-  if (chunks.length === 0) chunks.push([]);
-
-  for (const chunk of chunks) {
-    const placeholders = chunk.map(() => "?").join(",");
-    const sql =
-      "SELECT json_extract(data, '$._microfeed.bookId') AS bookId, content_text " +
-      "FROM items WHERE status != ?" +
-      (placeholders ? ` AND book_id IN (${placeholders})` : "") +
-      " LIMIT ? OFFSET ?";
-    // Every chunk keeps its own OFFSET walk; dropping it would silently
-    // truncate anything past one page.
-    for (let offset = 0; ; offset += PAGE_SIZE) {
-      const result = await db
-        .prepare(sql)
-        .bind(STATUSES.DELETED, ...chunk, PAGE_SIZE, offset)
-        .all();
-      const rows = Array.isArray(result.results) ? result.results : [];
-      if (rows.length === 0) break;
-      for (const row of rows) {
-        const bookId = asText(row.bookId).trim();
-        if (!bookId) continue;
-        chapters.set(bookId, (chapters.get(bookId) ?? 0) + 1);
-        words.set(bookId, (words.get(bookId) ?? 0) + countBodyText(row.content_text));
-      }
-      if (rows.length < PAGE_SIZE) break;
-    }
+  for (const [bookId, row] of stats) {
+    chapters.set(bookId, row.chaptersAll);
+    words.set(bookId, row.wordsAll);
   }
   return {chapters, words};
 }
@@ -185,12 +149,9 @@ export async function listAdminBooks(db: BookDb): Promise<BookAdmin[]> {
       "WHERE status IS NULL OR status != ? ORDER BY created_at ASC",
   ).bind(STATUSES.DELETED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
-  // Deliberately unscoped: the dashboard wants chapter counts for every book, so
-  // there is nothing to filter by. Passing every book id back in would keep the
-  // same 9,520-row read but force it through `items_book_id` (9,520 index lookups
-  // + row fetches) instead of the cheaper sequential `SCAN items`. `getAdminBook`
-  // below is the case where scoping genuinely pays.
-  const stats = await bookStats(db);
+  // 把书单回传，让 `bookStats` 只读这些书的物化行（本地 13 行），而不是先扫
+  // `items` 推导「有哪些书」再算——那正是被迁移 0103 消掉的那笔账。
+  const stats = await bookStats(db, rows.map((row) => asText(row.id)));
   const names = await categoryNames(db);
   return rows.map((row) => toBookAdmin(row, stats, names));
 }
