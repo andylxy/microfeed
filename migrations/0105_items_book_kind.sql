@@ -1,0 +1,47 @@
+-- 0105: items 加 (book_id, tcm_kind, status) 三列索引，让「按书取某类条目」真正收窄
+--
+-- 背景：中医书的结构化读取全靠 `book_id` + `tcm_kind` 两个条件定位
+-- （篇章 tcm_kind='chapter'、条文 'section'、方剂 'fang'）。此前 `items` 上
+-- 唯一的复合前缀索引是 0097 建的 `items_book_id (book_id, status)`：它能定位到
+-- 「一本书的全部条目」，但**无法定位到「一本书里的篇章」**——`tcm_kind` 不在
+-- 索引上，只能当作拿到行之后再做一次过滤。
+--
+-- 代价实测（本地 D1，最大一本书 2,964 条：81 篇章 + 2,883 条文）：
+--   App 篇章目录 getAppBookChapters   3,048 →   165 行读（18.5×）
+--   卷看板篇章列表 buildTcmVolumeBoard 3,046 →   163 行读（18.7×）
+--   卷看板条文列表（tcm_parent_id 子查询）8,893 → 6,010 行读
+--   卷看板孤儿条文检查（NOT IN 版本，仅索引生效）8,813 → 5,849 行读
+--   方剂目录 getTcmBookFang            2,968 →     2 行读
+--
+--   注意：这些查询返回的**行数一个都没变**（81 个篇章还是 81 个），改变的只是
+--   为了找到这 81 行而要扫过的行数。这正是「用了索引但仍然付了全表的钱」的典型：
+--   `EXPLAIN` 里写着 `SEARCH items USING INDEX items_book_id (book_id=? AND
+--   status=?)`，看起来是索引 seek，实际 seek 的前缀只够定位到整本书 2,964 行。
+--
+-- 为什么选 `(book_id, tcm_kind, status)` 这个顺序：
+--   * `(book_id, tcm_kind, id)` 只帮到卷看板（它的 status 是不等值 `!= 3`），
+--     App 目录（`status IN (1,4)`）退回原索引，3,048 行读毫无改善；
+--   * `WHERE status IN (1,4)` 的**部分索引**实测不被选用——D1 的 sqlite 版本
+--     不把它当谓词匹配，直接退回 `items_book_id`，3,048 行读原样保留；
+--   * 三列全等值/范围都能吃：等值命中篇章的 81 行，`status != 3` 也只用前缀
+--     两列就够。所以一条索引同时服务 App 与卷看板两条路径。
+--
+-- ⚠️ 仍留着一处 `USE TEMP B-TREE FOR ORDER BY`，本索引消不掉：篇章排序键是
+--   COALESCE(json_extract(data,'$._microfeed.no'), CAST(...'$._microfeed.section' AS TEXT)), id
+-- 这个表达式在 `status` 范围扫描之后才计算，SQLite 无法证明它的顺序等于索引
+-- 的顺序，只能临时排序。但被排序的只有 81 行（此前要排序 2,964 行），TEMP
+-- B-TREE 本身的开销已经不是问题——真正省掉的是那 2,900 行读。
+--
+-- 为什么不换掉 `items_book_id`：`getBookChapters` 的 `IS NULL` 分支
+-- （`book_id IS NULL AND status = ?`，为 ADR-0006 的存量回填兜底）仍完全靠它的
+-- `book_id` 前缀 seek NULL；这个前缀一旦被删，该分支只能退回 `status` 打头的
+-- 索引——本库 9,506 行全是 `status = 1`，等于空扫整张表去确认「没有 NULL
+-- 镜像」。两个索引各服务一条路径，比删掉一个已有索引再赌规划器的选择更安全。
+-- 索引总数 17 → 18，每条 items 写入多维护 1 个 B-tree；本库 items 写入是低频
+-- 的人工编辑操作，代价可忽略。
+--
+-- `data` 仍是唯一事实来源；纯索引，不改任何写入路径。
+-- 回滚：DROP INDEX items_book_kind;（纯冗余结构，删掉不丢任何数据）
+
+CREATE INDEX IF NOT EXISTS items_book_kind
+  ON items (book_id, tcm_kind, status);

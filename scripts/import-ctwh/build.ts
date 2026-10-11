@@ -53,6 +53,53 @@ export const CONTAINER_CHANNEL_IDS = {
 export const BOOK_NAME_OVERRIDE: Record<string, string> = {};
 
 /**
+ * 源 `Fang` 表命名冲突正名（与上面的 `BOOK_NAME_OVERRIDE` 同一手法：源快照
+ * `ctwh/Fang.sql` 保持原样，修正在本层落地，重跑导入即生效）。
+ *
+ * `708` 在源里名为「茯苓白术戎盐汤」，但正文是 滑石 / 乱发 / 白鱼 —— 实为
+ * 「滑石乱发白鱼散」。证据链：桂林古本自己的条文（`BookBody` no=1001002877，
+ * D1 `9IFB4p2D1zO`）写「…$f{滑石乱发白鱼散}主之；$f{茯苓白术戎盐汤}亦主之」，
+ * 而 `Fang` 表里 `滑石乱发白鱼散` **查无此名**（全库唯一的「孤儿引用」），
+ * `茯苓白术戎盐汤` 则有两条（708 / 709），其中 708 的正文正是滑石乱发白鱼散。
+ * 名字取桂林古本条文自己的用词（金匮要略写作 `滑石白鱼散`，两书用词不同，勿混）。
+ *
+ * 影响：不改的话「茯苓白术戎盐汤」在本书内有两首，按名解析只能取其一。
+ * 复验脚本：`.scratch/fang-marker/audit-names2.mjs`、`d1-check.mjs`。
+ */
+export const FANG_NAME_OVERRIDE: Record<string, string> = {
+  "708": "滑石乱发白鱼散",
+};
+
+/**
+ * 源 `Fang.FangText` 漏写闭合括号的方剂（7 条，全部出现在组成行）。
+ *
+ * 形态统一：`$u{药名$w{剂量}` 漏了 `$u{}` 的收尾括号，应为 `$u{药名}$w{剂量}`；
+ * 另有一条 `$w{四两|` 把 `}` 打成了 `|`。不改的话渲染器按「畸形标记」降级，
+ * 正文里会露出裸的 `$w{一两 (炙)` 之类（渲染器本身不崩、不丢字，只是难看）。
+ *
+ * 只对下面列出的 FangId 生效 —— 规则是「`$u{…}` 内容里又出现 `$u{`/`$w{` 即视为
+ * 漏括号」，全库其余 797 条跑同一规则零命中（`.scratch/fang-marker/verify-fix-rule.mts`）。
+ * 修完全库残留裸标记 0 条。
+ */
+export const FANG_TEXT_FIX_IDS: ReadonlySet<string> = new Set([
+  "355", // 禹余粮丸     $w{四两|      → $w{四两}
+  "537", // 真武汤       $u{细辛$u{干姜} → $u{细辛}$u{干姜}
+  "655", // 百合知母汤   $u{百合$w{七枚} …
+  "661", // 百合滑石散   $u{百合$w{一两 (炙)} …
+  "669", // 白虎加桂枝汤 ×5 处
+  "776", // 百合滑石散   （另一书的同一方）
+  "782", // 白虎加桂枝汤 （另一书的同一方）
+]);
+
+/** 给漏写闭合括号的 `FangText` 补上 `}`；其余文本原样返回。 */
+export function fixFangText(fangId: string, text: string): string {
+  if (!FANG_TEXT_FIX_IDS.has(fangId)) return text;
+  return text
+    .replace(/\$u\{([^}]*?)\$(?=[uw]\{)/g, "$u{$1}$")
+    .replace(/\$w\{([^}|]*)\|/g, "$w{$1}");
+}
+
+/**
  * 本草书（WorkInfo.BookNo）——条文的「标题 = 整段 SectionText、描述 = SectionText +
  * SectionNote」规则**只对这两本**生效。其它书（含同样有 SectionNote 的
  * 伤寒论・(人纪) / 金匮要略・(人纪)）保持「标题 = 卷内章号」，避免把整段正文塞进标题。
@@ -878,6 +925,10 @@ export function buildTargets(
   }
   for (const row of selectedFangs) {
     const fangId = String(rowValue(row, "FangId") ?? "");
+    // 源数据修正（见 FANG_NAME_OVERRIDE / fixFangText）：名字与正文都先过一层，
+    // 下面的 description / title / 回退解析 / track 一律用修正后的值。
+    const fangName = (FANG_NAME_OVERRIDE[fangId] ?? rowText(row, "FangName")).trim();
+    const fangText = fixFangText(fangId, rowText(row, "FangText"));
     const sourceBookNo = String(rowValue(row, "FangSourceBookId") ?? "");
     const sourceChannelId = bookNoToChannel.get(sourceBookNo) ?? null;
     if (sourceBookNo && !sourceChannelId) {
@@ -914,7 +965,7 @@ export function buildTargets(
     // 条目不在导入集里，yaoId 会悬空。
     let fromFangText = false;
     if (fangYaoList.length === 0 && FANG_TEXT_FALLBACK_BOOK_NOS.has(sourceBookNo)) {
-      fangYaoList = parseFangTextIngredients(rowText(row, "FangText")).map((entry) => {
+      fangYaoList = parseFangTextIngredients(fangText).map((entry) => {
         const yaoSourceKey = lookupYaoIdByName(entry.showName);
         if (onlyBookNo && yaoSourceKey) onlyBookYaoIds.add(yaoSourceKey);
         return {
@@ -928,7 +979,7 @@ export function buildTargets(
       });
       fromFangText = fangYaoList.length > 0;
     }
-    const description = textToHtml(rowText(row, "FangText"));
+    const description = textToHtml(fangText);
     const pubDate = toIso(rowText(row, "CreateDate"));
     track(
       {
@@ -939,7 +990,7 @@ export function buildTargets(
         tcmParentId: null,
         pubDate,
         data: {
-          title: rowText(row, "FangName").trim(),
+          title: fangName,
           description,
           content_format: "html",
           _microfeed: {
@@ -967,7 +1018,7 @@ export function buildTargets(
         },
         contentText: htmlToPlain(description),
       },
-      rowText(row, "FangText"),
+      fangText,
     );
   }
 

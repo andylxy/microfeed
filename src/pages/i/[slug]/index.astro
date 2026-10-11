@@ -16,6 +16,7 @@ import type {CategoryDb} from "@/server/feed/extCategory";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {loadSiteNav} from "@/server/feed/siteNav";
 import {loadPublicNotFoundPageRoute} from "@/server/pages/public";
+import {buildTcmMarkerLayer} from "@/server/tcm/markerPopover";
 
 const itemId = getIdFromSlug(Astro.params.slug ?? "");
 const loaded = await loadPublishedFeed(env, Astro.request, {
@@ -105,6 +106,23 @@ const book = currentBookId
     )
   : null;
 
+// TCM inline-annotation markers ($f{方剂} / $u{药名} → clickable popover).
+// Only activate for items that live in a TCM book (a 典籍 channel that has
+// tcm_kind items); other genres keep content_html exactly as-is.
+let markerLayer:
+  | Awaited<ReturnType<typeof buildTcmMarkerLayer>>
+  | null = null;
+if (currentBookId != null && tcmProbe != null) {
+  markerLayer = await buildTcmMarkerLayer(loaded.database.FEED_DB, {
+    bodyHtml: String(item?.content_html ?? ""),
+    title: String(item?.title ?? ""),
+    currentBookId: String(currentBookId),
+  });
+}
+const displayItem = item
+  ? {...item, content_html: markerLayer?.bodyHtml ?? item.content_html}
+  : item;
+
 const extraContext = {
   ...navigation,
   book: book
@@ -118,6 +136,13 @@ const extraContext = {
   next_chapter: nextChapter,
   previous_chapter: previousChapter,
   toc_url: currentBookId ? `/book/${currentBookId}` : "/",
+  // `Theme.getWebItem` only assigns the deprecated `item` alias, while feed-zh
+  // reads `items.0` — so without overriding the list the markerised body (and
+  // the runtime) would never reach the template. This page fetches exactly one
+  // item, so a single-element list is what every template here expects.
+  items: displayItem ? [displayItem] : (loaded.publicFeed.items ?? []),
+  tcmTitleHtml: markerLayer?.titleHtml ?? null,
+  tcm_marker_runtime: markerLayer?.runtimeHtml ?? null,
 };
 const theme = new Theme(
   loaded.publicFeed,
@@ -157,7 +182,7 @@ const canonicalUrl = itemId && item
     sharedHeadHtml={sharedTheme.getWebHeader().html}
     bodyStart={theme.getWebBodyStart().html}
     sharedBodyStart={sharedTheme.getWebBodyStart().html}
-    bodyHtml={theme.getWebItem(item).html}
+    bodyHtml={theme.getWebItem(displayItem!).html}
     bodyEnd={theme.getWebBodyEnd().html}
     sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
     searchEnabled={theme.supportsPagesAndSearch()}

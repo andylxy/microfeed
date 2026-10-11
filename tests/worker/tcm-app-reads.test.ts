@@ -15,6 +15,8 @@ import {
 const db = env.FEED_DB;
 
 const CHANNEL_ID = "tcmtestbook";
+/** 容器频道（方剂 型）：只用来锚定真实典籍的条目，自身不是作品。 */
+const CONTAINER_ID = "tcmtestcont";
 const INSERTED: string[] = [];
 
 afterEach(async () => {
@@ -23,7 +25,7 @@ afterEach(async () => {
     .map((id) => `'${id}'`)
     .join(",");
   if (itemIds) await db.exec(`DELETE FROM items WHERE id IN (${itemIds});`);
-  await db.exec(`DELETE FROM channels WHERE id = '${CHANNEL_ID}';`);
+  await db.exec(`DELETE FROM channels WHERE id IN ('${CHANNEL_ID}', '${CONTAINER_ID}');`);
   await db.exec("DELETE FROM ext_category WHERE id = '1runoCsI7dr' AND name = '伤寒';");
   INSERTED.length = 0;
 });
@@ -68,6 +70,21 @@ async function seed(): Promise<{chapterId: string; fangId: string}> {
         title: "伤寒金匮・(宋版)",
         description: "宋版原文",
         _microfeed: {author: "张仲景", chengShu: "汉", sourceImagePath: "Upload/a.jpg", case: "5"},
+      }),
+    )
+    .run();
+
+  // 容器频道与真实书同分类：它必须被导航过滤掉，否则 App 点开是一个没有章节的空壳。
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO channels (id, status, is_primary, data, genre) VALUES (?, 1, NULL, ?, '1runoCsI7dr')",
+    )
+    .bind(
+      CONTAINER_ID,
+      JSON.stringify({
+        title: "方剂",
+        description: "中医方剂库",
+        _microfeed: {tcmContainer: "fang"},
       }),
     )
     .run();
@@ -170,17 +187,34 @@ describe("TCM app read functions", () => {
     expect(book?.chapterCount).toBe(0);
   });
 
+  it("GetNav drops container channels so the app never opens an empty book", async () => {
+    await seed();
+    const nav = await getAppNav(db);
+    const shanghan = nav.find((c) => c.caseId === "1runoCsI7dr");
+    expect(shanghan).toBeDefined();
+    expect(shanghan!.navList.map((b) => b.bookNo)).toEqual([CHANNEL_ID]);
+  });
+
   it("GetBookIdFang returns formulas of one source book with composition detail", async () => {
-    const {fangId} = await seed();
+    await seed();
     const fangs = await getAppBookFang(db, CHANNEL_ID);
     expect(fangs).toHaveLength(1);
     expect(fangs[0]!.name).toBe("桂枝汤");
-    expect(fangs[0]!.ID).toBe(fangId);
+    // Fang.ID 发「本方在本书内的 0-based 序号」而非 11 位 tcmId：App Gson 的
+    // IntegerTypeAdapter 只接受数值/数值字符串，下发 tcmId 会让 App 直接崩。
+    // 2026-10-03 拍板 A，依据 .scratch/tcm-import/golden/compare.mts:36-39——源 int64
+    // 按 spec §16 不落库，故值不可逐字节复现，golden 归类 known-id-numeric。
+    // 本断言在 d1023b4 写成 11 位 id，21eb535 改实现（numericIdString → String(index)）
+    // 时漏改，现补齐。
+    expect(fangs[0]!.ID).toBe("0");
     expect(fangs[0]!.yaoCount).toBe("5");
     expect(fangs[0]!.drinkNum).toBe("3");
     expect(fangs[0]!.height).toBe("0");
     expect(fangs[0]!.text).toBe("$f{桂枝汤} 5味\n$u{桂枝}$w{三两。去皮}");
-    expect(fangs[0]!.standardYaoList[0]!.yaoID).toBe("tcmtestyao");
+    // 同一拍板：yaoID 发「在本方组成内的序号」，不发中药 tcmId。
+    // 注：实现用 1-based（reads.ts 的 String(yIndex + 1)），netcore 是 0-based 的全局
+    // Yao 序号（甘草=0、杏仁=17）；compare.mts:39 接受的正是「组成顺序号」同形数值。
+    expect(fangs[0]!.standardYaoList[0]!.yaoID).toBe("1");
     expect(fangs[0]!.standardYaoList[0]!.amount).toBe("三两");
     expect(fangs[0]!.standardYaoList[0]!.weight).toBe("300");
   });

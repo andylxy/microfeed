@@ -109,3 +109,21 @@ TCM 条目在源书里的原始序号（`_microfeed.no`），是条目 / 方剂�
 
 **sourceBookId（源书标识）**：
 TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book_id` 分属两种成员关系模型：方剂按 `sourceBookId` 过滤（真实书 book_id 或容器 `tcmfang0001`），平铺型中药 / 名词书直接按 `items.book_id` 归属。两者是 TCM 书两种不同的成员关系，对应不同的查询前置谓词。
+
+## 响应式设计
+
+**移动层**：
+视口宽度 ≤768px 的页面布局，对应 `--mf-mobile` 断点。导航栏折叠、网格降级、间距收紧。见 [ADR-0013](docs/novel-cms/adr/0013-responsive-breakpoints.md)。
+_Avoid_: 移动端、小屏幕、narrow viewport
+
+**桌面层**：
+视口宽度 ≥768px 的页面布局，对应 `--mf-desktop` 断点（>1280px 为增强桌面）。网格使用完整列数，间距正常。
+_Avoid_: 电脑端、宽屏
+
+**断点碎片化**：
+同一主题内多个页面使用不同的 `@media` 断点值（当前 feed-zh 曾有 6 个值），导致布局不连续和决策困难。已由 ADR-0013 收敛为 1 个全局断点（768px）+ 1 个网格专属断点（1024px，仅首页 `.mf-home-grid`）。
+_Avoid_: 断点不一致（碎片化更精确，含原因）
+
+**网格专属断点**：
+仅用于特定网格布局的断点值（如首页 `.mf-home-grid` 的 `1024px`），不参与全站布局决策。
+_Avoid_: 局部断点（专属更精确，指归属关系）

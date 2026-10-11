@@ -6,6 +6,7 @@ import {
   bookWordCounts,
   chapterWordCount,
 } from "@/server/feed/bookWordCount";
+import {isTcmContainerChannel} from "@/shared/ExtCategory";
 import {fetchSectionsByParents} from "@/server/feed/tcmSections";
 // The plain data shapes live in src/shared so the admin React app can use them
 // without importing from src/server (a hard boundary in this repo). Re-exported
@@ -55,10 +56,16 @@ export async function listPublishedBookSamples(
   const nameById = new Map(
     catRows.results.map((r) => [String(r.id), String(r.name)]),
   );
+  // Container channels (方剂 等) anchor the real books' items instead of being
+  // works themselves, so a card for one would only open a 404. Drop them before
+  // the word-count pass so they cost nothing.
+  const rows = result.results.filter(
+    (row) => !isTcmContainerChannel(safeParseJson(row.data)._microfeed),
+  );
   // Only these books' chapters are needed; unscoped this walks the whole
   // published set (~9.5k chapters / ~1.4 MiB) to count a handful of cards.
-  const counts = await bookWordCounts(db, result.results.map((r) => String(r.id)));
-  return result.results.map((row) => {
+  const counts = await bookWordCounts(db, rows.map((r) => String(r.id)));
+  return rows.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
     const author = authors[0] && typeof authors[0] === "object"
@@ -125,6 +132,8 @@ export async function searchPublishedBooks(
   const matches: ChannelBookSummary[] = [];
   for (const row of result.results) {
     const data = safeParseJson(row.data);
+    // Container channels (方剂 等) are not works — never a search result.
+    if (isTcmContainerChannel(data._microfeed)) continue;
     const title = typeof data.title === "string" ? data.title : "";
     const authors = Array.isArray(data.authors) ? data.authors : [];
     const authorNames = authors
@@ -356,6 +365,9 @@ export async function setCategoryVisible(
  * `channels.status` stores the numeric `STATUSES` value, not the status name,
  * so the join must compare against the number — comparing to `'published'`
  * matched nothing and made every count zero.
+ *
+ * Container channels (方剂 等) are excluded from the count: they are not works,
+ * so counting one would inflate the category the way it inflated the shelf.
  */
 export async function listCategoryNav(db: CategoryDb): Promise<Category[]> {
   const result = await db.prepare(
@@ -363,6 +375,7 @@ export async function listCategoryNav(db: CategoryDb): Promise<Category[]> {
       "COUNT(ch.id) AS book_count " +
       "FROM ext_category c " +
       "LEFT JOIN channels ch ON ch.genre = c.id AND ch.status = ? " +
+      "AND json_extract(ch.data, '$._microfeed.tcmContainer') IS NULL " +
       "WHERE c.visible = 1 " +
       "GROUP BY c.id " +
       "ORDER BY c.sort ASC, c.created_at ASC",
@@ -380,11 +393,15 @@ export async function listChannelsByGenre(
     // `channels.status` is the numeric STATUSES value, not the status name.
     "SELECT id, data FROM channels WHERE genre = ? AND status = ?",
   ).bind(genre, STATUSES.PUBLISHED).all();
+  // Container channels (方剂 等) are not works — see listPublishedBookSamples.
+  const rows = result.results.filter(
+    (row) => !isTcmContainerChannel(safeParseJson(row.data)._microfeed),
+  );
   // Scope the word-count pass to the books on this page: unscoped it walks the
   // whole published set (~9.5k chapters / ~1.4 MiB of body text) just to count
   // a handful of cards.
-  const counts = await bookWordCounts(db, result.results.map((r) => String(r.id)));
-  return result.results.map((row) => {
+  const counts = await bookWordCounts(db, rows.map((r) => String(r.id)));
+  return rows.map((row) => {
     const data = safeParseJson(row.data);
     const authors = Array.isArray(data.authors) ? data.authors : [];
     const author = authors[0] && typeof authors[0] === "object"
@@ -516,13 +533,32 @@ export async function getBookChapters(
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
   // `book_id` is the denormalized, indexable copy of `_microfeed.bookId`
-  // (ADR-0006). Rows whose mirror is still NULL — anything written before the
-  // backfill — are picked up by the `IS NULL` arm and confirmed against the JSON
-  // below, so no chapter is lost to a missing mirror.
+  // (ADR-0006) and is the discovery path. The JSON re-check further down is
+  // the *filter*: it confirms a row really belongs to this book, so a row with
+  // a wrong-but-non-NULL mirror is found by SQL and then dropped. One caveat —
+  // for pre-backfill rows whose mirror is still NULL the column tells us
+  // nothing, so the `IS NULL` arm is what discovers them and the JSON check is
+  // what confirms. Dropping that arm would silently lose those chapters.
+  //
+  // The two arms are joined with UNION ALL rather than OR. `... OR book_id IS
+  // NULL` in a single WHERE prevents SQLite from seeking `book_id`, so the
+  // planner falls back to the `items_status_created_at` index — and because
+  // *every* row in this database is published, `status = 1` selects all 9,506
+  // of them. Splitting the predicate into a compound query lets each arm use
+  // `items_book_id` on its own: 2,965 rows read for the same 2,964 chapters.
+  // Re-tested 2026-10-11 against several shapes that all preserve the same
+  // result set:
+  //   status = 1 AND (book_id = ? OR book_id IS NULL)   9,506 rows  ← 旧写法
+  //   (book_id = ? AND status = 1) OR (book_id IS NULL AND status = 1)  9,506
+  //     ↑ 单纯调语序没用，规划器照样走 status 前缀
+  //   UNION ALL 两臂                                   2,965 rows  ← 本写法
   const result = await db.prepare(
     "SELECT id, status, data, pub_date, updated_at FROM items " +
-      "WHERE status = ? AND (book_id = ? OR book_id IS NULL)",
-  ).bind(STATUSES.PUBLISHED, bookId).all();
+      "WHERE book_id = ? AND status = ? " +
+      "UNION ALL " +
+      "SELECT id, status, data, pub_date, updated_at FROM items " +
+      "WHERE book_id IS NULL AND status = ?",
+  ).bind(bookId, STATUSES.PUBLISHED, STATUSES.PUBLISHED).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   const tagged: Array<{
     row: Record<string, unknown>;

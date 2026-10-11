@@ -50,3 +50,17 @@ export interface ChannelBookSummary {
   /** The book channel's `_microfeed` pocket (serialStatus / genre / tags / ...). */
   microfeed?: Record<string, unknown>;
 }
+
+/**
+ * True for a TCM *container* channel — a channel that exists only to anchor
+ * items owned by the real books (方剂 等), not a work a reader can open.
+ *
+ * Container entries are attributed through `_microfeed.sourceBookId`, so the
+ * channel itself has no chapters of its own. Treating it as a book page makes
+ * the page fall through to the site feed's item window and render another
+ * book's content, so every public listing and the book route skip these.
+ */
+export function isTcmContainerChannel(microfeed: unknown): boolean {
+  if (microfeed == null || typeof microfeed !== "object") return false;
+  return (microfeed as Record<string, unknown>).tcmContainer != null;
+}

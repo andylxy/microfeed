@@ -1,5 +1,5 @@
 <style>
-  /* Same canvas as the book and reading pages (ADR-0010): the home page used to
+  /* Same canvas as the book and reading pages (ADR-0013): the home page used to
      be plain white while the other two had their own greys. */
   body:has(.mf-home-page) { background: var(--mf-page-bg); }
   .mf-home-page { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
@@ -40,7 +40,7 @@
   }
   .mf-home-status { font-size: 12px; color: var(--mf-muted); margin-top: auto; }
   .mf-home-empty { color: var(--mf-muted); padding: 40px 0; text-align: center; }
-  @media (max-width: 900px) { .mf-home-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 1024px) { .mf-home-grid { grid-template-columns: repeat(2, 1fr); } } /* ADR-0013: 网格专属断点，2→3列切换 */
   @media (max-width: 768px) { .mf-home-grid { grid-template-columns: 1fr; } }
 </style>
 

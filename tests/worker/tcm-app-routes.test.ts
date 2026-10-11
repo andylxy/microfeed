@@ -178,7 +178,11 @@ describe("TCM app route wire contract", () => {
     expect(body.code).toBe(200);
     const rows = body.data as Array<{ID: string; yaoCount: string; standardYaoList: Array<{weight: string}>}>;
     expect(rows.length).toBeGreaterThanOrEqual(1);
-    expect(rows[0]!.ID).toBe(FANG);
+    // Fang.ID 是「本方在本书内的 0-based 序号」而非 11 位 tcmId：App Gson 的
+    // IntegerTypeAdapter 只接受数值/数值字符串，下发 tcmId 会让 App 崩。
+    // 2026-10-03 拍板 A（.scratch/tcm-import/golden/compare.mts:36-39）。
+    // 本断言曾写 toBe(FANG)（11 位 id），21eb535 改实现后未同步。
+    expect(rows[0]!.ID).toBe("0");
     expect(rows[0]!.yaoCount).toBe("5");
     expect(rows[0]!.standardYaoList[0]!.weight).toBe("300");
   });

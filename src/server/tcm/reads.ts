@@ -325,8 +325,11 @@ export async function getAppNav(db: D1Database): Promise<AppNavCategory[]> {
   return withEmpty("getAppNav", async () => {
     const {results} = await db
       .prepare(
+        // 容器频道（方剂 等）的条目归属真实典籍，频道自身不是作品：列进导航只会让
+        // App 点开一个空壳书页。
         "SELECT c.id AS categoryId, c.name AS categoryName, ch.id AS bookId, ch.data AS data " +
           "FROM ext_category c JOIN channels ch ON ch.genre = c.id AND ch.status = 1 " +
+          "WHERE json_extract(ch.data, '$._microfeed.tcmContainer') IS NULL " +
           "ORDER BY c.sort, ch.created_at",
       )
       .all();

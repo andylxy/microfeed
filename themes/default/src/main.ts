@@ -151,7 +151,7 @@ function enableOverflowNavigation(): void {
     const summary = overflow?.querySelector<HTMLElement>("summary");
     if (!linkContainer || !overflow || !menu || !summary) continue;
 
-    const mobileNavigation = window.matchMedia("(max-width: 600px)");
+    const mobileNavigation = window.matchMedia("(max-width: 768px)");
     const arrangeLinks = (): void => {
       overflow.open = false;
 

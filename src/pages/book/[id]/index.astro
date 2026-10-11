@@ -4,6 +4,7 @@ import {env} from "cloudflare:workers";
 import {CODE_TYPES} from "@/shared/Constants";
 import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
+import {isTcmContainerChannel} from "@/shared/ExtCategory";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
@@ -43,10 +44,15 @@ if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
 const feedDb = loaded.database.FEED_DB;
 const db = feedDb as unknown as CategoryDb;
 const book = await getBookById(db, bookId);
+// A TCM container channel (方剂 等) is not a work: its entries belong to the
+// real books through `_microfeed.sourceBookId`, so the channel itself has no
+// chapters. Serving it as a book page used to fall through to the site feed's
+// item window and render another book's content — it is a 404 instead.
+const containerChannel = isTcmContainerChannel(book?.microfeed);
 // Both reasons have to reach the render branch below: the page used to key its
 // not-found state off `Astro.response.status`, which only `!book` ever set, so a
 // headless or offline site still served the whole book page.
-const unavailable = hidePublicWeb || !book;
+const unavailable = hidePublicWeb || !book || containerChannel;
 if (unavailable) {
   Astro.response.status = 404;
 }
@@ -82,11 +88,15 @@ const allItems = loaded.publicFeed.items as Array<Record<string, any>>;
 // then handed this page the *primary feed's* items — which is how a 中药 channel
 // ended up rendering another book's chapter list. Read the book's own rows
 // instead; only non-TCM books may still fall back to the feed window.
+//
+// A container channel (方剂) has no rows of its own at all: its entries carry
+// `sourceBookId` of the real books. It must never reach the feed window either,
+// or the same "another book's content" bug comes back through this branch.
 const bookItems = tagged.length > 0
   ? tagged
   : isTcmBook
     ? await getTcmBookEntries(db, bookId, Astro.url.origin)
-    : allItems;
+    : containerChannel ? [] : allItems;
 // Order by publish date: `chapterNo` restarts per volume, so sorting on it
 // alone interleaves 第一卷 / 第二卷 / 第三卷. chapterNo only breaks same-day ties.
 // The TCM catalog already comes back in volume-then-receipt order, and the

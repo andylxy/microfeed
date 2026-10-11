@@ -6,7 +6,7 @@
   </section>
 
   <section>
-    <h1>{{items.0.title}}</h1>
+    <h1>{{#tcmTitleHtml}}{{{tcmTitleHtml}}}{{/tcmTitleHtml}}{{^tcmTitleHtml}}{{items.0.title}}{{/tcmTitleHtml}}</h1>
     <div class="mb-4 text-sm">
       <time>{{items.0._microfeed.date_published_short}}</time>
       &middot;
@@ -96,4 +96,5 @@
       {{/items.0.content_html}}
     </div>
   </section>
+  {{#tcm_marker_runtime}}{{{tcm_marker_runtime}}}{{/tcm_marker_runtime}}
 </main>
