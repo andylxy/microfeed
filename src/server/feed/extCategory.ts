@@ -747,10 +747,17 @@ export async function getTcmBookEntries(
   bookId: string,
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
+  // 过滤写成包含式 `IN ('yao','term')`：SQLite 无法把排除式 `NOT IN` 翻译成
+  // 索引范围查找，只能把这本书的条目全扫一遍再逐行过滤，于是「确认这本书没有
+  // 这类条目」也要付整本书的代价（本地实测 1,905 行读、返回 0 行）。
+  // 包含式让 items_book_entries_order (book_id, json_extract(data,'$._microfeed.no'), id)
+  // 一次吃掉过滤与排序，读数减半。
+  //
+  // 这是刻意收窄：白名单当前等于全库已出现的 kind（yao / term），在此之上新增
+  // tcm_kind 时，需要同步把新值加进这个 IN 列表，否则新条目不会出现在书页条目里。
   const result = await db.prepare(
     "SELECT id, data, pub_date FROM items WHERE book_id = ? " +
-      "AND tcm_kind IS NOT NULL " +
-      "AND tcm_kind NOT IN ('chapter', 'section', 'fang') " +
+      "AND tcm_kind IN ('yao', 'term') " +
       "AND status != ? " +
       "ORDER BY json_extract(data, '$._microfeed.no'), id",
   ).bind(bookId, STATUSES.DELETED).all();

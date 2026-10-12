@@ -71,6 +71,10 @@ function isItemPath(pathname: string): boolean {
   return /^\/i\/[^/]+\/(?:json\/|rss\/)?$/u.test(pathname);
 }
 
+function isBookPath(pathname: string): boolean {
+  return /^\/book\/[^/]+\/$/u.test(pathname);
+}
+
 function isStandalonePagePath(pathname: string): boolean {
   return /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/u.test(pathname) &&
     pathname !== "/json/" && pathname !== "/rss/" &&
@@ -83,6 +87,7 @@ function isSiteFilePath(pathname: string): boolean {
 
 function isPublicPagePath(pathname: string): boolean {
   return PUBLIC_PAGE_PATHS.has(pathname) || isItemPath(pathname) ||
+    isBookPath(pathname) ||
     isStandalonePagePath(pathname) || isSiteFilePath(pathname);
 }
 
@@ -170,6 +175,13 @@ function isSensitivePath(pathname: string, adminPath: string): boolean {
 
 export function publicCacheTagsForPath(pathname: string): string[] {
   const tags = new Set<string>([PUBLIC_CACHE_TAGS.PUBLIC]);
+  // 书页读 channels（书名/封面）与 items（章节目录），并且按当前主题渲染，
+  // 所以四个标签都要挂上——条目、频道或主题任一变更都会让书页缓存失效。
+  if (isBookPath(pathname)) {
+    tags.add(PUBLIC_CACHE_TAGS.ITEMS);
+    tags.add(PUBLIC_CACHE_TAGS.PAGES);
+    tags.add(PUBLIC_CACHE_TAGS.THEME_CURRENT);
+  }
   const siteFilePath = isSiteFilePath(pathname);
   if (isFeedContentPath(pathname) || siteFilePath) {
     tags.add(PUBLIC_CACHE_TAGS.CHANNEL_PRIMARY);

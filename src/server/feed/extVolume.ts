@@ -314,16 +314,38 @@ async function buildTcmVolumeBoard(
   //   2,883 sections, 0 orphans):
   //     NOT IN      8,813 rows read to return 0 rows
   //     NOT EXISTS  5,848 rows read to return 0 rows
-  const orphanResult = await db.prepare(
-    "SELECT id, status, data, pub_date FROM items " +
-      "WHERE book_id = ? AND tcm_kind = 'section' " +
-      "AND status != ? " +
-      "AND NOT EXISTS (SELECT 1 FROM items c WHERE c.book_id = ? " +
-      "AND c.tcm_kind = 'chapter' AND c.id = items.tcm_parent_id)",
-  ).bind(bookId, STATUSES.DELETED, bookId).all();
-  const orphanRows = Array.isArray(orphanResult.results)
-    ? orphanResult.results
-    : [];
+  //
+  // 即便如此，它仍然要把这本书的每个 section 读一遍才能确认「没有孤儿」。
+  // 这里加一道前置计数：先用索引覆盖的 COUNT 拿该书 section 总数，跟已经按篇章
+  // 归档的条数比一下。两者相等就说明一个孤儿都没有，直接跳过全扫。
+  // 真实数据下孤儿是异常态（本地 13 本书全部为 0），所以绝大多数请求省掉这笔。
+  //
+  // 比较用「不相等」而非「大于」：`fetchSectionsByParents` 不按 kind 过滤，
+  // 挂在篇章下的方剂条目也会计入已归档数；而 COUNT 只数 section。两侧口径不同，
+  // 计数偏小时用「大于」会误判成没有孤儿。用「不相等」则两侧一旦不一致就跑一次
+  // 完整检测，宁可多跑一笔也不漏检。
+  const filedSections = [...sectionsByParent.values()]
+    .reduce((sum, sectionRows) => sum + sectionRows.length, 0);
+  const sectionTotalRow = await db.prepare(
+    "SELECT COUNT(*) AS total FROM items WHERE book_id = ? " +
+      "AND tcm_kind = 'section' AND status != ?",
+  ).bind(bookId, STATUSES.DELETED).first() as {total?: unknown} | null;
+  const orphanRows: Array<Record<string, unknown>> =
+    Number(sectionTotalRow?.total ?? 0) !== filedSections
+      ? await db
+          .prepare(
+            "SELECT id, status, data, pub_date FROM items " +
+              "WHERE book_id = ? AND tcm_kind = 'section' " +
+              "AND status != ? " +
+              "AND NOT EXISTS (SELECT 1 FROM items c WHERE c.book_id = ? " +
+              "AND c.tcm_kind = 'chapter' AND c.id = items.tcm_parent_id)",
+          )
+          .bind(bookId, STATUSES.DELETED, bookId)
+          .all()
+          .then((orphanResult) =>
+        Array.isArray(orphanResult.results) ? orphanResult.results : [],
+      )
+      : [];
   if (orphanRows.length > 0) {
     const chapters: VolumeChapter[] = orphanRows.map((row) => {
       const data = safeParseJson(row.data);
