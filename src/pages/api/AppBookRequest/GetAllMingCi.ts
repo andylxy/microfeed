@@ -4,7 +4,7 @@ import {env} from "cloudflare:workers";
 import {jsonResponse} from "@/server/http";
 import {appEnvelope} from "@/server/tcm/envelope";
 import {getAppAllTerms} from "@/server/tcm/reads";
-import {resolveMingCiPermission} from "@/server/app-mingci-permission/resolve";
+import {resolveMingCiPermission} from "@/server/app/permission/mingci";
 
 // 有码走原公共缓存；缺码 / 无凭证 / 解析失败一律 no-store（fail-closed，详见下方说明）。
 const PUBLIC_CACHE: ResponseInit["headers"] = {"cache-control": "public, max-age=300"};

@@ -13,8 +13,6 @@
  * 2. The permission test is {@link rbacAllows} — the same source the request
  *    guards use. A menu that disagreed with its page would show a link that
  *    403s, or hide a page the account may open.
- *
- * See `.scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md`.
  */
 
 import {rbacAllows, type RbacLocals} from "@/server/rbac/guard";

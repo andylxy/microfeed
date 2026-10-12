@@ -82,7 +82,7 @@ function lastDaysWindow(days: number, now: number = Date.now()): LoginLogWindow 
 }
 
 /**
- * Login log board (`/admin/login-logs/`, ADR-0002).
+ * Login log board (`/admin/login-logs/`, ADR-0023).
  *
  * Answers需求 3's「找出启动的 App」: one row per device per day, filtered by a
  * time window chosen with the same datetime control the item editor uses.

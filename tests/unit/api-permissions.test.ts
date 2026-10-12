@@ -23,6 +23,7 @@ import {
   isIntegrationApiPath,
   APP_BOOK_REQUEST_ROUTES,
   APP_BOOK_REQUEST_CONTENT_SUFFIXES,
+  APP_BOOK_REQUEST_ANONYMOUS_ROUTES,
 } from "@/server/api/access";
 import {requiredApiPermission} from "@/server/api/api-permissions";
 import {API_BASE_PATH, LEGACY_API_BASE_PATH} from "@/shared/ApiVersion";
@@ -228,17 +229,11 @@ describe("AppBookRequest route registry is fail-open-safe (ADR-0011 D2)", () => 
   // Routes that are deliberately anonymous (pre-auth / config). The middleware
   // skips the /api/ auth block for any AppBookRequest path that is NOT an
   // integration path, so these MUST be explicitly listed — an unlisted addition
-  // would silently become anonymous (fail-open). This set is the human-owned
-  // counterpart to `APP_BOOK_REQUEST_ROUTES`; the assertions below pin the two
+  // would silently become anonymous (fail-open). The list lives in
+  // `src/server/api/access.ts` next to the other two registries so the gate
+  // script and this test cannot drift apart; the assertions below pin the two
   // together so a new route can never land in a gap.
-  const ANONYMOUS = new Set([
-    "login",
-    "replaceToken",
-    "getPicCaptcha",
-    "GetProjectInfo",
-    "GetLoginInfo",
-    "getAboutInfo",
-  ]);
+  const ANONYMOUS = new Set<string>(APP_BOOK_REQUEST_ANONYMOUS_ROUTES);
   const ANONYMOUS_LOWER = new Set([...ANONYMOUS].map((name) => name.toLowerCase()));
 
   // `APP_BOOK_REQUEST_CONTENT_SUFFIXES` preserves the canonical (mixed-case)

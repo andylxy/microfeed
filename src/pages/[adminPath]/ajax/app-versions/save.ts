@@ -12,7 +12,7 @@ import type {APIRoute} from "astro";
 import {
   saveAppVersionConfig,
   saveRolloutRules,
-} from "@/server/app-version/config";
+} from "@/server/app/version/config";
 import {jsonResponse, localizedError} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import type {AppVersionSavePayload} from "@/shared/AppDeviceVersion";

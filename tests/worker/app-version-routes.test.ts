@@ -9,8 +9,8 @@ import {
   readRolloutRules,
   saveAppVersionConfig,
   saveRolloutRules,
-} from "@/server/app-version/config";
-import {resolveMinVersionForRequest} from "@/server/app-version/resolve";
+} from "@/server/app/version/config";
+import {resolveMinVersionForRequest} from "@/server/app/version/resolve";
 import {requireAccountAccess, requireAppVersion} from "@/server/rbac/guard";
 import {
   deviceIdFromRequest,

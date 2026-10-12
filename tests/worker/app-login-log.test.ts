@@ -6,7 +6,7 @@ import {
   type LoginLogWindow,
   listLoginLogs,
   recordLoginLog,
-} from "@/server/app-version/login-log";
+} from "@/server/app/version/login-log";
 
 /**
  * ADR-0002 (需求 3): one login row per device per calendar day, queried through

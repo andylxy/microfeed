@@ -11,11 +11,11 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {readAppVersionConfig} from "@/server/app-version/config";
+import {readAppVersionConfig} from "@/server/app/version/config";
 import {
   deleteUploadedApk,
   listUploadedApks,
-} from "@/server/app-version/apk-store";
+} from "@/server/app/version/apk-store";
 import {mediaBucket, mediaStorageUnavailableResponse} from "@/server/media/storage";
 import {jsonResponse} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";

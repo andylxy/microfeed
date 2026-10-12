@@ -21,7 +21,7 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
-import {listActiveAnnouncements} from "@/server/app-announcement/store";
+import {listActiveAnnouncements} from "@/server/app/announcement/store";
 import {ANNOUNCEMENT_FETCH_LIMIT} from "@/shared/AppAnnouncement";
 import {jsonResponse} from "@/server/http";
 

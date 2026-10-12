@@ -88,6 +88,26 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "replaceToken",
 ] as const;
 
+/**
+ * The AppBookRequest routes that are deliberately anonymous (pre-auth / config).
+ *
+ * The middleware skips the `/api/` auth block for any AppBookRequest path that
+ * is not an integration path, so a route absent from both this set and
+ * `APP_BOOK_REQUEST_CONTENT_SUFFIXES` is served anonymously — the fail-open
+ * risk called out in ADR-0011 D2. Keeping the list here (rather than in the
+ * gate script and the test separately) means there is one place to edit when a
+ * new anonymous route lands: `tests/unit/api-permissions.test.ts` and
+ * `scripts/check-endpoint-registration.ts` both read it from here.
+ */
+export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
+  "login",
+  "replaceToken",
+  "getPicCaptcha",
+  "GetProjectInfo",
+  "GetLoginInfo",
+  "getAboutInfo",
+] as const;
+
 export const APP_BOOK_REQUEST_CANONICAL = new Map(
   APP_BOOK_REQUEST_ROUTES.map((route) => [route.toLowerCase(), route]),
 );

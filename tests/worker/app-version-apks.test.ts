@@ -5,7 +5,7 @@ import {
   DELETE as apksDelete,
   GET as apksGet,
 } from "@/pages/[adminPath]/ajax/app-versions/apks";
-import {saveAppVersionConfig} from "@/server/app-version/config";
+import {saveAppVersionConfig} from "@/server/app/version/config";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**

@@ -12,7 +12,7 @@
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
-import {listLoginLogs} from "@/server/app-version/login-log";
+import {listLoginLogs} from "@/server/app/version/login-log";
 import {jsonResponse} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {LOGIN_LOG_MAX_ROWS} from "@/shared/AppLoginLog";

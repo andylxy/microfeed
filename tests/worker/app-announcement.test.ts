@@ -11,7 +11,7 @@ import {
   setStatus,
   updateAnnouncement,
   type AnnouncementDraft,
-} from "@/server/app-announcement/store";
+} from "@/server/app/announcement/store";
 
 /**
  * Announcements 数据层（DESIGN §5.1/§5.2）。锁住三件事，它们都容易静默回归：

@@ -6,7 +6,7 @@ import {
   ANNOUNCEMENT_STATUS,
   createAnnouncement,
   setStatus,
-} from "@/server/app-announcement/store";
+} from "@/server/app/announcement/store";
 
 /**
  * 公开端点 `GET /api/app/announcements` 的运行时契约（DESIGN §5.3）。

@@ -263,7 +263,7 @@ export async function listPages(
   }
   // 这里保持 `SELECT *`：返回的 `PageRecord` 带 content_html / content_text，而公开
   // API 的 `content_text` 是必填字段（OpenApiDocument），收窄等于改接口约定。后台列表另有
-  // `listAdminPageSummaries`（已裁列）。见 ADR-0002 D4。
+  // `listAdminPageSummaries`（已裁列）。见 ADR-0017 D4。
   const result = await database.FEED_DB.prepare(`
     SELECT * FROM pages
     WHERE ${clauses.join(" AND ")}

@@ -30,6 +30,11 @@
   - 由此产生的要求
 - 开发工作流
 - 源码架构
+- 架构治理（门禁脚本强制）
+  - src/server/ 顶层目录白名单
+  - 新增端点登记
+  - ADR 单一编号空间
+  - 迁移命名与回滚
 - API 规范与文档
 - 前端组件
   - 管理后台列表页：分页器与「每页条目数」统一来源
@@ -107,6 +112,32 @@
 - Astro 路由与中间件负责协调 server 模块和 UI 组件。保持路由文件精简，不引入独立的 Worker 入口点。
 - 稳定的、未加工的公共资源放在 `public/`；不要把它们移入源码包，也不要在没有明确迁移方案的情况下更改其公共 URL。
 
+## 架构治理（门禁脚本强制）
+
+以下规则由 `scripts/check-*.ts` 四个门禁脚本执行，接入 `yarn check`，违反即退出非零。脚本只读不写，输出格式 `文件:行 <规则编号> <描述>`。
+
+### src/server/ 顶层目录白名单
+
+- 判断理由：`src/server/` 顶层原有 23 项（18 目录 + 5 文件），其中 4 个是按特性命名的 `app-*` 目录，把共享层（`cache/`、`auth/`、`api/`）和领域层混在同一级。2026-10-12 重排把四个 `app-*` 特性收入 `src/server/app/{announcement,permission,version}/`、`tcm/app-cache.ts` 移入 `cache/`，顶层变为 20 项（15 目录 + 5 文件）。新增功能若继续开新顶层目录，会重新把共享层淹没在特性目录里。
+- 门禁：`scripts/check-server-layout.ts` 维护 20 项白名单。新增任何顶层项必须同时修改脚本白名单，否则 `yarn layout:check` 失败。
+
+### 新增端点登记
+
+- 判断理由：端点漏登记有两种静默缺口。① 移动端 `/api/AppBookRequest/` 有两套登记表（`APP_BOOK_REQUEST_ROUTES` 做大小写归一化、`APP_BOOK_REQUEST_CONTENT_SUFFIXES` 做鉴权开关）：归一化缺失导致任意大小写请求 404，鉴权缺失导致中间件把端点当匿名服务（fail-open）。② 公开 API 的 handler 若既不在 OpenAPI 规范里、也不在豁免类里，它仍可经 HTTP 访问，但审查 API 表面的人无从得知它存在。
+- 门禁：`scripts/check-endpoint-registration.ts` 对 `src/pages/api/` 下全部 54 个 handler 分四类——25 个公开 handler 必须对应 `OpenApiDocument.ts` 里的 path（规范的 path 相对 `/api/v1/`，无版本 `/api/...` 是同一 path 的 legacy 别名，20 条 path 每条至少一个 handler）；14 个 `/api/AppBookRequest/*` 另走 App 登记表；余下 15 个归入四个豁免类——四个 `/api/app/{version,announcements,search-permission,mingci-permission}`、`/api/auth/*`（better-auth 自管，catch-all 路由）、规范与文档元端点（`openapi.*`、`llms*.txt`）、`/api/` 根路由。门禁另跑两个反向检查：OpenAPI 每条 path 都有 handler、`APP_BOOK_REQUEST_ROUTES` 每条都有 handler 文件。
+- 人工登记：① 公开端点进 `OpenApiDocument.ts`；② App 内部端点进 `APP_BOOK_REQUEST_ROUTES`，需鉴权的再进 `APP_BOOK_REQUEST_CONTENT_SUFFIXES`；③ 匿名端点还要进 `APP_BOOK_REQUEST_ANONYMOUS_ROUTES`（`src/server/api/access.ts`，与另两个登记表同源，`tests/unit/api-permissions.test.ts` 与门禁都读它）。
+
+### ADR 单一编号空间
+
+- 判断理由：`docs/novel-cms/adr/` 曾出现 `ADR-0002` 被两篇不同 ADR 共用（作者隔离 vs D1 读路径优化），引用 `ADR-0002` 的代码注释指向歧义。`.scratch/microfeed-rbac/adr/` 与 `docs/novel-cms/adr/` 的编号空间重叠，同一裸编号在两处指向不同决策。
+- 门禁：`scripts/check-adr.ts` 执行四条规则：① 编号唯一（文件前缀与 H1 一致）；② 每篇 H1 以 `# ADR-NNNN:` 开头；③ `src/` 与 `migrations/` 中的裸 `ADR-NNNN` 引用必须解析到 docs 目录下的实际文件（`ADR-001 D-010`/`D-011` 仓外引用豁免）；④ 生产代码不得引用 `.scratch/<dir>/adr/*.md` 路径。
+- `.scratch/` 是草稿空间，编号可任意，但生产代码不得裸引。已被代码引用的草稿 ADR 必须提升为 docs ADR 后再引用。
+
+### 迁移命名与回滚
+
+- 判断理由：wrangler 以文件名作为 `d1_migrations` 记账键，改名会导致迁移重复执行。0107 及以前的 103 个迁移文件名已冻结不可改，快照在 `scripts/frozen-migration-names.txt`。0108 起引入 `NNNN_<type>_<desc>.sql` 命名（type ∈ schema/index/data/seed/cleanup），让 reviewer 从文件名即可识别迁移类型。data 与 cleanup 类迁移必须含 `-- rollback:` 注释块，说明回滚方式。
+- 门禁：`scripts/check-migrations.ts` 执行四条规则：① 0108+ 编号连续无缺号（0044、0047–0049 的历史缺号在冻结边界内，豁免）；② 0001–0107 文件名与快照逐条比对，改名与新增占位都能抓到；③ 0108+ 文件名含合法 type；④ 0108+ 的 data/cleanup 迁移含 `-- rollback:` 块。
+
 ## API 规范与文档
 
 - 不要添加断言 `docs/` 或任何 `README.md` 中的散文、标题、链接、命令片段、侧边栏标签或确切文件内容的单元测试。文档必须保持可手动编辑而不需要配套测试改动。用 `yarn docs:check` 和 `git diff --check` 校验文档，并在实现边界（可执行行为、schema、生成器、公共规范）测试，不测试渲染后的文字。
@@ -116,7 +147,7 @@
 - 绝不手动编辑 OpenAPI JSON、OpenAPI YAML、Scalar 输入、`llms.txt` 或 `llms-full.txt` 这类独立规范文件。它们必须从 `OPENAPI_DOCUMENT` 生成；完整 LLM 参考必须内嵌该完整生成的规范保持自包含。
 - 为每个变更或新增的端点添加规范与运行时测试，然后在发布前运行 `yarn lint:openapi` 和 `yarn check`。
 
-- **豁免：移动端专用通道不注册进 OpenAPI 规范**——`/api/AppBookRequest/*`、`/api/app/version`、`/api/app/announcements`、`/api/app/search-permission`、`/api/app/mingci-permission`。`AppBookRequest` 命名空间是对旧 .NET 后端接口的 1:1 移植（路径与响应 JSON 逐字节一致，App 只换 baseUrl、零改码），属 App 与后端之间的内部通道，并非面向公众的 feed API；其响应信封 `{code,data,msg}` 与字段形状由 `.scratch/tcm-import/spec.md` §6 与 `tests/worker/tcm-app-routes.test.ts` 锁定（golden 逐字节比对）。后四个端点由 App 调用、匿名可访问或仅服务客户端收敛（升级描述符、运营公告、搜索与名词解释的权限布尔），同样不面向公众。运行时覆盖由 `tcm-app-routes.test.ts` / `tcm-app-reads.test.ts` / `tcm-app-auth.test.ts` / `app-version-routes.test.ts` / `app-announcement-endpoint.test.ts` / `app-search-permission.test.ts` / `app-mingci-permission.test.ts` 提供，不在 `OpenApiDocument.ts` 重复登记。
+- **豁免：移动端专用通道不注册进 OpenAPI 规范**——`/api/AppBookRequest/*`、`/api/app/version`、`/api/app/announcements`、`/api/app/search-permission`、`/api/app/mingci-permission`。`AppBookRequest` 命名空间是对旧 .NET 后端接口的 1:1 移植（路径与响应 JSON 逐字节一致，App 只换 baseUrl、零改码），属 App 与后端之间的内部通道，并非面向公众的 feed API；其响应信封 `{code,data,msg}` 与字段形状由 `.scratch/tcm-import/spec.md` §6 与 `tests/worker/tcm-app-routes.test.ts` 锁定（golden 逐字节比对）。后四个端点由 App 调用、匿名可访问或仅服务客户端收敛（升级描述符、运营公告、搜索与名词解释的权限布尔），同样不面向公众。运行时覆盖由 `tcm-app-routes.test.ts` / `tcm-app-reads.test.ts` / `tcm-app-auth.test.ts` / `app-version-routes.test.ts` / `app-announcement-endpoint.test.ts` / `app-search-permission.test.ts` / `app-mingci-permission.test.ts` 提供，不在 `OpenApiDocument.ts` 重复登记。除这五条移动端通道外，`/api/auth/*`、规范与文档元端点（`openapi.*`、`llms*.txt`）与 `/api/` 根也不进 OpenAPI 规范——完整分类见「架构治理 → 新增端点登记」，以该节与 `scripts/check-endpoint-registration.ts` 为准。
 - `GET /api/AppBookRequest/GetAllMingCi` 复用 `app:mingci:view` 判定做服务端纵深防御：缺码/无凭证/DB 故障均 fail-closed 返回空数组 + `no-store`；不挂该权限码的 DOMAIN_RULES 规则，以免缺码返 403（由 `tests/worker/app-mingci-getall.test.ts` 覆盖）。
 
 ## 前端组件

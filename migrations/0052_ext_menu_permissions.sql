@@ -1,7 +1,6 @@
 -- 0052_ext_menu_permissions.sql
 --
--- The role editor's permission tree is organised by the admin menu (see
--- `.scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md`). The menu
+-- The role editor's permission tree is organised by the admin menu. The menu
 -- is data (`ext_menu`), and `ext_menu.permission_code` binds at most ONE code
 -- per page — too coarse for a page like Books, which governs read / create /
 -- update / delete. This table carries the many-to-many map instead.
@@ -11,8 +10,7 @@
 -- table can be extended lazily without hiding anything.
 --
 -- Deliberately no foreign keys: the menu is a UI structure and must never
--- become the thing that grants access (see
--- .scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md).
+-- become the thing that grants access.
 --
 -- Idempotent (`INSERT OR IGNORE`) so re-applying migrations is safe.
 

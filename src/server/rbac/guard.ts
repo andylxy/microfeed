@@ -38,7 +38,7 @@ import {
   compareVersionCode,
   parseAppVersionCode,
   resolveMinVersionForRequest,
-} from "@/server/app-version/resolve";
+} from "@/server/app/version/resolve";
 import {deviceIdFromRequest, permissionsInclude} from "./resolve";
 import {checkReplay} from "./replay";
 import {type PermissionCode} from "@/shared/Constants";
@@ -57,7 +57,7 @@ export interface RbacLocals {
 }
 
 /**
- * The App version gate (ADR-0005 / ADR-0008). Applies **only** to the App
+ * The App version gate (ADR-0020 / ADR-0021). Applies **only** to the App
  * content namespace `/api/AppBookRequest/*` — the web admin sends no
  * `app-version` header and must never be gated.
  *
@@ -68,9 +68,9 @@ export interface RbacLocals {
  *  - 头存在且为整数、`>= 地板` → 放行（`null`）；
  *  - 头存在但 `< 地板` → 426；
  *  - **地板 > 0 时，头缺失或非整数 → 426**（旧客户端，或被人剥掉头——强制升级
- *    的目标正是「不发头」的那批，见 ADR-0005）。
+ *    的目标正是「不发头」的那批，见 ADR-0020）。
  *
- * 强制旧版升级一律靠「抬高地板」实现，而不是靠惩罚缺头（ADR-0008）。
+ * 强制旧版升级一律靠「抬高地板」实现，而不是靠惩罚缺头（ADR-0021）。
  *
  * The floor comes from `resolveMinVersionForRequest`, so grayscale rules apply
  * once `userId`/`deviceId` are known. The pre-auth call site (before the login
@@ -88,7 +88,7 @@ export async function requireAppVersion(
     userId: context.userId ?? null,
   });
   // 地板为 0 = 未配置强制升级，版本门整体关闭（migrations/0080：0 表示不强制升级）。
-  // 强制旧版升级靠「抬高地板」实现，不是靠惩罚缺头（ADR-0008 / 票据 20）。
+  // 强制旧版升级靠「抬高地板」实现，不是靠惩罚缺头（ADR-0021 / 票据 20）。
   if (minVersionCode <= 0) return null;
   const headerCode = parseAppVersionCode(request.headers.get("app-version"));
   if (
@@ -231,7 +231,7 @@ export function withRbacGuard(handler: APIRoute, code: PermissionCode): APIRoute
  *
  * The app-version gate is deliberately **absent** here: it applies only to the
  * App content namespace `/api/AppBookRequest/*` and is enforced in
- * `middleware.ts` (ADR-0005). Admin and AJAX callers send no `app-version`
+ * `middleware.ts` (ADR-0020). Admin and AJAX callers send no `app-version`
  * header, so gating them would 426 the whole dashboard.
  */
 export async function requireRbac(

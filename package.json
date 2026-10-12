@@ -30,6 +30,10 @@
     "cli:check": "yarn workspace @microfeed/cli build && node --import tsx scripts/check-cli-package.ts",
     "lint:openapi": "node --import tsx scripts/lint-openapi.ts",
     "i18n:check": "node --import tsx scripts/check-i18n.ts",
+    "adr:check": "node --import tsx scripts/check-adr.ts",
+    "migrations:check": "node --import tsx scripts/check-migrations.ts",
+    "layout:check": "node --import tsx scripts/check-server-layout.ts",
+    "endpoints:check": "node --import tsx scripts/check-endpoint-registration.ts",
     "lint": "eslint .",
     "test": "TZ=UTC vitest run && TZ=UTC vitest run --config vitest.worker.config.ts",
     "test:deploy": "yarn test:deploy:unit && yarn test:deploy:worker",
@@ -41,7 +45,7 @@
     "docs:check": "astro check --root docs && yarn docs:build && node docs/scripts/check-build.mjs",
     "docs:upload-preview": "yarn docs:check && wrangler deploy --strict --env preview --config docs/wrangler.jsonc",
     "docs:deploy": "yarn docs:check && wrangler deploy --strict --env=\"\" --config docs/wrangler.jsonc",
-    "check": "yarn theme-kit:test && yarn theme-kit:pack-check && yarn lint:openapi && yarn lint && yarn i18n:check && yarn typecheck && yarn cli:check && yarn test && yarn build && wrangler deploy --dry-run --strict --config dist/server/wrangler.json && yarn docs:check"
+    "check": "yarn theme-kit:test && yarn theme-kit:pack-check && yarn lint:openapi && yarn lint && yarn i18n:check && yarn adr:check && yarn migrations:check && yarn layout:check && yarn endpoints:check && yarn typecheck && yarn cli:check && yarn test && yarn build && wrangler deploy --dry-run --strict --config dist/server/wrangler.json && yarn docs:check"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.7",

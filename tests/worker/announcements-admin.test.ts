@@ -12,7 +12,7 @@ import {
   updateAnnouncement,
   validateAnnouncementDraft,
   validateWindow,
-} from "@/server/app-announcement/store";
+} from "@/server/app/announcement/store";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**

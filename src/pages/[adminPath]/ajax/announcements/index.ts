@@ -22,7 +22,7 @@ import {
   getAnnouncement,
   isAnnouncementTab,
   listAdminAnnouncements,
-} from "@/server/app-announcement/store";
+} from "@/server/app/announcement/store";
 import {jsonResponse} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";

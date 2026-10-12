@@ -3,7 +3,7 @@
  *
  * 刻意做成匿名：被强制升级的客户端（或从未登录的客户端）也要能拿到「必须升级」这件事
  * 本身以及新包的下载地址。因此它读取地板，但**永不**返回 426 —— 426 只出现在内容端点
- * 命名空间 `/api/AppBookRequest/*`（ADR-0005）。
+ * 命名空间 `/api/AppBookRequest/*`（ADR-0020）。
  *
  * **副作用：每次调用记一条登录**（需求 3 追加，2026-10-04）。App 每次启动只检查一次
  * （工单 18），所以「一次启动 = 一次登录」，写入 `ext_app_login_log`：更新最后登录时间、
@@ -28,13 +28,13 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
-import {readAppVersionConfig} from "@/server/app-version/config";
-import {recordLoginLog} from "@/server/app-version/login-log";
+import {readAppVersionConfig} from "@/server/app/version/config";
+import {recordLoginLog} from "@/server/app/version/login-log";
 import {
   compareVersionCode,
   parseAppVersionCode,
   resolveMinVersionForRequest,
-} from "@/server/app-version/resolve";
+} from "@/server/app/version/resolve";
 import {providedLoginCredentialBearer} from "@/server/auth/credential-login";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
 import {deviceIdFromRequest} from "@/server/rbac/resolve";
@@ -67,8 +67,8 @@ export const GET: APIRoute = async ({request}) => {
   // 只有**已配置地板**（minVersionCode > 0）且调用方低于它（或压根没上报版本）才是硬阻；
   // 地板为 0 表示「不强制升级」（migrations/0080），此时一律软提示 —— 与内容门
   // `requireAppVersion` 的「地板 <= 0 关门」保持同一语义（票据 20）。
-  // 有新版本但没抬地板属软提示，由「latestVersionCode > 本机」承担（ADR-0009）。
-  // App 端直接采信该值，不得自行用 `minVersionCode` 重算（ADR-0008 §5）。
+  // 有新版本但没抬地板属软提示，由「latestVersionCode > 本机」承担（ADR-0022）。
+  // App 端直接采信该值，不得自行用 `minVersionCode` 重算（ADR-0021 §5）。
   const headerCode = parseAppVersionCode(request.headers.get("app-version"));
   const force =
     resolved.minVersionCode > 0 &&

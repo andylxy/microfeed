@@ -2,7 +2,7 @@ import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
 import {jsonResponse} from "@/server/http";
-import {cachedAppResponse} from "@/server/tcm/app-cache";
+import {cachedAppResponse} from "@/server/cache/app-cache";
 import {getAppBookChapters} from "@/server/tcm/reads";
 
 // 此前手写的 `cache-control: public, max-age=300` 从未生效过——`applyWorkerCachePolicy`

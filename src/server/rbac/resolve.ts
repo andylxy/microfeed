@@ -17,7 +17,7 @@ export const RBAC_WILDCARD = "*";
  *
  * Every authorization decision reads this — the admin guard (`hasPermission` in
  * `guard.ts`), the sessionless credential API (`credential-bearer.ts`) and the
- * App search-permission resolver (`app-search-permission/resolve.ts`) all call
+ * App search-permission resolver (`app/permission/search.ts`) all call
  * it. Keeping the rule in one function is what stops those paths from drifting
  * apart: a change to the wildcard semantics (or a future deny layer) lands once
  * and applies everywhere, instead of silently diverging between three copies.

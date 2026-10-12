@@ -74,7 +74,7 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "system:device:manage", name: "设备管理"},
   {code: "system:app-version:read", name: "版本查看"},
   {code: "system:app-version:manage", name: "版本管理"},
-  // App login-time log (ADR-0002, migration 0084). `:read` opens the board.
+  // App login-time log (ADR-0023, migration 0084). `:read` opens the board.
   // Mirror of PERMISSION_CODES in src/shared/Constants.ts — admin-endpoint-guards
   // and rbac.test.ts keep the two in lockstep.
   {code: "system:login-log:read", name: "登录日志查看"},

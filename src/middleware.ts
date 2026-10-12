@@ -151,7 +151,7 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     env.MICROFEED_ADMIN_AUTH_MODE,
   );
 
-  // Public App endpoints (ADR-0005 / §6.5). They are anonymous and deliberately
+  // Public App endpoints (ADR-0020 / §6.5). They are anonymous and deliberately
   // served before canonicalisation, so the app's exact URLs do not take a 308
   // round-trip to a trailing slash. Returning here also skips the `/api/` auth
   // block below, which is what actually keeps them anonymous — `/api/app/version`
@@ -225,7 +225,7 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     // via the caller's login credential (`mflc_…`).
     const replay = await checkReplay(env.FEED_DB, context.request);
     if (replay) return replay;
-    // Version gate, stage 1 (ADR-0005): before authentication only the global
+    // Version gate, stage 1 (ADR-0020): before authentication only the global
     // floor and `all` rules are known. A missing / non-integer `app-version`
     // header is a 426 — that is the force-upgrade target, not an edge case.
     const versionGate = await requireAppVersion(env.FEED_DB, context.request);
@@ -308,7 +308,7 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       attribution = result.attribution;
-      // Version gate, stage 2 (ADR-0005): the caller is now identified, so the
+      // Version gate, stage 2 (ADR-0020): the caller is now identified, so the
       // grayscale device/user/percent rules layer on top of the global floor.
       if (pathname.startsWith("/api/AppBookRequest/")) {
         const postAuthGate = await requireAppVersion(db, context.request, {
@@ -416,7 +416,7 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     );
   } else if (isAdminPathname(pathname, adminPath)) {
     // No app-version gate here: it applies only to the App content namespace
-    // `/api/AppBookRequest/*` (ADR-0005). The browser dashboard sends no
+    // `/api/AppBookRequest/*` (ADR-0020). The browser dashboard sends no
     // `app-version` header and must never be 426'd.
     const loginPath = adminUrl("login", adminPath);
     const passwordSetupPath = isAdminPasswordSetupPath(pathname, adminPath);

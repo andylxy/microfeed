@@ -1,7 +1,7 @@
 -- 0065_ext_drop_rbac_permissions_page.sql
 --
 -- Drops the second RBAC board page and merges its permission code back into
--- `system:role:manage`. See `.scratch/microfeed-rbac/adr/0002-one-rbac-board.md`.
+-- `system:role:manage`.
 --
 -- 0061 added the `rbac_permissions` menu row and the `/rbac/permissions/` page
 -- so an account holding only `system:permission:manage` had somewhere to land

@@ -1,4 +1,4 @@
-# ADR-0002: D1 读路径优化（批处理 / 窄投影 / 表达式索引）
+# ADR-0017: D1 读路径优化（批处理 / 窄投影 / 表达式索引）
 
 - 状态：Accepted（已实施）
 - 日期：2026-10-08
@@ -32,7 +32,7 @@ ADR-0001（`.scratch`）三轮静态审查发现 D1 读路径的多处全表扫�
 
 1. **G3/G4（Tier 2，保留 / 归档 + auth_session 清扫）**：`src/server/maintenance.ts`（新）+ `src/worker.ts` 的 `scheduled` 重写（4 张审计/日志表保留清理 + auth_session 过期行清扫）。这两项在 ADR-0001（`.scratch`）§4 列为 **Tier 2「需 schema/回溯，单独立项」**，本应另有迁移 + 门禁 + 数据校验。它们随本提交一并并入，仅作随行提交；其立项边界、保留策略与回滚仍在 ADR-0001 Tier 2 跟踪，不视为本 ADR 的一部分。
 2. **ADR-0002（`.scratch`）内容**：W5（item 写与审计写同批，落在 `src/server/items/service.ts` 与 `extContentReview.ts` 的 `planContentChange`）与 feed 列表投影收窄（`FeedDb.ITEM_FEED_COLUMNS`）属独立决策，由 `.scratch/microfeed-db/adr/0002-content-write-batch-and-feed-projection.md` 固定。
-3. **提交信息误引**：`9fb77fc` 的 message 写「ADR-0001 读路径优化」，但已提交的 ADR-0001 是「内容持久化采用 D1（非文件）」（docs/novel-cms/adr/0001）。本 ADR-0002 才是读路径优化的规范文档；历史提交信息不再改写，自此以本 ADR 为准。
+3. **提交信息误引**：`9fb77fc` 的 message 写「ADR-0001 读路径优化」，但已提交的 ADR-0001 是「内容持久化采用 D1（非文件）」（docs/novel-cms/adr/0001）。本 ADR-0017 才是读路径优化的规范文档；历史提交信息不再改写，自此以本 ADR 为准。
 
 ## 一致性
 

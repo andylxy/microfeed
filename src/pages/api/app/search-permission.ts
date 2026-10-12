@@ -4,7 +4,7 @@
  *
  * 这里只做**协议翻译**：把
  * {@link resolveSearchPermission} 给的事实映射成 HTTP 状态码。真正的凭证校验与
- * 权限解析在 `@/server/app-search-permission/resolve`，按 AGENTS.md「源码架构」
+ * 权限解析在 `@/server/app/permission/search`，按 AGENTS.md「源码架构」
  * （Worker 专属代码放 `src/server/`、路由保持精简）。
  *
  * 语义要点（fail-closed，INV-1 / INV-2）：
@@ -24,7 +24,7 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
-import {resolveSearchPermission} from "@/server/app-search-permission/resolve";
+import {resolveSearchPermission} from "@/server/app/permission/search";
 import {jsonResponse} from "@/server/http";
 
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};

@@ -1,5 +1,5 @@
 /**
- * 版本门解析（spec §6.3 / §6.4，ADR-0002 / ADR-0005 / ADR-0008）。
+ * 版本门解析（spec §6.3 / §6.4，ADR-0019 / ADR-0020 / ADR-0021）。
  *
  * `resolveMinVersionForRequest` 为一个请求回答一个问题：*这个调用方至少得在哪个
  * `versionCode` 上，低于它算不算硬阻？* 它把灰度规则叠加在全局地板之上：
@@ -7,7 +7,7 @@
  *   device (exact) > user (exact) > percent (hash) > all
  *   floor = max(matched rules WHERE force = 1, ext_app_version.min_version_code)
  *
- * 关键语义（ADR-0008 / ADR-0009）：地板 = max(全局 min_version_code, 命中且 force=1 的规则)，
+ * 关键语义（ADR-0021 / ADR-0022）：地板 = max(全局 min_version_code, 命中且 force=1 的规则)，
  * `force=0` 的软规则只提示、不抬地板。
  *
  * 本函数**只回答"地板是多少"**，不回答"要不要强制"：内容门按地板判 426；
@@ -20,7 +20,7 @@
 
 import {readAppVersionConfig, readRolloutRules} from "./config";
 
-/** 整数比较，归一化到 -1 / 0 / 1（ADR-0002：不做点分号式比较）。 */
+/** 整数比较，归一化到 -1 / 0 / 1（ADR-0019：不做点分号式比较）。 */
 export function compareVersionCode(a: number, b: number): number {
   const left = Number.isFinite(a) ? a : 0;
   const right = Number.isFinite(b) ? b : 0;
@@ -35,7 +35,7 @@ export function compareVersionCode(a: number, b: number): number {
  * 缺失、空、带符号或非整数一律返回 `null`。`null` 的含义是"客户端没给出可用的东西"，
  * 版本门会把它当作*低于地板*——但**仅当确实配置了地板时**（`minVersionCode > 0`）。
  * 没有地板时版本门完全关闭（票据 20），所以没带请求头的客户端不会因为版本旧而受罚；
- * 强制升级是靠*抬高地板*做到的（ADR-0005 / ADR-0008）。
+ * 强制升级是靠*抬高地板*做到的（ADR-0020 / ADR-0021）。
  */
 export function parseAppVersionCode(header: string | null): number | null {
   if (header === null) return null;
@@ -73,7 +73,7 @@ export interface VersionGateContext {
  *
  * ⚠️ **只有硬性要求才计入 `minVersionCode`。** 命中但 `force = 0` 的规则是*软提示*：
  * 它不能抬高地板，因为内容门正是按地板判 426 —— 让软规则去抬地板，等于对那些规则
- * 本来只想顺带提醒一下的客户端硬阻内容（ADR-0008 §5：软提示仅适用于地板之上的灰度）。
+ * 本来只想顺带提醒一下的客户端硬阻内容（ADR-0021 §5：软提示仅适用于地板之上的灰度）。
  * 所以软规则在这里是隐形的；它们通过 `/api/app/version` 那个面向调用方的 `force`
  * 来上报（见 `src/pages/api/app/version.ts`）。
  */

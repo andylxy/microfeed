@@ -10,7 +10,7 @@ import type {APIRoute} from "astro";
 import {
   readAppVersionConfig,
   readRolloutRules,
-} from "@/server/app-version/config";
+} from "@/server/app/version/config";
 import {jsonResponse} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";

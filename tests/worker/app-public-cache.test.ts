@@ -1,5 +1,5 @@
 /**
- * App 公共数据端点的服务端缓存验证（src/server/tcm/app-cache.ts）。
+ * App 公共数据端点的服务端缓存验证（src/server/cache/app-cache.ts）。
  *
  * 锁定行为：四个公共端点（GetAllZhongYao / GetAliaZhongYao / GetNav /
  * GetBookChapter）首次请求把响应写入 Cache API，后续请求即使 D1 不可用也能返回

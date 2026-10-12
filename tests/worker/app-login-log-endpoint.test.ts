@@ -2,7 +2,7 @@ import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {GET as loginLogsGet} from "@/pages/[adminPath]/ajax/login-logs";
-import {recordLoginLog} from "@/server/app-version/login-log";
+import {recordLoginLog} from "@/server/app/version/login-log";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**

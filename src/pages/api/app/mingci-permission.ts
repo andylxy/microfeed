@@ -4,7 +4,7 @@
  *
  * 这里只做**协议翻译**：把
  * {@link resolveMingCiPermission} 给的事实映射成 HTTP 状态码。真正的凭证校验与
- * 权限解析在 `@/server/app-mingci-permission/resolve`，按 AGENTS.md「源码架构」
+ * 权限解析在 `@/server/app/permission/mingci`，按 AGENTS.md「源码架构」
  * （Worker 专属代码放 `src/server/`、路由保持精简）。
  *
  * 语义要点（fail-closed，INV-1 / INV-2，逐字镜像 search-permission）：
@@ -24,7 +24,7 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
-import {resolveMingCiPermission} from "@/server/app-mingci-permission/resolve";
+import {resolveMingCiPermission} from "@/server/app/permission/mingci";
 import {jsonResponse} from "@/server/http";
 
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};

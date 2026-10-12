@@ -9,8 +9,7 @@
 --   a permission code-> visible only to accounts holding that code
 -- A menu binds at most one code on purpose. When a destination genuinely needs
 -- several, the role editor maps the page to them in `ext_menu_permissions`
--- (many-to-many); the visibility gate still binds one — see
--- .scratch/microfeed-rbac/adr/0001-permission-tree-follows-menu.md.
+-- (many-to-many); the visibility gate still binds one.
 --
 -- The permission codes referenced below are seeded by migration 0040 (the six
 -- new ones) and 0031/0035 (the rest). There is deliberately no foreign key: the

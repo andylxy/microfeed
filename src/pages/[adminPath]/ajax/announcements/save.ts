@@ -21,7 +21,7 @@ import {
   setStatus,
   updateAnnouncement,
   validateAnnouncementDraft,
-} from "@/server/app-announcement/store";
+} from "@/server/app/announcement/store";
 import {jsonResponse, localizedError} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import type {AnnouncementDraft} from "@/shared/AppAnnouncement";

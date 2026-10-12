@@ -3,7 +3,7 @@
 - 状态：Accepted（已实施）
 - 日期：2026-10-11
 - 决策人：用户 + 设计评审
-- 关联设计：ADR-0002（D1 读路径优化）、`CONTEXT.md` 的「数据层（D1）」词条、迁移 `0097_ext_scan_index_tuning.sql` / `0102_ext_ordering_index_widening.sql`
+- 关联设计：ADR-0017（D1 读路径优化）、`CONTEXT.md` 的「数据层（D1）」词条、迁移 `0097_ext_scan_index_tuning.sql` / `0102_ext_ordering_index_widening.sql`
 - 实测报告：`.scratch/d1-full-scan-audit-2026-10-10.md`（探针在 `.scratch/d1-scan/`）
 
 ## 背景

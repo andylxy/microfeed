@@ -8,7 +8,7 @@
  *
  * 运行时中立是刻意的：不依赖 D1、不依赖 `cloudflare:workers`、不碰 DOM。
  * 对应数据表见 `migrations/0086_ext_app_announcement.sql`，服务端读写在
- * `src/server/app-announcement/store.ts`。
+ * `src/server/app/announcement/store.ts`。
  */
 
 /** 公告状态。与迁移 0086 的 `status` 列一一对应。 */

@@ -4,7 +4,7 @@ import {
   compareVersionCode,
   hashDevicePercent,
   parseAppVersionCode,
-} from "@/server/app-version/resolve";
+} from "@/server/app/version/resolve";
 
 /**
  * 纯逻辑测试（spec §6.3 / §6.4）。

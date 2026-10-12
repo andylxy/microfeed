@@ -2,7 +2,7 @@
 --
 -- App 版本下发配置（单行表）。后台「版本管理」页（/admin/app-versions/）读写这一行，
 -- 公共端点 `GET /api/app/version` 与版本门 `requireAppVersion` 从它读全局地板
--- `min_version_code`（spec §5.1 / §6.4，ADR-0002 / ADR-0008）。
+-- `min_version_code`（spec §5.1 / §6.4，ADR-0019 / ADR-0021）。
 --
 -- 单行约束用 `CHECK (id = 1)` 表达：配置是全局唯一的，多行没有语义。
 -- 初始化 1 行，`min_version_code = 0` 表示「不强制升级」——上线强制升级前必须
