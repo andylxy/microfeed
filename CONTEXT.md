@@ -110,6 +110,18 @@ TCM 条目在源书里的原始序号（`_microfeed.no`），是条目 / 方剂�
 **sourceBookId（源书标识）**：
 TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book_id` 分属两种成员关系模型：方剂按 `sourceBookId` 过滤（真实书 book_id 或容器 `tcmfang0001`），平铺型中药 / 名词书直接按 `items.book_id` 归属。两者是 TCM 书两种不同的成员关系，对应不同的查询前置谓词。
 
+**未命中上限**：
+缓存在给定 TTL 与 POP 数下、单 URL 每日最多回源多少次——等于 `min(当日请求数 R, 86400/TTL × P)`。TTL 短到每个请求都是回源时，缓存等价于没开；判断一个 TTL 配得对不对看它，不看「有没有开缓存」。P 是服务该 URL 的 Cloudflare 数据中心/边缘节点数：CDN 缓存跨站共享但按 POP 各自判新鲜度，`caches.default`（Cache API）则是每数据中心各一份、不复制。见 [ADR-0016](docs/novel-cms/adr/0016-cache-ttl-not-cache-itself.md)。
+
+**分层缓存边界**：
+公开读路径有两层且互不借力——CDN 边缘缓存（`Cloudflare-CDN-Cache-Control` 控制，覆盖 `isPublicPagePath` 的公开 HTML）与 Worker Cache API（`caches.default`，`cachedAppResponse` 持有，供被中间件强制 `no-store` 的 `/api/*` 用）。`/api/*` 一律不可 CDN 缓存；可 Worker 缓存的前提是返回体与调用者身份无关（`GetAllMingCi` 因按权限裁剪反被排除）。Cache API 另有两个坑：`cache.put`/`match` 不支持 `stale-while-revalidate` 与 `stale-if-error`，且 `cache.put` 不兼容 tiered caching。
+
+**写时清理完整性**：
+缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都打上 `Cache-Tag` 并 purge——漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。清理点集中在 `FeedDb.putContent` 与 `purgePublicCache` 的调用处；绕过它们直接 `FEED_DB.batch()` 的写入（如卷板的四个处理器）必须自带清理。
+
+**章节回跳锚点**：
+章页与书页之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>#mf-toc-<itemId>`，书页给每个目录行设 `id="mf-toc-<item id>"`。哈希不能只在一侧改——书页的目录由客户端分组重排、行会被重新挂载，所以收尾处必须按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。
+
 ## 响应式设计
 
 **移动层**：

@@ -6,6 +6,7 @@ import {z} from "zod";
 
 import {AppError} from "@/shared/errors";
 import {STATUSES} from "@/shared/Constants";
+import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 import FeedDb from "@/server/feed/FeedDb";
 import {createFeedCrud} from "@/server/feed/feed";
 import {planContentChange} from "@/server/feed/extContentReview";
@@ -210,6 +211,39 @@ async function patchChapters(
   return changed.map((entry) => entry.itemId);
 }
 
+/**
+ * 卷板写入后清理公开缓存。
+ *
+ * 这四个写入处理器都走裸 `FEED_DB.batch()`（含上面的 `patchChapters`），绕开了
+ * `FeedDb.putContent` 里那条 `_purgePublicCacheTags`——所以卷名 / 卷序 / 归档
+ * 变化改写了 `_microfeed.volume`、`title`、`tcm_parent_id`，**书页与章页的 CDN
+ * 缓存却不会被失效**。边缘 TTL 现在按 `PUBLIC_CACHE_EDGE_CONTROL` 是 24h，漏清理
+ * 的实际后果就是「改一次卷名，读者最长 24 小时看着旧目录分组」，这也是把 TTL
+ * 从 300s 拉到 24h 之前必须先补上的那个口子。
+ *
+ * 标签挑书页同款（`publicCacheTagsForPath` 对 `isBookPath` 挂 ITEMS + PAGES），
+ * 再逐条加被改写条目的 `mf:item:{id}`——章页 `isItemPath` 自己带的就是这个。
+ * 刻意不 purge `mf:public`：首页 / 分类页 / feed 只呈现书名、封面与 ADR-0012
+ * 物化后的章节数，这三项都不随卷名卷序变。
+ *
+ * 走 `database.purgePublicCacheTags` 而不是直接调 `purgePublicCache`，是为了沿
+ * 用实例上那三个开关（非 preview、有 ACCOUNT_ID、传了 purger）——构造 `FeedDb`
+ * 时已经算好，本地开发与无账号配置下自动跳过。
+ */
+async function purgeVolumeBoardCache(
+  database: FeedDb,
+  changedItemIds: Iterable<string>,
+): Promise<void> {
+  const tags = new Set<string>([
+    PUBLIC_CACHE_TAGS.ITEMS,
+    PUBLIC_CACHE_TAGS.PAGES,
+  ]);
+  for (const itemId of changedItemIds) {
+    tags.add(PUBLIC_CACHE_TAGS.item(itemId));
+  }
+  await database.purgePublicCacheTags([...tags]);
+}
+
 /** 每个请求一份 FeedDb 与 FeedCrud，外加本书的章节 id 集合，这样请求永远碰不到别的书的章节。 */
 async function openBook(
   request: Request,
@@ -289,6 +323,7 @@ export async function assignChaptersHandler(
         tcmChapterStatement(db, itemId, parentId, target)),
     );
   }
+  await purgeVolumeBoardCache(database, applied);
   return {updated: applied.length};
 }
 
@@ -322,9 +357,11 @@ export async function renameVolumeHandler(
   const applied = await patchChapters(database, feedCrud, targets);
   // 中医卷的名字就是那行篇章自己的标题——看板把这个标题当成组名渲染——所以重命名卷
   // 就是重命名那行，其下条文携带的标签也一并跟随。
+  let renamedTcmChapterId: string | null = null;
   if (tcm) {
     const chapterId = await findTcmChapterId(db, bookId, from.trim());
     if (chapterId) {
+      renamedTcmChapterId = chapterId;
       // 条文的过滤条件必须以 `tcm_kind` 打头，写入才能命中
       // `items_tcm_kind_parent (tcm_kind, tcm_parent_id)`，不必全表扫描；
       // 归到某个篇章下的每一行都是 `section`。
@@ -339,9 +376,12 @@ export async function renameVolumeHandler(
       ]);
     }
   }
+  await purgeVolumeBoardCache(
+    database,
+    renamedTcmChapterId ? [...applied, renamedTcmChapterId] : applied,
+  );
   return {updated: applied.length};
 }
-
 /** 改写给定章节的 `chapterNo`——这正是章节在卷内移动、以及跨卷移动的方式。 */
 export async function reorderChaptersHandler(
   request: Request,
@@ -364,6 +404,7 @@ export async function reorderChaptersHandler(
       allow: () => true,
     }));
   const applied = await patchChapters(database, feedCrud, targets);
+  await purgeVolumeBoardCache(database, applied);
   return {updated: applied.length};
 }
 
@@ -405,5 +446,6 @@ export async function setVolumeOrderHandler(
     }
   }
   const applied = await patchChapters(database, feedCrud, targets);
+  await purgeVolumeBoardCache(database, applied);
   return {updated: applied.length};
 }
