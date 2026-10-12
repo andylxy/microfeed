@@ -124,6 +124,14 @@
         var heading = document.createElement("h3");
         heading.className = "mf-volume-heading";
         heading.textContent = current.volume;
+        // Anchor the 篇章 so a 篇章 返回 (`#mf-toc-<篇章 id>`) resolves to this
+        // heading. The owning 篇章 id rides on every 条文 row as
+        // data-mf-chapter-id (stamped by getTcmBookChapters); pull it from the
+        // group's first row. A 条文 返回 resolves to the row itself instead.
+        var chapterId = current.rows.length
+          ? current.rows[0].getAttribute("data-mf-chapter-id") || ""
+          : "";
+        if (chapterId) heading.id = "mf-toc-" + chapterId;
         fragment.appendChild(heading);
       }
       for (var itemIndex = 0; itemIndex < current.rows.length; itemIndex++) {
@@ -132,6 +140,26 @@
     }
     while (list.firstChild) list.removeChild(list.firstChild);
     list.appendChild(fragment);
+  }
+
+  // A reader arriving from a chapter page carries `#mf-toc-<item id>` (the 返回
+  // affordance on `/i/[slug]` builds it). The browser's own hash scroll is
+  // unreliable here: this loop re-parents the rows, which changes where the
+  // anchor sits, and the scroll can happen before that finishes. So scroll again
+  // once the catalogue is in its final shape.
+  //
+  // The highlight is what actually answers "which entry did I come from" — on a
+  // catalogue long enough that scrolling alone does not identify the row. It is
+  // decorative and purely presentational: no class is asserted by any test and it
+  // carries no state, only a background that fades back via transition.
+  var target = null;
+  if (window.location.hash) {
+    target = document.getElementById(window.location.hash.slice(1));
+  }
+  if (target) {
+    target.scrollIntoView({block: "center"});
+    var host = target.querySelector("a[href]") || target;
+    host.classList.add("mf-toc-came-from");
   }
 })();
 </script>

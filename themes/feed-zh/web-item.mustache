@@ -53,12 +53,24 @@
         {{^items.0.content_html}}{{#items.0.content_text}}<p>{{items.0.content_text}}</p>{{/items.0.content_text}}{{/items.0.content_html}}
       </div>
 
-      <nav class="mf-reader-nav" aria-label="章节导航">
-        {{#previous_chapter}}<a href="{{url}}" class="mf-reader-nav-prev"><span>上一章</span><strong>{{title}}</strong></a>{{/previous_chapter}}
-        {{^previous_chapter}}<span class="mf-reader-nav-empty">已是第一章</span>{{/previous_chapter}}
-        <a href="{{toc_url}}" class="mf-reader-nav-toc">目录</a>
-        {{#next_chapter}}<a href="{{url}}" class="mf-reader-nav-next"><strong>{{title}}</strong><span>下一章</span></a>{{/next_chapter}}
-        {{^next_chapter}}<span class="mf-reader-nav-empty">已是最后一章</span>{{/next_chapter}}
+      {{! 阅读导航只保留一个「返回」。上一章 / 下一章 / 三段式目录曾经由阅读页
+          `src/pages/i/[slug]/index.astro` 拉「整本书的章节列表」算出，那两个查询
+          在 D1 上要步进全书条目（非 TCM 约 2,965 行、TCM 约 6,091 行）却只是为了
+          确定当前章的位置，在每天 5,000,000 行读的免费额度下是单页最贵的一笔。
+          排序键是 `COALESCE(json_extract(data,'$._microfeed.no'),
+          CAST(json_extract(data,'$._microfeed.section') AS TEXT))`，没有任何索引
+          能覆盖它（F4 已实测 TEMP B-TREE 消不掉），所以「便宜地只取两个邻居」
+          这条路不存在。
+          现在 `toc_url` 指向书页并带上 `#mf-toc-<当前条目 id>`——书页按同一约定
+          给每个目录行（条文）设了 `id="mf-toc-<条文 id>"`，给每个篇章分组标题
+          （`<h3 class="mf-volume-heading">`）设了 `id="mf-toc-<篇章 id>"`，于是
+          「返回」直接落在读者刚才点开的那一行（或那一篇章）上
+          （见 `web-feed.mustache` 与 `web-body-end.mustache` 的收尾滚动）。}}
+      <nav class="mf-reader-nav" aria-label="阅读导航">
+        <a href="{{toc_url}}" class="mf-reader-return">
+          <span class="icon-arrow-left" aria-hidden="true"></span>
+          <span>返回</span>
+        </a>
       </nav>
 
     </article>

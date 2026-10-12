@@ -243,6 +243,11 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
 .mf-tcm-table th, .mf-tcm-table td { text-align: left; padding: .35em .5em; border-bottom: 1px solid #eee; }
 .mf-tcm-table th { color: #6b6b6b; font-weight: 500; }
 .mf-tcm-link { display: inline-block; margin-top: 1em; font-size: .85em; color: #2563eb; }
+.mf-tcm-back {
+  display: inline-block; margin-top: 1em; font-size: .85em; color: #2563eb;
+  background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+}
+.mf-tcm-back:hover { text-decoration: underline; }
 .mf-tcm-refs { margin-top: 1em; border-top: 1px solid #eee; padding-top: .6em; }
 .mf-tcm-refs-h { font-size: .8em; color: #6b6b6b; margin-bottom: .3em; }
 .mf-tcm-refs ul { margin: 0; padding-left: 1.1em; }
@@ -293,23 +298,24 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
       inner += '<div class="mf-tcm-refs"><div class="mf-tcm-refs-h">引用此方剂的条文</div><ul>' +
         refItems + '</ul></div>';
     }
-    // The ternary MUST stay wrapped in ( … ). A newline followed by a line
-    // that starts with "(" would otherwise parse as a function call on the
-    // previous statement's value — open(id) throws TypeError, so the click
-    // handler never reaches preventDefault() and the browser follows the
-    // <a href> and navigates away instead of opening the dialog. Same pattern
-    // the prototype uses.
-    inner += '<a class="mf-tcm-link" href="' + esc(f.url) + '">打开' +
-      (f.kind === 'fang' ? '方剂' : '中药') + '页 →</a>';
+    // "返回" button replaces the old "打开…页 →" link: it closes the dialog
+    // and returns to the page you were reading, no navigation away.
+    inner += '<button type="button" class="mf-tcm-back" data-back="1">返回</button>';
     bodyEl.innerHTML = inner;
     if (typeof dlg.showModal === 'function') dlg.showModal();
     else dlg.setAttribute('open', '');
     return true;
   }
   // Only marker anchors carry a [data-tcm-kind] descendant; the dialog's own
-  // "打开…页" link has none, so it navigates normally instead of re-opening.
+  // 返回 button (and the refs links, which have no marker) fall through to
+  // default behaviour — the button's data-back closes the dialog, and refs
+  // navigate normally.
   document.addEventListener('click', function (e) {
     var t = e.target;
+    if (t && t.closest) {
+      var back = t.closest('[data-back]');
+      if (back) { e.preventDefault(); dlg.close(); return; }
+    }
     var a = t && t.closest ? t.closest('a[href^="/i/"]') : null;
     if (!a || !a.querySelector('[data-tcm-kind]')) return;
     var id = a.getAttribute('href').split('/').filter(Boolean).pop();

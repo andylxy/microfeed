@@ -651,11 +651,12 @@ export async function getTcmBookChapters(
 
   const catalog: Array<Record<string, any>> = [];
   for (const chapterRow of chapterRows) {
+    const chapterId = String(chapterRow.id);
     const chapterData = safeParseJson(chapterRow.data);
     const volumeName = typeof chapterData.title === "string" && chapterData.title
       ? chapterData.title
       : "未命名篇章";
-    const sectionRows = sectionsByParent.get(String(chapterRow.id)) ?? [];
+    const sectionRows = sectionsByParent.get(chapterId) ?? [];
 
     for (const [index, row] of sectionRows.entries()) {
       const data = safeParseJson(row.data);
@@ -675,6 +676,12 @@ export async function getTcmBookChapters(
           // The 篇章 this 条文 is filed under is the volume — set it from the
           // live structure so grouping never depends on a stale tag.
           volume: volumeName,
+          // The owning 篇章 id rides on every 条文 so the theme can anchor the
+          // volume `<h3>` heading with `id="mf-toc-<篇章 id>"` — that is what a
+          // 篇章 返回 (`#mf-toc-<篇章 id>`) resolves to on the book page
+          // (see web-feed.mustache + web-body-end.mustache). A 条文 返回
+          // resolves to the row itself via `id="mf-toc-<条文 id>"`.
+          chapterId,
           chapterNo: Number(
             Number.isFinite(Number(microfeed.chapterNo))
               ? Number(microfeed.chapterNo)

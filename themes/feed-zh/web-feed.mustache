@@ -64,7 +64,7 @@
       <div class="mf-detail-chapter-grid" data-mf-toc>
         {{^items.length}}<div class="mf-detail-empty">暂无章节</div>{{/items.length}}
         {{#items}}
-        <div class="mf-toc-item mf-detail-chapter-item" data-mf-volume="{{_microfeed.volume}}" data-mf-chapter-no="{{_microfeed.chapterNo}}">
+        <div class="mf-toc-item mf-detail-chapter-item" id="mf-toc-{{id}}" data-mf-volume="{{_microfeed.volume}}" data-mf-chapter-id="{{_microfeed.chapterId}}" data-mf-chapter-no="{{_microfeed.chapterNo}}">
           <a href="{{_microfeed.web_url}}">{{title}}</a>
         </div>
         {{/items}}
@@ -77,7 +77,7 @@
       <div class="mf-detail-volume-title">方剂目录 <span>共 {{book_fang.length}} 首</span></div>
       <div class="mf-detail-chapter-grid">
         {{#book_fang}}
-        <div class="mf-toc-item">
+        <div class="mf-toc-item" id="mf-toc-{{id}}">
           <a href="{{_microfeed.web_url}}">{{title}}</a>
         </div>
         {{/book_fang}}

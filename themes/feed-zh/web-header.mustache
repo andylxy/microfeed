@@ -987,9 +987,43 @@ html[data-mf-reader-night] .mf-reader-body {
   border-top: 1px solid var(--mf-border);
   display: flex;
   gap: 1rem;
-  justify-content: space-between;
+  /* 只剩「返回」一个链接后 space-between 会把孤零零一项推到左边，居中才对；
+     上一章 / 下一章在 2026-10-12 移除，原因见 web-item.mustache 里的注释。 */
+  justify-content: center;
   margin-top: 2.5rem;
   padding-top: 1.25rem;
+}
+
+/* The single return control. Styled after the header's own back button so the
+   two read as the same affordance, since they point at the same URL. */
+.mf-reader-return {
+  align-items: center;
+  color: var(--mf-accent);
+  display: inline-flex;
+  font-weight: 500;
+  gap: 0.375rem;
+}
+
+.mf-reader-return:hover {
+  opacity: 1;
+}
+
+/* Marks the 目录 row the reader came back from, set by the catalogue rebuild in
+   web-body-end.mustache. Purely presentational — no test asserts on it and it
+   holds no state. Tinted from `--mf-accent` so it tracks whichever theme block
+   is live (light / dark / sepia all inherit an accent). */
+.mf-toc-came-from {
+  background-color: rgba(127, 127, 127, 0.16);
+  background-color: color-mix(in srgb, var(--mf-accent) 16%, transparent);
+  border-radius: var(--mf-radius-control);
+  animation: mf-toc-came-from 2.4s ease-out;
+}
+
+@keyframes mf-toc-came-from {
+  from {
+    background-color: rgba(127, 127, 127, 0.34);
+    background-color: color-mix(in srgb, var(--mf-accent) 34%, transparent);
+  }
 }
 
 .mf-reader-nav a {

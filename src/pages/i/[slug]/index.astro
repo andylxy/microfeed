@@ -7,11 +7,7 @@ import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import {
-  getBookById,
-  getBookChapters,
-  getTcmBookChapters,
-} from "@/server/feed/extCategory";
+import {getBookById} from "@/server/feed/extCategory";
 import type {CategoryDb} from "@/server/feed/extCategory";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {loadSiteNav} from "@/server/feed/siteNav";
@@ -52,50 +48,55 @@ const assetBaseUrl = themeAssetBaseUrl(
 );
 const navigation = await loadSiteNav(loaded.database.FEED_DB, Astro.request);
 
-// The reading page needs its neighbours and a table of contents. Resolve them
-// from the chapter's own book via a direct `_microfeed.bookId` query rather
-// than the primary feed's paged window: the feed only returns its newest page
-// of items, so this used to list just the current chapter and then render
-// "已是第一章" and "已是最后一章" at the same time.
+// The reader's only navigation into the book is the 目录 link, which needs nothing
+// but the chapter's own `_microfeed.bookId` — already in hand below, so it costs
+// zero extra D1 reads.
+//
+// What used to be here: the page also fetched the chapter's *whole book* chapter
+// list (`getTcmBookChapters` / `getBookChapters`) purely to work out which chapter
+// is "previous" and which is "next". That stepped over the entire book — roughly
+// 2,965 rows for a non-TCM book and 6,091 for a TCM one — to answer a question
+// about position, which on the 5,000,000 rows_read/day free tier was the single
+// most expensive thing one page could do.
+//
+// It cannot be made cheap instead of removed. Reading two neighbours needs a
+// bounded seek over the reading-order key
+// `COALESCE(json_extract(data,'$._microfeed.no'), CAST(json_extract(data,'$._microfeed.section') AS TEXT))`,
+// and no index covers it: every candidate shape leaves a TEMP B-TREE behind
+// (measured while tuning the book page; that is why the ordering index work was
+// abandoned). Reverting to a `pub_date`/rowid order would answer the question
+// cheaply but wrongly — 篇章 → 条文 would jump out of sequence.
+//
+// So the link stays (`toc_url`, below — the book page lists every chapter, and it
+// is edge-cached for 24h so following it is free), and the neighbour buttons are
+// gone. See `themes/feed-zh/web-item.mustache` for the template side.
 const currentBookId = ((item?._microfeed ?? {}) as Record<string, unknown>)
   .bookId ?? null;
-const chapterDb = loaded.database.FEED_DB as unknown as CategoryDb;
 // A TCM book's readable sequence is 篇章 → 条文, and its 方剂 are a catalog of
 // their own rather than chapters. The published-only chapter list would pull
 // those 方剂 into the sequence and order everything by publish date, so a 条文
 // at the end of a 篇章 linked "next" to a prescription instead of the first 条文
-// of the following 篇章.
+// of the following 篇章. The probe still gates the marker layer below.
 const tcmProbe = currentBookId == null
   ? null
-  : await chapterDb.prepare(
+  : await (loaded.database.FEED_DB as unknown as CategoryDb).prepare(
       "SELECT 1 AS one FROM items WHERE book_id = ? " +
         "AND tcm_kind IS NOT NULL LIMIT 1",
     ).bind(String(currentBookId)).first();
-const bookChapters = currentBookId == null
-  ? []
-  : tcmProbe != null
-    ? await getTcmBookChapters(chapterDb, String(currentBookId), Astro.url.origin)
-    : await getBookChapters(chapterDb, String(currentBookId), Astro.url.origin);
-// Only lean metadata is kept: each chapter carries its full `content_html`, and
-// handing that to the theme would embed the whole novel into every chapter page.
-const chapters = bookChapters.map((chapter) => {
-  const extra = (chapter._microfeed ?? {}) as Record<string, unknown>;
-  return {
-    chapterNo: extra.chapterNo ?? null,
-    id: String(chapter.id ?? ""),
-    title: String(chapter.title ?? ""),
-    url: String(extra.web_url ?? ""),
-    volume: extra.volume ?? "",
-    bookId: currentBookId == null ? null : String(currentBookId),
-  };
-});
-const currentChapterIndex = chapters.findIndex((chapter) => chapter.id === itemId);
-const previousChapter = currentChapterIndex > 0
-  ? chapters[currentChapterIndex - 1]
-  : undefined;
-const nextChapter = currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1
-  ? chapters[currentChapterIndex + 1]
-  : undefined;
+
+// The book page tags every 目录 row with `id="mf-toc-<item id>"`
+// (`themes/feed-zh/web-feed.mustache`), so carrying this chapter's id as a hash
+// makes 返回 land on the exact row the reader came from rather than the top of
+// the catalogue. On a 典籍 whose catalogue runs to eight thousand entries that
+// is the difference between one click and a very long scroll.
+//
+// The header back button uses the same URL, so both return affordances agree on
+// where "back" is. Falling back without the hash when the id is missing keeps the
+// link valid rather than pointing at `#mf-toc-undefined`.
+const bookUrl = currentBookId ? `/book/${currentBookId}` : "/";
+const tocUrl = currentBookId != null && itemId
+  ? `${bookUrl}#mf-toc-${itemId}`
+  : bookUrl;
 
 // Light metadata for the bookshelf button: the reader knows its own chapter but
 // the shelf is keyed on the book, so hand the theme just enough to add one.
@@ -132,10 +133,10 @@ const extraContext = {
         url: `/book/${book.id}`,
       }
     : null,
-  chapters,
-  next_chapter: nextChapter,
-  previous_chapter: previousChapter,
-  toc_url: currentBookId ? `/book/${currentBookId}` : "/",
+  // `chapters` / `previous_chapter` / `next_chapter` used to live here; they were
+  // removed with the whole-book fetch that fed them (see the comment above).
+  // `toc_url` is the only chapter navigation left, and it costs no extra read.
+  toc_url: tocUrl,
   // `Theme.getWebItem` only assigns the deprecated `item` alias, while feed-zh
   // reads `items.0` — so without overriding the list the markerised body (and
   // the runtime) would never reach the template. This page fetches exactly one
