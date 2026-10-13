@@ -247,6 +247,11 @@ describe("TCM app read functions", () => {
     expect(byCode.get("f")?.linkType).toBe(2);
     expect(byCode.get("g")?.linkType).toBe(3);
     expect(byCode.get("w")?.isSmallFont).toBe(true);
-    expect(byCode.get("w")?.color).toBe("#1CB55C");
+    // 0110 aligned $w with the source app's Color.GREEN (was the softer #1CB55C).
+    expect(byCode.get("w")?.color).toBe("#00FF00");
+    // 0109 turned the renderer's hard-coded 0.7 into data; every seed row carries
+    // the column default, so nothing renders differently until it is edited.
+    expect(byCode.get("w")?.smallFontScale).toBe(0.7);
+    expect(byCode.get("f")?.smallFontScale).toBe(0.7);
   });
 });

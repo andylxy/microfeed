@@ -22,8 +22,14 @@ export interface TcmMarkerStyle {
   code: string;
   /** CSS-ready colour: `#RRGGBB` or `rgba(...)`. */
   color: string;
-  /** Render at 0.7x size (source app: `RelativeSizeSpan(0.7f)`). */
+  /** Render at a reduced size (source app: `RelativeSizeSpan`). */
   smallFont: boolean;
+  /**
+   * Ratio applied when `smallFont` is set, e.g. `0.7` for 70%. Absent means
+   * {@link DEFAULT_SMALL_FONT_SCALE} — that keeps every style object built
+   * before this field existed rendering exactly as it did.
+   */
+  smallFontScale?: number;
   /** 0 = plain, 1 = 中药, 2 = 方剂, 3 = 名词. */
   linkType: number;
 }
@@ -49,6 +55,17 @@ export interface TcmMarkerRenderContext {
 }
 
 const MARKER_START = /\$([a-zA-Z]{1,10})\{/y;
+
+/** Ratio used by a `smallFont` marker whose row carries no explicit ratio. */
+export const DEFAULT_SMALL_FONT_SCALE = 0.7;
+
+/** Clamp to the range the admin write layer accepts, so a hand-edited row can
+ *  never render text invisible (0) or larger than the body (2). */
+function smallFontScale(style: TcmMarkerStyle): number {
+  const raw = Number(style.smallFontScale);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_SMALL_FONT_SCALE;
+  return Math.min(1, Math.max(0.3, raw));
+}
 
 /** `&` → `&amp;`, `"` → `&quot;` — enough for safe attribute values. */
 function escapeAttr(value: string): string {
@@ -84,7 +101,7 @@ function wrap(
   options: TcmMarkerRenderOptions,
 ): string {
   const styles = [`color:${style.color}`];
-  if (style.smallFont) styles.push("font-size:0.7em");
+  if (style.smallFont) styles.push(`font-size:${smallFontScale(style)}em`);
   const attributes = [
     `class="mf-mk mf-mk-${escapeAttr(style.code)}"`,
     `style="${escapeAttr(styles.join(";"))}"`,

@@ -6,11 +6,47 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {cn} from "@/lib/utils";
 import {ADMIN_URLS} from "@/shared/StringUtils";
+import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
 import type {AnnotationMarker} from "@/server/admin/annotation-marker-handlers";
 
 interface Props {
   initialMarkers: AnnotationMarker[];
 }
+
+/** Fallback colour for the create form — the renderer's own grey. */
+const DEFAULT_MARKER_COLOR = "#808080";
+
+/** link_type values and the i18n key naming each one. */
+const LINK_TYPES: Array<{value: number; label: string}> = [
+  {value: 0, label: "annotationMarkers.linkTypeNone"},
+  {value: 1, label: "annotationMarkers.linkTypeYao"},
+  {value: 2, label: "annotationMarkers.linkTypeFang"},
+  {value: 3, label: "annotationMarkers.linkTypeTerm"},
+];
+
+/** The presentation fields, shared by the edit row and the create form. */
+interface StyleDraft {
+  color: string;
+  smallFont: boolean;
+  smallFontScale: string;
+  linkType: number;
+}
+
+function draftOf(marker: AnnotationMarker): StyleDraft {
+  return {
+    color: marker.color,
+    smallFont: marker.smallFont,
+    smallFontScale: String(marker.smallFontScale),
+    linkType: marker.linkType,
+  };
+}
+
+const EMPTY_DRAFT: StyleDraft = {
+  color: DEFAULT_MARKER_COLOR,
+  smallFont: false,
+  smallFontScale: String(DEFAULT_SMALL_FONT_SCALE),
+  linkType: 0,
+};
 
 /** Pull the already-localized error message out of a failed admin ajax response. */
 async function parseError(response: Response, fallback: string): Promise<string> {
@@ -22,11 +58,87 @@ async function parseError(response: Response, fallback: string): Promise<string>
   }
 }
 
+/** The marker text as the public pages will paint it: colour + optional size. */
+function MarkerPreview({draft}: {draft: StyleDraft}) {
+  return (
+    <span
+      className="mf-mk"
+      style={{
+        color: draft.color,
+        ...(draft.smallFont ? {fontSize: `${draft.smallFontScale}em`} : {}),
+      }}
+    >
+      示例
+    </span>
+  );
+}
+
+/** The four style inputs, reused by the edit row and the create form. */
+function StyleFields({
+  draft,
+  onChange,
+  t,
+}: {
+  draft: StyleDraft;
+  onChange: (next: StyleDraft) => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <>
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="inline-block h-5 w-5 shrink-0 rounded border"
+          style={{background: draft.color}}
+        />
+        <Input
+          aria-label={t("annotationMarkers.color")}
+          className="w-40 font-mono text-xs"
+          onChange={(event) => onChange({...draft, color: event.target.value})}
+          value={draft.color}
+        />
+      </span>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          checked={draft.smallFont}
+          onChange={(event) => onChange({...draft, smallFont: event.target.checked})}
+          type="checkbox"
+        />
+        {t("annotationMarkers.smallFont")}
+      </label>
+      <Input
+        aria-label={t("annotationMarkers.smallFontScale")}
+        className="w-20"
+        disabled={!draft.smallFont}
+        max={1}
+        min={0.3}
+        onChange={(event) => onChange({...draft, smallFontScale: event.target.value})}
+        step={0.05}
+        type="number"
+        value={draft.smallFontScale}
+      />
+      <select
+        aria-label={t("annotationMarkers.linkType")}
+        className="rounded-md border bg-background px-3 py-2 text-sm"
+        onChange={(event) => onChange({...draft, linkType: Number(event.target.value)})}
+        value={draft.linkType}
+      >
+        {LINK_TYPES.map((option) => (
+          <option key={option.value} value={option.value}>
+            {t(option.label)}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
 /**
  * Admin screen for the annotation markers. The markers are the toolbar buttons
- * the wangEditor body editor turns into `$<code>{...}` wrappers. Adding,
- * renaming or removing a marker here takes effect on the next editor load with
- * no redeploy.
+ * the wangEditor body editor turns into `$<code>{...}` wrappers, and the same
+ * catalogue is what the public pages paint those wrappers with — so the colour,
+ * the reduced size (and its ratio) and the link type are all edited here rather
+ * than in a migration. Changes take effect on the next page load, no redeploy.
  */
 export default function AnnotationMarkersApp({initialMarkers}: Props) {
   const {t} = useTranslation();
@@ -37,10 +149,12 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
   const [newCode, setNewCode] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newMulti, setNewMulti] = useState(false);
+  const [newDraft, setNewDraft] = useState<StyleDraft>(EMPTY_DRAFT);
 
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editMulti, setEditMulti] = useState(false);
+  const [editDraft, setEditDraft] = useState<StyleDraft>(EMPTY_DRAFT);
 
   const refresh = (next: AnnotationMarker[]) => setMarkers(next);
 
@@ -49,7 +163,15 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
     setBusy(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxAnnotationMarkersCreate(), {
-        body: JSON.stringify({code: newCode, title: newTitle, multi: newMulti}),
+        body: JSON.stringify({
+          code: newCode,
+          title: newTitle,
+          multi: newMulti,
+          color: newDraft.color,
+          smallFont: newDraft.smallFont,
+          smallFontScale: Number(newDraft.smallFontScale),
+          linkType: newDraft.linkType,
+        }),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -62,6 +184,7 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
       setNewCode("");
       setNewTitle("");
       setNewMulti(false);
+      setNewDraft(EMPTY_DRAFT);
       showToast(t("annotationMarkers.created"), "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("annotationMarkers.createFailed"), "error");
@@ -74,6 +197,7 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
     setEditing(marker.code);
     setEditTitle(marker.title);
     setEditMulti(marker.multi);
+    setEditDraft(draftOf(marker));
   };
 
   const saveEdit = async (code: string) => {
@@ -81,7 +205,15 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
     setBusy(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxAnnotationMarkersUpdate(), {
-        body: JSON.stringify({code, title: editTitle, multi: editMulti}),
+        body: JSON.stringify({
+          code,
+          title: editTitle,
+          multi: editMulti,
+          color: editDraft.color,
+          smallFont: editDraft.smallFont,
+          smallFontScale: Number(editDraft.smallFontScale),
+          linkType: editDraft.linkType,
+        }),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -122,103 +254,149 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
     }
   };
 
+  const linkTypeLabel = (value: number) =>
+    t(LINK_TYPES.find((option) => option.value === value)?.label ?? "annotationMarkers.linkTypeNone");
+
   return (
     <div className="annotation-markers">
       <p className="annotation-markers__hint">{t("annotationMarkers.description")}</p>
 
-      <table className="annotation-markers__table">
-        <thead>
-          <tr>
-            <th>{t("annotationMarkers.code")}</th>
-            <th>{t("annotationMarkers.title")}</th>
-            <th>{t("annotationMarkers.multi")}</th>
-            <th className="annotation-markers__actions">{t("annotationMarkers.actions")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {markers.map((marker) => (
-            <tr key={marker.code}>
-              <td><code>{marker.code}</code></td>
-              <td>
-                {editing === marker.code ? (
-                  <Input
-                    value={editTitle}
-                    onChange={(event) => setEditTitle(event.target.value)}
-                  />
-                ) : (
-                  marker.title
-                )}
-              </td>
-              <td>
-                {editing === marker.code ? (
-                  <label className="annotation-markers__multi">
-                    <input
-                      checked={editMulti}
-                      onChange={(event) => setEditMulti(event.target.checked)}
-                      type="checkbox"
-                    />
-                    {t("annotationMarkers.multi")}
-                  </label>
-                ) : marker.multi ? (
-                  <span className="annotation-markers__badge">{t("annotationMarkers.multi")}</span>
-                ) : (
-                  ""
-                )}
-              </td>
-              <td className="annotation-markers__actions">
-                {editing === marker.code ? (
-                  <>
-                    <Button disabled={busy} onClick={() => saveEdit(marker.code)} size="sm">
-                      {t("annotationMarkers.save")}
-                    </Button>
-                    <Button
-                      onClick={() => setEditing(null)}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("annotationMarkers.cancel")}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button onClick={() => startEdit(marker)} size="sm" variant="ghost">
-                      {t("annotationMarkers.edit")}
-                    </Button>
-                    <Button
-                      className={cn("annotation-markers__danger")}
-                      onClick={() => remove(marker)}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("annotationMarkers.delete")}
-                    </Button>
-                  </>
-                )}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="annotation-markers__table w-full text-sm">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="py-2 pr-4">{t("annotationMarkers.code")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.title")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.preview")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.color")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.smallFont")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.smallFontScale")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.linkType")}</th>
+              <th className="py-2 pr-4">{t("annotationMarkers.multi")}</th>
+              <th className="annotation-markers__actions py-2">{t("annotationMarkers.actions")}</th>
             </tr>
-          ))}
-          {markers.length === 0 && (
-            <tr>
-              <td colSpan={4} className="annotation-markers__empty">
-                {t("annotationMarkers.empty")}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {markers.map((marker) => {
+              const draft = editing === marker.code ? editDraft : draftOf(marker);
+              return (
+                <tr key={marker.code} className="border-b align-middle">
+                  <td className="py-2 pr-4"><code>{marker.code}</code></td>
+                  <td className="py-2 pr-4">
+                    {editing === marker.code ? (
+                      <Input
+                        value={editTitle}
+                        onChange={(event) => setEditTitle(event.target.value)}
+                      />
+                    ) : (
+                      marker.title
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">
+                    <MarkerPreview draft={draft} />
+                  </td>
+                  {editing === marker.code ? (
+                    <td className="py-2 pr-4" colSpan={4}>
+                      <span className="flex flex-wrap items-center gap-3">
+                        <StyleFields draft={editDraft} onChange={setEditDraft} t={t} />
+                      </span>
+                    </td>
+                  ) : (
+                    <>
+                      <td className="py-2 pr-4">
+                        <span className="flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className="inline-block h-5 w-5 shrink-0 rounded border"
+                            style={{background: marker.color}}
+                          />
+                          <span className="font-mono text-xs">{marker.color}</span>
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4">{marker.smallFont ? "✓" : "—"}</td>
+                      <td className="py-2 pr-4">{marker.smallFont ? `${marker.smallFontScale}×` : "—"}</td>
+                      <td className="py-2 pr-4">{linkTypeLabel(marker.linkType)}</td>
+                    </>
+                  )}
+                  <td className="py-2 pr-4">
+                    {editing === marker.code ? (
+                      <label className="annotation-markers__multi">
+                        <input
+                          checked={editMulti}
+                          onChange={(event) => setEditMulti(event.target.checked)}
+                          type="checkbox"
+                        />
+                        {t("annotationMarkers.multi")}
+                      </label>
+                    ) : marker.multi ? (
+                      <span className="annotation-markers__badge">{t("annotationMarkers.multi")}</span>
+                    ) : (
+                      ""
+                    )}
+                  </td>
+                  <td className="annotation-markers__actions py-2">
+                    {editing === marker.code ? (
+                      <>
+                        <Button disabled={busy} onClick={() => saveEdit(marker.code)} size="sm">
+                          {t("annotationMarkers.save")}
+                        </Button>
+                        <Button
+                          onClick={() => setEditing(null)}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          {t("annotationMarkers.cancel")}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button onClick={() => startEdit(marker)} size="sm" variant="ghost">
+                          {t("annotationMarkers.edit")}
+                        </Button>
+                        <Button
+                          className={cn("annotation-markers__danger")}
+                          onClick={() => remove(marker)}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          {t("annotationMarkers.delete")}
+                        </Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {markers.length === 0 && (
+              <tr>
+                <td colSpan={9} className="annotation-markers__empty">
+                  {t("annotationMarkers.empty")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {creating ? (
-        <div className="annotation-markers__form">
+        <div className="annotation-markers__form mt-4 flex flex-wrap items-center gap-3">
           <Input
+            className="w-24"
             placeholder={t("annotationMarkers.codePlaceholder")}
             value={newCode}
             onChange={(event) => setNewCode(event.target.value)}
           />
           <Input
+            className="w-48"
             placeholder={t("annotationMarkers.titlePlaceholder")}
             value={newTitle}
             onChange={(event) => setNewTitle(event.target.value)}
           />
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            {t("annotationMarkers.preview")}：
+            <MarkerPreview draft={newDraft} />
+          </span>
+          <StyleFields draft={newDraft} onChange={setNewDraft} t={t} />
           <label className="annotation-markers__multi">
             <input
               checked={newMulti}
@@ -235,7 +413,7 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
           </Button>
         </div>
       ) : (
-        <Button onClick={() => setCreating(true)} size="sm">
+        <Button className="mt-4" onClick={() => setCreating(true)} size="sm">
           {t("annotationMarkers.new")}
         </Button>
       )}

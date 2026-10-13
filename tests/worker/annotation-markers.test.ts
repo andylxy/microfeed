@@ -62,10 +62,17 @@ describe("annotation marker handlers", () => {
     // linkType: 1 = 中药 ($u), 2 = 方剂 ($f), 3 = 名词 ($g); everything else 0.
     const {results} = await env.FEED_DB
       .prepare(
-        "SELECT code, title, color, small_font, link_type FROM ext_annotation_markers " +
-        "ORDER BY sort_order",
+        "SELECT code, title, color, small_font, small_font_scale, link_type " +
+        "FROM ext_annotation_markers ORDER BY sort_order",
       )
-      .all<{code: string; title: string; color: string; small_font: number; link_type: number}>();
+      .all<{
+        code: string;
+        title: string;
+        color: string;
+        small_font: number;
+        small_font_scale: number;
+        link_type: number;
+      }>();
 
     const byCode = new Map(results.map((row) => [row.code, row]));
     expect(byCode.get("u")?.link_type).toBe(1);
@@ -84,7 +91,17 @@ describe("annotation marker handlers", () => {
     expect(byCode.get("a")?.title).toBe("$a 按语");
     expect(byCode.get("u")?.title).toBe("$u 中药");
     expect(byCode.get("x")?.title).toBe("$x 橙字");
-    expect(byCode.get("w")?.color).toBe("#1CB55C");
+    // 0110 aligned these two colours with the source app's own definitions:
+    // $w was a softer green than Color.GREEN, and $y had no colour at all.
+    expect(byCode.get("w")?.color).toBe("#00FF00");
+    expect(byCode.get("y")?.color).toBe("#9A764F");
+    // 0071 kept the source's `argb(230, 0, 128, 255)` as this rgba value.
+    expect(byCode.get("g")?.color).toBe("rgba(0, 128, 255, 0.90)");
+    // 0109 turned the renderer's hard-coded 0.7 into data; the column default
+    // keeps every seed row rendering exactly as it did before.
+    for (const code of SEED_CODES) {
+      expect(byCode.get(code)?.small_font_scale).toBe(0.7);
+    }
     expect(results).toHaveLength(SEED_CODES.length);
   });
 
@@ -159,6 +176,88 @@ describe("annotation marker handlers", () => {
       request: post({code: "nope"}),
     } as any);
     expect(missingDelete.status).toBe(404);
+  });
+
+  it("writes the style fields, and a partial payload leaves them alone", async () => {
+    await createAnnotationMarkerEndpoint({
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+      request: post({code: "z", title: "$z 针灸"}),
+    } as any);
+
+    const styled = await updateAnnotationMarkerEndpoint({
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+      request: post({
+        code: "z",
+        title: "$z 针灸",
+        multi: false,
+        color: "#123456",
+        smallFont: true,
+        smallFontScale: 0.55,
+        linkType: 1,
+      }),
+    } as any);
+    expect(styled.status).toBe(200);
+    const data = (await styled.json()) as {
+      markers: {
+        code: string;
+        title: string;
+        color: string;
+        smallFont: boolean;
+        smallFontScale: number;
+        linkType: number;
+      }[];
+    };
+    const z = data.markers.find((m) => m.code === "z");
+    expect(z?.color).toBe("#123456");
+    expect(z?.smallFont).toBe(true);
+    expect(z?.smallFontScale).toBe(0.55);
+    expect(z?.linkType).toBe(1);
+
+    // The update endpoint is a patch: a payload that carries no style fields
+    // must not blank out the ones it never mentioned.
+    const renamed = await updateAnnotationMarkerEndpoint({
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+      request: post({code: "z", title: "$z 针灸科", multi: true}),
+    } as any);
+    expect(renamed.status).toBe(200);
+    const after = ((await renamed.json()) as {markers: (typeof data)["markers"]}).markers.find(
+      (m) => m.code === "z",
+    );
+    expect(after?.title).toBe("$z 针灸科");
+    expect(after?.color).toBe("#123456");
+    expect(after?.smallFontScale).toBe(0.55);
+  });
+
+  it("rejects an invalid colour, scale or link type", async () => {
+    await createAnnotationMarkerEndpoint({
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+      request: post({code: "z", title: "$z 针灸"}),
+    } as any);
+
+    const badBodies = [
+      {color: "red"},
+      {color: "#12345"},
+      {color: "rgb(300, 0, 0)"},
+      {smallFontScale: 0.1},
+      {smallFontScale: 2},
+      {smallFontScale: "wide"},
+      {linkType: 9},
+      {smallFont: "yes"},
+    ];
+    for (const bad of badBodies) {
+      const response = await updateAnnotationMarkerEndpoint({
+        locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+        request: post({code: "z", title: "$z 针灸", ...bad}),
+      } as any);
+      expect(response.status, JSON.stringify(bad)).toBe(400);
+    }
+
+    // The seeded rgba() value is the reason the alpha form must be accepted.
+    const accepted = await updateAnnotationMarkerEndpoint({
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
+      request: post({code: "z", title: "$z 针灸", color: "rgba(0, 128, 255, 0.90)"}),
+    } as any);
+    expect(accepted.status).toBe(200);
   });
 
   it("refuses mutations to an account without the manage permission", async () => {

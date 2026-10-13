@@ -15,6 +15,7 @@
  * deterministic wrapping.
  */
 
+import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
 import {TCM_CHAPTER_ORDER_SQL} from "./ordering";
 import {JINGSHU_ONLY_YAO_NAMES} from "./zhongyao-anchor";
 
@@ -124,6 +125,8 @@ export interface AppStyleItem {
   marker: string;
   color: string;
   isSmallFont: boolean;
+  /** Ratio for a `isSmallFont` marker, e.g. `0.7` for 70%. */
+  smallFontScale: number;
   linkType: number;
 }
 
@@ -808,7 +811,8 @@ export async function getAppStyleConfig(
   return withEmpty("getAppStyleConfig", async () => {
     const {results} = await db
       .prepare(
-        "SELECT code, title, color, small_font, link_type FROM ext_annotation_markers " +
+        "SELECT code, title, color, small_font, small_font_scale, link_type " +
+          "FROM ext_annotation_markers " +
           "ORDER BY sort_order",
       )
       .all();
@@ -816,6 +820,9 @@ export async function getAppStyleConfig(
       marker: String(row.code),
       color: String(row.color ?? "#808080"),
       isSmallFont: row.small_font === 1,
+      // Rows written before 0109 carry the column default (0.7), which is
+      // exactly what the renderer used to hard-code.
+      smallFontScale: Number(row.small_font_scale ?? DEFAULT_SMALL_FONT_SCALE),
       linkType: Number(row.link_type ?? 0),
     }));
   });

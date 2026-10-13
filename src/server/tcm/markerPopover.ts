@@ -87,6 +87,7 @@ function mapStyles(list: AppStyleItem[]): TcmMarkerStyle[] {
     code: s.marker,
     color: s.color,
     smallFont: s.isSmallFont,
+    smallFontScale: s.smallFontScale,
     linkType: s.linkType,
   }));
 }
@@ -327,6 +328,122 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
 </script>`;
 }
 
+/** How many 条文 a 方剂 popover lists before it caps. */
+const MAX_REFERENCES = 50;
+
+/** D1 caps a batch; one book's citations (478 rows here) would blow one call. */
+const CITATION_BATCH_SIZE = 100;
+
+/**
+ * Make sure `ext_marker_citations` holds this book's reverse index.
+ *
+ * Dirty-flag + lazy full recompute, the same shape migration 0103 uses for
+ * `ext_book_stats`: the triggers on `items` only clear `computed_at_ms`, and the
+ * real work happens here, when a reader finds the index stale — once per change
+ * cycle instead of once per page render.
+ *
+ * ⚠️ 前置不变量（ADR-0025 D6 / 用户 2026-10-13 强调）：正文在 `data.description` 里
+ * **按原形保存**，`$f{桂枝汤}` 是原文的一部分；渲染成 `<span>` 只发生在显示时。
+ * 这里只从原文里**提取**名字，表里不含任何 HTML。提取用的是 `extractMarkerNames`
+ * —— 与渲染路径同一个函数，所以「什么算一个标记」索引与渲染器不可能产生分歧。
+ *
+ * 顺序是 clear → 分片 insert → 最后盖时间戳：中途失败会留下"时间戳仍是 0"的脏行，
+ * 下一位读者会把它重算一遍，于是永远不会服务半份索引。
+ */
+async function ensureMarkerCitations(
+  db: D1Database,
+  bookId: string,
+): Promise<void> {
+  const state = await db
+    .prepare("SELECT computed_at_ms FROM ext_marker_citation_state WHERE book_id = ?")
+    .bind(bookId)
+    .first<{computed_at_ms: number}>();
+  if (state && Number(state.computed_at_ms) !== 0) return;
+
+  const {results} = await db
+    .prepare(
+      "SELECT id, rowid AS seq, data FROM items " +
+        "WHERE book_id = ? AND tcm_kind IN ('section', 'chapter') AND status IN (1, 4)",
+    )
+    .bind(bookId)
+    .all<{id: string; seq: number; data: unknown}>();
+
+  const rows: D1PreparedStatement[] = [];
+  for (const row of results ?? []) {
+    const d = parseData(row.data);
+    const names = extractMarkerNames(String(d.description ?? ""));
+    const sectionId = String(row.id);
+    const sectionTitle = String(d.title ?? "");
+    // 重算时的 rowid，用来复刻"无 ORDER BY 的 rowid 顺序"这一既有展示顺序。
+    const seq = Number(row.seq) || 0;
+    for (const name of names.fang) {
+      rows.push(
+        db
+          .prepare(
+            "INSERT OR REPLACE INTO ext_marker_citations " +
+              "(book_id, marker_code, marker_name, section_id, section_title, section_seq) " +
+              "VALUES (?, ?, ?, ?, ?, ?)",
+          )
+          .bind(bookId, "f", name, sectionId, sectionTitle, seq),
+      );
+    }
+    for (const name of names.yao) {
+      rows.push(
+        db
+          .prepare(
+            "INSERT OR REPLACE INTO ext_marker_citations " +
+              "(book_id, marker_code, marker_name, section_id, section_title, section_seq) " +
+              "VALUES (?, ?, ?, ?, ?, ?)",
+          )
+          .bind(bookId, "u", name, sectionId, sectionTitle, seq),
+      );
+    }
+  }
+
+  await db
+    .prepare("DELETE FROM ext_marker_citations WHERE book_id = ?")
+    .bind(bookId)
+    .run();
+  for (let i = 0; i < rows.length; i += CITATION_BATCH_SIZE) {
+    await db.batch(rows.slice(i, i + CITATION_BATCH_SIZE));
+  }
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO ext_marker_citation_state (book_id, computed_at_ms) VALUES (?, ?) " +
+          "ON CONFLICT(book_id) DO UPDATE SET computed_at_ms = excluded.computed_at_ms",
+      )
+      .bind(bookId, Date.now()),
+  ]);
+}
+
+/**
+ * The 条文 citing one 方剂, in source order.
+ *
+ * `marker_code = 'f'` is **required** for the
+ * `(book_id, marker_code, marker_name, section_seq)` index to be used — without it
+ * the planner walks every citation row the book has. Measured: 709 rows_read
+ * without the code column, 60 with it.
+ */
+async function findMarkerReferences(
+  db: D1Database,
+  bookId: string,
+  fangName: string,
+): Promise<Array<{id: string; title: string}>> {
+  const {results} = await db
+    .prepare(
+      "SELECT section_id, section_title FROM ext_marker_citations " +
+        "WHERE book_id = ? AND marker_code = 'f' AND marker_name = ? " +
+        "ORDER BY section_seq LIMIT ?",
+    )
+    .bind(bookId, fangName, MAX_REFERENCES)
+    .all<{section_id: string; section_title: string}>();
+  return (results ?? []).map((row) => ({
+    id: String(row.section_id),
+    title: String(row.section_title),
+  }));
+}
+
 /**
  * Build the marker layer for one item page. Returns `bodyHtml` always (it falls
  * back to the input when no styles/markers apply) and `titleHtml` / `runtimeHtml`
@@ -384,42 +501,11 @@ export async function buildTcmMarkerLayer(
     return {titleHtml: null, bodyHtml: bodyHtmlIn, runtimeHtml: null};
   }
 
-  // Load this book's 条文/篇章 ONCE (book-scoped via the `book_id` index, so the
-  // planner seeks on `items_book_id` and filters `tcm_kind`/`status` as residual)
-  // so every 方剂 can list the 条文 that cite it via `$f{方名}` — without one
-  // query per formula. Container channels carry no 条文, so skip them.
-  const bookSections: Array<{id: string; title: string; desc: string}> = [];
-  if (fangByName.size > 0 && !CONTAINER_CHANNEL_IDS.has(opts.currentBookId)) {
-    const {results} = await db
-      .prepare(
-        "SELECT id, data FROM items " +
-          "WHERE book_id = ? AND tcm_kind IN ('section', 'chapter') " +
-          "AND status IN (1, 4)",
-      )
-      .bind(opts.currentBookId)
-      .all();
-    for (const row of results ?? []) {
-      const d = parseData(row.data);
-      bookSections.push({
-        id: String(row.id),
-        title: String(d.title ?? ""),
-        desc: String(d.description ?? ""),
-      });
-    }
-  }
-  const findReferences = (fangName: string): Array<{id: string; title: string}> => {
-    const needle = `$f{${fangName}}`;
-    const out: Array<{id: string; title: string}> = [];
-    const seen = new Set<string>();
-    for (const s of bookSections) {
-      if (s.desc.includes(needle) && !seen.has(s.id)) {
-        seen.add(s.id);
-        out.push({id: s.id, title: s.title});
-        if (out.length >= 50) break; // cap the popover list
-      }
-    }
-    return out;
-  };
+  // The 条文 that cite each 方剂 come from `ext_marker_citations` (migration 0111).
+  // Container channels carry no 条文, so they have no index to build either.
+  const citationsReady =
+    fangByName.size > 0 && !CONTAINER_CHANNEL_IDS.has(opts.currentBookId);
+  if (citationsReady) await ensureMarkerCitations(db, opts.currentBookId);
 
   // Build popover data: seed from the page's markers, then follow markers that
   // appear inside resolved 方剂/中药 bodies so the dialog's own links work.
@@ -471,7 +557,11 @@ export async function buildTcmMarkerLayer(
   // are resolved — including those reached through nested markers.
   for (const id of Object.keys(data)) {
     const entry = data[id];
-    if (entry && entry.kind === "fang") entry.references = findReferences(entry.name);
+    if (entry && entry.kind === "fang") {
+      entry.references = citationsReady
+        ? await findMarkerReferences(db, opts.currentBookId, entry.name)
+        : [];
+    }
   }
 
   return {titleHtml, bodyHtml: renderedBody, runtimeHtml: buildRuntimeHtml(data)};

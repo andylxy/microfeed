@@ -8,9 +8,10 @@ import {buildTcmMarkerLayer, type TcmPopoverEntry} from "@/server/tcm/markerPopo
 // name), 0 = small-font annotation only. These mirror the ext_annotation_markers
 // rows seeded into the real DB below.
 const STYLES = [
-  {code: "u", color: "#2a7", small_font: 0, link_type: 1},
-  {code: "f", color: "#a23", small_font: 0, link_type: 2},
-  {code: "w", color: "#888", small_font: 1, link_type: 0},
+  {code: "u", color: "#2a7", small_font: 0, small_font_scale: 0.7, link_type: 1},
+  {code: "f", color: "#a23", small_font: 0, small_font_scale: 0.7, link_type: 2},
+  // 不是默认 0.7 —— 覆盖 0109 起由后台配置的缩小比例
+  {code: "w", color: "#888", small_font: 1, small_font_scale: 0.55, link_type: 0},
 ];
 
 interface FangRow { id: string; data: any; }
@@ -39,7 +40,22 @@ function makeD1(database: DatabaseSync): D1Database {
       },
     };
   }
-  return {prepare(sql: string) { return statement(sql, []); }} as unknown as D1Database;
+  return {
+    prepare(sql: string) { return statement(sql, []); },
+    // D1 的 batch 是单事务全成或全回滚。这里用显式事务复刻，好让断言能看到
+    // 「中途失败 ⇒ 时间戳仍是 0」这一 `ensureMarkerCitations` 依赖的性质。
+    async batch(list: any[]) {
+      database.exec("BEGIN");
+      try {
+        const out = list.map((s) => s.run());
+        database.exec("COMMIT");
+        return out;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  } as unknown as D1Database;
 }
 
 // Build a real, in-memory D1-backed database: an `items` table (fang/yao/section)
@@ -64,8 +80,26 @@ function makeRealDb(
       title TEXT,
       color TEXT,
       small_font INTEGER,
+      small_font_scale REAL NOT NULL DEFAULT 0.7,
       link_type INTEGER,
       sort_order INTEGER
+    );
+    -- 0111：标注引用物化表。列名/主键与该迁移逐字一致，否则真实 SQL 会在
+    -- 这里报 no such table / no such column。
+    CREATE TABLE ext_marker_citations (
+      book_id TEXT NOT NULL,
+      marker_code TEXT NOT NULL,
+      marker_name TEXT NOT NULL,
+      section_id TEXT NOT NULL,
+      section_title TEXT NOT NULL DEFAULT '',
+      section_seq INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (book_id, marker_code, marker_name, section_id)
+    );
+    CREATE INDEX ext_marker_citations_lookup
+      ON ext_marker_citations (book_id, marker_code, marker_name, section_seq);
+    CREATE TABLE ext_marker_citation_state (
+      book_id TEXT PRIMARY KEY,
+      computed_at_ms INTEGER NOT NULL DEFAULT 0
     );
   `);
   const ins = database.prepare(
@@ -81,9 +115,11 @@ function makeRealDb(
     ins.run(r.id, JSON.stringify(r.data), "section", 1, r.book_id);
   }
   const mins = database.prepare(
-    "INSERT INTO ext_annotation_markers (code, title, color, small_font, link_type, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO ext_annotation_markers (code, title, color, small_font, small_font_scale, link_type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
-  STYLES.forEach((s, i) => mins.run(s.code, "", s.color, s.small_font, s.link_type, i));
+  STYLES.forEach((s, i) =>
+    mins.run(s.code, "", s.color, s.small_font, s.small_font_scale, s.link_type, i),
+  );
 
   return makeD1(database);
 }

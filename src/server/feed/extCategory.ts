@@ -628,73 +628,229 @@ export async function getBookChapters(
  * which is what makes a TCM book render with the same "volume heading +
  * chapters" shape a novel does.
  */
+/**
+ * Shape one 条文 row the way every public catalog consumer expects.
+ *
+ * Shared by the whole-book catalog (`getTcmBookChapters`) and the single-volume
+ * reader (`getVolumeSections`) so the two can never drift — the volume page is
+ * literally a slice of what the book catalog builds.
+ */
+function mapTcmSectionRow(
+  row: Record<string, unknown>,
+  context: {
+    baseUrl: string;
+    chapterId: string;
+    index: number;
+    volumeName: string;
+  },
+): Record<string, any> {
+  const data = safeParseJson(row.data);
+  const id = String(row.id);
+  const title = typeof data.title === "string" ? data.title : "未命名章节";
+  const microfeed = data._microfeed && typeof data._microfeed === "object"
+    ? data._microfeed as Record<string, unknown>
+    : {};
+  const pubDate = typeof row.pub_date === "string" ? row.pub_date : "";
+  const shortDate = pubDate ? pubDate.slice(0, 10) : "";
+  return {
+    id,
+    ...data,
+    ...(pubDate ? {date_published: pubDate} : {}),
+    _microfeed: {
+      ...microfeed,
+      // 条文所属的篇章就是它的「卷」，从实时结构取，不依赖可能过期的标签。
+      volume: context.volumeName,
+      // 篇章 id 跟着每条走：阅读页「返回」用它拼卷页 URL
+      // （`/book/<bookId>/v/<篇章 id>#mf-toc-<条 id>`），见 CONTEXT.md「章节回跳锚点」。
+      chapterId: context.chapterId,
+      chapterNo: Number(
+        Number.isFinite(Number(microfeed.chapterNo))
+          ? Number(microfeed.chapterNo)
+          : context.index + 1,
+      ),
+      wordCount: chapterWordCount(data),
+      web_url: PUBLIC_URLS.webItem(id, title, context.baseUrl),
+      ...(shortDate ? {date_published_short: shortDate} : {}),
+    },
+  };
+}
+
+/** One 篇章 (volume) row of a book, as its list or detail page needs it. */
+interface BookChapterRow {
+  id: string;
+  title: string;
+}
+
+/**
+ * The book's 篇章 rows, in the order the source app lays them out.
+ *
+ * The whole-book catalog, the book page's volume list and the volume page's own
+ * lookup all need this shape; keeping the `tcm_kind` / `status` filter and the
+ * 未命名篇章 fallback in one place stops the three from drifting.
+ *
+ * Walks `items_book_kind (book_id, tcm_kind, status)`; migration 0112 appended
+ * `pub_date` to that index, so this query still seeks it and cannot fall back to
+ * a wider scan. 实测 55 rows_read for 伤寒金匮・(宋版) 的 27 行篇章 —— 55 而非 27 是
+ * `ORDER BY` 的 2× 排序放大（同 ADR-0024 记录的篇章查询），量小不值得再为它加索引。
+ */
+async function fetchBookChapterRows(
+  db: CategoryDb,
+  bookId: string,
+): Promise<BookChapterRow[]> {
+  const result = await db.prepare(
+    "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'chapter' " +
+      "AND status != ? " +
+      "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
+  ).bind(bookId, STATUSES.DELETED).all();
+  return (result.results ?? []).map((row) => ({
+    id: String(row.id),
+    title: volumeTitleOf(safeParseJson(row.data)),
+  }));
+}
+
+/** 篇章的展示名；源数据缺失时兜底成「未命名篇章」。 */
+function volumeTitleOf(chapterData: Record<string, any>): string {
+  return typeof chapterData.title === "string" && chapterData.title
+    ? chapterData.title
+    : "未命名篇章";
+}
+
 export async function getTcmBookChapters(
   db: CategoryDb,
   bookId: string,
   baseUrl: string,
 ): Promise<Array<Record<string, any>>> {
-  const chapterResult = await db.prepare(
-    "SELECT id, data FROM items WHERE book_id = ? AND tcm_kind = 'chapter' " +
-      "AND status != ? " +
-      "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
-  ).bind(bookId, STATUSES.DELETED).all();
-  const chapterRows = Array.isArray(chapterResult.results)
-    ? chapterResult.results
-    : [];
+  const chapters = await fetchBookChapterRows(db, bookId);
 
   // 一次（分片）取回所有篇章的条文，取代每个篇章各查一次——此前一本 N 篇章的书
   // 要发 N 次往返；排序键以 tcm_parent_id 打头命中 0094 索引，消除 filesort。
-  const chapterIds = chapterRows.map((row) => String(row.id));
-  const sectionsByParent = await fetchSectionsByParents(db, chapterIds, {
-    tcmKindSection: true,
-  });
+  const sectionsByParent = await fetchSectionsByParents(
+    db,
+    chapters.map((c) => c.id),
+    {tcmKindSection: true},
+  );
 
   const catalog: Array<Record<string, any>> = [];
-  for (const chapterRow of chapterRows) {
-    const chapterId = String(chapterRow.id);
-    const chapterData = safeParseJson(chapterRow.data);
-    const volumeName = typeof chapterData.title === "string" && chapterData.title
-      ? chapterData.title
-      : "未命名篇章";
-    const sectionRows = sectionsByParent.get(chapterId) ?? [];
-
+  for (const chapter of chapters) {
+    const sectionRows = sectionsByParent.get(chapter.id) ?? [];
     for (const [index, row] of sectionRows.entries()) {
-      const data = safeParseJson(row.data);
-      const id = String(row.id);
-      const title = typeof data.title === "string" ? data.title : "未命名章节";
-      const microfeed = data._microfeed && typeof data._microfeed === "object"
-        ? data._microfeed as Record<string, unknown>
-        : {};
-      const pubDate = typeof row.pub_date === "string" ? row.pub_date : "";
-      const shortDate = pubDate ? pubDate.slice(0, 10) : "";
-      catalog.push({
-        id,
-        ...data,
-        ...(pubDate ? {date_published: pubDate} : {}),
-        _microfeed: {
-          ...microfeed,
-          // The 篇章 this 条文 is filed under is the volume — set it from the
-          // live structure so grouping never depends on a stale tag.
-          volume: volumeName,
-          // The owning 篇章 id rides on every 条文 so the theme can anchor the
-          // volume `<h3>` heading with `id="mf-toc-<篇章 id>"` — that is what a
-          // 篇章 返回 (`#mf-toc-<篇章 id>`) resolves to on the book page
-          // (see web-feed.mustache + web-body-end.mustache). A 条文 返回
-          // resolves to the row itself via `id="mf-toc-<条文 id>"`.
-          chapterId,
-          chapterNo: Number(
-            Number.isFinite(Number(microfeed.chapterNo))
-              ? Number(microfeed.chapterNo)
-              : index + 1,
-          ),
-          wordCount: chapterWordCount(data),
-          web_url: PUBLIC_URLS.webItem(id, title, baseUrl),
-          ...(shortDate ? {date_published_short: shortDate} : {}),
-        },
-      });
+      catalog.push(
+        mapTcmSectionRow(row, {
+          baseUrl,
+          chapterId: chapter.id,
+          index,
+          volumeName: chapter.title,
+        }),
+      );
     }
   }
   return catalog;
+}
+
+/** One volume (篇章) of a TCM book, as the book page's catalog lists it. */
+export interface BookVolume {
+  id: string;
+  name: string;
+}
+
+/**
+ * A TCM book's volumes — the 篇章 rows, and nothing else.
+ *
+ * The book page used to read the whole book's 条文 (921 rows_read for
+ * 伤寒金匮・宋版, ≈3,045 for 素问) just to render a title list. Since ADR-0025 the
+ * book page lists volumes and the reader opens one on demand, so all it needs is
+ * these rows.
+ *
+ * An empty array means the book has no 篇章 at all — a flat TCM book (中药 /
+ * 名词) — and its catalog stays flat.
+ */
+export async function getBookVolumes(
+  db: CategoryDb,
+  bookId: string,
+): Promise<BookVolume[]> {
+  const chapters = await fetchBookChapterRows(db, bookId);
+  return chapters.map((chapter) => ({id: chapter.id, name: chapter.title}));
+}
+
+/** One volume plus its 条文, in receipt order. */
+export interface VolumeDetail {
+  id: string;
+  name: string;
+  sections: Array<Record<string, any>>;
+}
+
+/**
+ * One volume's 条文, for the volume page (ADR-0025).
+ *
+ * Reads exactly one 篇章 row plus that volume's 条文 — `tcm_parent_id = ?` hits the
+ * 0094 `items_section_order` index, so the cost is 1 + N rows_read (N ≤ 97 on the
+ * books here) instead of the whole book.
+ *
+ * Returns null when the id is not a 篇章 row, so the route can 404.
+ */
+export async function getVolumeSections(
+  db: CategoryDb,
+  chapterId: string,
+  baseUrl: string,
+): Promise<VolumeDetail | null> {
+  // 单行点查：按主键取那一篇，不读该书的其它篇章。
+  const chapterRow = await db.prepare(
+    "SELECT id, data FROM items WHERE id = ? AND tcm_kind = 'chapter' AND status != ?",
+  ).bind(chapterId, STATUSES.DELETED).first();
+  if (!chapterRow) return null;
+
+  const name = volumeTitleOf(safeParseJson(chapterRow.data));
+
+  const sectionsByParent = await fetchSectionsByParents(db, [chapterId], {
+    tcmKindSection: true,
+  });
+  const rows = sectionsByParent.get(chapterId) ?? [];
+  return {
+    id: chapterId,
+    name,
+    sections: rows.map((row, index) =>
+      mapTcmSectionRow(row, {baseUrl, chapterId, index, volumeName: name}),
+    ),
+  };
+}
+
+/** The book's most recently published 条文 — the「最近更新」line. */
+export interface LatestSection {
+  title: string;
+  url: string;
+  dateShort: string;
+}
+
+/**
+ * `ORDER BY pub_date DESC LIMIT 1` over one book's 条文.
+ *
+ * Cheap **only because** migration 0112 rebuilt `items_book_kind` with `pub_date`
+ * appended. Before that the planner picked `items_status_pub_date(status=?)` and
+ * sorted the whole table (8,348 rows_read, measured); now it seeks the book and
+ * takes the first index entry (1 row).
+ *
+ * 本书 812 条文的 `pub_date` 大量并列，所以「最新一条」在时间戳相同的一组里是任意的
+ * —— 这是数据问题，索引不解决（ADR-0025 局限 4）。
+ */
+export async function getLatestBookSection(
+  db: CategoryDb,
+  bookId: string,
+  baseUrl: string,
+): Promise<LatestSection | null> {
+  const row = await db.prepare(
+    "SELECT id, data, pub_date FROM items WHERE book_id = ? " +
+      "AND tcm_kind = 'section' AND status = ? ORDER BY pub_date DESC LIMIT 1",
+  ).bind(bookId, STATUSES.PUBLISHED).first();
+  if (!row) return null;
+  const data = safeParseJson(row.data);
+  const id = String(row.id);
+  const title = typeof data.title === "string" ? data.title : "未命名章节";
+  const pubDate = typeof row.pub_date === "string" ? row.pub_date : "";
+  return {
+    title,
+    url: PUBLIC_URLS.webItem(id, title, baseUrl),
+    dateShort: pubDate ? pubDate.slice(0, 10) : "",
+  };
 }
 
 /**
