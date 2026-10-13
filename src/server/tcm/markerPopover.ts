@@ -26,6 +26,12 @@
 import {renderTcmMarkers, type TcmMarkerStyle} from "@/shared/TcmMarkers";
 import {getAppStyleConfig, type AppStyleItem} from "./reads";
 
+/**
+ * The two marker codes that carry a reverse index (`ext_marker_citations`).
+ * `$a{}` 之类纯样式标记不进表，`$g{}` 也不（`linkType=3` 不生成链接）。
+ */
+type MarkerCode = "f" | "u";
+
 /** Container channel ids — a TCM item viewed directly (fang/yao/term page). */
 const CONTAINER_CHANNEL_IDS = new Set(["tcmfang0001", "tcmyao00001", "tcmterm0001"]);
 
@@ -37,7 +43,7 @@ export interface TcmPopoverEntry {
   meta: string;
   /** Formula composition rows (only for kind === "fang"). */
   yao?: Array<{name: string; amount: string; suffix: string; extra: string}>;
-  /** 条文/篇章里引用了本方的链接（仅 kind === "fang"）。 */
+  /** 条文/篇章里引用了本条目（方剂或中药）的链接。 */
   references?: Array<{id: string; title: string}>;
   /** Rendered body HTML (markers inside are themselves clickable). */
   body: string;
@@ -296,7 +302,8 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
         return '<li><a class="mf-tcm-link" href="' + esc('/i/' + r.id + '/') + '">' +
           esc(r.title) + '</a></li>';
       }).join('');
-      inner += '<div class="mf-tcm-refs"><div class="mf-tcm-refs-h">引用此方剂的条文</div><ul>' +
+      var refHead = f.kind === 'yao' ? '引用此中药的条文' : '引用此方剂的条文';
+      inner += '<div class="mf-tcm-refs"><div class="mf-tcm-refs-h">' + refHead + '</div><ul>' +
         refItems + '</ul></div>';
     }
     // "返回" button replaces the old "打开…页 →" link: it closes the dialog
@@ -328,10 +335,10 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
 </script>`;
 }
 
-/** How many 条文 a 方剂 popover lists before it caps. */
+/** How many 条文 a popover (方剂 or 中药) lists before it caps. */
 const MAX_REFERENCES = 50;
 
-/** D1 caps a batch; one book's citations (478 rows here) would blow one call. */
+/** D1 caps a batch; one book's citations (752 rows here) would blow one call. */
 const CITATION_BATCH_SIZE = 100;
 
 /**
@@ -360,6 +367,10 @@ async function ensureMarkerCitations(
     .first<{computed_at_ms: number}>();
   if (state && Number(state.computed_at_ms) !== 0) return;
 
+  // Walks `items_book_kind (book_id, tcm_kind, status, pub_date)` — 实测计划为
+  // `SEARCH items USING INDEX items_book_kind (book_id=? AND tcm_kind=? AND status=?)`，
+  // 本书 847 rows_read / 839 行。这是「整本读取」：行数由书的大小决定，无法用索引消除，
+  // 只是从「每次渲染」挪到了「每个变更周期一次」。
   const {results} = await db
     .prepare(
       "SELECT id, rowid AS seq, data FROM items " +
@@ -380,6 +391,7 @@ async function ensureMarkerCitations(
       rows.push(
         db
           .prepare(
+            // 按主键 (book_id, marker_code, marker_name, section_id) 定位，单行写入。
             "INSERT OR REPLACE INTO ext_marker_citations " +
               "(book_id, marker_code, marker_name, section_id, section_title, section_seq) " +
               "VALUES (?, ?, ?, ?, ?, ?)",
@@ -391,6 +403,7 @@ async function ensureMarkerCitations(
       rows.push(
         db
           .prepare(
+            // 按主键 (book_id, marker_code, marker_name, section_id) 定位，单行写入。
             "INSERT OR REPLACE INTO ext_marker_citations " +
               "(book_id, marker_code, marker_name, section_id, section_title, section_seq) " +
               "VALUES (?, ?, ?, ?, ?, ?)",
@@ -400,6 +413,8 @@ async function ensureMarkerCitations(
     }
   }
 
+  // 计划：`SEARCH ext_marker_citations USING INDEX ext_marker_citations_lookup (book_id=?)`
+  // —— 只删本书的行（实测本书 752 行）。
   await db
     .prepare("DELETE FROM ext_marker_citations WHERE book_id = ?")
     .bind(bookId)
@@ -418,25 +433,29 @@ async function ensureMarkerCitations(
 }
 
 /**
- * The 条文 citing one 方剂, in source order.
+ * The 条文 citing one entry (`f` = 方剂, `u` = 中药), in source order.
  *
- * `marker_code = 'f'` is **required** for the
+ * `marker_code` is **required** for the
  * `(book_id, marker_code, marker_name, section_seq)` index to be used — without it
- * the planner walks every citation row the book has. Measured: 709 rows_read
- * without the code column, 60 with it.
+ * the planner walks every citation row the book has. Measured on a 方剂 sample:
+ * 709 rows_read without the code column, 60 with it.
+ *
+ * 计划：`SEARCH ext_marker_citations USING INDEX ext_marker_citations_lookup
+ * (book_id=? AND marker_code=? AND marker_name=?)`。
  */
 async function findMarkerReferences(
   db: D1Database,
   bookId: string,
-  fangName: string,
+  markerCode: MarkerCode,
+  markerName: string,
 ): Promise<Array<{id: string; title: string}>> {
   const {results} = await db
     .prepare(
       "SELECT section_id, section_title FROM ext_marker_citations " +
-        "WHERE book_id = ? AND marker_code = 'f' AND marker_name = ? " +
+        "WHERE book_id = ? AND marker_code = ? AND marker_name = ? " +
         "ORDER BY section_seq LIMIT ?",
     )
-    .bind(bookId, fangName, MAX_REFERENCES)
+    .bind(bookId, markerCode, markerName, MAX_REFERENCES)
     .all<{section_id: string; section_title: string}>();
   return (results ?? []).map((row) => ({
     id: String(row.section_id),
@@ -501,10 +520,12 @@ export async function buildTcmMarkerLayer(
     return {titleHtml: null, bodyHtml: bodyHtmlIn, runtimeHtml: null};
   }
 
-  // The 条文 that cite each 方剂 come from `ext_marker_citations` (migration 0111).
-  // Container channels carry no 条文, so they have no index to build either.
+  // The 条文 citing each 方剂/中药 come from `ext_marker_citations` (migration 0111).
+  // Container channels carry no 条文 of their own, so they have no index to build;
+  // and a page with no entity marker has nothing to look up.
   const citationsReady =
-    fangByName.size > 0 && !CONTAINER_CHANNEL_IDS.has(opts.currentBookId);
+    !CONTAINER_CHANNEL_IDS.has(opts.currentBookId) &&
+    (initial.fang.size > 0 || initial.yao.size > 0);
   if (citationsReady) await ensureMarkerCitations(db, opts.currentBookId);
 
   // Build popover data: seed from the page's markers, then follow markers that
@@ -553,15 +574,20 @@ export async function buildTcmMarkerLayer(
     }
   }
 
-  // Attach cross-references (条文 citing each 方剂) now that all fang entries
-  // are resolved — including those reached through nested markers.
+  // Attach cross-references (条文 citing each entry) now that all entries are
+  // resolved — including those reached through nested markers.
+  //
+  // 中药的名字要对齐重算时的口径：`buildYaoEntry` 已经做过 `stripYaoNo`，
+  // 这里再补 `normalizeYaoName`，才等于 `ensureMarkerCitations` 存进表的键。
   for (const id of Object.keys(data)) {
     const entry = data[id];
-    if (entry && entry.kind === "fang") {
-      entry.references = citationsReady
-        ? await findMarkerReferences(db, opts.currentBookId, entry.name)
-        : [];
-    }
+    if (!entry) continue;
+    // `kind` 只有 fang / yao 两支，所以这里是穷尽映射，不需要兜底分支。
+    const code: MarkerCode = entry.kind === "fang" ? "f" : "u";
+    const name = entry.kind === "fang" ? entry.name : normalizeYaoName(entry.name);
+    entry.references = citationsReady
+      ? await findMarkerReferences(db, opts.currentBookId, code, name)
+      : [];
   }
 
   return {titleHtml, bodyHtml: renderedBody, runtimeHtml: buildRuntimeHtml(data)};

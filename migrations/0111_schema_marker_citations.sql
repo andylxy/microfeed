@@ -26,11 +26,15 @@
 -- `markerPopover` 的解析也是按名字查表（`resolveHref`）。所以重算时直接从正文里
 -- 提取名字即可，不需要先知道该书的方剂名单。
 --
--- ⚠️ `json_extract(NEW.data, …)` 的暴露面**不是本表新增的**：`items_site_search_after_{insert,update,
---    delete}` 三个既有搜索同步触发器已经在用 json_extract，而 `items.data` 允许 NULL/空
---    （`data TEXT NOT NULL=0`）。实测 `json_extract('非JSON')` 抛 `malformed JSON` 并中止整条写入
---    ⇒ 一旦 `data` 为空串，既有搜索触发器先失败。故此处**不单独加 `json_valid` 保护**
---    （那只会造成「单独设防」的错觉）；真要修，三个搜索触发器应与本表一起加，另立一次改动。
+-- 关于 `json_extract(NEW.data, …)` 的安全性 —— 2026-10-13 实测结论，别凭直觉改：
+--   「触发器对每行求值 json_extract，遇到非法 JSON 会中止写入」听起来像风险，但**在这张表上不可达**：
+--   `items` 上有 11 条以 `json_extract(data, …)` 为表达式的索引（`items_tcm_kind_name`、
+--   `items_source_book_id`、`items_section_order`、`items_fang_order_v2` …），维护索引就必须求值表达式
+--   ⇒ 非法/空串的 `data` **根本写不进 items**，与触发器无关。
+--   证据：把全库 10 个触发器**全部 DROP** 之后，`UPDATE items SET data = '' …` 仍抛 `malformed JSON`。
+--   ⇒ 这里**不设 `json_valid` 守卫**（那条分支不可达，是死代码）。真要防，该防的是「有人删掉那些表达式索引」，
+--      而那不归本迁移管。
+--   `items.data` 是可空、无默认的 TEXT；`json_extract(NULL, …)` 返回 NULL、不抛错，所以 NULL 行也安全。
 --
 -- 回滚：
 --   DROP TRIGGER IF EXISTS ext_marker_citations_dirty_on_insert;
