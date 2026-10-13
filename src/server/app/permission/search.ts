@@ -4,7 +4,7 @@
  * <p>放在 {@code src/server/}，因为它要用 Worker 绑定（D1）与令牌校验 ——
  * AGENTS.md「源码架构」把这类代码归到 {@code src/server/}，
  * 路由只负责把结果翻译成 HTTP（{@code src/pages/api/app/search-permission.ts}）。
- * 同层的 {@code @/server/app/announcement/store} 也是「路由薄、逻辑在 server」的形态。</p>
+ * 同层的 {@code @/server/app/permission/mingci} 也是「路由薄、逻辑在 server」的形态。</p>
  *
  * <p><b>为什么返回值不带状态码</b>：本模块知道的是事实（有没有凭证、凭证有没有通过、
  * 权限集合里有没有这两个码），而「事实该对应哪个 HTTP 状态码」是运输层的约定。

@@ -37,6 +37,8 @@ import {readFileSync, readdirSync, existsSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {report, finish} from "./gate-utils";
+
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const migrationsRoot = path.join(repositoryRoot, "migrations");
 const frozenListPath = path.join(repositoryRoot, "scripts", "frozen-migration-names.txt");
@@ -46,9 +48,6 @@ const ENFORCED_LOWER_BOUND = 108;
 const ALLOWED_TYPES = ["schema", "index", "data", "seed", "cleanup"];
 const TYPES_REQUIRING_ROLLBACK = new Set(["data", "cleanup"]);
 
-type Finding = {file: string; line: number; rule: string; message: string};
-
-const findings: Finding[] = [];
 const migrationFiles = existsSync(migrationsRoot)
   ? readdirSync(migrationsRoot).filter((name) => name.endsWith(".sql")).sort()
   : [];
@@ -59,10 +58,6 @@ const frozenNames = new Set(
     .map((line) => line.trim())
     .filter(Boolean),
 );
-
-function report(file: string, rule: string, message: string, line = 1): void {
-  findings.push({file, line, rule, message});
-}
 
 // Rule MIG-001: file name shape, duplicate numbers, and contiguity from the
 // enforced boundary. Duplicates matter because `d1_migrations` keys on the
@@ -171,13 +166,7 @@ for (const name of migrationFiles) {
   }
 }
 
-if (findings.length > 0) {
-  for (const finding of findings) {
-    console.error(`${finding.file}:${finding.line} [${finding.rule}] ${finding.message}`);
-  }
-  console.error(`\n${findings.length} migration hygiene violation(s).`);
-  process.exit(1);
-}
+finish("migration hygiene");
 
 const frozenOnDisk = migrationFiles.filter((name) =>
   Number.parseInt(name.slice(0, 4), 10) <= FROZEN_UPPER_BOUND,

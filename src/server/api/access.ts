@@ -66,8 +66,8 @@ export const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
  * replaceToken, captcha, project/login/about info). The regression test in
  * `tests/unit/api-permissions.test.ts` enumerates the actual handler files under
  * `src/pages/api/AppBookRequest/` and fails CI if any route is neither a content
- * route nor explicitly anonymous — that silent gap is the fail-open risk called
- * out in ADR-0011 D2. Kept here (not in `middleware.ts`) so unit tests can
+ * route nor explicitly anonymous — that silent gap is the fail-open risk. Kept
+ * here (not in `middleware.ts`) so unit tests can
  * import it without pulling in the Astro / cloudflare:workers runtime the
  * middleware module depends on.
  */
@@ -94,8 +94,7 @@ export const APP_BOOK_REQUEST_ROUTES = [
  * The middleware skips the `/api/` auth block for any AppBookRequest path that
  * is not an integration path, so a route absent from both this set and
  * `APP_BOOK_REQUEST_CONTENT_SUFFIXES` is served anonymously — the fail-open
- * risk called out in ADR-0011 D2. Keeping the list here (rather than in the
- * gate script and the test separately) means there is one place to edit when a
+ * risk. Keeping the list here means one place to edit when a
  * new anonymous route lands: `tests/unit/api-permissions.test.ts` and
  * `scripts/check-endpoint-registration.ts` both read it from here.
  */

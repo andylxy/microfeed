@@ -114,7 +114,7 @@
 
 ## 架构治理（门禁脚本强制）
 
-以下规则由 `scripts/check-*.ts` 四个门禁脚本执行，接入 `yarn check`，违反即退出非零。脚本只读不写，输出格式 `文件:行 <规则编号> <描述>`。
+以下规则由 `scripts/check-*.ts` 四个门禁脚本执行，接入 `yarn check`，违反即退出非零。脚本只读不写，输出格式为 `文件:行 <规则编号> <描述>`；行号为 0 表示该规则作用于整个文件或整个文件名，不指向具体某一行。
 
 ### src/server/ 顶层目录白名单
 
@@ -124,8 +124,8 @@
 ### 新增端点登记
 
 - 判断理由：端点漏登记有两种静默缺口。① 移动端 `/api/AppBookRequest/` 有两套登记表（`APP_BOOK_REQUEST_ROUTES` 做大小写归一化、`APP_BOOK_REQUEST_CONTENT_SUFFIXES` 做鉴权开关）：归一化缺失导致任意大小写请求 404，鉴权缺失导致中间件把端点当匿名服务（fail-open）。② 公开 API 的 handler 若既不在 OpenAPI 规范里、也不在豁免类里，它仍可经 HTTP 访问，但审查 API 表面的人无从得知它存在。
-- 门禁：`scripts/check-endpoint-registration.ts` 对 `src/pages/api/` 下全部 54 个 handler 分四类——25 个公开 handler 必须对应 `OpenApiDocument.ts` 里的 path（规范的 path 相对 `/api/v1/`，无版本 `/api/...` 是同一 path 的 legacy 别名，20 条 path 每条至少一个 handler）；14 个 `/api/AppBookRequest/*` 另走 App 登记表；余下 15 个归入四个豁免类——四个 `/api/app/{version,announcements,search-permission,mingci-permission}`、`/api/auth/*`（better-auth 自管，catch-all 路由）、规范与文档元端点（`openapi.*`、`llms*.txt`）、`/api/` 根路由。门禁另跑两个反向检查：OpenAPI 每条 path 都有 handler、`APP_BOOK_REQUEST_ROUTES` 每条都有 handler 文件。
-- 人工登记：① 公开端点进 `OpenApiDocument.ts`；② App 内部端点进 `APP_BOOK_REQUEST_ROUTES`，需鉴权的再进 `APP_BOOK_REQUEST_CONTENT_SUFFIXES`；③ 匿名端点还要进 `APP_BOOK_REQUEST_ANONYMOUS_ROUTES`（`src/server/api/access.ts`，与另两个登记表同源，`tests/unit/api-permissions.test.ts` 与门禁都读它）。
+- 门禁：`scripts/check-endpoint-registration.ts` 对 `src/pages/api/` 下全部 56 个 handler 分三类——25 个公开 handler 必须对应 `OpenApiDocument.ts` 里的 path（规范的 path 相对 `/api/v1/`，无版本 `/api/...` 是同一 path 的 legacy 别名，20 条 path 每条至少一个 handler）；14 个 `/api/AppBookRequest/*` 另走 App 登记表；余下 17 个归入四个豁免类——四个 `/api/app/{version,announcements,search-permission,mingci-permission}`、`/api/auth/*`（better-auth 自管，catch-all 路由）、规范与文档元端点（`openapi.*`、`llms*.txt`，含 `/api/v1/openapi.html` 与 `/api/v1/` 两个 `.astro` 路由）、`/api/` 根路由。六条规则 ENDPOINT-001..006 的逐条定义见脚本头注释：除上面的三分类外，还要求 catch-all 路由可识别、App 登记表与磁盘 handler 双向一致、且每个 AppBookRequest handler 必须落在内容路由（需鉴权）或匿名路由之一。
+- 人工登记：① 公开端点进 `OpenApiDocument.ts`；② App 内部端点进 `APP_BOOK_REQUEST_ROUTES`，需鉴权的再进 `APP_BOOK_REQUEST_CONTENT_SUFFIXES`；③ 匿名端点还要进 `APP_BOOK_REQUEST_ANONYMOUS_ROUTES`（`src/server/api/access.ts`，与另两个登记表同源，`tests/unit/api-permissions.test.ts` 与门禁都读它）。注意中间件的匿名判定是「不在内容路由表即匿名」，匿名表是登记记录与审查线索、不是运行时开关，两者不出现缺口由门禁的 ENDPOINT-005 保证。
 
 ### ADR 单一编号空间
 

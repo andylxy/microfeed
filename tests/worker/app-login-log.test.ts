@@ -9,7 +9,7 @@ import {
 } from "@/server/app/version/login-log";
 
 /**
- * ADR-0002 (需求 3): one login row per device per calendar day, queried through
+ * ADR-0023 (需求 3): one login row per device per calendar day, queried through
  * a `[fromMs, toMs)` window on `login_at`.
  *
  * The three properties worth locking down here are the dedup key, the window

@@ -6,7 +6,7 @@ import {recordLoginLog} from "@/server/app/version/login-log";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**
- * End-to-end guard + window tests for the login-log board (ADR-0002).
+ * End-to-end guard + window tests for the login-log board (ADR-0023).
  *
  * The DB-level dedup and window logic is covered in `app-login-log.test.ts`;
  * what only this file can catch is the HTTP surface — a missing

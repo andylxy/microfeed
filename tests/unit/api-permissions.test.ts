@@ -225,7 +225,7 @@ describe("app mingci-permission endpoint (/api/app/mingci-permission/)", () => {
   });
 });
 
-describe("AppBookRequest route registry is fail-open-safe (ADR-0011 D2)", () => {
+describe("AppBookRequest route registry is fail-open-safe", () => {
   // Routes that are deliberately anonymous (pre-auth / config). The middleware
   // skips the /api/ auth block for any AppBookRequest path that is NOT an
   // integration path, so these MUST be explicitly listed — an unlisted addition

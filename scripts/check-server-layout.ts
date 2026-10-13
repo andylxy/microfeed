@@ -22,10 +22,10 @@ import {readdirSync, statSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {report, finish} from "./gate-utils";
+
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const serverRoot = path.join(repositoryRoot, "src", "server");
-
-type Finding = {file: string; line: number; rule: string; message: string};
 
 const WHITELIST = new Set([
   // Domain directories.
@@ -52,29 +52,19 @@ const WHITELIST = new Set([
   "mutation.ts",
 ]);
 
-const findings: Finding[] = [];
 const entries = readdirSync(serverRoot);
 
 for (const entry of entries) {
   if (WHITELIST.has(entry)) continue;
   const absolute = path.join(serverRoot, entry);
   const kind = statSync(absolute).isDirectory() ? "directory" : "file";
-  findings.push({
-    file: `src/server/${entry}`,
-    // The finding is about the directory entry itself, not a line inside it;
-    // line 1 keeps the output shape `path:line [rule] message` uniform.
-    line: 1,
-    rule: "LAYOUT-001",
-    message: `top-level ${kind} is not in the whitelist; add it to scripts/check-server-layout.ts`,
-  });
+  report(
+    `src/server/${entry}`,
+    "LAYOUT-001",
+    `top-level ${kind} is not in the whitelist; add it to scripts/check-server-layout.ts`,
+  );
 }
 
-if (findings.length > 0) {
-  for (const finding of findings) {
-    console.error(`${finding.file}:${finding.line} [${finding.rule}] ${finding.message}`);
-  }
-  console.error(`\n${findings.length} layout violation(s).`);
-  process.exit(1);
-}
+finish("layout");
 
 console.log(`OK: ${entries.length} top-level entries under src/server/, all whitelisted.`);
