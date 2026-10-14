@@ -3,9 +3,11 @@ import {DatabaseSync} from "node:sqlite";
 
 import {
   buildTcmMarkerLayer,
+  mapStyles,
   type TcmMarkerLayer,
   type TcmPopoverEntry,
 } from "@/server/tcm/markerPopover";
+import {renderTcmMarkers} from "@/shared/TcmMarkers";
 
 // Marker styles backing the renderer. `code` selects the marker type;
 // `link_type` 2 = 方剂 (resolved in-book), 1 = 中药 (resolved globally by pure
@@ -16,6 +18,9 @@ const STYLES = [
   {code: "f", color: "#a23", small_font: 0, small_font_scale: 0.7, link_type: 2},
   // 不是默认 0.7 —— 覆盖 0109 起由后台配置的缩小比例
   {code: "w", color: "#888", small_font: 1, small_font_scale: 0.55, link_type: 0},
+  // 票 01：$a 按语与生产 ext_annotation_markers 一致——灰色小字、linkType=0。
+  // 它代表一整类「有样式、无链接」的码（a/m/w/q/n/x/r/v/h/y）。
+  {code: "a", color: "#808080", small_font: 1, small_font_scale: 0.7, link_type: 0},
 ];
 
 interface FangRow { id: string; data: any; }
@@ -285,6 +290,30 @@ describe("buildTcmMarkerLayer", () => {
       currentBookId: "BOOK1",
     });
     expect(layer.runtimeHtml).toBeNull();
+    // 票 01 回归：「没有实体标记」不等于「没有标记」。$w 剂量（绿色小字、
+    // linkType=0）必须渲染成样式 span——那道暗门曾用 data-tcm-kind 当「本页
+    // 有标记」的判据，让 700 个只含非链接码的条目整页裸露 $x{...} 原文。
+    expect(layer.bodyHtml).toContain('class="mf-mk mf-mk-w"');
+    expect(layer.bodyHtml).not.toContain("$w{");
+  });
+
+  it("styles a non-linkable-only body without emitting a runtime (gate fix)", async () => {
+    // 票 01 主回归：整页只有 $a 按语（灰字小字、无链接）——正是暗门受害页的
+    // 形态（本地快照 700 个条目 / 6,139 处 occurrence 属于此类）。
+    const db = makeRealDb([], []);
+    const bodyHtml = "<p>太阳病，发热无汗，反恶寒者，$a{（病源云恶寒。）}名曰刚痓。</p>";
+    const layer = await buildTcmMarkerLayer(db, {
+      bodyHtml,
+      title: "第二条",
+      currentBookId: "BOOK1",
+    });
+    // 样式渲染照常：span 在、字面量没
+    expect(layer.bodyHtml).toContain('class="mf-mk mf-mk-a"');
+    expect(layer.bodyHtml).not.toContain("$a{");
+    // 弹层仍不激活：没有可链接实体，就没有弹窗数据可放
+    expect(layer.runtimeHtml).toBeNull();
+    // 标题无标记 → 渲染结果与原文相同 → 交给模板回落（与既有行为一致）
+    expect(layer.titleHtml).toBe("第二条");
   });
 
   it("lists 条文 citing a 方剂 in the same book (cross-reference)", async () => {
@@ -405,5 +434,25 @@ describe("buildTcmMarkerLayer", () => {
     expect(layer.runtimeHtml).toContain(
       "f.kind === 'yao' ? '引用此中药的条文' : '引用此方剂的条文'",
     );
+  });
+});
+
+describe("mapStyles", () => {
+  it("renames the App style fields to the renderer's shape", async () => {
+    // 路由侧渲染卷名时的字段转换：App 下发 marker/isSmallFont，渲染器要
+    // code/smallFont。少了这一步，renderTcmMarkers 会把每个标记降级成
+    // unknown 灰色文本（书页目录曾因此全灰）。
+    const mapped = mapStyles([
+      {marker: "f", color: "#a23", isSmallFont: false, smallFontScale: 0.7, linkType: 2},
+      {marker: "a", color: "#808080", isSmallFont: true, smallFontScale: 0.55, linkType: 0},
+    ]);
+    expect(mapped).toEqual([
+      {code: "f", color: "#a23", smallFont: false, smallFontScale: 0.7, linkType: 2},
+      {code: "a", color: "#808080", smallFont: true, smallFontScale: 0.55, linkType: 0},
+    ]);
+    // 转换后喂给渲染器：能命中样式，而不是 unknown
+    const html = renderTcmMarkers("$f{桂枝汤}", mapped, {});
+    expect(html).toContain('class="mf-mk mf-mk-f"');
+    expect(html).not.toContain("mf-mk-unknown");
   });
 });

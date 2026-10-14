@@ -43,5 +43,4 @@ App 配置里；迁移须把这套协议落到 `ext_annotation_markers` 并让�
 ## 当前渲染状态
 
 - App 端：按 `GetTipsStyleConfig` 下发的目录自行渲染（已对齐）。
-- PC Web：按用户 2026-09-28 拍板，**原样输出** `$X{}` 文本；`src/shared/TcmMarkers.ts`
-  已实现递归解析 + 脏括号容错，但**尚未接入** `FeedPublicJsonBuilder`（将来一处接线即可）。
+- PC Web：按 2026-10-11 实施（取代 2026-09-28 拍板，见 `docs/novel-cms/adr/0015-marker-popover-public-integration.md`）已接入公开阅读页——`src/pages/i/[slug]/index.astro` 在服务端调用 `src/server/tcm/markerPopover.ts` 的 `buildTcmMarkerLayer`，复用 `src/shared/TcmMarkers.ts` 的递归解析 + 脏括号容错生成内联弹层；接入点是阅读页服务端而非原计划的 `FeedPublicJsonBuilder`（出口已取消）。

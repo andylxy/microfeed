@@ -398,6 +398,42 @@ describe("public Pages", () => {
       .toBe(true);
   });
 
+  it("exports plain-text title/excerpt and drops highlights for marked results", async () => {
+    await activateV2();
+    const request = new Request(`${ORIGIN}/marked-search-page/`);
+    const db = await database("/marked-search-page/");
+    const page = await createPage(db, request, {
+      content_html: "<p>桂枝$f{桂枝汤}主之。needle</p>",
+      navigation_label: "Marked search",
+      slug: "marked-search-page",
+      status: "published",
+      title: "桂枝$f{桂枝汤}",
+    });
+
+    const response = await apiContext(
+      searchJson,
+      db,
+      new Request(`${ORIGIN}/search.json?q=needle`),
+    );
+    expect(response.status).toBe(200);
+    const data = await response.json() as {
+      items: Array<{
+        content_text?: string;
+        highlights?: unknown;
+        id: string;
+        title?: string;
+      }>;
+    };
+    const result = data.items.find(({id}) => id === page.id);
+    // 标题与摘要走纯文本出口：$x{} 外壳剥掉、不留字面量（票07）
+    expect(result?.title).not.toContain("$f{");
+    expect(result?.title).toContain("桂枝汤");
+    expect(result?.content_text).not.toContain("$f{");
+    expect(result?.content_text).toContain("桂枝汤");
+    // 带标记的条目弃用高亮切片（按原始文本切分会把外壳切碎）
+    expect(result?.highlights).toBeUndefined();
+  });
+
   it("uses the active v2 theme destination for public item search links", async () => {
     const request = new Request(`${ORIGIN}/search-destination-page/`);
     const db = await database("/search-destination-page/");

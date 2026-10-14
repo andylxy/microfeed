@@ -18,6 +18,7 @@ import {
 } from "@/server/themes/Theme";
 import {buildAudioUrlWithTracking} from "@/shared/StringUtils";
 import {resolveThemeSearchItemUrl} from "@/shared/themes/ThemeSearch";
+import {hasTcmMarker, markersToPlainText} from "@/shared/TcmMarkers";
 
 export const GET: APIRoute = async ({request}) => {
   const url = new URL(request.url);
@@ -82,29 +83,39 @@ export const GET: APIRoute = async ({request}) => {
             book.categoryName ?? "",
           ].filter(Boolean).join(" · "),
           id: `book-${book.id}`,
-          title: book.title,
+          // 书籍结果同样走纯文本出口（实测频道标题 0 标记，no-op 开销）
+          title: markersToPlainText(book.title),
           type: "book" as const,
           type_label: typeLabel("book"),
           url: `/book/${book.id}`,
         })),
-        ...response.items.map((item) => ({
-          content_text: item.content_text,
-          date_published: item.date_published,
-          highlights: item.highlights,
-          id: item.id,
-          title: item.title,
-          type: item.type,
-          type_label: typeLabel(item.type),
-          url: item.type === "item"
-            ? resolveThemeSearchItemUrl(searchItemDestination, {
-                attachmentUrl: item.attachment_url
-                  ? buildAudioUrlWithTracking(item.attachment_url, trackingUrls)
-                  : undefined,
-                itemUrl: item.item_url,
-                webUrl: item.web_url,
-              })
-            : item.web_url,
-        })),
+        ...response.items.map((item) => {
+          // 标题与摘要走纯文本出口（标记外壳在结果列表里是噪声）。高亮切片按
+          // 原始文本切分，会把外壳切碎（出现 "、杏子仁。 $f{" 这种半句）——
+          // 带标记的条目弃用切片，客户端 appendExcerpt 有既有回退（无命中切片
+          // → 整段纯文本摘要）。宁可丢 <mark>，不显示切碎的外壳。
+          const rawTitle = String(item.title ?? "");
+          const rawText = String(item.content_text ?? "");
+          const markerised = hasTcmMarker(rawTitle) || hasTcmMarker(rawText);
+          return {
+            content_text: markersToPlainText(rawText),
+            date_published: item.date_published,
+            highlights: markerised ? undefined : item.highlights,
+            id: item.id,
+            title: markersToPlainText(rawTitle),
+            type: item.type,
+            type_label: typeLabel(item.type),
+            url: item.type === "item"
+              ? resolveThemeSearchItemUrl(searchItemDestination, {
+                  attachmentUrl: item.attachment_url
+                    ? buildAudioUrlWithTracking(item.attachment_url, trackingUrls)
+                    : undefined,
+                  itemUrl: item.item_url,
+                  webUrl: item.web_url,
+                })
+              : item.web_url,
+          };
+        }),
       ],
     }, {headers: {"cache-control": "private, no-store"}});
   } catch (error) {

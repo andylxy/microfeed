@@ -88,7 +88,12 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function mapStyles(list: AppStyleItem[]): TcmMarkerStyle[] {
+/** App 下发的样式目录 → 渲染器消费的样式形状。导出供路由侧直接渲染
+ *  （卷名 / 条名等标题级文本）——字段名不同（marker→code、
+ *  isSmallFont→smallFont），路由侧直接拿 getAppStyleConfig 的返回值喂
+ *  renderTcmMarkers 会把每个标记降级成 unknown 灰色文本（外壳丢、内容留），
+ *  故转换点只此一处。 */
+export function mapStyles(list: AppStyleItem[]): TcmMarkerStyle[] {
   return list.map((s) => ({
     code: s.marker,
     color: s.color,
@@ -282,9 +287,13 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
       return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c];
     });
   }
-  function open(id) {
-    var f = DATA[id];
-    if (!f) return false;
+  // Stack of opened entry ids. Opening a nested marker pushes; 返回/×/ESC
+  // pop one level and re-render the new top. Backdrop click wipes the whole
+  // stack (that's the "cancel everything" escape hatch). DATA is pre-baked
+  // with every nested entry at page load, so the stack only needs ids — no
+  // body HTML snapshot per level.
+  var stack = [];
+  function render(f) {
     titleEl.textContent = f.name;
     metaEl.textContent = f.meta || '';
     var inner = '';
@@ -306,31 +315,63 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
       inner += '<div class="mf-tcm-refs"><div class="mf-tcm-refs-h">' + refHead + '</div><ul>' +
         refItems + '</ul></div>';
     }
-    // "返回" button replaces the old "打开…页 →" link: it closes the dialog
-    // and returns to the page you were reading, no navigation away.
+    // 返回 button. Semantics: one level up, not "close everything" — matches
+    // ×/ESC. At the stack bottom it degenerates to closing the dialog.
     inner += '<button type="button" class="mf-tcm-back" data-back="1">返回</button>';
     bodyEl.innerHTML = inner;
-    if (typeof dlg.showModal === 'function') dlg.showModal();
-    else dlg.setAttribute('open', '');
+  }
+  function open(id) {
+    var f = DATA[id];
+    if (!f) return false;
+    stack.push(id);
+    render(f);
+    if (!dlg.open) {
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+      else dlg.setAttribute('open', '');
+    }
     return true;
   }
-  // Only marker anchors carry a [data-tcm-kind] descendant; the dialog's own
-  // 返回 button (and the refs links, which have no marker) fall through to
-  // default behaviour — the button's data-back closes the dialog, and refs
-  // navigate normally.
+  function back() {
+    if (!stack.length) return;
+    stack.pop();
+    if (stack.length) {
+      render(DATA[stack[stack.length - 1]]);
+    } else {
+      dlg.close();
+    }
+  }
+  // Marker anchors carry a [data-tcm-kind] descendant. The dialog's own
+  // 返回 button closes one level via [data-back]; the refs links inside
+  // the dialog have no marker so they navigate normally.
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (t && t.closest) {
-      var back = t.closest('[data-back]');
-      if (back) { e.preventDefault(); dlg.close(); return; }
+      var backBtn = t.closest('[data-back]');
+      if (backBtn) { e.preventDefault(); back(); return; }
     }
     var a = t && t.closest ? t.closest('a[href^="/i/"]') : null;
     if (!a || !a.querySelector('[data-tcm-kind]')) return;
     var id = a.getAttribute('href').split('/').filter(Boolean).pop();
     if (open(id)) e.preventDefault();
   });
-  document.getElementById('mf-tcm-close').addEventListener('click', function () { dlg.close(); });
-  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  // × and ESC both walk the stack one level (matching 返回). The native
+  // dialog cancel event fires on ESC; preventDefault keeps it open.
+  document.getElementById('mf-tcm-close').addEventListener('click', function (e) {
+    e.preventDefault();
+    back();
+  });
+  dlg.addEventListener('cancel', function (e) {
+    e.preventDefault();
+    back();
+  });
+  // Backdrop click (outside the dialog chrome) is the "cancel everything"
+  // path — clear the stack and close.
+  dlg.addEventListener('click', function (e) {
+    if (e.target === dlg) {
+      stack.length = 0;
+      dlg.close();
+    }
+  });
 })();
 </script>`;
 }
@@ -512,13 +553,28 @@ export async function buildTcmMarkerLayer(
   const renderedBody = renderTcmMarkers(bodyHtmlIn, styles, {resolveHref});
   const titleHtml = renderTcmMarkers(escapeHtml(titleIn), styles, {resolveHref});
 
-  // Inactive only when neither the body nor the h1 title carries an entity
-  // marker — otherwise the title-only-marker case would wrongly drop its links.
+  // 两道门，管两件不同的事。此前只有一道门，用「有没有可链接实体」同时判
+  // 「要不要渲染」和「要不要弹窗」，只含非链接码（$a 按语 / $m 强调 / $w 剂量
+  // / $q 出处……）的页面整层作废，正文原样返回。修正记录见 ADR-0015「解析之后
+  // 还有两道门」。
+  //
+  // 门一（样式渲染）：正文或标题渲染出过任何 mf-mk span → 本页有标记，返回
+  // 渲染结果（含未知码的灰色降级 span）；一个样式标记都没有才回退原文。
+  const hasStyledMarker =
+    renderedBody.includes('class="mf-mk') || titleHtml.includes('class="mf-mk');
+  if (!hasStyledMarker) {
+    return {titleHtml: null, bodyHtml: bodyHtmlIn, runtimeHtml: null};
+  }
+  // 门二（弹层激活）：只有存在可链接实体（$f / $u / $g 才带 data-tcm-kind）才
+  // 值得建弹窗数据与 runtime——纯样式码没有可弹的内容。标题里的可链接实体也算，
+  // 否则标题-only 的链接会丢。
   const hasEntityMarker =
     renderedBody.includes("data-tcm-kind") || titleHtml.includes("data-tcm-kind");
   if (!hasEntityMarker) {
-    return {titleHtml: null, bodyHtml: bodyHtmlIn, runtimeHtml: null};
+    return {titleHtml, bodyHtml: renderedBody, runtimeHtml: null};
   }
+  // 引用表预热门：只有出现了 方剂 / 中药 标记才需要物化（initial 取自原始正文，
+  // 与上面两道门的判据无关）。
 
   // The 条文 citing each 方剂/中药 come from `ext_marker_citations` (migration 0111).
   // Container channels carry no 条文 of their own, so they have no index to build;

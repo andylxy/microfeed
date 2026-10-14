@@ -132,6 +132,8 @@ Pattern.compile("\\$([a-zA-Z]{1,10})\\{([^}]*)\\}")   // marker 1-10 字母，�
 
 **`linkType` 是关键**：标记不只是颜色，是**可点击的跨实体跳转**（1=药、2=方、3=名词）。
 
+> **站点自有码（迁移 `0115`，2026-10-14，票04）**：上表 13 枚是源 `TipsTextRenderConfig` 全目录。导入数据里还有两枚**不在源目录**、但语义稳定的站点自有码——`$s`（方剂「右X味」总起，227 处，全落 fang）与 `$l`（校勘异文如「一本作常」，18 处，全落《难经》篇章）——已按 `$a`（灰 `#808080` + 0.7× 小字、linkType 0）补配置，类名 `mf-mk-s`/`mf-mk-l`。`$fm` 全库仅 1 处且是把「温中」的「中」重复包一层的录入误标，**不补配置**，继续 `mf-mk-unknown` 灰色降级。
+
 ### 4.3 站点现有标记对照（3 错 1 对）
 
 | 现有 `ext_annotation_markers` | 判定 |
@@ -143,7 +145,7 @@ Pattern.compile("\\$([a-zA-Z]{1,10})\\{([^}]*)\\}")   // marker 1-10 字母，�
 
 ### 4.4 ⛔ 公开站目前不解析标记
 
-`src/shared/BodyFormat.ts` 的 `bodyToHtml()` 对 HTML **原样透传**，主题 mustache 直出 `content_html`；全仓只有编辑器侧 `registerMarkerMenus.ts` 用标记（插入纯文本）。
+`src/shared/BodyFormat.ts` 的 `bodyToHtml()` 对 HTML **原样透传**，主题 mustache 直出 `content_html`；编辑器侧 `registerMarkerMenus.ts` 仅用标记插入纯文本。公开阅读页的标记解析由 `src/server/tcm/markerPopover.ts`（2026-10-11 接入，见 ADR-0015）负责，复用 `src/shared/TcmMarkers.ts` 渲染器——它在 `bodyToHtml` 之后对 `content_html` 做二次变换，不改变 `bodyToHtml` 的透传语义。
 ⇒ **必须先加渲染器，否则读者看到满屏字面 `$u{桂枝}$w{三两}`。**
 
 ---
@@ -302,7 +304,7 @@ ALTER TABLE ext_annotation_markers ADD COLUMN link_type INTEGER NOT NULL DEFAULT
 
 ## 7. 标记渲染器规格
 
-> **⚠️ 状态（2026-09-28 用户拍板）：已实现但未接入公开管线。** PC Web **暂时原样输出** `$X{}`（`FeedPublicJsonBuilder` 直出原文）；移动端 App 自己渲染（linkType 语义由 `GetTipsStyleConfig` 下发，App 侧 TipsTextRenderer 消费）。渲染器模块 `src/shared/TcmMarkers.ts` 与单测保留，将来 PC 端要上样式时从 §7 的接入点（`FeedPublicJsonBuilder` 的 `content_html` 出口）接回即可。
+> **⚠️ 状态变更（2026-09-28 拍板已被 2026-10-11 实施取代，见 `docs/novel-cms/adr/0015-marker-popover-public-integration.md`）**：标记渲染器**已接入公开阅读页**。PC Web 不再原样输出 `$X{}`——`src/pages/i/[slug]/index.astro`（公开阅读页）在服务端调用 `src/server/tcm/markerPopover.ts` 的 `buildTcmMarkerLayer`，对 `content_html` 做 `$f{方剂}` / `$u{药名}` 内联注解弹层（仅条目属于典籍频道、有 tcm 子项时激活），复用 `src/shared/TcmMarkers.ts` 渲染器。**接入点与原拍板不同**：原计划是 `FeedPublicJsonBuilder` / `BodyFormat.ts` 的 `content_html` 出口（已取消），实际走的是阅读页服务端解析层。移动端 App 仍自渲染（linkType 语义由 `GetTipsStyleConfig` 下发，App 侧 TipsTextRenderer 消费），不受影响。
 
 新文件：`src/shared/TcmMarkers.ts`（运行时中立，不放 `src/server/`）
 
@@ -325,7 +327,7 @@ export function renderTcmMarkers(body: string, styles: TcmMarkerStyle[]): string
 5. 未知 marker → 去掉 `$x{}` 外壳，输出纯文本（灰色降级）。
 6. 只作用于 HTML **文本节点**，不得破坏标签属性。
 
-接入点：`src/shared/BodyFormat.ts` 的 `bodyToHtml()` HTML 分支（编辑器读 `data.description` 原值，不受影响）。CSS 类需进主题/全局样式。
+接入点（实际，2026-10-11 实施，见 ADR-0015）：`src/server/tcm/markerPopover.ts` 的 `buildTcmMarkerLayer(db, {bodyHtml, title, currentBookId})`，由 `src/pages/i/[slug]/index.astro` 在服务端调用，仅对典籍类条目激活；CSS 类（`mf-mk` 系列）需进主题/全局样式。原计划接入点 `src/shared/BodyFormat.ts` 的 `bodyToHtml()` 已取消（阅读页改为在其后做 `content_html` 二次变换）。
 
 ---
 
@@ -381,14 +383,14 @@ export function renderTcmMarkers(body: string, styles: TcmMarkerStyle[]): string
 
 - 新增迁移 `0070` / `0071` / `0072`
 - 新增 `src/shared/TcmMarkers.ts`、`src/shared/Tcm.ts`、`src/server/tcm/*.ts`、`src/pages/api/AppBookRequest/*.ts`
-- `src/shared/TcmMarkers.ts` 渲染器**保留但不接入公开管线**（用户拍板：PC 暂时原样输出，App 自渲染）
+- `src/shared/TcmMarkers.ts` 渲染器**已接入公开阅读页**（`/i/[slug]`，服务端 `buildTcmMarkerLayer`，见 ADR-0015）；移动端 App 仍自渲染
 - 新增 `scripts/import-ctwh/`（不入 `src/`）
 - 后台内容列表加 `tcm_kind` 筛选（唯一 UI 改动）
 
 **排除范围**
 
 - 不动 `auth_*` 表、不动 RBAC 决策链
-- 不动现有主题文件（`themes/feed-zh/`）与页面模板
+- ~~不动现有主题文件（`themes/feed-zh/`）与页面模板~~ → **已突破（2026-10-11 实施，见 ADR-0015）**：标记弹层接入需改 `themes/*/web-item.mustache`（注入 `mf-mk` 样式与弹层容器）与阅读页 `src/pages/i/[slug]/index.astro`（调用 `buildTcmMarkerLayer`）；这是对原 2026-09-28 排除范围的偏离，经用户确认保留。
 - 不动 OpenAPI 契约（`src/shared/OpenApiDocument.ts`）
 - 不迁问诊 / AI 对话、不改 Android App 代码
 - **不碰生产**：先本地 miniflare，确认后 `d1 export` 备份再写远程
@@ -404,8 +406,8 @@ export function renderTcmMarkers(body: string, styles: TcmMarkerStyle[]): string
 3. ✅ 迁移 `0070`：`items` 加 `tcm_kind` + `tcm_parent_id` + 2 索引（**无源 id 列**）
 4. ✅ 迁移 `0071`：`ext_annotation_markers` 加 3 列 + 重种 13 项 + 修正 3 枚 title
 5. ✅ 迁移 `0072`：建「针灸」「人纪」两个 `ext_category` 与三个容器频道（方剂 / 本草 / 名词）
-6. ✅ `src/shared/TcmMarkers.ts` 渲染器 + 单测 10 例（**按拍板保留、不接入公开管线**）
-7. ~~`BodyFormat.ts` 接入点~~ → **已按用户拍板取消**：PC 暂时原样输出标记，App 自渲染
+6. ✅ `src/shared/TcmMarkers.ts` 渲染器 + 单测 10 例（**已接入公开阅读页 `/i/[slug]`，见 ADR-0015**）
+7. ~~`BodyFormat.ts` 接入点~~ → **已取消**：原计划 `BodyFormat.ts` / `FeedPublicJsonBuilder` 出口未采用；实际接入点为阅读页服务端 `buildTcmMarkerLayer`（`src/server/tcm/markerPopover.ts`，2026-10-11 实施，见 ADR-0015）
 8. ✅ `scripts/import-ctwh/` 转译脚本（确定性 11 位 id、关系按 §16 分流）
 9. ✅ 本地 miniflare 导入 + 全量保真审计（85601 字段 0 不一致，见工单 07）
 10. 写 `src/server/tcm/` 八个读函数 + `src/pages/api/AppBookRequest/` 路由（含 `login` / `replaceToken`）
@@ -449,7 +451,7 @@ export function renderTcmMarkers(body: string, styles: TcmMarkerStyle[]): string
 | 9 | 图形验证码 | `getPicCaptcha` 自绘验证码 | 无此能力 | 先确认 App 是否必调；不必调则端点返回空，不阻塞登录链路 |
 | 10 | 时间 | MySQL `datetime`（`CreateDate`） | `pub_date` RFC3339（`msToRFC3339`） | `pub_date` = 源 `CreateDate`；展示排序沿用 |
 | 11 | 图片 | 本地相对路径 `Upload/Images/...`（无源文件导出） | R2 媒体库 + 永久 `media_url` | 走 `yarn microfeed media upload` 回填；导入期置空，原始路径存 `_microfeed.sourceImagePath` |
-| 12 | 标记渲染 | Android `TipsTextRenderer`：正则单遍、**不支持嵌套**（`$a{$q{}}` 渲染成字面文本）、SpannableString | 公开站**完全不解析**标记（`bodyToHtml` 原样透传） | **PC 暂时原样输出（用户拍板 2026-09-28）**；递归渲染器已实现保留（§7），App 端自渲染、样式由 `GetTipsStyleConfig` 下发；golden 比对时"嵌套字面文本"与"签名字段移除"同属已知差异 |
+| 12 | 标记渲染 | Android `TipsTextRenderer`：正则单遍、**不支持嵌套**（`$a{$q{}}` 渲染成字面文本）、SpannableString | 公开站**服务端解析**标记（`/i/[slug]` 经 `buildTcmMarkerLayer` 生成内联弹层，递归渲染器 `src/shared/TcmMarkers.ts` 支持嵌套） | PC 公开阅读页**已接入**（2026-10-11，ADR-0015）；移动端 App 仍自渲染、样式由 `GetTipsStyleConfig` 下发；golden 比对时"嵌套字面文本"与"签名字段移除"同属已知差异 |
 | 13 | 内容审核 / 审计 / webhook | 无 | `ext_content_review` + `ext_content_audit` + webhook 发射 | **后台编辑条文走既有审核流与审计，保留不关**；批量导入直写 D1 **有意绕过** webhook/审计（一次性、可重跑，符合预期） |
 | 14 | 分页 | `HttpListData` 分页封装 | 现有端点多为全量返回 | 维持全量（中药 172 / 方剂 804 量级小）；书目录列表按篇章序号全量返回 |
 | 15 | API 框架 | ASP.NET Controller（返回 `dynamic` / `IActionResult`） | Astro 路由（`src/pages/api/**`）+ `jsonResponse` | 路径 1:1（`/api/AppBookRequest/*`），GET/POST 方法对齐；**不进 OpenAPI 契约**（App 专用，非公共 API） |

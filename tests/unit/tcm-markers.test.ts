@@ -1,6 +1,11 @@
 import {describe, expect, it} from "vitest";
 
-import {renderTcmMarkers, type TcmMarkerStyle} from "@/shared/TcmMarkers";
+import {
+  hasTcmMarker,
+  markersToPlainText,
+  renderTcmMarkers,
+  type TcmMarkerStyle,
+} from "@/shared/TcmMarkers";
 
 const STYLES: TcmMarkerStyle[] = [
   {code: "u", color: "#0000FF", smallFont: false, linkType: 1},
@@ -91,5 +96,46 @@ describe("renderTcmMarkers", () => {
     expect(html).toContain("前文");
     expect(html).toContain("桂枝");
     expect(html).not.toContain("$u{");
+  });
+});
+
+describe("markersToPlainText", () => {
+  it("strips the $x{} shell, keeps the content", () => {
+    expect(markersToPlainText("名曰柔痓。$a{（病源云恶寒。）}")).toBe("名曰柔痓。（病源云恶寒。）");
+  });
+
+  it("keeps content of nested markers, dropping every shell", () => {
+    expect(markersToPlainText("$f{桂枝汤$u{甘草}}主之")).toBe("桂枝汤甘草主之");
+  });
+
+  it("degrades unknown codes the same way the renderer does", () => {
+    // 无样式配置的码：外壳剥掉、内容保留（与 mf-mk-unknown 降级同语义）
+    expect(markersToPlainText("剂量$s{三两}")).toBe("剂量三两");
+  });
+
+  it("returns marker-free text untouched", () => {
+    expect(markersToPlainText("太阳病，发热")).toBe("太阳病，发热");
+  });
+
+  it("consumes an unclosed marker up to its first brace", () => {
+    // 与 renderSegment 的未闭合降级一致：不吃掉后续文本
+    expect(markersToPlainText("前文$a{内容后文")).toBe("前文内容后文");
+  });
+
+  it("keeps the tail after a bare < with no closing >", () => {
+    // 裸 `<`（无配对 `>`）不是标签：按字面保留，后续文本不丢（防 <title>/摘要边角输入）
+    expect(markersToPlainText("寒 < 热并见")).toBe("寒 < 热并见");
+  });
+});
+
+describe("hasTcmMarker", () => {
+  it("finds a marker anywhere in the text, not just at the start", () => {
+    expect(hasTcmMarker("太阳病$a{按语}主之")).toBe(true);
+    expect(hasTcmMarker("$f{桂枝汤}")).toBe(true);
+  });
+
+  it("reports false for marker-free text", () => {
+    expect(hasTcmMarker("太阳病，发热")).toBe(false);
+    expect(hasTcmMarker("")).toBe(false);
   });
 });

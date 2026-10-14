@@ -24,12 +24,24 @@
 - 激活条件：条目属于典籍频道且有 tcm 子项（`currentBookId != null && tcmProbe != null`）
   时才解析 `content_html`，其余条目保持原样；`markerPopover` 内硬编码容器频道
   `CONTAINER_CHANNEL_IDS = {"tcmfang0001","tcmyao00001","tcmterm0001"}`。
+- **解析之后还有两道门（2026-10-13 修正，见 ticket 01）**：`buildTcmMarkerLayer`
+  内部按两个不同目的分别门控——
+  1. **样式渲染门**：正文或标题渲染出过任何 `mf-mk` span 才返回渲染结果，
+     否则回退原文。样式表 `ext_annotation_markers` 里 `linkType=0` 的码
+     （`$a` 按语 / `$m` 强调 / `$w` 剂量 / `$q` 出处 / `$n` / `$x` / `$r` / `$v` /
+     `$h` / `$y`）**有样式、无链接**，这一门保证它们照常出彩色/小字。
+  2. **弹层激活门**：只有出现可链接实体（`$f`=方剂 / `$u`=中药 / `$g`=名词，
+     带 `data-tcm-kind`）才构建弹层 runtime 与引用表预热——纯样式码没有可弹内容。
+  这两件事自 2026-10-13 起由两道门分别判定；此前由同一个 `if`（都看 `data-tcm-kind`）
+  判定，只含非链接码的页面会整层作废：本地快照 **700 个全非链接码条目**（占带标记条目
+  22.5%）正文裸露 `$x{...}` 原文。全库不可链接 occurrence 6,139 / 14,349（42.8%）是
+  occurrence 占比，混合页的非链接码本就正常渲染，不计入受影响条目数。
 - 复用：弹层依旧复用 `src/shared/TcmMarkers.ts` 渲染器与既有 `mf-mk` CSS 类约定。
 - 移动端 App 通道**不受影响**：App 仍自渲染（`GetTipsStyleConfig` 下发 linkType 语义，
   App 侧 `TipsTextRenderer` 消费），与本次改动正交。
 
 **与原拍板的关键偏差**：原拍板的接入点是 `FeedPublicJsonBuilder` / `BodyFormat.ts` 的
-`content_html` 出口（已取消）；实际落地走的是阅读页**服务端解析层** `buildTcmMarkerLayer`，
+`content_html` 出口（已取消）；实际接入走的是阅读页**服务端解析层** `buildTcmMarkerLayer`，
 在 `bodyToHtml` 之后、主题 mustache 之前对 `content_html` 做二次变换。两者目的相同
 （公开页显示内联标记弹层），但接入位置不同。
 
