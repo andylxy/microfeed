@@ -9,6 +9,7 @@ import AdminPagination, {
 } from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import type {AdminDeviceRow} from "@/shared/AppDeviceVersion";
 import {ADMIN_URLS} from "@/shared/StringUtils";
@@ -221,7 +222,7 @@ export default function DevicesApp({canManage = false, itemsPerPage}: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-xs whitespace-nowrap text-muted-foreground">
-                      {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : "—"}
+                      {row.lastSeenAt ? formatAdminDateTime(row.lastSeenAt) : "—"}
                     </td>
                     <td className="px-4 py-2">
                       {canManage && (

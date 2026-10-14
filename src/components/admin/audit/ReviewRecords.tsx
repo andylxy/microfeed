@@ -1,4 +1,4 @@
-import {formatAdminDateTime24} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 
 /**
@@ -28,7 +28,7 @@ interface Props {
 
 function formatTimestamp(ms: number | null): string | null {
   if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
-  return formatAdminDateTime24(new Date(ms).toISOString()) ||
+  return formatAdminDateTime(new Date(ms).toISOString()) ||
     new Date(ms).toISOString();
 }
 

@@ -354,16 +354,22 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
     var id = a.getAttribute('href').split('/').filter(Boolean).pop();
     if (open(id)) e.preventDefault();
   });
-  // × and ESC both walk the stack one level (matching 返回). The native
-  // dialog cancel event fires on ESC; preventDefault keeps it open.
+  // × walks the stack one level (matching 返回).
   document.getElementById('mf-tcm-close').addEventListener('click', function (e) {
     e.preventDefault();
     back();
   });
-  dlg.addEventListener('cancel', function (e) {
-    e.preventDefault();
-    back();
-  });
+  // ESC also walks the stack one level. We intercept keydown at the document
+  // capture phase so the dialog never sees the key — its native cancel event
+  // is not reliably cancelable (Chrome flips cancelable to false on the 2nd
+  // ESC in a sequence, closing the dialog before our handler runs).
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && dlg.open) {
+      e.preventDefault();
+      e.stopPropagation();
+      back();
+    }
+  }, true);
   // Backdrop click (outside the dialog chrome) is the "cancel everything"
   // path — clear the stack and close.
   dlg.addEventListener('click', function (e) {

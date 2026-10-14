@@ -158,7 +158,13 @@
   }
   if (target) {
     target.scrollIntoView({block: "center"});
-    var host = target.querySelector("a[href]") || target;
+    // 书页目录行是 `div.mf-toc-item`（内含唯一章链接），高亮加在那个 `<a>` 上；
+    // 卷页的 target 是 `<article class="mf-volume-section">`，它的正文里本身就有
+    // `$f{}` / `$u{}` 渲染出来的实体链接 —— 无条件下探会高亮到正文第一个内联链接
+    // 而不是整条，所以只对目录行下探，其余一律高亮 target 本身。
+    var host = target.classList.contains("mf-toc-item")
+      ? (target.querySelector("a[href]") || target)
+      : target;
     host.classList.add("mf-toc-came-from");
   }
 })();

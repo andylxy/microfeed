@@ -10,6 +10,7 @@ import AdminPagination, {
 } from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import {
   LOGIN_LOG_MAX_ROWS,
@@ -304,7 +305,7 @@ export default function LoginLogsApp({itemsPerPage}: Props) {
                     {row.deviceId}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap">
-                    {new Date(row.loginAt).toLocaleString()}
+                    {formatAdminDateTime(row.loginAt)}
                   </td>
                   <td className="px-4 py-2 tabular-nums">
                     {row.loginCount}

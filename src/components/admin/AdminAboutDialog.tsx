@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {useTranslation} from "@/client/i18n";
-import {formatAdminTimestamp} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {OUR_BRAND} from "@/shared/Constants";
 import {
   MICROFEED_MANAGE_COMMAND,
@@ -173,7 +173,7 @@ export default function AdminAboutDialog({defaultOpen = false, deployment}: Prop
               <dt className="text-muted-foreground">{t("about.deployed")}</dt>
               <dd>
                 <time dateTime={deployment.deployedAt} suppressHydrationWarning>
-                  {formatAdminTimestamp(deployment.deployedAt)}
+                  {formatAdminDateTime(deployment.deployedAt)}
                 </time>
               </dd>
             </div>

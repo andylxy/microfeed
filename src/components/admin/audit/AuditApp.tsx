@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
 
-import {formatAdminDateTime24} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import {
   AdminCollectionError,
@@ -17,7 +17,7 @@ interface AuditChapter {
 
 function formatDateTime(value: number | null): string {
   if (!value) return "—";
-  return formatAdminDateTime24(value) || "—";
+  return formatAdminDateTime(value) || "—";
 }
 
 export default function AuditApp() {

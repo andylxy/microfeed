@@ -6,10 +6,7 @@ import {
 } from "@tanstack/react-table";
 import {useMemo, useState, type MouseEvent} from "react";
 import i18n, {useTranslation} from "@/client/i18n";
-import {
-  formatAdminShortDate,
-  formatAdminTimestamp,
-} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -26,11 +23,6 @@ import {
 } from "@/components/admin/shared/AdminCollectionState";
 import {useAdminCollection} from "@/client/useAdminCollection";
 import {buttonVariants} from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {cn} from "@/lib/utils";
 import {
   ENCLOSURE_CATEGORIES,
@@ -143,38 +135,20 @@ function validDate(value: number | undefined): Date | undefined {
   return new Date(value as number);
 }
 
-function formatShortDate(date: Date): string {
-  return formatAdminShortDate(date);
-}
-
-function formatFullTimestamp(date: Date): string {
-  return formatAdminTimestamp(date, "long");
-}
-
 function ItemDate({value}: {value?: number}) {
   const date = validDate(value);
   if (!date) {
     return <span aria-label={i18n.t("items.dateUnavailable")}>—</span>;
   }
 
-  const fullTimestamp = formatFullTimestamp(date);
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <time
-            aria-label={fullTimestamp}
-            className="block min-w-0 cursor-help whitespace-normal break-words leading-snug"
-            dateTime={date.toISOString()}
-            suppressHydrationWarning
-            tabIndex={0}
-          >
-            {formatShortDate(date)}
-          </time>
-        }
-      />
-      <TooltipContent>{fullTimestamp}</TooltipContent>
-    </Tooltip>
+    <time
+      className="block min-w-0 whitespace-normal break-words leading-snug"
+      dateTime={date.toISOString()}
+      suppressHydrationWarning
+    >
+      {formatAdminDateTime(date)}
+    </time>
   );
 }
 

@@ -65,6 +65,24 @@ describe("Workers Caching response policy", () => {
       ]);
   });
 
+  it("caches volume pages with the book page's invalidation groups", () => {
+    const response = policy("/book/q6u5siNb2hT/v/45suxYq70le/");
+
+    expect(response.headers.get("cache-control")).toBe(
+      PUBLIC_CACHE_BROWSER_CONTROL,
+    );
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      PUBLIC_CACHE_EDGE_CONTROL,
+    );
+    // 与书页同款四标签：正文变更（`mf:items`）要让卷页缓存失效。
+    expect(response.headers.get("cache-tag")?.split(",")).toEqual([
+      PUBLIC_CACHE_TAGS.PUBLIC,
+      PUBLIC_CACHE_TAGS.ITEMS,
+      PUBLIC_CACHE_TAGS.PAGES,
+      PUBLIC_CACHE_TAGS.THEME_CURRENT,
+    ]);
+  });
+
   it("tags item representations independently from aggregate pages", () => {
     const tags = policy(`/i/${ITEM_ID}/json/`)
       .headers.get("cache-tag")?.split(",");

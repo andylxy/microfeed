@@ -1,6 +1,6 @@
 import {useState} from "react";
 import i18n from "@/client/i18n";
-import {formatAdminDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 
 import AdminSectionCard from "@/components/admin/shared/AdminSectionCard";
 import {Button} from "@/components/ui/button";
@@ -153,7 +153,7 @@ export default function WebhookDeliveriesApp({initialDeliveries, endpoints, init
                 <button className="grid w-full gap-1 p-4 text-left hover:bg-muted/50 sm:grid-cols-[1fr_auto]" onClick={() => inspect(delivery.id)} type="button">
                   <span><span className="font-medium">{delivery.eventType}</span>{delivery.isTest && <span className="ml-2 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase">{t("webhookDeliveries.testBadge")}</span>}<span className="ml-2 text-xs text-muted-foreground">{delivery.endpointName ?? delivery.endpointUrl}</span></span>
                   <DeliveryStatus status={delivery.status} />
-                  <span className="text-xs text-muted-foreground">{formatAdminDate(delivery.createdAt)} · {t("webhookDeliveries.attempts", {count: delivery.attemptCount})}</span>
+                  <span className="text-xs text-muted-foreground">{formatAdminDateTime(delivery.createdAt)} · {t("webhookDeliveries.attempts", {count: delivery.attemptCount})}</span>
                 </button>
               </li>
             ))}

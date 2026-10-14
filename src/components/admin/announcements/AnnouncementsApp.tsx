@@ -10,7 +10,7 @@ import AdminPagination, {
 import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminTextarea from "@/components/admin/shared/AdminTextarea";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
-import {formatAdminTimestamp} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
 import {
@@ -184,10 +184,10 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
       if (row.validFrom === null && row.validTo === null) return t("announcements.noWindow");
       const from = row.validFrom === null
         ? t("announcements.noWindow")
-        : formatAdminTimestamp(row.validFrom);
+        : formatAdminDateTime(row.validFrom);
       const to = row.validTo === null
         ? t("announcements.noWindow")
-        : formatAdminTimestamp(row.validTo);
+        : formatAdminDateTime(row.validTo);
       return t("announcements.fromTo", {from, to});
     },
     [t],
@@ -365,7 +365,7 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
                     </td>
                     <td className="px-4 py-2 tabular-nums">{row.version}</td>
                     <td className="px-4 py-2 whitespace-nowrap text-xs">
-                      {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}
+                      {row.updatedAt ? formatAdminDateTime(row.updatedAt) : "—"}
                     </td>
                     {canManage && (
                       <td className="px-4 py-2">

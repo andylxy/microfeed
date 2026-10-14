@@ -2,7 +2,7 @@ import {useEffect, useState, type ReactNode} from "react";
 import {CircleHelpIcon, CopyIcon, SearchIcon} from "lucide-react";
 
 import i18n, {useTranslation} from "@/client/i18n";
-import {formatAdminTimestamp} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {showToast} from "@/client/ToastUtils";
 import ThemeInstallHelpDialog from "@/components/admin/themes/ThemeInstallHelpDialog";
 import ThemePreviewDialog from "@/components/admin/themes/ThemePreviewDialog";
@@ -69,7 +69,7 @@ function InstalledAt({value}: {value: string}) {
     <p className="mt-1 text-xs text-muted-foreground">
       {i18n.t("themes.installedAt")}{" "}
       <time dateTime={valid ? date.toISOString() : value}>
-        {valid ? formatAdminTimestamp(date) : value}
+        {valid ? formatAdminDateTime(date) : value}
       </time>
     </p>
   );

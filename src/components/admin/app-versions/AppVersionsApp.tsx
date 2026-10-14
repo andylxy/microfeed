@@ -3,7 +3,7 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {CloudUploadIcon} from "lucide-react";
 
 import Requests from "@/client/requests";
-import {formatAdminTimestamp} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import FileUploader from "@/components/admin/shared/AdminFileUploader";
 
 import {
@@ -558,7 +558,7 @@ export default function AppVersionsApp({canManage = false, itemsPerPage}: Props)
                       {humanFileSize(apk.size)}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
-                      {formatAdminTimestamp(apk.uploadedAt)}
+                      {formatAdminDateTime(apk.uploadedAt)}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs">
                       {apk.md5.slice(0, 8)}…

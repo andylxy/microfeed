@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
 
-import {formatAdminDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
@@ -271,14 +271,14 @@ export default function LoginCredentialsPanel({userId}: Props) {
                   <span>
                     {credential.lastUsedAtMs
                       ? t("loginCredentials.lastUsed", {
-                        date: formatAdminDate(new Date(credential.lastUsedAtMs)),
+                        date: formatAdminDateTime(new Date(credential.lastUsedAtMs)),
                       })
                       : t("loginCredentials.neverUsed")}
                   </span>
                   <span>
                     {credential.expiresAtMs
                       ? t("loginCredentials.expires", {
-                        date: formatAdminDate(new Date(credential.expiresAtMs)),
+                        date: formatAdminDateTime(new Date(credential.expiresAtMs)),
                       })
                       : t("loginCredentials.noExpiry")}
                   </span>

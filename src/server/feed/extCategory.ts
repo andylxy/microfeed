@@ -754,20 +754,36 @@ export interface BookVolume {
 }
 
 /**
- * A TCM book's volumes — the 篇章 rows, and nothing else.
+ * A TCM book's volumes — the 篇章 rows of a book that actually holds 条文.
  *
  * The book page used to read the whole book's 条文 (921 rows_read for
  * 伤寒金匮・宋版, ≈3,045 for 素问) just to render a title list. Since ADR-0025 the
  * book page lists volumes and the reader opens one on demand, so all it needs is
  * these rows.
  *
- * An empty array means the book has no 篇章 at all — a flat TCM book (中药 /
- * 名词) — and its catalog stays flat.
+ * An empty array means the book has no volumes — a flat TCM book (中药 / 名词)
+ * — and its catalog stays flat. Those books still carry a single root 篇章
+ * (its title is the book's own name) but no 条文 under it: their entries are
+ * `yao` / `term` rows, which the flat catalog lists directly. That root row is
+ * not a volume a reader can open, so it must not be returned here — otherwise
+ * the book page would show a one-volume catalog and drop the 172 flat entries.
+ *
+ * ⚠️ 这是**全书级**判定，不是逐卷：只查「本书有没有任何非删条文」，所以一个
+ * 条文已被删光的篇章仍会被返回（点开显示「本卷暂无内容」）。要逐卷过滤得改成
+ * `EXISTS` 子查询，代价是每篇章一次点查，本批不做。
+ *
+ * 先做一次 `tcm_kind='section' AND status != 3` 点查（命中时 1 行，走 `items_book_kind`）区分两类书；
+ * 有条文才读篇章行（实测 55 rows_read for 伤寒金匮・宋版 的 27 卷）—— 所以卷列表合计 **56**。
  */
 export async function getBookVolumes(
   db: CategoryDb,
   bookId: string,
 ): Promise<BookVolume[]> {
+  const hasSections = await db.prepare(
+    "SELECT 1 AS one FROM items WHERE book_id = ? AND tcm_kind = 'section' " +
+      "AND status != ? LIMIT 1",
+  ).bind(bookId, STATUSES.DELETED).first();
+  if (!hasSections) return [];
   const chapters = await fetchBookChapterRows(db, bookId);
   return chapters.map((chapter) => ({id: chapter.id, name: chapter.title}));
 }

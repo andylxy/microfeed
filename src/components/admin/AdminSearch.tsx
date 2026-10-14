@@ -6,7 +6,7 @@ import {
 } from "react";
 import {FileTextIcon, SearchIcon} from "lucide-react";
 
-import {formatAdminShortDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {Button} from "@/components/ui/button";
 import {
   Dialog,
@@ -40,10 +40,6 @@ interface Props {
   adminPath: string;
 }
 
-function formatShortDate(value: string): string {
-  return formatAdminShortDate(value);
-}
-
 function ResultTitle({result}: {result: AdminSearchResult}) {
   const {t} = useTranslation();
   const segments = result.highlights.length > 0
@@ -57,7 +53,7 @@ function ResultTitle({result}: {result: AdminSearchResult}) {
 
 function ResultMetadata({result}: {result: AdminSearchResult}) {
   const {t} = useTranslation();
-  const publishedDate = formatShortDate(result.date_published);
+  const publishedDate = formatAdminDateTime(result.date_published);
   return (
     <>
       {result.status}

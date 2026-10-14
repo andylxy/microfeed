@@ -3,6 +3,7 @@ import {env} from "cloudflare:workers";
 
 import {CODE_TYPES, STATUSES} from "@/shared/Constants";
 import {getIdFromSlug, PUBLIC_URLS} from "@/shared/StringUtils";
+import {markersToPlainText} from "@/shared/TcmMarkers";
 import Theme from "@/server/themes/Theme";
 import PublicLayout from "../../../layouts/PublicLayout.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
@@ -84,18 +85,46 @@ const tcmProbe = currentBookId == null
         "AND tcm_kind IS NOT NULL LIMIT 1",
     ).bind(String(currentBookId)).first();
 
-// The book page tags every 目录 row with `id="mf-toc-<item id>"`
-// (`themes/feed-zh/web-feed.mustache`), so carrying this chapter's id as a hash
-// makes 返回 land on the exact row the reader came from rather than the top of
-// the catalogue. On a 典籍 whose catalogue runs to eight thousand entries that
-// is the difference between one click and a very long scroll.
+// ADR-0025 的「章节回跳锚点」（见 CONTEXT.md）：TCM 书的「返回」指向**卷页**
+// `/book/<id>/v/<篇章 id>/#mf-toc-<条 id>`，卷页给每条设 `id="mf-toc-<条 id>"`，
+// 由 `web-body-end` 的收尾脚本滚动并高亮。书页只列卷之后，书页上那个
+// `#mf-toc-<条 id>` 锚点已不存在 —— 仍指向书页会到页面顶部。
 //
-// The header back button uses the same URL, so both return affordances agree on
-// where "back" is. Falling back without the hash when the id is missing keeps the
-// link valid rather than pointing at `#mf-toc-undefined`.
+// **尾斜杠要留着**：卷页的规范路径形状是 `/book/{id}/v/{篇章 id}/`，`public-cache.ts`
+// 的 `isBookScopedPath` 用 `/^\/book\/[^/]+\/(?:v\/[^/]+\/)?$/u` 认它。少一个尾斜杠，
+// 服务端只会回一个 **308 Permanent Redirect** 把它补回来（本地实测：
+// `/book/<id>/v/<卷>/` → 200 `cache-control: no-cache`；去掉斜杠 → 308 + `private, no-store`）。
+// 重定向本身永远不可缓存——`isPublicCacheableResponse` 要求 `response.status === 200`
+// （同一个函数里的前置，**引函数名别引行号**，合并 `isVolumePath` 时行号已经漂过一次），
+// 308 落不进公开分支，还会被 `Cloudflare-CDN-Cache-Control: no-store`
+// 挡在边缘缓存之外。所以每次点「返回」都要多付一个不可缓存的往返。
+// 片段（`#…`）会被浏览器带过重定向，锚点不会坏——代价是那一跳，不是错位。
+// 页面本身仍然是边缘缓存的，别把它说成「整笔回源」。
+//
+// 篇章 id 不在 `getItemJson` 返回的 7 列里，所以这里补一条 **1 row_read** 的点查
+// （按 `items` 主键 `id`；远便宜于旧「上一章 / 下一章」所需的整本扫描）。扁平书
+// （中药 / 名词）的条目 `tcm_kind` 是 `yao` / `term`，虽带 `tcm_parent_id`，但它指向的是
+// 那本书唯一的 root 篇章、不是卷 —— 照它拼出的卷页是空的，所以下面只认条文。
+//
+// 返回按钮与页面里所有返回入口共用同一个 URL，所以两处「返回」到同一位置。
+const parentRow = itemId && tcmProbe != null
+  ? await (loaded.database.FEED_DB as unknown as CategoryDb)
+      .prepare("SELECT tcm_kind, tcm_parent_id FROM items WHERE id = ?")
+      .bind(itemId)
+      .first()
+  : null;
+// 只有**条文**（`tcm_kind='section'`）回卷页。扁平条目（中药 `yao` / 名词 `term`）
+// 也有 `tcm_parent_id` —— 但它指向那本书唯一的 root 篇章（不是卷），照它拼出的
+// 卷页是空的。那些条目退回书页锚点。
+const volumeId =
+  parentRow && parentRow.tcm_kind === "section" && parentRow.tcm_parent_id
+    ? String(parentRow.tcm_parent_id)
+    : null;
 const bookUrl = currentBookId ? `/book/${currentBookId}` : "/";
 const tocUrl = currentBookId != null && itemId
-  ? `${bookUrl}#mf-toc-${itemId}`
+  ? volumeId
+    ? `${bookUrl}/v/${volumeId}/#mf-toc-${itemId}`
+    : `${bookUrl}#mf-toc-${itemId}`
   : bookUrl;
 
 // Light metadata for the bookshelf button: the reader knows its own chapter but
@@ -164,6 +193,11 @@ const sharedTheme = new Theme(
 const canonicalUrl = itemId && item
   ? PUBLIC_URLS.webItem(itemId, String(item.title ?? ""), Astro.url.origin)
   : undefined;
+// 页标题与摘要走纯文本出口——标记外壳在浏览器标签页与搜索摘要里是噪声
+// （正文的标题用 tcmTitleHtml，那里可以带颜色/链接）。曾实测某条阅读页的标签页
+// 标题里 3 个方剂标记、2 个中药标记、1 个黑字标记原样显示。
+const pageTitle = markersToPlainText(item?.title ?? "Untitled");
+const pageDescription = markersToPlainText(item?.content_text ?? "");
 ---
 
 {notFoundPage?.kind === "page" ? (
@@ -172,8 +206,8 @@ const canonicalUrl = itemId && item
   <PublicNotFoundHeading />
 ) : (
   <PublicLayout
-    title={String(item.title ?? "Untitled")}
-    description={String(item.content_text ?? "")}
+    title={pageTitle}
+    description={pageDescription}
     language={loaded.publicFeed.language}
     canonicalUrl={canonicalUrl}
     channelImage={String(loaded.content.channel?.image ?? "")}

@@ -387,12 +387,14 @@ a.mf-chip {
  * and a three-column chapter list. This mirrors poto/详情面.html. */
 /* The canvas has to reach the footer too, or these pages end in a white band. */
 body:has(.mf-book-detail-page),
-body:has(.mf-library-page) {
+body:has(.mf-library-page),
+body:has(.mf-volume-page) {
   background: var(--mf-page-bg);
 }
 
 .mf-book-detail-page,
-.mf-library-page {
+.mf-library-page,
+.mf-volume-page {
   background: var(--mf-page-bg);
   min-height: 100vh;
   /* Was `-2em -1em -4em`. Those negative margins cancelled the shared
@@ -672,6 +674,76 @@ body:has(.mf-library-page) {
   white-space: nowrap;
 }
 
+/* 卷页（ADR-0025 D1/D3）：卷头 + 连续铺开的条文正文。
+   正文复用 .mf-rich-content，条与条之间不加分隔线（正文自带序号已足够分界）。
+   「返回」落到某条时的 `.mf-toc-came-from` 高亮沿用上面那条通用规则。 */
+
+/* 卷导航：放在正文之后、整行居中（2026-10-13 站点要求）。顺序是
+   「上一卷 · 卷名 | 返回目录 | 下一卷 · 卷名」—— 读完一卷顺手往下翻，不用回顶部。
+   按钮沿用 `.mf-detail-btn` 的胶囊外观，只覆盖高度/换行/宽度：卷名可长到 41 字符
+   （还含 `$r{…}` 标注），固定 2.5rem 高的胶囊在窄屏会横向溢出。 */
+.mf-volume-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .75em;
+  margin-top: 2em;
+}
+
+.mf-volume-nav .mf-detail-btn {
+  height: auto;
+  min-height: 2.5rem;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.mf-volume-body {
+  margin-top: 1.5em;
+  /* 正文栏收窄居中，与 `.mf-reader-content` 同值（47.5rem）：卷页曾经没有宽度
+     约束，条文正文拉通到 960px 容器，一行七八十个字，与 0.1.39 时代阅读页的
+     760px 阅读栏相比「区域非常大、很难看」（2026-10-13 站点要求）。 */
+  max-width: 47.5rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 卷头（2026-10-13 站点要求）：阅读页式紧凑头，替代原先的 `.mf-detail-card` 大卡。
+   卷页只有「卷名 + 条数」一项内容，大卡（1.75rem 标题 + 标签 pill + 1.25em 内距）
+   通栏铺开显得空且大；这里沿用 `.mf-reader-chapter-head` 的结构与字号——即
+   0.1.39 时代阅读页章节头的观感。书页/分类页的 `.mf-detail-card` 不受影响。 */
+.mf-volume-head {
+  border-bottom: 1px solid var(--mf-border);
+  padding-bottom: 1em;
+  margin-bottom: 1.5em;
+}
+
+.mf-volume-title {
+  color: var(--mf-text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 .5em;
+}
+
+/* 条数与卷名同一行（2026-10-13 站点要求）：小号弱化色，跟在卷名后。
+   书名不显示——面包屑已有，不重复。 */
+.mf-volume-count {
+  color: var(--mf-muted);
+  font-size: .8125rem;
+  font-weight: 400;
+  margin-left: .75em;
+}
+
+.mf-volume-section {
+  scroll-margin-top: 5rem;
+}
+
+.mf-volume-section + .mf-volume-section {
+  margin-top: 1.75em;
+}
+
 .mf-detail-chapter-item a:hover {
   color: var(--mf-novel);
   opacity: 1;
@@ -795,11 +867,11 @@ body:has(.mf-library-page) {
     grid-template-columns: 1fr;
   }
 
+  /* 书页的作者信息区在移动端整块隐藏（2026-10-13 站点要求）：窄屏一屏能看到的
+     应该是书名、封面、简介与目录，「作者 / 用心写出不一样的故事」这段占一大块
+     且信息量低。桌面端（>768px）保持原样。 */
   .mf-author-card {
-    align-items: flex-start;
-    border-top: 1px solid var(--mf-border);
-    grid-column: 1 / -1;
-    padding-top: 1em;
+    display: none;
   }
 
   .mf-detail-main {
@@ -1188,83 +1260,11 @@ html:has(.fq-header) {
   font-weight: 600 !important;
 }
 
-/* Search box */
-.fq-search {
-  align-items: center !important;
-  background: var(--mf-surface) !important;
-  border-radius: var(--mf-radius-pill) !important;
-  box-sizing: border-box !important;
-  display: flex !important;
-  height: 36px !important;
-  padding: 0 16px !important;
-  width: 240px !important;
-}
-
-.fq-search-input {
-  background: transparent !important;
-  border: 0 !important;
-  color: var(--mf-text) !important;
-  flex: 1 !important;
-  font-size: 13px !important;
-  outline: none !important;
-}
-
-.fq-search-input::placeholder {
-  color: var(--mf-muted) !important;
-}
-
-.fq-search-btn {
-  align-items: center !important;
-  background: transparent !important;
-  border: 0 !important;
-  color: var(--mf-muted) !important;
-  cursor: pointer !important;
-  display: flex !important;
-  padding: 0 !important;
-}
-
-.fq-search-btn svg {
-  fill: var(--mf-muted) !important;
-  height: 16px !important;
-  width: 16px !important;
-}
-
-/* On narrow screens the inline search field no longer fits alongside the
- * logo, nav, and auth links. Collapse it to just the icon button (matching
- * the upstream .mf-site-search behaviour at this width) so the header keeps
- * its single row instead of overflowing horizontally. */
-@media (max-width: 768px) {
-  .fq-search {
-    padding: 0 10px !important;
-    width: auto !important;
-  }
-
-  .fq-search-input {
-    display: none !important;
-  }
-}
-
-/* Auth links */
-.fq-auth {
-  align-items: center !important;
-  display: flex !important;
-  font-size: 14px !important;
-  gap: 16px !important;
-}
-
-.fq-auth a {
-  color: var(--mf-text) !important;
-}
-
-.fq-auth a:hover {
-  color: var(--mf-brand) !important;
-}
-
-.fq-auth-divider {
-  background: var(--mf-border) !important;
-  height: 14px !important;
-  width: 1px !important;
-}
+/* 顶部的搜索框与「登录 / 注册」入口已按站点要求移除（2026-10-13）：
+   `web-body-start.mustache` 的 `fq-header-right` 只剩颜色主题切换，本节原先的
+   `.fq-search*` / `.fq-auth*` 规则随之失效，一并删除（留着只会让人以为还能配出来）。
+   注意：文件末尾 `vite` 编译产物那一段不可手工维护，里面还有更早一代的
+   `.mf-site-search` 等死规则，同理不再追究。 */
 
 /* These page roots used to be 100vw with negative margins to break out of the
  * shared stylesheet's 70ch html column. `html:has(.fq-header)` now makes the
@@ -1272,7 +1272,8 @@ html:has(.fq-header) {
  * horizontal scrollbar that 100vw causes once a vertical scrollbar exists. */
 .mf-book-detail-page,
 .mf-library-page,
-.mf-reader-page {
+.mf-reader-page,
+.mf-volume-page {
   box-sizing: border-box !important;
   max-width: none !important;
   width: 100% !important;

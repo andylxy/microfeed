@@ -1,0 +1,217 @@
+---
+import {env} from "cloudflare:workers";
+
+import {CODE_TYPES} from "@/shared/Constants";
+import {bodyToHtml} from "@/shared/BodyFormat";
+import {isTcmContainerChannel} from "@/shared/ExtCategory";
+import {markersToPlainText} from "@/shared/TcmMarkers";
+import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
+import Theme from "@/server/themes/Theme";
+import PublicLayout from "../../../../../layouts/PublicLayout.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
+import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
+import {
+  getBookById,
+  getBookVolumes,
+  getVolumeSections,
+} from "@/server/feed/extCategory";
+import type {CategoryDb} from "@/server/feed/extCategory";
+import {loadSiteNav} from "@/server/feed/siteNav";
+import {buildTcmMarkerLayer} from "@/server/tcm/markerPopover";
+
+// 卷页 `/book/<bookId>/v/<篇章 id>/`（ADR-0025 D1）。
+//
+// 卷键是 `tcm_kind='chapter'` 那一行的 11 字符 id：稳定主键（卷改名/卷序调整都
+// 不断链），且卷页查询直接命中 `items_section_order`。序号或卷名做键都会在插入/
+// 改名时指错卷或断链。
+//
+// 这是「按需读取」的字面实现：书页只列卷，读者点开某一卷时才读那一卷的条文
+// （1 篇章行 + N 条文），而不是渲染整本书。
+const bookId = Astro.params.id ?? "";
+const volumeId = Astro.params.volumeId ?? "";
+
+const loaded = await loadPublishedFeed(env, Astro.request, {
+  includeActiveTheme: true,
+});
+const hidePublicWeb = shouldHidePublicWeb(loaded.content);
+if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
+  return Astro.redirect(
+    new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
+    302,
+  );
+}
+
+const feedDb = loaded.database.FEED_DB;
+const db = feedDb as unknown as CategoryDb;
+const book = await getBookById(db, bookId);
+// A container channel (方剂 等) is not a work — it has no 篇章 of its own, so a
+// `/book/<container>/v/<id>/` URL is a 404, same as the book page.
+const containerChannel = isTcmContainerChannel(book?.microfeed);
+
+const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
+const assetBaseUrl = themeAssetBaseUrl(
+  env,
+  Astro.request.url,
+  loaded.content.activeTheme?.assetOwnerThemeId,
+  loaded.content.activeTheme?.bundle.assets,
+  webSettings.publicBucketUrl,
+);
+const siteNav = await loadSiteNav(feedDb, Astro.request);
+
+// 该卷的条文，按需读：1 行篇章 + 该卷条文（`tcm_parent_id = ?` 命中 0094
+// `items_section_order`，实测 1 + N rows_read，N ≤ 97）。`null` = 该 id 不是篇章。
+const volume = hidePublicWeb
+  ? null
+  : await getVolumeSections(db, volumeId, Astro.url.origin);
+// 卷必须属于这本书 —— 否则 `/book/A/v/<B 的篇章 id>/` 会串书。篇章列表同时用于
+// 上一卷 / 下一卷（按篇章顺序，实测 56 rows_read for 27 卷）。与上面的卷内容一样
+// 受 `hidePublicWeb` 门禁：隐藏站点下不值得为一次 404 付这 56 行。
+const volumes = book && !hidePublicWeb ? await getBookVolumes(db, bookId) : [];
+const volumeIndex = volumes.findIndex((entry) => entry.id === volumeId);
+// 404 归纳（与 ADR-0025「实现状态」D1 行一一对应）：书/站不可用（`hidePublicWeb`、
+// `!book`）、TCM 容器频道、该 id 不是篇章（`!volume`）、篇章已删（`getVolumeSections`
+// 同带 `status != 3`）、以及篇章不属于本书（`volumeIndex < 0`）。
+const unavailable =
+  hidePublicWeb || !book || containerChannel || !volume || volumeIndex < 0;
+if (unavailable) {
+  Astro.response.status = 404;
+}
+
+const bookUrl = `/book/${bookId}`;
+const volumeUrl = (id: string) => `${bookUrl}/v/${id}/`;
+const prevVolume = volumeIndex > 0 ? volumes[volumeIndex - 1] : undefined;
+const nextVolume = volumeIndex >= 0 && volumeIndex < volumes.length - 1
+  ? volumes[volumeIndex + 1]
+  : undefined;
+
+// 标注层按卷只建一次（见 `plan.md` §4.2.1「卷页必须跑标注层，而且只能按卷跑一次」）：
+// 把该卷条文正文用一个 HTML 注释分隔符合并、建一次层、再按分隔符切回。实测切回段数与
+// 条数相等（最大卷 97→97），且切回后的单条输出与单独建层**逐字一致** —— 所以合并不引入
+// 任何差异，却把 N 次（N×981 rows_read）压成 1 次。分隔符是 HTML 注释，`$f{}` / `$u{}`
+// 渲染不会动它。
+const SECTION_SPLIT = "\n<!--MF-SECTION-SPLIT-->\n";
+const markerLayer =
+  !unavailable && volume
+    ? await buildTcmMarkerLayer(feedDb, {
+        // 与阅读页同一条渲染链：阅读页拿到的是 `content_html`，正是
+        // `bodyToHtml(description, content_format)`（`FeedPublicJsonBuilder`）。
+        // 这里必须自己补这一步 —— TCM 导入恒定写 `content_format: "html"`
+        // 所以现状看不出差别，但后台可把单条改成 markdown，少了它卷页会露原始
+        // markdown（plan §4.4「阅读页正文渲染不变」）。标注层吃的是**渲染后**
+        // 的 HTML，`$f{}` / `$u{}` 在两种格式里都保持字面（用户约束：原形入库、
+        // 显示时才改写），所以这一步不会把标记吃掉。
+        bodyHtml: volume.sections
+          .map((section) =>
+            bodyToHtml(section.description, section.content_format),
+          )
+          .join(SECTION_SPLIT),
+        title: volume.name,
+        currentBookId: bookId,
+      })
+    : null;
+const splitParts = markerLayer
+  ? markerLayer.bodyHtml.split(SECTION_SPLIT)
+  : null;
+const sectionCount = (volume?.sections ?? []).length;
+// 段数必须与条数相等，否则放弃切分、退回逐条用未合并的正文。正文是外部数据：
+// 万一某条自带了字面的 `<!--MF-SECTION-SPLIT-->`，`split` 会多切出几段，下面按
+// 下标与正文对不上就会**静默错位**（锚点与正文张冠李戴、还不报错）。退回的代价是该卷
+// 渲染不到标注层（`$f{}` 露原文），但比悄悄渲染错内容好。
+const splitAligned = splitParts?.length === sectionCount;
+if (markerLayer && !splitAligned) {
+  console.error(JSON.stringify({
+    message: "TCM volume marker layer split misaligned; falling back to raw bodies",
+    bookId,
+    volumeId,
+    expected: sectionCount,
+    got: splitParts?.length ?? 0,
+  }));
+}
+const renderedParts = splitAligned ? splitParts : null;
+// 每条一个 `<article id="mf-toc-<条 id>">`，不输出条标题（ADR-0025 D3）。
+const volumeSections = (volume?.sections ?? []).map((section, index) => ({
+  id: String(section.id),
+  bodyHtml:
+    renderedParts?.[index] ??
+    bodyToHtml(section.description, section.content_format),
+}));
+
+const extraContext = book
+  ? {
+      ...siteNav,
+      volume_view: true,
+      book_title: book.title,
+      book_url: bookUrl,
+      volume_name: volume?.name ?? "",
+      // 卷名与条名同权——14 个卷名带标记（灵枢 9、神农本草经・人纪 4、
+      // 宋版伤寒论 1），曾原样显示在 <title>、面包屑与卷头三处。
+      // `volume_name_html` 走标注层的标题出口（markerLayer 的 title 就是卷名），
+      // 带颜色、可链接；`volume_name_text` 是纯文本出口，给 <title> 与面包屑。
+      volume_name_html: markerLayer?.titleHtml ?? null,
+      volume_name_text: markersToPlainText(volume?.name ?? ""),
+      volume_section_count: volumeSections.length,
+      volume_sections: volumeSections,
+      // 卷导航按钮自身是 <a>，标签出纯文本（嵌套链接是非法 HTML）
+      ...(prevVolume
+        ? {
+            volume_prev: {
+              text: markersToPlainText(prevVolume.name),
+              url: volumeUrl(prevVolume.id),
+            },
+          }
+        : {}),
+      ...(nextVolume
+        ? {
+            volume_next: {
+              text: markersToPlainText(nextVolume.name),
+              url: volumeUrl(nextVolume.id),
+            },
+          }
+        : {}),
+      tcm_marker_runtime: markerLayer?.runtimeHtml ?? null,
+    }
+  : {};
+
+const theme = new Theme(
+  loaded.publicFeed,
+  loaded.content.settings,
+  null,
+  loaded.content.activeTheme,
+  assetBaseUrl,
+  extraContext,
+);
+const sharedTheme = new Theme(
+  loaded.publicFeed,
+  loaded.content.settings,
+  CODE_TYPES.SHARED,
+  loaded.content.activeTheme,
+  assetBaseUrl,
+  extraContext,
+);
+// 页标题走纯文本出口——标记外壳在浏览器标签页里是噪声（卷头标题用
+// volume_name_html，那里可以带颜色/链接）。
+const pageTitle = volume
+  ? `${markersToPlainText(volume.name)} · ${markersToPlainText(book?.title ?? "")}`
+  : markersToPlainText(book?.title ?? loaded.publicFeed.title ?? "");
+---
+
+{unavailable ? (
+  <PublicNotFoundHeading />
+) : (
+  <PublicLayout
+    title={pageTitle}
+    description={String(book?.description ?? "")}
+    language={loaded.publicFeed.language}
+    channelImage={String(loaded.content.channel?.image ?? "")}
+    favicon={webSettings.favicon}
+    publicBucketUrl={webSettings.publicBucketUrl}
+    headHtml={theme.getWebHeader().html}
+    sharedHeadHtml={sharedTheme.getWebHeader().html}
+    bodyStart={theme.getWebBodyStart().html}
+    sharedBodyStart={sharedTheme.getWebBodyStart().html}
+    bodyHtml={theme.getWebFeed().html}
+    bodyEnd={theme.getWebBodyEnd().html}
+    sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
+    searchEnabled={theme.supportsPagesAndSearch()}
+  />
+)}

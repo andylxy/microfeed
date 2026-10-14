@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
-import {formatAdminDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
 import AdminSectionCard from "@/components/admin/shared/AdminSectionCard";
 import {Button} from "@/components/ui/button";
@@ -203,7 +203,7 @@ export default function WebhookOverviewApp({
             {overview.alerts.map((alert) => (
               <li className="rounded-lg border border-amber-500/35 bg-amber-500/8 p-3" key={alert.id}>
                 <p className="font-medium">{alert.message}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{formatAdminDate(alert.createdAt)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatAdminDateTime(alert.createdAt)}</p>
               </li>
             ))}
           </ul>

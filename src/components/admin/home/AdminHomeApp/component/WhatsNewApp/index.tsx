@@ -1,4 +1,5 @@
 import React from 'react';
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import i18n from "@/client/i18n";
 import {OUR_BRAND} from "@/shared/Constants";
 
@@ -45,7 +46,16 @@ export default class WhatsNewApp extends React.Component<any, any> {
               <a className="font-normal" href={item._microfeed.web_url} target="_blank" rel="noopener noreferrer">{item.title}</a>
             </div>
             <div className="text-xs text-muted-color mt-1">
-              {item._microfeed.date_published_short}
+              {/* Canonical admin date format, built from the raw ms / ISO only.
+                  The feed also ships `_microfeed.date_published_short`, but that
+                  string is pre-formatted in the *publisher's* timezone and lands
+                  on a different calendar day than the raw fields (measured:
+                  `2026-09-22T20:19:19.650Z` → `"Wed Sep 23 2026"`), so running it
+                  through the formatter printed a confidently wrong time. It is
+                  also never reached: all 14 items in the live feed carry both
+                  raw fields. If the feed ever drops them the cell renders empty
+                  rather than a fabricated midnight. */}
+              {formatAdminDateTime(item._microfeed.date_published_ms ?? item.date_published)}
             </div>
           </div>))}
           {items.length > 0 ? <div className="text-right">

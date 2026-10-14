@@ -1,3 +1,56 @@
+{{#volume_view}}
+{{! 卷页（ADR-0025 D1/D3）：把该卷全部条文正文连续铺开，每条一个
+    <article id="mf-toc-<条 id>">，**不输出条标题** —— 803/812 条正文以标题开头
+    （标题就是正文首句的截断），标题是噪声。正文已由按卷一次的 buildTcmMarkerLayer
+    渲染（$f{} / $u{} 变成可点实体），runtime 在页尾注入。 }}
+<main class="mf-volume-page">
+  <div class="mf-detail-container">
+    <nav class="mf-breadcrumb" aria-label="面包屑">
+      <a href="/">首页</a><span>/</span><a href="{{book_url}}">{{book_title}}</a><span>/</span><span>{{volume_name_text}}</span>
+    </nav>
+
+    {{! 卷头用阅读页式紧凑头（2026-10-13 站点要求）：不复用书页的 `.mf-detail-card`
+        大卡——卷页只有一行卷名加一条计数，大卡通栏 960px 显得空且大。标题/计数/
+        分隔线的结构与字号跟 `.mf-reader-chapter-head` 一致，即 0.1.39 时代阅读页
+        章节头的观感。
+        卷名与条数同一行（2026-10-13 站点要求，示例「辨痓湿暍脉证第四  共 14 条」）：
+        书名不在这里重复——面包屑「首页 / 伤寒金匮・(宋版) / 卷名」已经给了。
+        卷名走标注层标题出口：带标记的卷名（14 个）出颜色/链接，
+        `volume_name_html` 缺失时改用原始卷名。 }}
+    <header class="mf-volume-head">
+      <h1 class="mf-volume-title">{{#volume_name_html}}{{{volume_name_html}}}{{/volume_name_html}}{{^volume_name_html}}{{volume_name}}{{/volume_name_html}}<span class="mf-volume-count">共 {{volume_section_count}} 条</span></h1>
+    </header>
+
+    <div class="mf-volume-body">
+      {{^volume_sections.length}}<div class="mf-detail-empty">本卷暂无内容</div>{{/volume_sections.length}}
+      {{#volume_sections}}
+      <article class="mf-volume-section" id="mf-toc-{{id}}">
+        {{! 正文复用阅读页的 `.mf-reader-body`（1.125rem / 行高 2 / 两端对齐）——
+            卷页曾经只有 `.mf-rich-content`（1rem / 行高 1.6 / 左对齐），且正文栏
+            没有宽度约束，一行七八十个字。该类是非作用域规则，卷页直接复用，
+            不新造排版规则（2026-10-13 站点要求）。 }}
+        <div class="mf-rich-content mf-reader-body">{{{bodyHtml}}}</div>
+      </article>
+      {{/volume_sections}}
+    </div>
+
+    {{! 卷导航放在正文之后（2026-10-13 站点要求）：读者读完一卷后顺手翻卷，不必回
+        顶部找。顺序固定为「上一卷 · 卷名 | 返回目录 | 下一卷 · 卷名」，整行居中；
+        首卷不渲染「上一卷」、末卷不渲染「下一卷」。 }}
+    <nav class="mf-volume-nav" aria-label="卷导航">
+      {{#volume_prev}}
+      <a class="mf-detail-btn" href="{{url}}">上一卷 · {{text}}</a>
+      {{/volume_prev}}
+      <a class="mf-detail-btn" href="{{book_url}}">返回目录</a>
+      {{#volume_next}}
+      <a class="mf-detail-btn" href="{{url}}">下一卷 · {{text}}</a>
+      {{/volume_next}}
+    </nav>
+  </div>
+  {{#tcm_marker_runtime}}{{{tcm_marker_runtime}}}{{/tcm_marker_runtime}}
+</main>
+{{/volume_view}}
+{{^volume_view}}
 <main class="mf-book-detail-page">
   <div class="mf-detail-container">
     <nav class="mf-breadcrumb" aria-label="面包屑">
@@ -59,6 +112,25 @@
     </section>
 
     <section class="mf-detail-card mf-detail-content-card" id="mf-detail-catalog">
+      {{#book_volumes.length}}
+      {{! TCM 结构化书（ADR-0025 D2）：目录只列卷，每条一个卷页链接。
+          不再渲染条文（省掉整本 921 rows_read 的扫描）。 }}
+      <h2 class="mf-detail-section-title">目录 · {{book_volumes.length}}卷</h2>
+      {{! 副行同时给出卷数与物化口径的条目总数：952 = 27 篇章 + 812 条文 + 113 方剂
+          （ADR-0025 D5 接受的口径，由 readBookStats 提供，替代原先显示的 812 章）。 }}
+      <div class="mf-detail-volume-title">卷目录 <span>共 {{book_volumes.length}} 卷 · {{novel_detail.totalChapterCount}} 条</span></div>
+      <div class="mf-detail-chapter-grid">
+        {{#book_volumes}}
+        <div class="mf-toc-item mf-detail-chapter-item" id="mf-toc-{{id}}">
+          {{! 卷名过标注层（无 resolveHref，目录项自身是 <a>，不嵌套链接） }}
+          <a href="{{url}}">{{#nameHtml}}{{{nameHtml}}}{{/nameHtml}}{{^nameHtml}}{{name}}{{/nameHtml}}</a>
+        </div>
+        {{/book_volumes}}
+      </div>
+      {{/book_volumes.length}}
+      {{^book_volumes.length}}
+      {{! 扁平书（中药 / 名词）与非 TCM 小说书：保持条目平铺，文案沿用原来的「章」。
+          结构化 TCM 书走上面的卷目录分支，那里的「条」是物化口径（全部条目）。 }}
       <h2 class="mf-detail-section-title">目录 · {{novel_detail.totalChapterCount}}章</h2>
       <div class="mf-detail-volume-title">章节目录 <span>共 {{novel_detail.totalChapterCount}} 章</span></div>
       <div class="mf-detail-chapter-grid" data-mf-toc>
@@ -69,6 +141,7 @@
         </div>
         {{/items}}
       </div>
+      {{/book_volumes.length}}
     </section>
 
     {{#book_fang.length}}
@@ -86,3 +159,4 @@
     {{/book_fang.length}}
   </div>
 </main>
+{{/volume_view}}

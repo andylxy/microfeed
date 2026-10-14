@@ -137,18 +137,15 @@ describe("admin items list", () => {
     expect(output.match(/Public page/gu)).toHaveLength(2);
   });
 
-  it("shows compact wrapping dates with full timestamp tooltips", () => {
+  it("renders the full YYYY-MM-DD HH:mm:ss timestamp", () => {
     const output = renderItemsList();
 
-    expect(output).toContain("Aug 4, 2026");
-    expect(output).not.toContain("Aug 4, 2026 at 5:00 PM");
+    // One fixed numeric format for every admin date display; `dateTime` keeps
+    // the raw ISO instant for machines. No tooltip — the cell shows the full
+    // stamp, so a hover duplicate would be noise.
+    expect(output).toContain("2026-08-04 17:00:00");
     expect(output).toContain('dateTime="2026-08-04T17:00:00.000Z"');
-    expect(output).toContain('data-slot="tooltip-trigger"');
-    expect(output).toContain("cursor-help whitespace-normal break-words");
-    expect(output).toContain("min-w-0 whitespace-normal break-words");
-    expect(output).toMatch(
-      /aria-label="Aug 4, 2026(?:,| at) 5:00:00 PM [^"]+"/u,
-    );
+    expect(output).not.toContain('data-slot="tooltip-trigger"');
   });
 
   it("exposes descending sort state and preserves the status filter", () => {

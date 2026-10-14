@@ -1,6 +1,6 @@
 import {type FormEvent, useState} from "react";
 import i18n, {useTranslation} from "@/client/i18n";
-import {formatAdminDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import {
   KeyRoundIcon,
   LaptopIcon,
@@ -90,7 +90,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
 function dateLabel(value: string | null): string {
   if (!value) return i18n.t("account.unknown");
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? i18n.t("account.unknown") : formatAdminDate(date);
+  return Number.isNaN(date.getTime()) ? i18n.t("account.unknown") : formatAdminDateTime(date);
 }
 
 function deviceLabel(userAgent: string | null): string {

@@ -2,7 +2,9 @@ import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
 import {
+  getBookVolumes,
   getTcmBookEntries,
+  getVolumeSections,
   listCategoryNav,
   listChannelsByGenre,
   listPublishedBookSamples,
@@ -158,7 +160,13 @@ function databaseWithTcmItems(): CategoryDb {
       ('fang_1', '{"title":"桂枝汤","_microfeed":{"no":1}}', 1, '2024-09-14T16:56:57.000Z', 'book_yao', 'fang', NULL),
       ('section_1', '{"title":"条文","_microfeed":{"receiptNo":1}}', 1, '2024-09-14T16:56:57.000Z', 'book_tcm', 'section', 'chapter_1'),
       ('chapter_1', '{"title":"平脉法第一"}', 1, '2024-09-14T16:56:57.000Z', 'book_tcm', 'chapter', NULL),
-      ('yao_other', '{"title":"别的书的药","_microfeed":{"no":2}}', 1, '2024-09-14T16:56:57.000Z', 'book_other', 'yao', NULL);
+      ('yao_other', '{"title":"别的书的药","_microfeed":{"no":2}}', 1, '2024-09-14T16:56:57.000Z', 'book_other', 'yao', NULL),
+      ('chapter_root_yao', '{"title":"中药"}', 1, '2024-09-14T16:56:57.000Z', 'book_yao', 'chapter', NULL),
+      ('chapter_del', '{"title":"只剩已删条文"}', 1, '2024-09-14T16:56:57.000Z', 'book_del', 'chapter', NULL),
+      ('section_del', '{"title":"已删条文"}', 3, '2024-09-14T16:56:57.000Z', 'book_del', 'section', 'chapter_del'),
+      ('chapter_gone', '{"title":"已删篇章"}', 3, '2024-09-14T16:56:57.000Z', 'book_del', 'chapter', NULL),
+      ('chapter_empty', '{"title":"条文删光了的活篇章"}', 1, '2024-09-14T16:56:57.000Z', 'book_del', 'chapter', NULL),
+      ('section_empty', '{"title":"已删条文"}', 3, '2024-09-14T16:56:57.000Z', 'book_del', 'section', 'chapter_empty');
   `);
   return new SqliteCategoryDb(database);
 }
@@ -210,5 +218,72 @@ describe("TCM flat-entry books (中药 / 名词 collections)", () => {
     );
 
     expect(entries).toEqual([]);
+  });
+});
+
+describe("getBookVolumes (ADR-0025 D2)", () => {
+  it("returns the 篇章 rows of a book that actually holds 条文", async () => {
+    const volumes = await getBookVolumes(databaseWithTcmItems(), "book_tcm");
+
+    expect(volumes).toEqual([{id: "chapter_1", name: "平脉法第一"}]);
+  });
+
+  it("returns nothing for a flat book, whose root 篇章 carries no 条文", async () => {
+    // 中药 / 名词 collections hang off a root 篇章 (title = the book's own name)
+    // that holds no 条文. Treating that row as a volume would render a
+    // one-volume catalog and drop the book's flat entries — it must not be
+    // returned (ADR-0025 D2).
+    expect(await getBookVolumes(databaseWithTcmItems(), "book_yao")).toEqual([]);
+  });
+
+  it("returns nothing for a book with no 篇章 at all", async () => {
+    expect(await getBookVolumes(databaseWithTcmItems(), "book_other")).toEqual([]);
+  });
+
+  it("returns nothing when the book's only 条文 are deleted", async () => {
+    // 探针带 `status != DELETED`：只剩已删条文的书不算结构化书，否则书页会列出一个
+    // 打开即空的卷（`getVolumeSections` 也会返回 0 条）。
+    expect(await getBookVolumes(databaseWithTcmItems(), "book_del")).toEqual([]);
+  });
+});
+
+describe("getVolumeSections (ADR-0025 D1/D3 的卷页数据源)", () => {
+  it("returns one 篇章 plus its 条文, stamped with the volume's id and name", async () => {
+    const volume = await getVolumeSections(
+      databaseWithTcmItems(),
+      "chapter_1",
+      "https://example.test",
+    );
+
+    expect(volume).toMatchObject({id: "chapter_1", name: "平脉法第一"});
+    expect(volume?.sections.map((s: any) => s.id)).toEqual(["section_1"]);
+    // 卷页的「返回」锚点与 prev/next 都依赖这两个键。
+    expect(volume?.sections[0]?._microfeed).toMatchObject({
+      chapterId: "chapter_1",
+      volume: "平脉法第一",
+    });
+  });
+
+  it("returns null for an id that is not a live 篇章, so the route can 404", async () => {
+    const db = databaseWithTcmItems();
+    expect(await getVolumeSections(db, "nope", "https://example.test")).toBeNull();
+    // 方剂行、条文行都不是篇章
+    expect(await getVolumeSections(db, "fang_1", "https://example.test")).toBeNull();
+    expect(await getVolumeSections(db, "section_1", "https://example.test")).toBeNull();
+    // 已删篇章（`status = 3`）—— 路由据此 404
+    expect(await getVolumeSections(db, "chapter_gone", "https://example.test")).toBeNull();
+  });
+
+  it("returns a live 篇章 with 0 条文 rather than null (route shows 本卷暂无内容, not a 404)", async () => {
+    // 篇章本身 `status=1`、只是条文已删：`getVolumeSections` 返回该卷 + 空数组。
+    // 全书级点查不拦这种情况，所以书页仍列该卷、卷页 200 显示「本卷暂无内容」。
+    const volume = await getVolumeSections(
+      databaseWithTcmItems(),
+      "chapter_empty",
+      "https://example.test",
+    );
+
+    expect(volume).toMatchObject({id: "chapter_empty", name: "条文删光了的活篇章"});
+    expect(volume?.sections).toEqual([]);
   });
 });

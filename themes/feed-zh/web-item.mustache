@@ -61,11 +61,10 @@
           CAST(json_extract(data,'$._microfeed.section') AS TEXT))`，没有任何索引
           能覆盖它（F4 已实测 TEMP B-TREE 消不掉），所以「便宜地只取两个邻居」
           这条路不存在。
-          现在 `toc_url` 指向书页并带上 `#mf-toc-<当前条目 id>`——书页按同一约定
-          给每个目录行（条文）设了 `id="mf-toc-<条文 id>"`，给每个篇章分组标题
-          （`<h3 class="mf-volume-heading">`）设了 `id="mf-toc-<篇章 id>"`，于是
-          「返回」直接落在读者刚才点开的那一行（或那一篇章）上
-          （见 `web-feed.mustache` 与 `web-body-end.mustache` 的收尾滚动）。}}
+          现在 `toc_url` 指向**卷页**（TCM 书的条文）或书页（扁平条目书）并带上
+          `#mf-toc-<当前条目 id>`，不回书页时是按 `tcm_kind='section'` 判定的；
+          卷页给每条设 `id="mf-toc-<条文 id>"`，于是「返回」直接落在读者刚才点开的
+          那一条上（见 `web-feed.mustache` 与 `web-body-end` 的收尾滚动）。}}
       <nav class="mf-reader-nav" aria-label="阅读导航">
         <a href="{{toc_url}}" class="mf-reader-return">
           <span class="icon-arrow-left" aria-hidden="true"></span>
@@ -80,7 +79,7 @@
           anywhere in the repo (no bookshelf or red-packet feature exists), so they
           rendered as buttons that did nothing. Only the working tools remain. The
           ☰目录 toggle was removed with the bottom TOC drawer it opened — the 目录
-          link above goes to the book page, which lists every chapter. }}
+          link above goes to `toc_url`（TCM 条文的卷页 / 扁平书目的书页）。}}
       <button class="mf-reader-tool" type="button" data-mf-reader-night><span aria-hidden="true">◐</span><small>夜间</small></button>
       <button class="mf-reader-tool" type="button" data-mf-font="large"><span aria-hidden="true">A</span><small>字号</small></button>
     </aside>

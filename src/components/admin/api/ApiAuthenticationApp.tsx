@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import {useState} from "react";
 
-import {formatAdminDate} from "@/client/admin-date-format";
+import {formatAdminDateTime} from "@/client/admin-date-format";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {Button} from "@/components/ui/button";
 import {
@@ -219,7 +219,7 @@ export default function ApiAuthenticationApp({
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
                         {apiKey.scopes.includes("content:write") ? t("api.readAndWrite") : t("api.readOnly")}
-                        {" · "}{t("api.created")} {formatAdminDate(apiKey.createdAtMs)}
+                        {" · "}{t("api.created")} {formatAdminDateTime(apiKey.createdAtMs)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">

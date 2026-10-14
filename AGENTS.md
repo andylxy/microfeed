@@ -186,6 +186,7 @@
 - **语言解析顺序（三处必须一致）**：显式偏好 cookie `microfeed-admin-language` → `Accept-Language` / `navigator.language`。服务端用 `adminLanguageFromRequest(request)`；内联脚本 `AdminLanguageScript.astro` 与客户端 `detectBrowserLanguage()`（`src/client/i18n.ts`）用同样的顺序。任一处漏掉 cookie，首屏就会渲染成错的语言（先英文、水合后翻中文的闪烁）。切换语言会 `location.reload()`，使服务端渲染的标题与 `<html lang>` 一致。
 - **有文案的岛屿用 `client:only="react"`**：`client:load` 会服务端渲染，而服务端 i18next 单例恒为 en（没有 `window`）→ 首屏出英文。保留 `client:load` 的仅限无文案（`Toaster`）或纯图标触发器（`AdminThemeMenu`、`AdminLanguageMenu`，语言切换器必须立即可用）。
 - **公开 API 错误正文按 `Accept-Language` 本地化，不读管理端 cookie**，避免公开规范随管理员偏好变化；响应头与状态码一律不变。
+- **管理后台日期/时间统一固定数字格式**（站点要求，2026-10-14）：一律用 `src/client/admin-date-format.ts` 的 `formatAdminDateTime`（`2026-10-14 11:29:42`，24 小时制、本地时区）——**所有**日期显示（含条目列表、搜索结果这类列表列）都用它，不再有「仅日期」变体。**禁止** `toLocaleString()` / `Intl.DateTimeFormat` / 各语言不同的写法：它们随语言与系统变，同一个后台在两台机器上会渲染成两种样子，审计/日志这类要「对齐着看」的时间尤其不能这样。不要在任何服务端渲染路径里用它（workerd 是 UTC）。
 - 待办：日期/数字本地化（`humanizeMs` 硬编码 en-US，其输出是公开 feed 的一部分，需要单独谨慎修改）。
 - 更改 UI 文案（i18n）时，既有测试可能断言旧英文文案；运行测试并把断言更新为对应的 i18n 键调用或新的渲染文本。
 

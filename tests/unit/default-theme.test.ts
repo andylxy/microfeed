@@ -56,7 +56,7 @@ describe("bundled theme packages", () => {
     expect(sourceStyles).toMatch(
       /\.mf-footer-link,[\s\S]*?\.mf-footer-link:visited\s*\{\s*color:\s*#19b7fa;/u,
     );
-    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 600px\)\s*\{[\s\S]*?html:not\(\.rss-document\)\s*\{[\s\S]*?padding-right:\s*1em;[\s\S]*?padding-left:\s*1em;/u);
+    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 768px\)\s*\{[\s\S]*?html:not\(\.rss-document\)\s*\{[\s\S]*?padding-right:\s*1em;[\s\S]*?padding-left:\s*1em;/u);
     expect(sourceStyles).not.toMatch(/footer\s*\{[^}]*position:\s*fixed/gu);
   });
 
@@ -100,7 +100,7 @@ describe("bundled theme packages", () => {
       expect(template).toContain('<div class="icon-arrow-left">{{title}}</div>');
     }
 
-    expect(sourceScript).toContain('window.matchMedia("(max-width: 600px)")');
+    expect(sourceScript).toContain('window.matchMedia("(max-width: 768px)")');
     expect(sourceScript).toContain("if (mobileNavigation.matches)");
     expect(sourceScript).toContain("for (const link of links) menu.append(link)");
     expect(sourceScript).toContain("for (const link of links.slice(0, 2))");
@@ -111,10 +111,10 @@ describe("bundled theme packages", () => {
     expect(sourceStyles).toMatch(/\.mf-site-nav\s*\{[\s\S]*?justify-content:\s*space-between;/u);
     expect(sourceStyles).toMatch(/\.mf-site-search\s*\{[\s\S]*?margin-left:\s*auto;/u);
     expect(sourceStyles).not.toMatch(/\.mf-nav-links\s*\{[^}]*margin-left:\s*auto;/u);
-    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 600px\)[\s\S]*?\.mf-site-search\s*\{\s*display:\s*none;/u);
-    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 600px\)[\s\S]*?\.mf-search-icon-button\s*\{[\s\S]*?display:\s*inline-flex;/u);
-    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 600px\)[\s\S]*?\.mf-nav-links > a\s*\{[\s\S]*?display:\s*none;/u);
-    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 600px\)[\s\S]*?\.mf-nav-overflow-menu-icon\s*\{[\s\S]*?display:\s*block;/u);
+    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 768px\)[\s\S]*?\.mf-site-search\s*\{\s*display:\s*none;/u);
+    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 768px\)[\s\S]*?\.mf-search-icon-button\s*\{[\s\S]*?display:\s*inline-flex;/u);
+    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 768px\)[\s\S]*?\.mf-nav-links > a\s*\{[\s\S]*?display:\s*none;/u);
+    expect(sourceStyles).toMatch(/@media only screen and \(max-width: 768px\)[\s\S]*?\.mf-nav-overflow-menu-icon\s*\{[\s\S]*?display:\s*block;/u);
     expect(sourceStyles).toMatch(/html \.mf-public-search\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?margin:\s*auto;/u);
     expect(sourceStyles).toMatch(/\.mf-nav-overflow summary:hover\s*\{[\s\S]*?opacity:\s*65%;/u);
     expect(search).toContain('class="mf-visually-hidden"');
@@ -165,14 +165,14 @@ describe("bundled theme packages", () => {
     expect(rssStylesheet).toContain('name="viewport"');
     expect(rssStylesheet).toContain('class="rss-container"');
     expect(rssStylesheet).toContain("max-width:50rem");
-    expect(rssStylesheet).toContain("width&lt;=600px");
+    expect(rssStylesheet).toContain("width&lt;=768px");
     expect(rssStylesheet).toContain("rss/channel/atom:link[@rel='next']");
     expect(rssStylesheet).toContain('class="mf-footer-link"');
     expect(rssSource).toContain('class="mf-footer-link"');
     expect(rssStylesheet).toContain("var(--mf-accent)");
     expect(rssStylesheet).not.toContain("microfeed:compiled-tailwind");
     expect(rssSource).toContain("microfeed:compiled-tailwind");
-    expect(sourceStyles).toContain("@media only screen and (max-width: 600px)");
+    expect(sourceStyles).toContain("@media only screen and (max-width: 768px)");
     expect(rssStylesheet).not.toContain("fade(black");
     expect(rssStylesheet).not.toContain('"Noto\n');
   });
@@ -190,7 +190,7 @@ describe("bundled theme packages", () => {
       formatVersion: 2,
       packageId: "microfeed.default",
       previewFixture: "fixtures/editorial.json",
-      version: "1.1.16",
+      version: "1.1.17",
     });
     expect(fixture.items[0]).toMatchObject({
       _microfeed: {is_audio: true},
