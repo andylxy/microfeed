@@ -74,10 +74,31 @@ _Avoid_: 公开端点（易与站点公开资源混淆）
 App 命名空间的安全模型（实为 fail-open）：「未登记进集成清单即视为匿名」。名称「反向」仅指登记方向与常规白名单相反；其风险是新增敏感端点若漏登记会静默公开，以回归测试约束，不翻转为 fail-closed。
 _Avoid_: 白名单（方向相反）
 
+## 书的结构（典籍与小说）
+
+**卷**：
+一本书的阅读单位。本仓库有两种来源，**必须分清**：TCM 典籍里卷是数据库里的一行（见「篇章」）；小说类书里卷只是每章 `_microfeed.volume` 上的一个字符串标签，没有独立实体。自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起卷还是一级阅读单位，有自己的 URL（`/book/<bookId>/v/<篇章 id>/`）。
+_Avoid_: 分卷、册、目录章节（都不是本语境的单位）
+
+**篇章**：
+TCM 典籍里承载卷的那一行 `items`（`tcm_kind = 'chapter'`）。它是实体、有 11 字符 id，卷名就是它的 `title`；条文靠 `tcm_parent_id` 挂在它下面。
+_Avoid_: 卷（在 TCM 书里二者同指，但「篇章」强调的是数据库里的那一行）
+
+**条文**：
+TCM 典籍里的最小阅读单位（`tcm_kind = 'section'`）。它才是 `$f{方剂}` / `$u{中药}` 标注标记的宿主，也是阅读页 `/i/<slug>` 的粒度。
+_Avoid_: 章节、小节、条目
+
+**扁平条目**：
+没有篇章层的 TCM 书（中药 / 名词）里的条目（`tcm_kind` 为 `yao` / `term`），直接按 `items.book_id` 归属。这类书**没有卷**，书页保持平铺目录、不引入卷。
+_Avoid_: 无卷书、平铺书（都指同一件事，但「扁平条目」强调条目本身没有父层）
+
 ## 数据层（D1）
 
 **全表扫描**：
-查询无法用索引定位行、必须读整表（或整个索引）再逐行判断。在 D1 上表现为读放大与延迟，是本语境要消除的主要缺陷。
+查询无法用索引定位行、必须读整表（或整个索引）再逐行判断。在 D1 上表现为读放大与延迟，是本语境要消除的主要缺陷。2026-10-12 全量审计确认 `items` 上已不存在（见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)）。
+
+**整本读取**：
+一次页面加载读取某本书的全部条目——阅读页标注层、以及引用表**脏标记后的那一次懒自举重算**都如此（书页目录自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起不再如此，改为按需读取）。它的上界由**书的大小**决定，与表大小无关；是全表扫描被消除后剩余的主要读代价来源，靠边缘缓存兜底。判断它贵不贵同样看 `rows_read`（实测素问书页 ≈3,045）。见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)。
 
 **派生真实列**：
 把 `data` JSON 里被高频过滤或排序的字段提升为表上的真实列并建索引（如 `items.book_id`、`items.tcm_parent_id`），使查询走索引，不必在 SQL 里算 `json_extract` 表达式。
@@ -120,7 +141,9 @@ TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book
 缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都打上 `Cache-Tag` 并 purge——漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。清理点集中在 `FeedDb.putContent` 与 `purgePublicCache` 的调用处；绕过它们直接 `FEED_DB.batch()` 的写入（如卷板的四个处理器）必须自带清理。
 
 **章节回跳锚点**：
-章页与书页之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>#mf-toc-<itemId>`，书页给每个目录行设 `id="mf-toc-<item id>"`。哈希不能只在一侧改——书页的目录由客户端分组重排、行会被重新挂载，所以收尾处必须按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。
+阅读页与目录之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>/v/<篇章 id>/#mf-toc-<条 id>`（TCM 书；扁平条目书没有篇章，退回 `/book/<bookId>#mf-toc-<条 id>`），卷页给每个条文设 `id="mf-toc-<条 id>"`。哈希不能只在一侧改——收尾脚本（`web-body-end`）会在目录重建后按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)。
+
+卷页那条 URL 的**尾斜杠要留着**：卷页规范路径是 `/book/{id}/v/{篇章 id}/`，`public-cache.ts` 的 `isBookScopedPath` 用 `/^\/book\/[^/]+\/(?:v\/[^/]+\/)?$/u` 认它。少一个尾斜杠，服务端只回一个 **308** 补斜杠（本地实测：有斜杠 200 `no-cache`，无斜杠 308 `private, no-store`）；重定向本身不可缓存（`isPublicCacheableResponse` 要求 200），于是每次点「返回」多付一个不可缓存的往返。片段会被浏览器带过重定向，锚点不坏；页面本身仍走边缘缓存。
 
 ## 响应式设计
 

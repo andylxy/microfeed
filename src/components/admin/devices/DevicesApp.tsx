@@ -8,6 +8,7 @@ import AdminPagination, {
   paginate,
 } from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import type {AdminDeviceRow} from "@/shared/AppDeviceVersion";
 import {ADMIN_URLS} from "@/shared/StringUtils";
@@ -101,12 +102,19 @@ export default function DevicesApp({canManage = false, itemsPerPage}: Props) {
   // Free-text filtering is client-side: the whole board loads in one request
   // (the device table is one row per account-device pair), so a keystroke must
   // not trigger a request.
+  //
+  // `userId` is part of the haystack on purpose: most accounts carry an email
+  // only (`username` / `displayUsername` both null), so the owner cell falls
+  // back to rendering the account id. Searching for the string the operator can
+  // actually see must work — leaving `userId` out made the visible first line
+  // unfilterable.
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return devices;
     return devices.filter((row) =>
       row.deviceId.toLowerCase().includes(needle) ||
       (row.username ?? "").toLowerCase().includes(needle) ||
+      (row.userId ?? "").toLowerCase().includes(needle) ||
       (row.email ?? "").toLowerCase().includes(needle)
     );
   }, [devices, query]);
@@ -136,8 +144,8 @@ export default function DevicesApp({canManage = false, itemsPerPage}: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            className="w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm"
+          <Input
+            className="max-w-sm"
             onChange={(event) => {
               setQuery(event.target.value);
               setPage(0);

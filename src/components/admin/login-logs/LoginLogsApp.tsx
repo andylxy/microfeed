@@ -9,6 +9,7 @@ import AdminPagination, {
   paginate,
 } from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {
   LOGIN_LOG_MAX_ROWS,
@@ -235,8 +236,8 @@ export default function LoginLogsApp({itemsPerPage}: Props) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <input
-          className="w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm"
+        <Input
+          className="max-w-sm"
           onChange={(event) => {
             setQuery(event.target.value);
             setPage(0);

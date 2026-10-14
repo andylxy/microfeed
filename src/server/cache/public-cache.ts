@@ -93,8 +93,25 @@ function isItemPath(pathname: string): boolean {
   return /^\/i\/[^/]+\/(?:json\/|rss\/)?$/u.test(pathname);
 }
 
-function isBookPath(pathname: string): boolean {
-  return /^\/book\/[^/]+\/$/u.test(pathname);
+/**
+ * 书页 `/book/{id}/` 与卷页 `/book/{id}/v/{篇章 id}/`（ADR-0025 D1）。
+ *
+ * 两者是同一族「书范围内的公开页」，而所有调用点（`isPublicPagePath`、
+ * `publicCacheTagsForPath`）要的都是它们的**并集**——所以用一条正则表达，
+ * 不再各写一条、再在每个调用点 `||` 一次。
+ *
+ * 卷页那一段为什么必须被认出来：`^\/book\/[^/]+\/$` 这种单段正则落不到四段路径，
+ * 漏掉就走 `private, no-store` —— 每次访问都实付卷页的整笔回源
+ * （标注层 ≈981 + 篇章行 + 该卷条文），「按需读取」省下的全被吃掉。
+ *
+ * 注意上面说的是「卷页形状整体没被认出来」的代价。**少一个尾斜杠是另一回事**：
+ * 那时 Astro 会先回一个 308 把斜杠补回来（实测 `/book/<id>/v/<卷>` → 308 + `private, no-store`，
+ * 带斜杠 → 200 + `no-cache`），页面本身照样进边缘缓存，只是每次多付一个不可缓存的往返
+ * （308 不满足本文件的 `response.status === 200` 前置，所以永远不进公开分支）。
+ * 两者别混为一谈——修复 `toc_url` 那类「少斜杠」问题时，别把代价写成「整笔回源」。
+ */
+function isBookScopedPath(pathname: string): boolean {
+  return /^\/book\/[^/]+\/(?:v\/[^/]+\/)?$/u.test(pathname);
 }
 
 /**
@@ -124,7 +141,7 @@ function isSiteFilePath(pathname: string): boolean {
 
 function isPublicPagePath(pathname: string): boolean {
   return PUBLIC_PAGE_PATHS.has(pathname) || isItemPath(pathname) ||
-    isBookPath(pathname) ||
+    isBookScopedPath(pathname) ||
     isCategoryPath(pathname) ||
     isStandalonePagePath(pathname) || isSiteFilePath(pathname);
 }
@@ -215,7 +232,9 @@ export function publicCacheTagsForPath(pathname: string): string[] {
   const tags = new Set<string>([PUBLIC_CACHE_TAGS.PUBLIC]);
   // 书页读 channels（书名/封面）与 items（章节目录），并且按当前主题渲染，
   // 所以四个标签都要挂上——条目、频道或主题任一变更都会让书页缓存失效。
-  if (isBookPath(pathname)) {
+  // 卷页（`/book/{id}/v/{篇章 id}/`）读的是同一批数据（书名、该卷条文、主题），
+  // 挂同一组四个标签：正文变更 → `mf:items` 失效 → 卷页跟着刷新。
+  if (isBookScopedPath(pathname)) {
     tags.add(PUBLIC_CACHE_TAGS.ITEMS);
     tags.add(PUBLIC_CACHE_TAGS.PAGES);
     tags.add(PUBLIC_CACHE_TAGS.THEME_CURRENT);

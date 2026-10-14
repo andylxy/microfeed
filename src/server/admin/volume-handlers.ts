@@ -221,7 +221,7 @@ async function patchChapters(
  * 的实际后果就是「改一次卷名，读者最长 24 小时看着旧目录分组」，这也是把 TTL
  * 从 300s 拉到 24h 之前必须先补上的那个口子。
  *
- * 标签挑书页同款（`publicCacheTagsForPath` 对 `isBookPath` 挂 ITEMS + PAGES），
+ * 标签挑书页同款（`publicCacheTagsForPath` 对 `isBookScopedPath` 挂 ITEMS + PAGES），
  * 再逐条加被改写条目的 `mf:item:{id}`——章页 `isItemPath` 自己带的就是这个。
  * 刻意不 purge `mf:public`：首页 / 分类页 / feed 只呈现书名、封面与 ADR-0012
  * 物化后的章节数，这三项都不随卷名卷序变。
