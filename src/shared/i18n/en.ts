@@ -2133,6 +2133,42 @@ export const en = {
     target: "Target",
     detail: "Detail",
     empty: "No RBAC changes recorded yet.",
+    noMatch: "No matching entries.",
+    filterPlaceholder: "Filter by actor or detail",
+    count: "{{count}} entries",
+    noChange: "No change",
+    actionLabel: {
+      role: {
+        create: "Create role",
+        rename: "Rename role",
+        renameCode: "Change role code",
+        delete: "Delete role",
+        permissions: "Edit role permissions",
+      },
+      user: {
+        create: "Create account",
+        delete: "Delete account",
+        ban: "Ban account",
+        unban: "Unban account",
+        passwordReset: "Reset password",
+        profile: "Edit profile",
+        roles: "Edit account roles",
+      },
+      device: {
+        revoke: "Revoke device",
+        restore: "Restore device",
+      },
+      credential: {
+        create: "Create login credential",
+        revoke: "Revoke login credential",
+      },
+    },
+    field: {
+      name: "Name",
+      email: "Email",
+      username: "Username",
+      displayUsername: "Display username",
+    },
   },
   publicSearch: {
     title: "Search this site",

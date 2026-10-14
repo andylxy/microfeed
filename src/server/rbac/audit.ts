@@ -19,6 +19,8 @@
 
 import {env} from "cloudflare:workers";
 
+import type {RbacAuditRow} from "@/shared/RbacAudit";
+
 /** The signed-in account, as far as the trail needs it. */
 export interface AuditActor {
   email?: string | null;
@@ -84,18 +86,9 @@ export async function recordRbacAudit(entry: PendingAudit): Promise<void> {
   await auditStatement(env.FEED_DB, entry).run();
 }
 
-/** One trail row, shaped for display (C3: the trail was write-only before). */
-export interface RbacAuditRow {
-  id: string;
-  actorLabel: string | null;
-  action: string;
-  target: string;
-  detail: string | null;
-  beforeDetail: string | null;
-  createdAtMs: number;
-}
-
-/** The latest trail rows, newest first — read side for the admin page. */
+/** The latest trail rows, newest first — read side for the admin page.
+ * `RbacAuditRow` itself lives in `@/shared/RbacAudit` so the React island can
+ * import it without reaching into `@/server/`. */
 export async function readRecentRbacAudit(
   db: D1Database,
   limit = 100,

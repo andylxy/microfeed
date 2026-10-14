@@ -2129,6 +2129,42 @@ export const zhCN: TranslationKey = {
     target: "对象",
     detail: "详情",
     empty: "暂无 RBAC 变更记录。",
+    noMatch: "没有匹配的记录。",
+    filterPlaceholder: "按操作者或详情关键字筛选",
+    count: "共 {{count}} 条",
+    noChange: "无变更",
+    actionLabel: {
+      role: {
+        create: "创建角色",
+        rename: "重命名角色",
+        renameCode: "修改角色代码",
+        delete: "删除角色",
+        permissions: "修改角色权限",
+      },
+      user: {
+        create: "创建账号",
+        delete: "删除账号",
+        ban: "禁用账号",
+        unban: "启用账号",
+        passwordReset: "重置密码",
+        profile: "修改资料",
+        roles: "修改账号角色",
+      },
+      device: {
+        revoke: "撤销设备",
+        restore: "恢复设备",
+      },
+      credential: {
+        create: "创建登录凭据",
+        revoke: "撤销登录凭据",
+      },
+    },
+    field: {
+      name: "名称",
+      email: "邮箱",
+      username: "用户名",
+      displayUsername: "显示用户名",
+    },
   },
   publicSearch: {
     title: "搜索本站",
