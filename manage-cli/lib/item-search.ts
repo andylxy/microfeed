@@ -152,6 +152,11 @@ export async function normalizeItemSearchContent(
   );
 
   let normalized = 0;
+  // 已知接受项（D1SCAN-001，2026-10-15 本地 9506 行 / 18.4MB 实测 24–41ms）：
+  // 谓词含列比列 `content_text_updated_at != updated_at`，任何索引都不可用，
+  // 与 `content_text_revision != N` 的 OR 使另一条也走不上索引。仅部署重建
+  // 搜索索引时运行（无陈旧行时 1 轮 + 收尾 COUNT 共约 90ms/部署），接受；
+  // 若要根治须改维护 stale 标记位，不属于索引方案。
   for (let batch = 0; batch < MAX_NORMALIZATION_BATCHES; batch += 1) {
     const rows = sourceRows(await cloudflare.queryD1(
       config,

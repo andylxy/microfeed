@@ -99,17 +99,18 @@ export const GET: APIRoute = async ({locals, request}) => {
       .first<{total: number}>();
 
     // 草稿补齐：本书范围内按 status=2 过滤（items_book_kind 覆盖索引步进，
-    // 只为草稿行取表数据），谓词与旧扫描逐字一致。计数不带 LIMIT——旧查询的
-    // total 是全量计数，编辑器底部「仅显示前 50 条」靠它对齐。
+    // 只为草稿行取表数据），谓词与旧扫描逐字一致。不带 ORDER BY / LIMIT：
+    // 合并函数统一按 (book_id, receiptNo, id) 重排并截 50 条，SQL 侧再排一次
+    // 只是多余的 TEMP B-TREE（D1SCAN-002）；行数上界由草稿总量决定，正常
+    // 作者态下远小于 50。计数同样不带 LIMIT——旧查询的 total 是全量计数，
+    // 编辑器底部「仅显示前 50 条」靠它对齐。
     const draftResult = await env.FEED_DB
       .prepare(
         "SELECT id, data, book_id, tcm_parent_id FROM items " +
           "WHERE book_id = ? AND tcm_kind = 'section' AND status = ? AND (" +
           "EXISTS (SELECT 1 FROM json_each(" +
           "json_extract(data, '$._microfeed.fangList')) WHERE json_each.value = ?) " +
-          "OR data LIKE ? ESCAPE '\\') " +
-          "ORDER BY book_id, json_extract(data, '$._microfeed.receiptNo'), id " +
-          "LIMIT 50",
+          "OR data LIKE ? ESCAPE '\\')",
       )
       .bind(bookId, STATUSES.UNPUBLISHED, name, likePattern)
       .all<{

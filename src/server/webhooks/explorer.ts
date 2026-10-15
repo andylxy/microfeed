@@ -95,6 +95,11 @@ export async function listWebhookExplorerSubjects(
     return [{id: "navigation", label: "Current Page navigation"}];
   }
   if (definition.sourceKind === "item") {
+    // 已知接受项（D1SCAN-003，2026-10-15 本地 9506 行实测）：ORDER BY 走
+    // items_updated_at 索引。空搜索词时全部命中、LIMIT 50 早停（0.18ms）；
+    // 无命中搜索词要扫全索引并逐行取数据求值（36.99ms），稀有命中词介于
+    // 两者之间（1.02ms）。后台事件源 typeahead 低频使用，暂接受；生产 items
+    // 行数显著增长时按同一探针复估。
     const result = await runtimeEnv.FEED_DB.prepare(`
       SELECT id, status, COALESCE(json_extract(data, '$.title'), '') AS title
       FROM items
