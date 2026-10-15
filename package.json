@@ -34,6 +34,8 @@
     "migrations:check": "node --import tsx scripts/check-migrations.ts",
     "layout:check": "node --import tsx scripts/check-server-layout.ts",
     "endpoints:check": "node --import tsx scripts/check-endpoint-registration.ts",
+    "d1scan:check": "node --import tsx scripts/check-d1-scan.ts",
+    "gate:subset": "node --import tsx scripts/gate-subset.ts",
     "lint": "eslint .",
     "test": "TZ=UTC vitest run && TZ=UTC vitest run --config vitest.worker.config.ts",
     "test:smoke": "node scripts/smoke-tcm-markers.mjs",
