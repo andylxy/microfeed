@@ -19,9 +19,17 @@
 - 结论必须明确：可以就是可以，不可以就不可以，没有折中的方式。
 - 涉及数值、范围、时间、数量的判断，必须给出具体数字或可验证的条件；暂时给不出数字时，写明缺什么数据、从哪里取，禁止用形容词代替数值。
 
+## 最高指令：门禁仅在手动触发时运行（普通任务不跑）
+
+- 普通开发任务（实现、修复、重构、文档、主题、迁移等）**不跑**门禁：不跑 `yarn check`、不跑 `yarn test`、不跑 `yarn typecheck`、不跑任何 `scripts/check-*.ts`，也不在任务轮次结尾补跑。
+- 门禁只由**用户手动触发**的 `.microfeed-gate-subset` 技能运行。本文件下文「git 提交检查」「开发工作流」「架构治理」「API 规范与文档」「已部署实例的部署流程」等节中所有「运行 `yarn check` / `yarn test` / `yarn typecheck` / `yarn build` / `yarn lint:openapi`」的要求，**一律改为由该手动技能执行**，不再在普通任务中自动执行。
+- `.agents/skills/develop-microfeed`（及 `document-microfeed`、`develop-microfeed-theme`）技能中「边改边跑 targeted tests / checks」「提交前 `yarn check`」的步骤，同样以本条为准，不自动执行。
+- 例外：用户当场明确要求「跑测试 / 跑门禁 / 验证」时，按用户指定的范围执行。
+
 ## 目录
 
 - 最高指令：远程 D1 额度与量化回复
+- 最高指令：门禁仅在手动触发时运行（普通任务不跑）
 - 最高指令：git 提交检查
   - 本环境：提交由用户手动执行（AI 不代为提交）
 - 最高指令：环境边界（开发在本地，生产由用户管理）
@@ -65,6 +73,11 @@
 本沙箱在文件系统层拦截工作区内的删除（改为移进 Windows 回收站），git 提交时对 lock 文件与 ref 目录的清理被改写成搬运，分支引用会随 `.git/refs/heads/<ns>` 一起离开仓库：commit 报成功，`git log` 却说 `does not have any commits yet`、`git status` 把整仓显示成已暂存。提交对象与 `.git/logs/HEAD`（reflog）从未受损，引用可从 reflog 一行恢复；任何碰索引的 git 命令都会产生被搬走的 `index.lock`。
 
 ⇒ 由用户在自己终端手动提交（那里没有这层拦截，一次即成）。AI 的职责是：改代码、跑完整验证、给出精确的 `git add` 路径与提交信息，交给用户执行。若确实需要 AI 代为提交，走技能 `git-safe-commit` 的流程：提交后立刻 `git rev-parse HEAD` 复核，被吃则从 reflog 重写引用（先 `mkdir -p` 父目录）。
+
+### git 管理红线（AI 行为约束）
+
+- **禁止自动创建分支**：未获用户明确指令，AI 不得执行 `git checkout -b` / `git branch <新名>` / `git switch -c` 新建分支；分支由用户决定，或在既有任务分支上继续。
+- **禁止自动提交（提交不作为默认 / 优先动作）**：commit / push 永远不是默认或优先动作，AI 不代为提交，必须由用户手动执行（见上「本环境：提交由用户手动执行」）。确需 AI 代为提交时，仅走 `git-safe-commit` 技能流程，并在提交后 `git rev-parse HEAD` 复核。
 
 ## 最高指令：环境边界（开发在本地，生产由用户管理）
 
@@ -249,8 +262,10 @@ yarn manage theme delete <theme-id> --instance ctwh-881019-xyz --confirm <theme-
 ```
 
 - **必须保留上一版**：`theme rollback` 依赖 `theme_state.previous_theme_id`。删除该字段指向的版本时，CLI 会自动把它清成 `NULL`，回滚点随之消失。第 3 行起更早的历史版本没有任何用途，一律删除。
-- `theme delete` 是**软删除**（写 `deleted_at`，行仍留在表里）。⛔ **不要**用 `wrangler d1 execute … "DELETE FROM themes …"` 绕过：物理删除不会清理该版本在 R2 的资产（留下孤儿对象），也不会修正 `theme_state`，且不可恢复。
-- 内置主题（`microfeed.*`）不参与清理：CLI 拒绝删除它们，也不占 Custom 配额。每个环境上限：100 个未删除 Custom 版本、20 个草稿。
+- 管理后台（Settings → Themes 的 custom tab）有同用途的界面入口（[ADR-0026](docs/novel-cms/adr/0026-purge-only-physical-delete-path.md)）：「清理旧版本」按钮先 dryRun 给出将删清单再执行，口径为全局——全部自定义主题里只留激活行与上一版行（上文 CLI 流程为按 package 口径），已软删除的墓碑行一并清除；每行删除是二选一对话框，归档（软删除）或永久删除（purge，需输入 `package@version` 确认）。
+- 软删除（`theme delete` 与管理后台的「归档」）写 `deleted_at`，行仍留在表里，继续占 `UNIQUE(package_id, version)`——重装同版本会报 `versionReusedAfterDeletion`，墓碑行只能靠「清理旧版本」或单行「永久删除」释放重装位。
+- ⛔ **不要**用 `wrangler d1 execute … "DELETE FROM themes …"` 绕过。管理后台的「永久删除」（purge 端点）是唯一合法物理删除路径：拒绝内置与当前激活行、删行后清理该版本在 R2 的资产、修正 `theme_state`。裸 SQL 三条都做不到——留下孤儿 R2 对象、`theme_state` 悬空指向、不可恢复。
+- 内置主题（`microfeed.*`）不参与清理：CLI 与管理后台都拒绝删除它们，也不占 Custom 配额。每个环境上限：100 个未删除 Custom 版本、20 个草稿。
 
 ## 实例管理与 Cloudflare 部署
 
