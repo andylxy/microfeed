@@ -58,7 +58,7 @@
 | `listChannelsByGenre(db, genre)` | `extCategory.ts:376` | 该分类下**已发布**的书，返回公开书卡形状 |
 | `getBookById(db, id)` | `extCategory.ts:449` | 单本书，**已发布才返回**（`AND status = ?`） |
 | `getBookChapters(db, bookId, baseUrl)` | `extCategory.ts:509` | 该书的**已发布**章节，按 `pub_date` → `chapterNo` 排序 |
-| `listVolumeBoard(db, bookId)` | `extVolume.ts:98` | 卷分组**规则**（含草稿，仅供借鉴规则） |
+| `listBookVolumes(db, bookId)` | `extVolume.ts:131` | 卷列表（含逐卷条数）；标签书的卷分组**规则**在内部函数 `listTagVolumes`（`extVolume.ts:402`，含草稿，仅供借鉴规则） |
 | `FeedDb.getItemById(id, statuses)` | `FeedDb.ts:510` | 单条 item，可传 `[PUBLISHED]` |
 | `getIdFromSlug(v)` | `shared/StringUtils.ts:309` | 解析 `{slug}-{11 位 id}` 或裸 11 位 id |
 
@@ -141,7 +141,7 @@
 
 - 端点 4：`contentHtml` = `items.data.description` 的**原始值**（见决策 7）；
   `volume` 取 `_microfeed.volume`（未分卷为空串）；`chapterNo` 取 `_microfeed.chapterNo`（缺失为 0）。
-- 端点 3：未分卷的桶 `name` 为空串（与 `listVolumeBoard` 一致），恒排最后。
+- 端点 3：未分卷的桶 `name` 为空串（与 `listTagVolumes` 一致），恒排最后。
 
 ### 3. 必须同时登记两处（缺一不可）
 
@@ -209,14 +209,14 @@ suffix === "content/categories/" ||
 |---|---|
 | 1 | `listCategoryNav(db)` —— 一次查询即得 `visible` 过滤 + 已发布 `book_count`。<br>（`listCategories(db)` 是**后台用**，不过滤 `visible`，不可用于对外 API。） |
 | 2 | `getCategoryBySlugOrId(db, {categoryId})` → 取 **`.id`**（`channels.genre` 存的是分类 id）→ `listChannelsByGenre(db, id)` |
-| 3 | `getBookById(db, bookId)`（校验已发布 + 拿 `book.title`）+ `getBookChapters(db, bookId, baseUrl)`（已发布章节集合）+ 套用 `listVolumeBoard` 的**分组规则** |
+| 3 | `getBookById(db, bookId)`（校验已发布 + 拿 `book.title`）+ `getBookChapters(db, bookId, baseUrl)`（已发布章节集合）+ 套用 `listTagVolumes` 的**分组规则** |
 | 4 | `FeedDb.getItemById(id, [STATUSES.PUBLISHED])` → 取 6 个字段；再 `getBookById` 校验所属书 |
 
-**卷分组**：复用 `listVolumeBoard`（`extVolume.ts:98`）的**分组规则**
+**卷分组**：复用 `listTagVolumes`（`extVolume.ts:402`）的**分组规则**
 （桶按 `volume` 名；组序 `volumeOrder` ?? 首章 `chapterNo` → 首章 `pub_date` → id；未分卷桶恒排最后）。
-⚠️ 该函数查 `WHERE status != DELETED`（**含草稿**）且在 JS 里过滤 `bookId`，
-⇒ 正确组合是 **`getBookChapters` 拿已发布集合 + `listVolumeBoard` 的分组规则**，
-**不要直接调 `listVolumeBoard`**，也**不在 API 层另写第三套分组逻辑**。
+⚠️ 该函数查 `WHERE book_id = ? AND status != DELETED`（**含草稿**），
+⇒ 正确组合是 **`getBookChapters` 拿已发布集合 + `listTagVolumes` 的分组规则**，
+**不要直接调后台卷看板的取数函数**（它们按卷展开，见 [ADR-0027](0027-admin-volume-board-on-demand-reads.md)），也**不在 API 层另写第三套分组逻辑**。
 
 ### 7. 正文原样返回 + 格式标识
 

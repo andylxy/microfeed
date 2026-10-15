@@ -44,7 +44,7 @@ function volumeOrder(chapter: FeedChapter): number | null {
 
 /**
  * Bucket chapters by their `volume` label, using the same rule the admin volume
- * board uses (see `listVolumeBoard` in `extVolume.ts`): order groups by an
+ * board uses (see `listTagVolumes` in `extVolume.ts`): order groups by an
  * explicit `volumeOrder`, else by each group's first chapter number, then that
  * chapter's publish date, then its id. The unfiled bucket (empty label) is
  * always last.

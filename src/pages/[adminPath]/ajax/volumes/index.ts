@@ -4,7 +4,7 @@ import type {APIRoute} from "astro";
 import {jsonResponse, serviceError} from "@/server/http";
 import type {VolumeDb} from "@/server/feed/extVolume";
 import {
-  listVolumeBoardHandler,
+  listBookVolumesHandler,
   listVolumeBooksHandler,
 } from "@/server/admin/volume-handlers";
 import {
@@ -16,7 +16,10 @@ import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 /**
- * `GET ?bookId=<id>` returns the book picker plus that book's volume board.
+ * `GET ?bookId=<id>` returns the book picker plus that book's **volumes** — the
+ * volume rows and their entry counts, never the entries themselves. A volume's
+ * entries come from a second request when the admin expands it, so opening a
+ * book reads the book's structure instead of every item it has.
  * `GET ?categoryId=<id>` narrows the picker to that category's books, and the
  * response always carries the category nav so the board can offer the same
  * filtering the public shelf does. Without `bookId` only the picker is returned.
@@ -38,9 +41,9 @@ export const GET: APIRoute = async ({locals, request}) => {
           categoryId,
         )).map((book) => ({id: book.id, title: book.title}))
       : await listVolumeBooksHandler(db);
-    const board = bookId ? await listVolumeBoardHandler(db, bookId) : null;
+    const volumes = bookId ? await listBookVolumesHandler(db, bookId) : null;
     return jsonResponse(
-      {board, books, categories},
+      {books, categories, volumes},
       {headers: {"cache-control": "private, no-store"}},
     );
   } catch (error) {
