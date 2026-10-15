@@ -24,7 +24,9 @@
 - 普通开发任务（实现、修复、重构、文档、主题、迁移等）**不跑**门禁：不跑 `yarn check`、不跑 `yarn test`、不跑 `yarn typecheck`、不跑任何 `scripts/check-*.ts`，也不在任务轮次结尾补跑。
 - 门禁只由**用户手动触发**的 `.microfeed-gate-subset` 技能运行。本文件下文「git 提交检查」「开发工作流」「架构治理」「API 规范与文档」「已部署实例的部署流程」等节中所有「运行 `yarn check` / `yarn test` / `yarn typecheck` / `yarn build` / `yarn lint:openapi`」的要求，**一律改为由该手动技能执行**，不再在普通任务中自动执行。
 - `.agents/skills/develop-microfeed`（及 `document-microfeed`、`develop-microfeed-theme`）技能中「边改边跑 targeted tests / checks」「提交前 `yarn check`」的步骤，同样以本条为准，不自动执行。
-- 例外：用户当场明确要求「跑测试 / 跑门禁 / 验证」时，按用户指定的范围执行。
+- **测试代码只写不跑（对一切任务生效，含 spec / 工单 / 票据 / 计划 / 技能流程）**：写测试文件是任务的一部分，运行测试永远不是。验收条目里只允许出现「写出 xxx 测试（不运行）」这类措辞，禁止出现「运行 `yarn test` / 跑 targeted tests / 本地实测 / 起 dev server 验证 / 登录后抓响应」这类步骤。测试是否通过由用户在任务完成后统一手动触发 `.microfeed-gate-subset` 时决定。
+- **不主动起 dev server 做端到端实测**：不得为了「交还前真的跑到预期行为」自行启动 `manage dev`、登录后台、抓取真实响应字节或页面渲染。需要代价数字时用只读探针（`EXPLAIN QUERY PLAN`、行数、字节数）并把数字写进代码注释或票据，实测同样只在用户当场明确要求时执行。
+- 例外：用户当场明确要求「跑测试 / 跑门禁 / 验证 / 起服务」时，按用户指定的范围执行。
 
 ## 目录
 
@@ -32,11 +34,13 @@
 - 最高指令：门禁仅在手动触发时运行（普通任务不跑）
 - 最高指令：git 提交检查
   - 本环境：提交由用户手动执行（AI 不代为提交）
+  - git 管理红线（AI 行为约束）
 - 最高指令：环境边界（开发在本地，生产由用户管理）
   - 开发环境 = 本地项目环境
   - 生产环境由用户主动管理
   - 由此产生的要求
 - 开发工作流
+  - 票据边界（收窄规则）
 - 源码架构
 - 架构治理（门禁脚本强制）
   - src/server/ 顶层目录白名单
@@ -45,7 +49,7 @@
   - 迁移命名与回滚
 - API 规范与文档
 - 前端组件
-  - 管理后台列表页：分页器与「每页条目数」统一来源
+  - 管理后台列表页：取数代价按行读判断
 - 交互样式
 - 管理后台国际化
 - 内容管理 CLI
@@ -104,7 +108,7 @@
 
 - 本地跑过的验证必须如实报告：命令、范围、结果、失败项，不把没跑过的说成跑过。
 - 本地无法验证的结论，标注为未验证，不当成事实陈述。
-- 交还工作前，任务范围内的改动要在本地真的跑到预期行为；本地环境本身出问题导致跑不了时，说清卡在哪、卡在哪个进程或文件，并且不动不属于自己启动的进程。
+- 交还工作前，任务范围内的改动要静态写完（代码 + 测试文件 + 所需的索引与迁移）；是否运行归上一节「门禁仅在手动触发时运行」——不自行跑测试、不起 dev server。本地环境本身出问题导致连静态工作都无法进行时，说清卡在哪、卡在哪个进程或文件，并且不动不属于自己启动的进程。
 
 ## 开发工作流
 
@@ -114,6 +118,14 @@
 - 保留无关变更。绝不为清理任务分支而 stash、reset、discard 或 stage 它们；必要时使用隔离的 worktree。
 - 发布前运行 `git diff --check` 和 `yarn check`，只提交任务范围内的文件；当 GitHub 认证可用时，向 `microfeed/microfeed` 打开草稿拉取请求。
 - 编辑和测试完成后，交还工作之前必须停止自己启动的每个开发服务器，确认每个进程已退出，让人类操作者可以无端口冲突地运行 `yarn dev`；绝不停止不是自己启动的服务器。
+
+### 票据边界（收窄规则）
+
+- 切分原则的文字只存在于生成工单与票据的两个技能里：`~/.agents/skills/to-spec/SKILL.md` 的 Implementation Decisions 一节，与 `~/.agents/skills/to-tickets/SKILL.md` 的 `<vertical-slice-rules>` 和两份票据模板。本节不复述这些规则，只登记它们在本仓库对应到的事实；两处文字冲突时以技能为准，改本节而不改技能就是制造互相矛盾的定义。
+- 本仓库的接缝，即一张票据纵向穿过的层：数据层 `src/server/**`，端点层 `src/pages/**`，组件层 `src/components/admin/**`，迁移与索引 `migrations/**`，规范层 `src/shared/ApiSchemas.ts` 与 `src/shared/OpenApiDocument.ts`，文案层 `src/shared/i18n/en.ts` 与 `zh-CN.ts`，文档与语汇表 `CONTEXT.md`、`docs/novel-cms/adr/**`、`AGENTS.md`。写工单时逐张列出该票穿过的接缝。
+- 「与行为同票」的机械依据来自门禁，不是偏好：`scripts/check-adr.ts` 要求 `src/` 与 `migrations/` 里的裸 `ADR-NNNN` 引用解析到 `docs/novel-cms/adr/**` 下的真实文件，所以引用某条 ADR 的行为票必须同时创建该文件；`scripts/check-i18n.ts` 要求 `zh-CN.ts` 的键形状镜像 `en.ts`，所以新文案键随用到它的组件同票；`scripts/check-endpoint-registration.ts` 要求 handler 与登记一致，所以新端点随它的首个调用方同票。三条门禁的逐条规则见「架构治理」与「API 规范与文档」两节。
+- 票据与文档里的数字在本仓库的取数地点：`node:sqlite` 只读探针脚本的 stdout 文件与其 `EXPLAIN QUERY PLAN` 输出，留在 `.scratch/<feature-slug>/`（`.gitignore:134` 覆盖该目录），票据写出该文件路径。D1 的 `meta.rows_read` 需要 Miniflare 绑定，探针拿不到的口径要标注为推得值。
+- 写测试断言前先读被断言的函数本体，确认它是否顺便插入新行、写入的是 `null` 还是空串、返回哪些类型的行；一次阅读代替一次红色断言。这条在「测试只写不跑」的规则下是强制的。
 
 ## 源码架构
 
@@ -169,24 +181,10 @@
 - 优先扩展共享的 shadcn/ui 组件，不创建一次性控件，不引入另一个原语组件库。用共享组件和设计 token 组合界面，用 `cn` 助手合并类名，保持 Base UI 提供的无障碍行为完好。
 - 已在改动的旧界面渐进迁移即可；不要仅仅为了采用 shadcn/ui 而重写无关的正常工作界面。
 
-### 管理后台列表页：分页器与「每页条目数」统一来源
+### 管理后台列表页：取数代价按行读判断
 
-- **新建任何管理后台列表/看板类页面模块（`.astro` + React 组件）时，必须内置分页器（paginator）**，不允许一次性渲染整张表。列表数据量大（条目、方剂、别名、卷章等）时尤甚。
-- **分页大小必须统一从「设置 → 条目（Items）→ 每页条目数」获取**，不允许在组件里写死常量。该设置存于 `webGlobalSettings.itemsPerPage`，由 `SettingsApp` 的 `ItemsSettingsApp` 编辑并持久化。
-- **标准接线方式（强制，所有列表页一致）**：
-  1. `.astro` 页 frontmatter 读取并归一化：
-     ```astro
-     ---
-     import {normalizeAdminItemListLimit} from "@/shared/AdminCollections";
-     const webSettings = feedContent.settings?.webGlobalSettings ?? {};
-     const itemsPerPage = normalizeAdminItemListLimit(webSettings.itemsPerPage);
-     ---
-     <XxxApp client:only="react" {itemsPerPage}>…</XxxApp>
-     ```
-  2. React 组件声明 `itemsPerPage?: number` prop，并用 `const pageSize = Math.max(1, itemsPerPage ?? DEFAULT_ITEMS_PER_PAGE);`（`DEFAULT_ITEMS_PER_PAGE` 仅作 prop 缺失时的兜底，正常路径来自设置）。
-  3. 客户端切片分页：`totalPages = Math.ceil(rows.length / pageSize)`、`safePage = Math.min(page, totalPages - 1)`、`pageRows = rows.slice(...)`；翻页器仅在 `totalPages > 1` 时显示，文案复用 `volumes.paginationAria/previous/pageIndicator/next`。
-- 已按此接线的页面：`fangs` / `volumes` / `yao` / `term` / `items/list` / `tcm-entry` / `aliases`；新增页面不得倒退为写死。
-- 例外：`themes` 列表走服务端分页（`listing.pagination`，`THEME_LIST_PAGE_SIZE`），不属于此客户端切片模式，不在此约束内。
+- 列表/看板类页面（`.astro` + React 组件）的取数代价以 D1 **行读**为准：一次请求只读页面当前要展示的范围。不得为了在客户端凑一个分页控件而把整本或整表读回来——客户端切片不产生任何行读，代价在那一次请求本身。
+- 行数可能很大的列表走服务端分页（`themes` 走 `listing.pagination` 与 `THEME_LIST_PAGE_SIZE`），或按实体按需读取（卷看板：点书只读该书的书目，点卷才读该卷的条目）。
 
 ## 交互样式
 
