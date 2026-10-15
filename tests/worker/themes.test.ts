@@ -141,7 +141,7 @@ describe("versioned theme storage", () => {
       id: "bundled-default-v2",
       packageId: "microfeed.default",
       sourceKind: "bundled",
-      version: "1.1.17",
+      version: "1.1.18",
     });
     expect(loaded.content.themeMigrationCompleted).toBe(true);
   });
@@ -379,7 +379,7 @@ describe("versioned theme storage", () => {
     });
     expect(searched.builtInGroups[0]).toMatchObject({
       catalogKey: "default",
-      currentVersion: "1.1.17",
+      currentVersion: "1.1.18",
       packageId: "microfeed.default",
       source: "bundled:default",
     });
@@ -775,5 +775,227 @@ describe("versioned theme storage", () => {
     );
     expect(await rssStylesheet.text()).toContain("RSS preview rendered");
     await store.deactivate();
+  });
+
+  it("purges a custom version physically and clears the previous pointer", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    const packageId = `local.purge.${crypto.randomUUID()}`;
+    const first = await store.installVersion({
+      ...packageData(packageId, "1.0.0"),
+      source: {kind: "local-directory", path: "/purge"},
+    });
+    const second = await store.installVersion({
+      ...packageData(packageId, "2.0.0"),
+      source: {kind: "local-directory", path: "/purge"},
+    });
+    await store.activate(first.id);
+    await store.activate(second.id);
+    expect((await store.getState()).previousThemeId).toBe(first.id);
+
+    await store.purgeVersion(first.id, env.MEDIA_BUCKET);
+
+    expect(await store.getVersion(first.id, true)).toBeNull();
+    const state = await store.getState();
+    expect(state.previousThemeId).toBeNull();
+    expect(state.activeThemeId).toBe(second.id);
+    const row = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM themes WHERE id = ?",
+    ).bind(first.id).first<{count: number}>();
+    expect(row?.count).toBe(0);
+  });
+
+  it("refuses to purge built-in and active versions", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    await store.ensureThemeMigration({});
+    await expect(
+      store.purgeVersion("bundled-default-v2", env.MEDIA_BUCKET),
+    ).rejects.toThrow("Built-in");
+    const active = await store.installVersion({
+      ...packageData(`local.purge-active.${crypto.randomUUID()}`),
+      source: {kind: "local-directory", path: "/purge-active"},
+    });
+    await store.activate(active.id);
+    await expect(
+      store.purgeVersion(active.id, env.MEDIA_BUCKET),
+    ).rejects.toThrow("active theme");
+    expect(await store.getVersion(active.id, true)).not.toBeNull();
+  });
+
+  it("purges a soft-deleted tombstone row and frees its install slot", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    const packageId = `local.purge-tomb.${crypto.randomUUID()}`;
+    const version = await store.installVersion({
+      ...packageData(packageId),
+      source: {kind: "local-directory", path: "/purge-tomb"},
+    });
+    await store.deleteVersion(version.id, env.MEDIA_BUCKET);
+    expect((await store.getVersion(version.id, true))?.deletedAt).toBeTruthy();
+
+    await store.purgeVersion(version.id, env.MEDIA_BUCKET);
+
+    expect(await store.getVersion(version.id, true)).toBeNull();
+    const reused = await store.installVersion({
+      ...packageData(packageId),
+      source: {kind: "local-directory", path: "/purge-tomb"},
+    });
+    expect(reused.version).toBe("1.0.0");
+  });
+
+  it("deletes inherited assets once the last referencing version is purged", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    const ownerId = crypto.randomUUID();
+    const key = `development/themes/${ownerId}/assets/purge-logo.svg`;
+    await env.MEDIA_BUCKET.put(key, "<svg/>", {httpMetadata: {contentType: "image/svg+xml"}});
+    const source = packageData(`worker.purge-assets.${crypto.randomUUID()}`);
+    source.manifest.assets = ["assets/purge-logo.svg"];
+    source.bundle.assets = [{
+      contentType: "image/svg+xml",
+      key,
+      path: "assets/purge-logo.svg",
+      sha256: "6".repeat(64),
+      size: 6,
+    }];
+    const owner = await store.installVersion({
+      ...source,
+      assetOwnerThemeId: ownerId,
+      id: ownerId,
+      source: {kind: "local-directory"},
+    });
+    const child = await store.installVersion({
+      ...source,
+      manifest: {...source.manifest, version: "2.0.0"},
+      assetOwnerThemeId: owner.id,
+      source: {kind: "local-directory"},
+    });
+    await store.purgeVersion(owner.id, env.MEDIA_BUCKET);
+    expect(await env.MEDIA_BUCKET.head(key)).not.toBeNull();
+    await store.purgeVersion(child.id, env.MEDIA_BUCKET);
+    expect(await env.MEDIA_BUCKET.head(key)).toBeNull();
+  });
+
+  it("previews and purges old versions while keeping the active and previous rows", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    const packageId = `local.cleanup.${crypto.randomUUID()}`;
+    const previous = await store.installVersion({
+      ...packageData(packageId, "1.0.0"),
+      source: {kind: "local-directory", path: "/cleanup"},
+    });
+    const active = await store.installVersion({
+      ...packageData(packageId, "2.0.0"),
+      source: {kind: "local-directory", path: "/cleanup"},
+    });
+    const tombstone = await store.installVersion({
+      ...packageData(packageId, "3.0.0"),
+      source: {kind: "local-directory", path: "/cleanup"},
+    });
+    await store.activate(previous.id);
+    await store.activate(active.id);
+    await store.deleteVersion(tombstone.id, env.MEDIA_BUCKET);
+
+    const preview = await store.purgeOldVersions(env.MEDIA_BUCKET, true);
+
+    expect(preview).toEqual([{
+      id: tombstone.id,
+      packageId,
+      tombstone: true,
+      version: "3.0.0",
+    }]);
+    expect(await store.getVersion(tombstone.id, true)).not.toBeNull();
+
+    const purged = await store.purgeOldVersions(env.MEDIA_BUCKET);
+
+    expect(purged).toEqual(preview);
+    expect(await store.getVersion(tombstone.id, true)).toBeNull();
+    expect(await store.getVersion(previous.id, true)).not.toBeNull();
+    expect(await store.getVersion(active.id, true)).not.toBeNull();
+  });
+
+  it("keeps only the active row when there is no previous theme", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    const packageId = `local.cleanup-noprev.${crypto.randomUUID()}`;
+    const active = await store.installVersion({
+      ...packageData(packageId, "1.0.0"),
+      source: {kind: "local-directory", path: "/cleanup-noprev"},
+    });
+    const other = await store.installVersion({
+      ...packageData(packageId, "2.0.0"),
+      source: {kind: "local-directory", path: "/cleanup-noprev"},
+    });
+    await store.activate(active.id);
+
+    const purged = await store.purgeOldVersions(env.MEDIA_BUCKET);
+
+    expect(purged.map((row) => row.id)).toEqual([other.id]);
+    expect(await store.getVersion(other.id, true)).toBeNull();
+    expect(await store.getVersion(active.id, true)).not.toBeNull();
+  });
+
+  it("never targets bundled rows and purges several stale versions in one run", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    await store.ensureThemeMigration({});
+    const packageId = `local.cleanup-bundled.${crypto.randomUUID()}`;
+    const staleOld = await store.installVersion({
+      ...packageData(packageId, "1.0.0"),
+      source: {kind: "local-directory", path: "/cleanup-bundled"},
+    });
+    const staleNew = await store.installVersion({
+      ...packageData(packageId, "2.0.0"),
+      source: {kind: "local-directory", path: "/cleanup-bundled"},
+    });
+    const active = await store.installVersion({
+      ...packageData(packageId, "3.0.0"),
+      source: {kind: "local-directory", path: "/cleanup-bundled"},
+    });
+    await store.activate(active.id);
+    const bundledBefore = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM themes WHERE source_kind = 'bundled'",
+    ).first<{count: number}>();
+    expect(bundledBefore?.count).toBeGreaterThan(0);
+
+    const purged = await store.purgeOldVersions(env.MEDIA_BUCKET);
+
+    expect(purged.map((row) => row.id).sort()).toEqual([staleOld.id, staleNew.id].sort());
+    expect(await store.getVersion(staleOld.id, true)).toBeNull();
+    expect(await store.getVersion(staleNew.id, true)).toBeNull();
+    expect(await store.getVersion(active.id, true)).not.toBeNull();
+    const bundledAfter = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM themes WHERE source_kind = 'bundled'",
+    ).first<{count: number}>();
+    expect(bundledAfter?.count).toBe(bundledBefore?.count);
+  });
+
+  it("refuses to clean up while the active theme is built-in", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    await store.ensureThemeMigration({});
+    await store.activate("bundled-default-v2");
+    const version = await store.installVersion({
+      ...packageData(`local.cleanup-builtin.${crypto.randomUUID()}`),
+      source: {kind: "local-directory", path: "/cleanup-builtin"},
+    });
+
+    await expect(store.purgeOldVersions(env.MEDIA_BUCKET, true))
+      .rejects.toThrow("custom theme");
+
+    expect(await store.getVersion(version.id, true)).not.toBeNull();
+  });
+
+  it("refuses to clean up while the active slot is empty", async () => {
+    const store = new ThemeStore(env.FEED_DB);
+    await store.ensureThemeMigration({});
+    const active = await store.installVersion({
+      ...packageData(`local.cleanup-empty.${crypto.randomUUID()}`),
+      source: {kind: "local-directory", path: "/cleanup-empty"},
+    });
+    await store.activate(active.id);
+    const stale = await store.installVersion({
+      ...packageData(`local.cleanup-empty-2.${crypto.randomUUID()}`),
+      source: {kind: "local-directory", path: "/cleanup-empty-2"},
+    });
+    await store.deactivate();
+
+    await expect(store.purgeOldVersions(env.MEDIA_BUCKET, true))
+      .rejects.toThrow("custom theme");
+
+    expect(await store.getVersion(stale.id, true)).not.toBeNull();
   });
 });

@@ -292,6 +292,61 @@ export async function resumeWebhookEndpoint(
   return getWebhookEndpoint(database, id);
 }
 
+/**
+ * 物理删除一个 webhook 端点（purge，ADR-0026）：端点、它的投递、投递尝试、
+ * 以及只属于它的 event 删完。与 {@link deleteWebhookEndpoint} 的软删分工——
+ * 软删保留端点行、cron `pruneWebhookHistory` 按保留期收尾；purge 立即收尾。
+ *
+ * 外键顺序（0017）：deliveries→endpoints、deliveries→events、attempts→deliveries，
+ * 所以 batch 内只能 attempts → deliveries → events → endpoints。deliveries 一删，
+ * 「本端点的独占事件」就无从查起，因此删前先用一条 DISTINCT 读把 event id 取出。
+ * 读代价量化（AGENTS.md:13）：外层 `endpoint_id = ?` 走 `webhook_deliveries_endpoint`
+ * 索引，rows_read ≈ 该端点的投递数；反连接子查询 `endpoint_id <> ?` 用不上该索引
+ * （索引前导列是等值匹配），整表读 `webhook_deliveries`，rows_read = 表行数（投递
+ * 历史总量）。admin 一次性操作，量级可接受。读与删之间若来了别的端点对同一事件
+ * 的新投递，events 删除撞外键、整个 batch 回滚——purge 失败可重试，不会留半删状态。
+ *
+ * event 用独占引用删法：只删投递曾指向本端点、且没有其他端点投递在用的 event。
+ * cron 的「无投递引用」删法会把保留期内的 explorer 事件一并硬删，那是它的保留期
+ * 职责，purge 不越界（ADR-0026 的两份删域清单对账要求）。
+ *
+ * `webhook_daily_usage` / `webhook_budget_reservations` 没有 endpoint_id 列
+ * （全局预算账本），不属于端点删除域，purge 不碰。
+ */
+export async function purgeWebhookEndpoint(
+  database: D1Database,
+  id: string,
+): Promise<boolean> {
+  const exclusive = await database.prepare(`
+    SELECT DISTINCT event_id FROM webhook_deliveries
+    WHERE endpoint_id = ?
+      AND event_id NOT IN (
+        SELECT event_id FROM webhook_deliveries WHERE endpoint_id <> ?
+      )`,
+  ).bind(id, id).all<{event_id: string}>();
+  const eventIds = (exclusive.results ?? []).map((row) => row.event_id);
+  const statements = [
+    database.prepare(`
+      DELETE FROM webhook_delivery_attempts WHERE delivery_id IN (
+        SELECT id FROM webhook_deliveries WHERE endpoint_id = ?
+      )`,
+    ).bind(id),
+    database.prepare("DELETE FROM webhook_deliveries WHERE endpoint_id = ?").bind(id),
+  ];
+  if (eventIds.length > 0) {
+    statements.push(
+      database.prepare(
+        `DELETE FROM webhook_events WHERE id IN (${eventIds.map(() => "?").join(", ")})`,
+      ).bind(...eventIds),
+    );
+  }
+  statements.push(
+    database.prepare("DELETE FROM webhook_endpoints WHERE id = ?").bind(id),
+  );
+  const results = await database.batch(statements);
+  return Boolean(results[results.length - 1]?.meta.changes);
+}
+
 export async function deleteWebhookEndpoint(
   database: D1Database,
   id: string,

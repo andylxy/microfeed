@@ -5,6 +5,8 @@ import i18n, {useTranslation} from "@/client/i18n";
 import {formatAdminDateTime} from "@/client/admin-date-format";
 import {showToast} from "@/client/ToastUtils";
 import ThemeInstallHelpDialog from "@/components/admin/themes/ThemeInstallHelpDialog";
+import {type PurgeChoice} from "@/components/admin/shared/PurgeConfirmDialog";
+import usePurgeConfirm from "@/components/admin/shared/usePurgeConfirm";
 import ThemePreviewDialog from "@/components/admin/themes/ThemePreviewDialog";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -15,6 +17,7 @@ import {
 } from "@/shared/ManagementCli";
 import type {
   BuiltInThemeGroup,
+  PurgedThemeVersion,
   ThemeAdminTab,
   ThemeListResponse,
   ThemeListSort,
@@ -366,16 +369,45 @@ export default function ThemesApp({
       window.location.reload();
     });
   };
-  const deleteTheme = (theme: ThemeVersionSummary) => {
-    if (!window.confirm(t("themes.deleteConfirm", {
-      id: theme.id,
-      packageId: theme.packageId,
-      version: theme.version,
-    }))) return;
-    run(async () => {
+  const confirmDeletion = async (theme: ThemeVersionSummary, choice: PurgeChoice) => {
+    if (choice === "purge") {
+      await requestJson(ADMIN_URLS.ajaxThemePurge(theme.id), {method: "POST", body: "{}"});
+    } else {
       await requestJson(ADMIN_URLS.ajaxTheme(theme.id), {method: "DELETE"});
-      window.location.reload();
-    });
+    }
+    window.location.reload();
+  };
+  const purge = usePurgeConfirm<ThemeVersionSummary>({
+    busy,
+    confirmToken: (theme) => `${theme.packageId}@${theme.version}`,
+    onConfirm: (theme, choice) => run(() => confirmDeletion(theme, choice)),
+  });
+  const cleanupOldVersions = async () => {
+    const plan = await requestJson(ADMIN_URLS.ajaxThemes(), {
+      body: JSON.stringify({action: "purgeOldVersions", dryRun: true}),
+      method: "POST",
+    }) as {purged: PurgedThemeVersion[]};
+    if (plan.purged.length === 0) {
+      showToast(t("themes.cleanupNone"), "success");
+      return;
+    }
+    const list = plan.purged
+      .map((row) => `${row.packageId}@${row.version}${row.tombstone ? t("themes.cleanupTombstoneTag") : ""}`)
+      .join("\n");
+    // 批量清理确认的是「预览清单执行」，不是单行删除：清单可含十几行，
+    // 逐行输入 package@version 不可行，原生 confirm 展示的 count + 全量清单
+    // （即 dryRun 预览）就是确认面。单行删除走 PurgeConfirmDialog（二选一 +
+    // 输入确认），两者确认强度不同是有意为之，与 spec 第 4 节的入口设计一致。
+    if (!window.confirm(t("themes.cleanupConfirm", {
+      count: plan.purged.length,
+      list,
+    }))) return;
+    const result = await requestJson(ADMIN_URLS.ajaxThemes(), {
+      body: JSON.stringify({action: "purgeOldVersions"}),
+      method: "POST",
+    }) as {purged: PurgedThemeVersion[]};
+    showToast(t("themes.cleanupDone", {count: result.purged.length}), "success");
+    window.location.reload();
   };
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value);
@@ -420,7 +452,7 @@ export default function ThemesApp({
     instanceName,
     onActivate: activate,
     onCreateVersion: createVersion,
-    onDelete: deleteTheme,
+    onDelete: purge.requestPurge,
     onPreview: previewTheme,
     siteUrl,
     state: listing.state,
@@ -577,6 +609,15 @@ export default function ThemesApp({
                   </select>
                 </label>
               </div>
+              <div className="mt-3 flex justify-end">
+                <Button
+                  disabled={busy || loading}
+                  onClick={() => run(cleanupOldVersions)}
+                  variant="destructive"
+                >
+                  {t("themes.cleanupOldVersions")}
+                </Button>
+              </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
                 <p>{loading ? t("themes.updating") : (listing.pagination.total === 1 ? t("themes.resultOne", {count: listing.pagination.total}) : t("themes.resultOther", {count: listing.pagination.total}))}</p>
                 {listing.pagination.totalPages > 0 && <p>{t("themes.pageOf", {page: listing.pagination.page, total: listing.pagination.totalPages})}</p>}
@@ -616,6 +657,8 @@ export default function ThemesApp({
           supportsPagesAndSearch={preview.supportsPagesAndSearch}
         />
       )}
+
+      {purge.dialog}
     </div>
   );
 }

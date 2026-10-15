@@ -5,6 +5,9 @@ import {
   Trash2Icon,
 } from "lucide-react";
 
+import {type PurgeChoice} from "@/components/admin/shared/PurgeConfirmDialog";
+import usePurgeConfirm from "@/components/admin/shared/usePurgeConfirm";
+
 import {preventCloseWhenChanged} from "@/client/BrowserUtils";
 import {showToast} from "@/client/ToastUtils";
 import {nativeWebMcpAvailable} from "@/client/webmcp/feature-detection";
@@ -173,6 +176,7 @@ export default function PageEditorApp({
   const [busy, setBusy] = useState(false);
   const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
   const [savedPage, setSavedPage] = useState<PageRecord | undefined>(page);
+
   const changedRef = useRef(false);
   const busyRef = useRef(false);
   const draftRef = useRef(draft);
@@ -332,17 +336,32 @@ export default function PageEditorApp({
     savedPage?.status,
   ]);
 
-  const remove = async () => {
-    if (!page || !window.confirm(t("pages.deleteConfirm", {title: page.title}))) return;
+  const remove = () => {
+    if (page) purge.requestPurge({id: page.id, title: page.title});
+  };
+  const confirmDeletion = async (target: {id: string; title: string}, choice: PurgeChoice) => {
     setBusy(true);
     try {
-      await responseJson(await fetch(ADMIN_URLS.ajaxPage(page.id), {method: "DELETE"}));
+      if (choice === "purge") {
+        await responseJson(await fetch(ADMIN_URLS.ajaxPagePurge(target.id), {
+          body: "{}",
+          headers: {"content-type": "application/json"},
+          method: "POST",
+        }));
+      } else {
+        await responseJson(await fetch(ADMIN_URLS.ajaxPage(target.id), {method: "DELETE"}));
+      }
       window.location.assign(ADMIN_URLS.pages());
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("pages.deleteFailed"), "error");
       setBusy(false);
     }
   };
+  const purge = usePurgeConfirm<{id: string; title: string}>({
+    busy,
+    confirmToken: (target) => target.title,
+    onConfirm: confirmDeletion,
+  });
 
   return (
     <>
@@ -507,6 +526,8 @@ export default function PageEditorApp({
         }}
         topic={helpTopic}
       />
+
+      {purge.dialog}
     </>
   );
 }

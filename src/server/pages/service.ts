@@ -649,6 +649,34 @@ export async function deletePage(
   return true;
 }
 
+/**
+ * 物理删除一个页面（purge，ADR-0026）：pages 行与 page_paths 行一起删，再清页面
+ * 缓存。与 {@link deletePage} 的软删分工——软删翻 status 保留行；purge 不保留。
+ *
+ * page_paths 必须显式删：它没有指向 pages 的外键（0013 只有 page_id 列），不删
+ * 会留孤儿行，其 slug 主键与 page_paths_current_page 唯一索引还会挡住同 slug
+ * 重建。已软删的行同样可 purge（本函数不按 status 过滤）。
+ */
+export async function purgePage(
+  database: FeedDb,
+  id: string,
+  commit?: DatabaseMutationCommit<boolean>,
+): Promise<boolean> {
+  const existing = await database.FEED_DB.prepare(
+    "SELECT slug FROM pages WHERE id = ? LIMIT 1",
+  ).bind(id).first() as {slug: string} | null;
+  if (existing && isNotFoundPageSlug(existing.slug)) {
+    throw new PageRequestError("errors.page.default404CannotDelete");
+  }
+  if (!existing) return false;
+  await commitDatabaseMutation(database.FEED_DB, [
+    database.FEED_DB.prepare("DELETE FROM page_paths WHERE page_id = ?").bind(id),
+    database.FEED_DB.prepare("DELETE FROM pages WHERE id = ?").bind(id),
+  ], true, commit);
+  await purgePageCaches(database, id);
+  return true;
+}
+
 export async function resolvePagePath(
   database: D1Database,
   request: Request,

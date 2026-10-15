@@ -23,6 +23,7 @@ import {
 } from "@/server/webhooks/explorer";
 import {
   createWebhookEndpoint,
+  purgeWebhookEndpoint,
   readWebhookSettings,
   resumeWebhookEndpoint,
   rotateWebhookEndpointSecret,
@@ -555,6 +556,81 @@ describe("webhook endpoint lifecycle", () => {
       "SELECT secret_ciphertext FROM webhook_endpoints WHERE id = ?",
     ).bind(successful.value.endpoint.id).first<{secret_ciphertext: string}>();
     expect(stored?.secret_ciphertext).not.toContain(successful.value.secret);
+  });
+
+  it("purges an endpoint with its deliveries, attempts, and exclusive events", async () => {
+    await insertEndpoint("purge-target");
+    await insertEndpoint("purge-other");
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_events
+          (id, event_type, api_version, subject_type, subject_id, payload_json,
+           origin, request_id, correlation_id, budget_day, created_at)
+        VALUES ('evt-exclusive', 'item.created', 'v1', 'item', 'item-1', '{}',
+          'system', 'req-1', 'corr-1', '2026-10-14', CURRENT_TIMESTAMP)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_events
+          (id, event_type, api_version, subject_type, subject_id, payload_json,
+           origin, request_id, correlation_id, budget_day, created_at)
+        VALUES ('evt-shared', 'item.created', 'v1', 'item', 'item-2', '{}',
+          'system', 'req-2', 'corr-2', '2026-10-14', CURRENT_TIMESTAMP)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_deliveries
+          (id, event_id, endpoint_id, endpoint_url, status, is_test, is_manual, queued_at)
+        VALUES ('del-target-exclusive', 'evt-exclusive', 'purge-target',
+          'https://example.com/purge-target', 'pending', 0, 0, CURRENT_TIMESTAMP)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_deliveries
+          (id, event_id, endpoint_id, endpoint_url, status, is_test, is_manual, queued_at)
+        VALUES ('del-target-shared', 'evt-shared', 'purge-target',
+          'https://example.com/purge-target', 'pending', 0, 0, CURRENT_TIMESTAMP)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_deliveries
+          (id, event_id, endpoint_id, endpoint_url, status, is_test, is_manual, queued_at)
+        VALUES ('del-other-shared', 'evt-shared', 'purge-other',
+          'https://example.com/purge-other', 'pending', 0, 0, CURRENT_TIMESTAMP)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_delivery_attempts
+          (id, delivery_id, attempt_number, outcome, duration_ms)
+        VALUES (9001, 'del-target-exclusive', 1, 'failed', 12)`,
+      ),
+      // 预算账本没有 endpoint_id（全局表，不属端点删除域）：purge 后必须原样幸存。
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_daily_usage (usage_day, deliveries)
+        VALUES ('2026-10-14', 3)`,
+      ),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_budget_reservations (id, delivery_count, budget_day)
+        VALUES ('res-purge-target', 2, '2026-10-14')`,
+      ),
+    ]);
+
+    const usageBefore = (await env.FEED_DB.prepare(
+      "SELECT deliveries FROM webhook_daily_usage WHERE usage_day = '2026-10-14'",
+    ).first<{deliveries: number}>())?.deliveries;
+
+    expect(await purgeWebhookEndpoint(env.FEED_DB, "purge-target")).toBe(true);
+
+    const count = async (sql: string) =>
+      (await env.FEED_DB.prepare(sql).first<{count: number}>())?.count ?? -1;
+    expect(await count("SELECT count(*) AS count FROM webhook_deliveries WHERE endpoint_id = 'purge-target'")).toBe(0);
+    expect(await count("SELECT count(*) AS count FROM webhook_delivery_attempts WHERE delivery_id = 'del-target-exclusive'")).toBe(0);
+    expect(await count("SELECT count(*) AS count FROM webhook_events WHERE id = 'evt-exclusive'")).toBe(0);
+    expect(await count("SELECT count(*) AS count FROM webhook_events WHERE id = 'evt-shared'")).toBe(1);
+    expect(await count("SELECT count(*) AS count FROM webhook_deliveries WHERE id = 'del-other-shared'")).toBe(1);
+    expect(await count("SELECT count(*) AS count FROM webhook_endpoints WHERE id = 'purge-target'")).toBe(0);
+    expect(await count("SELECT count(*) AS count FROM webhook_daily_usage")).toBe(1);
+    expect(await count("SELECT count(*) AS count FROM webhook_budget_reservations")).toBe(1);
+    const usageAfter = (await env.FEED_DB.prepare(
+      "SELECT deliveries FROM webhook_daily_usage WHERE usage_day = '2026-10-14'",
+    ).first<{deliveries: number}>())?.deliveries;
+    expect(usageAfter).toBe(usageBefore);
+    expect(await purgeWebhookEndpoint(env.FEED_DB, "purge-target")).toBe(false);
   });
 
   it("requires a successful paused test before explicit resume", async () => {

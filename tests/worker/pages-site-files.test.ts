@@ -1,12 +1,14 @@
 import {env} from "cloudflare:workers";
 import type {APIContext, APIRoute} from "astro";
-import {beforeEach, describe, expect, it} from "vitest";
+import {beforeEach, describe, expect, it, vi} from "vitest";
 
+import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
 import FeedDb from "@/server/feed/FeedDb";
 import {updateApiAccessSettings} from "@/server/api/api-keys";
 import {
   createPage,
   deletePage,
+  purgePage,
   getPageById,
   listPages,
   navigationPages,
@@ -1142,5 +1144,72 @@ describe("Pages and Site Files API handlers", () => {
       new Request(`${ORIGIN}/api/v1/site-files/${id}/`, {method: "DELETE"}),
       {siteFileId: id},
     )).status).toBe(200);
+  });
+
+  it("purges a page physically together with its path rows", async () => {
+    const request = new Request(`${ORIGIN}/purge-me/`);
+    const db = await database("/purge-me/");
+    const page = await createPage(db, request, {
+      content_html: "<p>Purge body</p>",
+      navigation_label: "Purge me",
+      slug: "purge-me",
+      status: "published",
+      title: "Purge me",
+    });
+    const pathsBefore = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM page_paths WHERE page_id = ?",
+    ).bind(page!.id).first<{count: number}>();
+    expect(pathsBefore?.count).toBeGreaterThan(0);
+    // createPage 也会清缓存，间谍须在那之后挂，只数 purgePage 的这一次。
+    const purgeTags = vi.spyOn(db, "purgePublicCacheTags");
+
+    expect(await purgePage(db, page!.id)).toBe(true);
+
+    expect(purgeTags).toHaveBeenCalledTimes(1);
+    expect(purgeTags).toHaveBeenCalledWith([
+      PUBLIC_CACHE_TAGS.PUBLIC,
+      PUBLIC_CACHE_TAGS.PAGES,
+      PUBLIC_CACHE_TAGS.page(page!.id),
+      PUBLIC_CACHE_TAGS.ITEMS,
+    ]);
+
+    const row = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM pages WHERE id = ?",
+    ).bind(page!.id).first<{count: number}>();
+    expect(row?.count).toBe(0);
+    const pathsAfter = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM page_paths WHERE page_id = ?",
+    ).bind(page!.id).first<{count: number}>();
+    expect(pathsAfter?.count).toBe(0);
+    const recreated = await createPage(db, request, {
+      content_html: "<p>Purge body again</p>",
+      navigation_label: "Purge me",
+      slug: "purge-me",
+      status: "published",
+      title: "Purge me again",
+    });
+    expect(recreated?.slug).toBe("purge-me");
+  });
+
+  it("purges a soft-deleted page and refuses the default 404 page", async () => {
+    const request = new Request(`${ORIGIN}/purge-tomb/`);
+    const db = await database("/purge-tomb/");
+    const page = await createPage(db, request, {
+      content_html: "<p>Tomb body</p>",
+      navigation_label: "Purge tomb",
+      slug: "purge-tomb",
+      status: "published",
+      title: "Purge tomb",
+    });
+    await deletePage(db, page!.id);
+    expect(await purgePage(db, page!.id)).toBe(true);
+    const row = await env.FEED_DB.prepare(
+      "SELECT count(*) AS count FROM pages WHERE id = ?",
+    ).bind(page!.id).first<{count: number}>();
+    expect(row?.count).toBe(0);
+
+    await expect(purgePage(db, DEFAULT_NOT_FOUND_PAGE_ID))
+      .rejects.toBeInstanceOf(PageRequestError);
+    expect(await purgePage(db, "no-such-page")).toBe(false);
   });
 });

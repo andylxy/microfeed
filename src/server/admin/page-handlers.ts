@@ -18,6 +18,7 @@ import {
   activeThemeSupportsPages,
   createPage,
   deletePage,
+  purgePage,
   getPageById,
   listAdminPageSummaries,
   PageConflictError,
@@ -211,6 +212,33 @@ export const updateAdminPage: APIRoute = async ({params, request}) => {
     );
     if (!page) return localizedError(request, "errors.page.notFound", 404);
     return jsonResponse(page);
+  } catch (error) {
+    const response = serviceError(request, error);
+    if (response) return response;
+    throw error;
+  }
+};
+
+export const purgeAdminPage: APIRoute = async ({params, request}) => {
+  if (!params.pageId) {
+    return localizedError(request, "errors.page.invalidId", 400);
+  }
+  try {
+    const before = await getPageById(env.FEED_DB, request, params.pageId);
+    if (!await purgePage(
+      database(request),
+      params.pageId,
+      contentMutationWebhookCommit(env, request, {
+        before: before as unknown as Record<string, unknown> | null,
+        context: {origin: "dashboard"},
+        id: params.pageId,
+        kind: "page",
+        mutation: "deleted",
+      }),
+    )) {
+      return localizedError(request, "errors.page.notFound", 404);
+    }
+    return jsonResponse({});
   } catch (error) {
     const response = serviceError(request, error);
     if (response) return response;

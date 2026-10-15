@@ -3,6 +3,7 @@ import type {APIRoute} from "astro";
 
 import {appErrorResponse, jsonResponse, localizedError} from "@/server/http";
 import {AppError} from "@/shared/errors";
+import {mediaBucket} from "@/server/media/storage";
 import ThemeStore from "@/server/themes/ThemeStore";
 import {
   singleWebhookEventCommit,
@@ -166,6 +167,13 @@ export const POST: APIRoute = async ({locals, request}) => {
         }, {origin: "dashboard"}),
       );
       return jsonResponse({state});
+    }
+    if (input.action === "purgeOldVersions") {
+      const purged = await store.purgeOldVersions(
+        mediaBucket(env),
+        input.dryRun === true,
+      );
+      return jsonResponse({purged});
     }
     return localizedError(request, "errors.theme.unknownAction", 400);
   } catch (error) {

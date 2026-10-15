@@ -472,6 +472,8 @@ export const ADMIN_URLS = {
     adminUrl("ajax/annotation-markers/delete", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
+  ajaxVolumeEntries: () =>
+    adminUrl("ajax/volumes/entries", browserAdminPath()),
   ajaxVolumeAssign: () =>
     adminUrl("ajax/volumes/assign", browserAdminPath()),
   ajaxVolumeRename: () =>
@@ -551,6 +553,10 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/themes/${id}`, browserAdminPath()),
   ajaxThemePreview: (id: string) =>
     adminUrl(`ajax/themes/${id}/preview`, browserAdminPath()),
+  ajaxThemePurge: (id: string) =>
+    adminUrl(`ajax/themes/${id}/purge`, browserAdminPath()),
+  ajaxPagePurge: (id: string) =>
+    adminUrl(`ajax/pages/${id}/purge`, browserAdminPath()),
   ajaxThemeDraft: (id: string) =>
     adminUrl(`ajax/themes/drafts/${id}`, browserAdminPath()),
   ajaxThemeDraftPreview: (id: string) =>

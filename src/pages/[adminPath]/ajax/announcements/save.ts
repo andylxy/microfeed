@@ -5,12 +5,14 @@
  * - `{create: {...}}`  新建
  * - `{update: {id, ...}}`  编辑（`version` 按内容改动自增，见 store）
  * - `{setStatus: {id, status}}`  删除(4) / 过期(3) / 恢复发布(2)
+ * - `{purge: {id}}`  物理删除（行移除，不可恢复）
  *
  * Guarded by `system:announcement:manage` —— 与读取端点的 `:read` 分开，
  * 这样「能看」与「能改」可以独立授予（角色编辑器里是两个叶子）。
  *
  * 校验失败一律 400 且**不**写入：半条公告比没有公告更糟（客户端会弹空框）。
- * `setStatus` 走软删（4），不 DROP，保留审计。
+ * `setStatus` 走软删（置 4，行保留）；`purge` 是物理删除（行移除，不可恢复），
+ * 由管理后台删除对话框的「永久删除」选项触发（ADR-0026）。
  */
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
@@ -18,6 +20,7 @@ import type {APIRoute} from "astro";
 import {
   createAnnouncement,
   isSettableStatus,
+  purgeAnnouncement,
   setStatus,
   updateAnnouncement,
   validateAnnouncementDraft,
@@ -31,6 +34,7 @@ interface SaveBody {
   create?: AnnouncementDraft;
   update?: AnnouncementDraft & {id?: number};
   setStatus?: {id?: number; status?: number};
+  purge?: {id?: number};
 }
 
 export const POST: APIRoute = async ({locals, request}) => {
@@ -83,6 +87,18 @@ export const POST: APIRoute = async ({locals, request}) => {
       return localizedError(request, "errors.announcements.notFound", 404);
     }
     return jsonResponse({ok: true, row: updated});
+  }
+
+  if (body.purge !== undefined) {
+    const {id} = body.purge;
+    if (typeof id !== "number") {
+      return localizedError(request, "errors.announcements.invalidPayload", 400);
+    }
+    const purged = await purgeAnnouncement(env.FEED_DB, id);
+    if (!purged) {
+      return localizedError(request, "errors.announcements.notFound", 404);
+    }
+    return jsonResponse({ok: true});
   }
 
   if (body.setStatus !== undefined) {

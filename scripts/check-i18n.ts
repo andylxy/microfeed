@@ -5,12 +5,15 @@
  * key renders as `errors.foo.bar` in the dashboard. `tsc` cannot catch that:
  * keys are plain strings at every call site. This script is the only guard.
  *
- * It asserts five things:
+ * It asserts six things:
  *   unresolved       - a referenced key that `translate()` cannot resolve.
  *   only en / only zh - the two resource files drifted apart.
  *   placeholder mis  - same key, different `{{placeholders}}` per language.
  *   self-ref in en   - a value that starts with "errors." means a bulk
  *                      literal-to-key replacement overwrote en.ts's own value.
+ *   lone braces      - a value with a single-braced `{name}` group. i18next
+ *                      interpolates `{{name}}` only, so the group renders
+ *                      literally in the UI.
  *
  * Run with `yarn i18n:check`. It exits non-zero when anything is wrong.
  */
@@ -87,6 +90,27 @@ const selfReferential = Object.entries(flatEnglish)
   .filter(([, value]) => value.startsWith("errors."))
   .map(([key]) => key);
 
+// Interpolation only replaces `{{name}}`. Strip every well-formed pair first,
+// then any surviving identifier-shaped `{name}` group renders literally in the
+// dashboard - this is the blind spot that let "Type {target} to confirm" ship:
+// both languages had the same lone group, so the parity check stayed silent.
+// Only identifier-shaped groups count: help copy may legitimately show literal
+// braces (e.g. the `{...}` code sample in annotationMarkers.description).
+const loneBracedGroups = (value: string): string[] => {
+  const withoutPairs = value.replace(/\{\{[^{}]*\}\}/gu, "");
+  return withoutPairs.match(/\{[A-Za-z0-9_]+\}/gu) ?? [];
+};
+const loneBraces = [
+  ...new Set([
+    ...Object.entries(flatEnglish)
+      .filter(([, value]) => loneBracedGroups(value).length > 0)
+      .map(([key]) => `en ${key}`),
+    ...Object.entries(flatChinese)
+      .filter(([, value]) => loneBracedGroups(value).length > 0)
+      .map(([key]) => `zh-CN ${key}`),
+  ]),
+];
+
 // The sidebar renders its labels through a dynamic key (`menu.item.${id}`), so
 // the literal scan above cannot see them: a missing one would render the raw
 // key name in the dashboard. Enumerate the ids instead - this is the gap that
@@ -143,6 +167,12 @@ if (selfReferential.length > 0) {
   failures.push(
     `en values that are themselves keys (${selfReferential.length}):\n    ` +
       selfReferential.slice(0, 20).join("\n    "),
+  );
+}
+if (loneBraces.length > 0) {
+  failures.push(
+    `single-braced {groups} that render literally (${loneBraces.length}) - ` +
+      `use {{name}}:\n    ${loneBraces.slice(0, 20).join("\n    ")}`,
   );
 }
 if (missingNavLabels.length > 0) {

@@ -22,6 +22,7 @@ import {
 import {
   createWebhookEndpoint,
   deleteWebhookEndpoint,
+  purgeWebhookEndpoint,
   getWebhookDelivery,
   getWebhookEndpoint,
   listWebhookDeliveries,
@@ -233,6 +234,14 @@ export const updateAdminWebhookEndpoint: APIRoute = async ({params, request}) =>
 export const deleteAdminWebhookEndpoint: APIRoute = async ({params, request}) => {
   if (!params.endpointId ||
     !await deleteWebhookEndpoint(env.FEED_DB, params.endpointId)) {
+    return localizedError(request, "errors.webhook.endpointNotFound", 404);
+  }
+  return jsonResponse({});
+};
+
+export const purgeAdminWebhookEndpoint: APIRoute = async ({params, request}) => {
+  if (!params.endpointId ||
+    !await purgeWebhookEndpoint(env.FEED_DB, params.endpointId)) {
     return localizedError(request, "errors.webhook.endpointNotFound", 404);
   }
   return jsonResponse({});

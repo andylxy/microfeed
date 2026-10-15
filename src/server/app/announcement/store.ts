@@ -4,7 +4,8 @@
  * <p>对应迁移 {@code 0086_ext_app_announcement}。本模块是公告功能的唯一数据入口，
  * 公开端点（02 工单）与管理后台（04 工单）都只通过这里读写，不直拼 SQL。</p>
  *
- * <p><b>状态</b>：{@code 1 draft / 2 published / 3 expired / 4 deleted}（软删，置 4 即可）。</p>
+ * <p><b>状态</b>：{@code 1 draft / 2 published / 3 expired / 4 deleted}（软删，置 4 即可）。
+ * 物理删除走 {@link purgeAnnouncement}（行移除，不可恢复，ADR-0026）。</p>
  *
  * <p><b>version</b>：客户端去重用的「内容指纹」。{@link updateAnnouncement} 仅在
  * <b>title/body 被改动</b>时自增；只改时间窗口或状态不增——否则只是改了生效期，
@@ -248,6 +249,21 @@ export async function updateAnnouncement(
     )
     .run();
   return getAnnouncement(db, id);
+}
+
+/**
+ * 物理删除一条公告（purge，ADR-0026）：行从表里移除。与 {@link setStatus} 置
+ * deleted(4) 的软删分工——软删保留行，purge 不保留。已确认本表无子表引用
+ * （0086 为唯一建表点），调用方（管理后台删除对话框）负责确认。
+ */
+export async function purgeAnnouncement(
+  db: D1Database,
+  id: number,
+): Promise<boolean> {
+  const result = await db.prepare(
+    "DELETE FROM ext_app_announcement WHERE id = ?",
+  ).bind(id).run();
+  return Boolean(result.meta.changes);
 }
 
 /**

@@ -378,4 +378,22 @@ describe("admin tab filter helper", () => {
     await setStatus(db, created.id, ANNOUNCEMENT_STATUS.EXPIRED, NOW);
     expect(await listAdminAnnouncements(db, "expired", NOW)).toHaveLength(1);
   });
+
+  it("purges an announcement physically and refuses unknown ids", async () => {
+    const created = await createAnnouncement(
+      db,
+      {title: "purge-target", status: ANNOUNCEMENT_STATUS.PUBLISHED},
+      NOW,
+    );
+
+    const denied = await callPost({purge: {id: created.id}}, readLocals());
+    expect(denied.status).toBe(403);
+
+    const response = await callPost({purge: {id: created.id}});
+    expect(response.status).toBe(200);
+    expect(await getAnnouncement(db, created.id)).toBeNull();
+
+    const missing = await callPost({purge: {id: created.id}});
+    expect(missing.status).toBe(404);
+  });
 });

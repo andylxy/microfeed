@@ -454,6 +454,18 @@ export interface ThemeVersionSummary {
   version: string;
 }
 
+/**
+ * 被 purge 掉的主题行清单项（ADR-0026 批量清理）：dryRun 预览与正式执行返回
+ * 同一种结构，服务端 ThemeStore 与后台 ThemesApp 共用这一份定义。
+ * tombstone 标记该行是软删除历史（墓碑行）还是 live 行。
+ */
+export interface PurgedThemeVersion {
+  id: string;
+  packageId: string;
+  tombstone: boolean;
+  version: string;
+}
+
 export interface ThemeDraftSummary {
   assetCount: number;
   assetOwnerThemeId: string | null;

@@ -21,6 +21,8 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Switch} from "@/components/ui/switch";
 import {showToast} from "@/client/ToastUtils";
+import {type PurgeChoice} from "@/components/admin/shared/PurgeConfirmDialog";
+import usePurgeConfirm from "@/components/admin/shared/usePurgeConfirm";
 import {useTranslation} from "@/client/i18n";
 import i18n from "@/client/i18n";
 import type {WebhookEndpointSummary} from "@/shared/Webhooks";
@@ -136,7 +138,10 @@ export default function WebhookEndpointsApp({
     }
   };
   const action = async (endpoint: WebhookEndpointSummary, actionName: string) => {
-    if (actionName === "delete" && !window.confirm(t("webhookEndpoints.deleteConfirm", {name: endpoint.name}))) return;
+    if (actionName === "delete") {
+      purge.requestPurge(endpoint);
+      return;
+    }
     setBusy(true);
     try {
       const method = actionName === "delete" ? "DELETE" : "POST";
@@ -152,6 +157,27 @@ export default function WebhookEndpointsApp({
       setBusy(false);
     }
   };
+  const confirmDeletion = async (endpoint: WebhookEndpointSummary, choice: PurgeChoice) => {
+    setBusy(true);
+    try {
+      if (choice === "purge") {
+        await requestJson(`endpoints/${endpoint.id}/purge`, {body: "{}", method: "POST"});
+      } else {
+        await requestJson(`endpoints/${endpoint.id}`, {method: "DELETE"});
+      }
+      await refresh();
+      showToast(t("webhookEndpoints.actionCompleteToast", {action: "delete"}), "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const purge = usePurgeConfirm<WebhookEndpointSummary>({
+    busy,
+    confirmToken: (endpoint) => endpoint.name,
+    onConfirm: confirmDeletion,
+  });
   const setStatus = async (
     endpoint: WebhookEndpointSummary,
     active: boolean,
@@ -413,6 +439,8 @@ export default function WebhookEndpointsApp({
           </ul>
         )}
       </AdminSectionCard>
+
+      {purge.dialog}
     </div>
   );
 }

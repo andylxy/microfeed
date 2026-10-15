@@ -11,6 +11,8 @@ import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminTextarea from "@/components/admin/shared/AdminTextarea";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import {formatAdminDateTime} from "@/client/admin-date-format";
+import {type PurgeChoice} from "@/components/admin/shared/PurgeConfirmDialog";
+import usePurgeConfirm from "@/components/admin/shared/usePurgeConfirm";
 import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
 import {
@@ -234,8 +236,8 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
 
   const changeStatus = useCallback(
     async (row: AnnouncementRow, status: AnnouncementStatus) => {
-      if (status === ANNOUNCEMENT_STATUS.DELETED
-        && !globalThis.confirm(t("announcements.confirmDelete"))) {
+      if (status === ANNOUNCEMENT_STATUS.DELETED) {
+        purge.requestPurge(row);
         return;
       }
       const result = await post({setStatus: {id: row.id, status}});
@@ -248,6 +250,28 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
     },
     [load, post, t],
   );
+
+  const confirmDeletion = async (row: AnnouncementRow, choice: PurgeChoice) => {
+    setSaving(true);
+    try {
+      const result = choice === "purge"
+        ? await post({purge: {id: row.id}})
+        : await post({setStatus: {id: row.id, status: ANNOUNCEMENT_STATUS.DELETED}});
+      if (!result.ok) {
+        setError(result.error ?? t("announcements.saveFailed"));
+        return;
+      }
+      setNotice(t("announcements.saved"));
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  };
+  const purge = usePurgeConfirm<AnnouncementRow>({
+    busy: saving,
+    confirmToken: (row) => row.title,
+    onConfirm: confirmDeletion,
+  });
 
   if (loading && rows.length === 0) {
     return <AdminCollectionLoading label={t("announcements.title")} />;
@@ -542,6 +566,8 @@ export default function AnnouncementsApp({canManage, itemsPerPage}: Props) {
             </div>
         </AdminDialog>
       )}
+
+      {purge.dialog}
     </div>
   );
 }

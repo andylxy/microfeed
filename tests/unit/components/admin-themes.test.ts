@@ -272,4 +272,19 @@ describe("Admin versioned themes", () => {
     expect(editor).toContain("...previousCustomCode");
     expect(editorRoute).toContain('adminUrl("settings/themes"');
   });
+
+  it("offers archive and permanent deletion through one confirm dialog", async () => {
+    const [themes, dialog] = await Promise.all([
+      source("components/admin/themes/ThemesApp.tsx"),
+      source("components/admin/shared/PurgeConfirmDialog.tsx"),
+    ]);
+    expect(themes).toContain("PurgeConfirmDialog");
+    expect(themes).toContain("confirmDeletion");
+    expect(themes).toContain("ADMIN_URLS.ajaxThemePurge");
+    expect(themes).toContain('{method: "DELETE"}');
+    expect(themes).not.toContain('window.confirm(t("themes.deleteConfirm"');
+    expect(dialog).toContain('t("purge.archiveOption")');
+    expect(dialog).toContain('t("purge.purgeOption")');
+    expect(dialog).toContain("confirmToken");
+  });
 });

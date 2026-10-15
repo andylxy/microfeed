@@ -18,6 +18,7 @@ import type {
   ThemeManifestV1,
   ThemePreviewFixture,
   ThemeAdminTab,
+  PurgedThemeVersion,
   ThemeSourceKind,
   ThemeState,
   ThemeVersionSummary,
@@ -902,9 +903,125 @@ export default class ThemeStore {
     await this.cleanupAssetOwner(ownerId, bucket);
   }
 
+  /**
+   * 物理删除一个自定义版本（purge，ADR-0026 D4）：行从表里移除，不写墓碑。
+   *
+   * 与 {@link deleteVersion} 的分工：软删除保留行（仍占 `UNIQUE(package_id, version)`，
+   * 重装同版本报 `versionReusedAfterDeletion`）；purge 释放该约束，代价是不可恢复。
+   * 对已软删除的墓碑行同样有效——批量清理旧版本（`purgeOldVersions`）靠它回收墓碑。
+   *
+   * 三件必须同时做（AGENTS.md 禁裸 SQL 绕过的理由逐条消除）：
+   * 1. 拒绝 bundled 与当前激活行（激活行先停用再删）；
+   * 2. 先删行再清 R2 资产——{@link cleanupAssetOwner} 的引用计数只算未删行与草稿，
+   *    反序会把这行自己算成引用而跳过清理，留下孤儿资产；
+   * 3. `theme_state.previous_theme_id` 指向被删行时清空，否则回滚点悬空。
+   */
+  async purgeVersion(id: string, bucket?: R2Bucket | null): Promise<void> {
+    const theme = await this.getVersion(id, true);
+    if (!theme) throw new AppError("errors.theme.notFound");
+    if (theme.sourceKind === "bundled") {
+      throw new AppError("errors.theme.bundledCannotDelete");
+    }
+    const state = await this.getState();
+    if (state.activeThemeId === id) {
+      throw new AppError("errors.theme.activeCannotDelete");
+    }
+    const deleted = await this.database.prepare(
+      `DELETE FROM themes WHERE id = ? AND NOT EXISTS (
+         SELECT 1 FROM theme_state
+         WHERE id = 'current' AND active_theme_id = ?
+       )
+       RETURNING asset_owner_theme_id`,
+    ).bind(id, id).first<{asset_owner_theme_id: string | null}>();
+    if (!deleted) {
+      throw new AppError("errors.theme.becameActiveDuringDelete");
+    }
+    await this.database.prepare(
+      `UPDATE theme_state SET previous_theme_id = NULL,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = 'current' AND previous_theme_id = ?`,
+    ).bind(id).run();
+
+    const ownerId = theme.assetOwnerThemeId;
+    if (!ownerId) return;
+    // 删行之后 owner 行可能已经不存在（owner 是自拥有行、已被 purge），那时
+    // cleanupAssetOwner 读不到它的资产清单——所以在删行前先把清单拿出来。
+    let capturedAssets: readonly {key: string}[];
+    if (ownerId === id) {
+      capturedAssets = theme.bundle.assets;
+    } else {
+      const owner = await this.getVersion(ownerId, true);
+      // owner 行不在时用本行的 bundle：本行不拥有资产（assetOwnerThemeId 指向
+      // owner），bundle.assets 列的正是以 owner 为前缀存放的那一组（派生时整组
+      // 继承，ThemeAssets 的媒体前缀只认 assetOwnerThemeId），是仅剩的权威清单。
+      capturedAssets = owner ? owner.bundle.assets : theme.bundle.assets;
+    }
+    await this.cleanupAssetOwner(ownerId, bucket, capturedAssets);
+  }
+
+  /**
+   * 批量清理旧版本（ADR-0026 D2/D3）：custom 行里 keep 集
+   * {active, previous} 之外的全部 purge。live 行与墓碑行都算——墓碑仍占
+   * `UNIQUE(package_id, version)`（见 {@link purgeVersion}）。dryRun 只返回
+   * 将删清单，不删任何行。
+   *
+   * 读代价（AGENTS.md:13）：custom 全集一次扫描走全表（`EXPLAIN QUERY PLAN`
+   * 实测 `SCAN themes`——source_kind 无索引，themes_created_at / themes_deleted_at /
+   * themes_asset_owner 三个索引的谓词都不匹配本查询）。rows_read = themes 全表行数
+   * （本地实测 25 行 = custom 17 + bundled 8；生产上界 = bundled 数 + custom 配额 100
+   * + 墓碑累积）。SELECT 只取 id / package_id / version / deleted_at 四个窄列，
+   * 读取字节按每行约 100 字节估（25 行 ≈ 2.5 KB；100 行 ≈ 10 KB）；manifest 与
+   * bundle 两列 JSON 不进投影。keep 集两条主键查各 1 rows_read。表在这个量级
+   * 不新增索引。
+   *
+   * 删除逐行进行、非原子：目标行被并发激活时该行抛错，已删的行不回滚
+   * （半清理状态）。与单行 deleteVersion 的语义一致；纯写路径，无新增读。
+   */
+  async purgeOldVersions(
+    bucket?: R2Bucket | null,
+    dryRun = false,
+  ): Promise<PurgedThemeVersion[]> {
+    const state = await this.getState();
+    const active = state.activeThemeId
+      ? await this.getVersion(state.activeThemeId, true)
+      : null;
+    if (!active || active.sourceKind === "bundled") {
+      throw new AppError("errors.theme.cleanupRequiresCustomActive");
+    }
+    const keep = new Set(
+      [state.activeThemeId, state.previousThemeId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    const rows = results<{
+      deleted_at: string | null;
+      id: string;
+      package_id: string;
+      version: string;
+    }>(
+      await this.database.prepare(
+        "SELECT id, package_id, version, deleted_at FROM themes WHERE source_kind != 'bundled'",
+      ).all(),
+    );
+    const targets = rows
+      .filter((row) => !keep.has(row.id))
+      .map((row) => ({
+        id: row.id,
+        packageId: row.package_id,
+        tombstone: row.deleted_at !== null,
+        version: row.version,
+      }));
+    if (dryRun) return targets;
+    for (const row of targets) {
+      await this.purgeVersion(row.id, bucket);
+    }
+    return targets;
+  }
+
   private async cleanupAssetOwner(
     ownerId: string,
     bucket?: R2Bucket | null,
+    capturedAssets?: readonly {key: string}[] | null,
   ): Promise<void> {
     const references = await this.database.prepare(
       `SELECT (
@@ -916,23 +1033,29 @@ export default class ThemeStore {
     ).bind(ownerId, ownerId).first<{count: number}>();
     if ((references?.count ?? 0) > 0) return;
 
+    // owner 行已被 purge 时用调用前捕获的资产清单；账目列随行消失，跳过记账。
     const owner = await this.getVersion(ownerId, true);
-    if (!owner || owner.bundle.assets.length === 0) return;
+    const assets = owner?.bundle.assets ?? capturedAssets ?? [];
+    if (assets.length === 0) return;
 
     try {
       if (!bucket) throw new AppError("errors.theme.r2Unavailable");
-      await bucket.delete(owner.bundle.assets.map((asset) => asset.key));
-      await this.database.prepare(
-        `UPDATE themes SET assets_deleted_at = CURRENT_TIMESTAMP,
-         asset_cleanup_error = NULL WHERE id = ?`,
-      ).bind(ownerId).run();
+      await bucket.delete(assets.map((asset) => asset.key));
+      if (owner) {
+        await this.database.prepare(
+          `UPDATE themes SET assets_deleted_at = CURRENT_TIMESTAMP,
+           asset_cleanup_error = NULL WHERE id = ?`,
+        ).bind(ownerId).run();
+      }
     } catch (error) {
-      await this.database.prepare(
-        "UPDATE themes SET asset_cleanup_error = ? WHERE id = ?",
-      ).bind(
-        error instanceof Error ? error.message : String(error),
-        ownerId,
-      ).run();
+      if (owner) {
+        await this.database.prepare(
+          "UPDATE themes SET asset_cleanup_error = ? WHERE id = ?",
+        ).bind(
+          error instanceof Error ? error.message : String(error),
+          ownerId,
+        ).run();
+      }
       throw error;
     }
   }
