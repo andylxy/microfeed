@@ -99,59 +99,94 @@ function MarkerPreview({draft}: {draft: StyleDraft}) {
   );
 }
 
-/** The four style inputs, reused by the edit row and the create form. */
-export function StyleFields({
-  draft,
-  onChange,
-  t,
-}: {
+/** The shared props every style field takes: the draft, its setter, the translator. */
+interface StyleFieldProps {
   draft: StyleDraft;
   onChange: (next: StyleDraft) => void;
   t: (key: string) => string;
-}) {
+}
+
+/**
+ * The colour well. A native colour input styled down to the 20×20 swatch the
+ * read-only row shows, plus the stored value as text so the committed colour
+ * stays readable (rgba() rows keep their exact string until a pick overwrites it).
+ */
+function ColorField({draft, onChange, t}: StyleFieldProps) {
+  return (
+    <span className="flex items-center gap-2">
+      <input
+        aria-label={t("annotationMarkers.color")}
+        className="h-5 w-5 shrink-0 cursor-pointer appearance-none rounded border p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-moz-color-swatch]:border-none"
+        onChange={(event) => onChange({...draft, color: event.target.value})}
+        type="color"
+        value={colorInputValue(draft.color)}
+      />
+      <span className="font-mono text-xs">{draft.color}</span>
+    </span>
+  );
+}
+
+/** The reduced-size toggle. */
+function SmallFontField({draft, onChange, t}: StyleFieldProps) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        checked={draft.smallFont}
+        onChange={(event) => onChange({...draft, smallFont: event.target.checked})}
+        type="checkbox"
+      />
+      {t("annotationMarkers.smallFont")}
+    </label>
+  );
+}
+
+/** The reduced-size ratio, only editable while the toggle is on. */
+function SmallFontScaleField({draft, onChange, t}: StyleFieldProps) {
+  return (
+    <Input
+      aria-label={t("annotationMarkers.smallFontScale")}
+      className="w-20"
+      disabled={!draft.smallFont}
+      max={1}
+      min={0.3}
+      onChange={(event) => onChange({...draft, smallFontScale: event.target.value})}
+      step={0.05}
+      type="number"
+      value={draft.smallFontScale}
+    />
+  );
+}
+
+/** Which entity the marker links to (none / 中药 / 方剂 / 名词). */
+function LinkTypeField({draft, onChange, t}: StyleFieldProps) {
+  return (
+    <select
+      aria-label={t("annotationMarkers.linkType")}
+      className="rounded-md border bg-background px-3 py-2 text-sm"
+      onChange={(event) => onChange({...draft, linkType: Number(event.target.value)})}
+      value={draft.linkType}
+    >
+      {LINK_TYPES.map((option) => (
+        <option key={option.value} value={option.value}>
+          {t(option.label)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * The four style inputs as one inline group, for the create form below the
+ * table. The edit row places each field in its own cell instead, so every
+ * control sits under its column header.
+ */
+export function StyleFields({draft, onChange, t}: StyleFieldProps) {
   return (
     <>
-      <span className="flex items-center gap-2">
-        <input
-          aria-label={t("annotationMarkers.color")}
-          className="h-5 w-5 shrink-0 cursor-pointer appearance-none rounded border p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-moz-color-swatch]:border-none"
-          onChange={(event) => onChange({...draft, color: event.target.value})}
-          type="color"
-          value={colorInputValue(draft.color)}
-        />
-        <span className="font-mono text-xs">{draft.color}</span>
-      </span>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          checked={draft.smallFont}
-          onChange={(event) => onChange({...draft, smallFont: event.target.checked})}
-          type="checkbox"
-        />
-        {t("annotationMarkers.smallFont")}
-      </label>
-      <Input
-        aria-label={t("annotationMarkers.smallFontScale")}
-        className="w-20"
-        disabled={!draft.smallFont}
-        max={1}
-        min={0.3}
-        onChange={(event) => onChange({...draft, smallFontScale: event.target.value})}
-        step={0.05}
-        type="number"
-        value={draft.smallFontScale}
-      />
-      <select
-        aria-label={t("annotationMarkers.linkType")}
-        className="rounded-md border bg-background px-3 py-2 text-sm"
-        onChange={(event) => onChange({...draft, linkType: Number(event.target.value)})}
-        value={draft.linkType}
-      >
-        {LINK_TYPES.map((option) => (
-          <option key={option.value} value={option.value}>
-            {t(option.label)}
-          </option>
-        ))}
-      </select>
+      <ColorField draft={draft} onChange={onChange} t={t} />
+      <SmallFontField draft={draft} onChange={onChange} t={t} />
+      <SmallFontScaleField draft={draft} onChange={onChange} t={t} />
+      <LinkTypeField draft={draft} onChange={onChange} t={t} />
     </>
   );
 }
@@ -319,11 +354,22 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
                     <MarkerPreview draft={draft} />
                   </td>
                   {editing === marker.code ? (
-                    <td className="py-2 pr-4" colSpan={4}>
-                      <span className="flex flex-wrap items-center gap-3">
-                        <StyleFields draft={editDraft} onChange={setEditDraft} t={t} />
-                      </span>
-                    </td>
+                    // 每个字段一个单元格，与表头逐列对齐：合在一个 colSpan 里时，
+                    // 控件会偏离各自列（比例输入出现在「缩小」列下那种错位）。
+                    <>
+                      <td className="py-2 pr-4">
+                        <ColorField draft={editDraft} onChange={setEditDraft} t={t} />
+                      </td>
+                      <td className="py-2 pr-4">
+                        <SmallFontField draft={editDraft} onChange={setEditDraft} t={t} />
+                      </td>
+                      <td className="py-2 pr-4">
+                        <SmallFontScaleField draft={editDraft} onChange={setEditDraft} t={t} />
+                      </td>
+                      <td className="py-2 pr-4">
+                        <LinkTypeField draft={editDraft} onChange={setEditDraft} t={t} />
+                      </td>
+                    </>
                   ) : (
                     <>
                       <td className="py-2 pr-4">
