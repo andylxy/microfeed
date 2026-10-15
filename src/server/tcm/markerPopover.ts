@@ -119,6 +119,30 @@ function extractMarkerNames(source: string): {fang: Set<string>; yao: Set<string
 }
 
 /**
+ * Collect names from a 条文's structured `_microfeed.fangList` — the second
+ * citation source, parallel to the `$f{…}` markers in the body. Both feed the
+ * same `f` rows: the popover reads them, and the 方剂 editor's reverse-reference
+ * view (`ajax/tcm/fang-references`) points at this index instead of scanning
+ * the book. Names are trimmed so a space-padded source entry still matches the
+ * editor's trimmed lookup.
+ */
+function extractFangListNames(data: Record<string, any>): string[] {
+  const pocket = data._microfeed;
+  const list =
+    pocket && typeof pocket === "object"
+      ? (pocket as Record<string, any>).fangList
+      : undefined;
+  if (!Array.isArray(list)) return [];
+  const names: string[] = [];
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const name = entry.trim();
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+/**
  * All 方剂 in one 典籍 book, keyed by name (first occurrence = `no` min wins
  * so same-name duplicates resolve to the fuller entry). Returns empty when the
  * current book is not a 典籍 book (e.g. the fang container itself).
@@ -398,13 +422,16 @@ const CITATION_BATCH_SIZE = 100;
  *
  * ⚠️ 前置不变量（ADR-0025 D6 / 用户 2026-10-13 强调）：正文在 `data.description` 里
  * **按原形保存**，`$f{桂枝汤}` 是原文的一部分；渲染成 `<span>` 只发生在显示时。
- * 这里只从原文里**提取**名字，表里不含任何 HTML。提取用的是 `extractMarkerNames`
- * —— 与渲染路径同一个函数，所以「什么算一个标记」索引与渲染器不可能产生分歧。
+ * 这里只从原文里**提取**名字，表里不含任何 HTML。正文来源走 `extractMarkerNames`
+ * —— 与渲染路径同一个函数，所以「什么算一个标记」索引与渲染器不可能产生分歧；
+ * 结构化来源 `_microfeed.fangList` 与它合并去重（`extractFangListNames`）。
+ * 读者：popover（`findMarkerReferences`）与方剂编辑器的反向引用视图
+ * （`ajax/tcm/fang-references`）都读这张表，后者因此不再整书扫描。
  *
  * 顺序是 clear → 分片 insert → 最后盖时间戳：中途失败会留下"时间戳仍是 0"的脏行，
  * 下一位读者会把它重算一遍，于是永远不会服务半份索引。
  */
-async function ensureMarkerCitations(
+export async function ensureMarkerCitations(
   db: D1Database,
   bookId: string,
 ): Promise<void> {
@@ -430,11 +457,15 @@ async function ensureMarkerCitations(
   for (const row of results ?? []) {
     const d = parseData(row.data);
     const names = extractMarkerNames(String(d.description ?? ""));
+    // 结构化来源（fangList）与正文来源（$f{}）合并去重后同以 'f' 写入：主键
+    // (book_id, marker_code, marker_name, section_id) 对两源命中同一条文的情况
+    // 本就去重，合并只为省掉一次空写的 INSERT OR REPLACE。
+    const fangNames = new Set([...names.fang, ...extractFangListNames(d)]);
     const sectionId = String(row.id);
     const sectionTitle = String(d.title ?? "");
     // 重算时的 rowid，用来复刻"无 ORDER BY 的 rowid 顺序"这一既有展示顺序。
     const seq = Number(row.seq) || 0;
-    for (const name of names.fang) {
+    for (const name of fangNames) {
       rows.push(
         db
           .prepare(

@@ -8,9 +8,17 @@
  * 字节数的算式与数据缺口、候选索引定义。
  *
  * 判定口径（与 d1-full-scan-audit 一致）：
- *   - `SCAN <表>` 且不含 `USING INDEX` = 真·全表扫描（D1SCAN-001）。
+ *   - `SCAN <表>` 且不含 `USING INDEX` = 真·全表扫描（D1SCAN-001）。无 WHERE 的
+ *     整表 `DELETE FROM <表>` 是 bulk 维护操作，索引无法收窄，不记 001。
  *   - `SCAN <表> USING INDEX <索引>` = 索引全扫，比全表扫描便宜仍要记（D1SCAN-003）。
  *   - `USE TEMP B-TREE` = 排序/去重溢出到临时 B-tree（D1SCAN-002，最常被忽略的性能债）。
+ *     行数加权只数「非点查访问」：主键/rowid 点查（`(id=?)`）每轮最多贡献 1 行，
+ *     被 join 的大表不是排序输入；全部访问都是小表或点查时不记（否则「小表驱动 +
+ *     主键点查」的查询会被大表行数误记，实测 8 处噪音）。
+ *   - WHERE 子句整体坍缩成单个 `?`（条件 const 带分支拼接、静态内联给不出真条件）
+ *     的语句计入 skipped，不按计划结果记违规。
+ *   - 源码里 SQL 常量上一行写 `// d1scan:ignore <原因>` 显式豁免整块常量（维护
+ *     脚本的全量重建），豁免数进汇总输出，可 grep 可评审。
  *   - 按表行数加权：≤101 行的小表全表扫描比走索引还快，直接排除；只有大表上的
  *     才记为违规。`sqlite_*` 元数据表的扫描属于检视库结构，不计入性能债。
  *
@@ -122,6 +130,8 @@ interface SqlBlob {
   text: string;
   file: string;
   line: number;
+  /** `// d1scan:ignore <原因>` 豁免理由（常量上一行），非空 = 整块常量不检查。 */
+  ignore?: string;
 }
 
 /** 剥 `//` 与 `/* *\/` 注释（SQL 字面量内几乎不含 `//`，可接受极小误剥风险）。 */
@@ -184,6 +194,9 @@ const EXPR_OPENER_KEYWORDS = new Set([
 const DANGLING_TAIL =
   /(?:\b(?:ORDER|GROUP|WHERE|AND|OR|SET|ON|BY|VALUES|HAVING|LIMIT|OFFSET|JOIN|FROM|IN|LIKE|IS|BETWEEN|CASE|WHEN|THEN|ELSE|NOT|SELECT|UNION|EXISTS)\s*|[,(\[=<>+\-*\/|])$/iu;
 
+/** WHERE 子句只剩一个占位符 = 条件 const 带分支拼接，静态内联给不出真条件。 */
+const WHERE_PLACEHOLDER_ONLY = /\bWHERE\s+\?\s*(?:ORDER\s+BY|GROUP\s+BY|LIMIT\b|$)/iu;
+
 /**
  * `?` 只能出现在表达式位置：前面（仅隔空白）必须是运算符、左括号、逗号，或
  * {@link EXPR_OPENER_KEYWORDS} 里的关键词。紧跟标识符、数字、引号、右括号、
@@ -202,16 +215,18 @@ function hasBadPlaceholder(stmt: string): boolean {
 /**
  * 前置判定：抽取出的 SQL 片段能否交给 SQLite 静态规划。规则——
  *   ① 以 SELECT/WITH/INSERT/UPDATE/DELETE/REPLACE 开头（拦掉被窗口截断的半句）；
- *   ② `?` 不出现在名字位置（FROM/JOIN/INTO/UPDATE/TABLE/INDEX/AS/SET 之后，
+ *   ② WHERE 子句未整体坍缩为单个占位符（条件拼接无法静态内联，计划无意义）；
+ *   ③ `?` 不出现在名字位置（FROM/JOIN/INTO/UPDATE/TABLE/INDEX/AS/SET 之后，
  *      允许被引号包住）与 `INTO <表>(` 列清单内（`VALUES(...)` 不受影响）；
- *   ③ 不是触发器体（OLD/NEW 引用无法独立规划）；
- *   ④ 不以子句关键词 / 运算符收尾（拼接窗口截断）；
- *   ⑤ 没有出现在名字位置或子句残留的 `?`；
- *   ⑥ 圆括号平衡。
+ *   ④ 不是触发器体（OLD/NEW 引用无法独立规划）；
+ *   ⑤ 不以子句关键词 / 运算符收尾（拼接窗口截断）；
+ *   ⑥ 没有出现在名字位置或子句残留的 `?`；
+ *   ⑦ 圆括号平衡。
  * 不满足的片段不计入语句数，而是逐条列出并给出原因——缺口响亮可见，不静默吞掉。
  */
 function canPlan(stmt: string): boolean {
   if (!/^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|REPLACE)\b/iu.test(stmt)) return false;
+  if (WHERE_PLACEHOLDER_ONLY.test(stmt)) return false;
   if (/\b(?:FROM|JOIN|INTO|UPDATE|TABLE|INDEX|AS|SET)\s*["']?\?/iu.test(stmt)) return false;
   if (/INTO\s+[A-Za-z_]\w*\s*\([^)]*\?/iu.test(stmt)) return false;
   if (/\b(?:OLD|NEW)\s*\./iu.test(stmt)) return false;
@@ -226,6 +241,9 @@ function canPlan(stmt: string): boolean {
 function planSkipReason(stmt: string): string {
   if (!/^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|REPLACE)\b/iu.test(stmt)) {
     return "非查询语句开头（英文文案或拼接窗口截断）";
+  }
+  if (WHERE_PLACEHOLDER_ONLY.test(stmt)) {
+    return "WHERE 子句整体坍缩为占位符（条件拼接无法静态内联）";
   }
   if (/\b(?:OLD|NEW)\s*\./iu.test(stmt)) return "触发器体（OLD/NEW 引用），无法独立规划";
   if (/\b(?:FROM|JOIN|INTO|UPDATE|TABLE|INDEX|AS|SET)\s*["']?\?/iu.test(stmt)) {
@@ -253,6 +271,39 @@ function candidateIndex(stmt: string, table: string): string {
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}…`;
+}
+
+/** FROM/JOIN 之后可能紧跟子句关键词而非别名——这些词不当别名。 */
+const JOIN_TAIL_KEYWORDS = new Set([
+  "ON", "WHERE", "GROUP", "ORDER", "LEFT", "RIGHT", "INNER", "OUTER", "CROSS",
+  "JOIN", "LIMIT", "UNION", "HAVING", "WINDOW", "USING", "SET", "VALUES",
+]);
+
+/**
+ * 语句里 `FROM/JOIN <表> [AS] <别名>` 的别名→真实表名映射。计划详情里的名字是
+ * 别名（`SEARCH i USING INDEX ...`），不映射回表名就永远拿不到行数。
+ */
+function aliasTables(stmt: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const re = /\b(?:FROM|JOIN)\s+["'`]?([A-Za-z_]\w*)["'`]?(?:\s+(?:AS\s+)?["'`]?([A-Za-z_]\w*)["'`]?)?/giu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stmt))) {
+    const table = m[1];
+    const rawAlias = m[2];
+    const alias = rawAlias && !JOIN_TAIL_KEYWORDS.has(rawAlias.toUpperCase()) ? rawAlias : table;
+    map.set(alias.toLowerCase(), table);
+    map.set(table.toLowerCase(), table);
+  }
+  return map;
+}
+
+/**
+ * 某次表访问是否只是主键/rowid 点查（`(id=?)` / `(rowid=?)`）。点查每轮最多
+ * 贡献 1 行：join 到大表不等于排序输入变大——「小表驱动 + 主键点查」的语句
+ * （audit 汇总、review 列表等）其 TEMP B-TREE 只排驱动表的结果行。
+ */
+function isPointLookup(detail: string): boolean {
+  return /\((?:id|rowid)=\?\)/u.test(detail);
 }
 
 /**
@@ -303,12 +354,12 @@ function extractSql(file: string, src: string): SqlBlob[] {
     } else if (gap === "+") {
       current += " " + seg;
     } else {
-      blobs.push(finalizeBlob(current, currentStart, file, stripped, consts));
+      blobs.push(finalizeBlob(current, currentStart, file, stripped, consts, src));
       current = seg;
       currentStart = lit.index;
     }
   }
-  if (current !== "") blobs.push(finalizeBlob(current, currentStart, file, stripped, consts));
+  if (current !== "") blobs.push(finalizeBlob(current, currentStart, file, stripped, consts, src));
   return blobs.filter((b) => /\b(from|join)\b/iu.test(b.text));
 }
 
@@ -318,13 +369,26 @@ function finalizeBlob(
   file: string,
   stripped: string,
   consts: Map<string, string>,
+  src: string,
 ): SqlBlob {
   let t = inlineConsts(text, consts, 0);
   t = neutralizeTemplates(t);
   t = stripSqlLineComments(t);
   t = t.replace(/\s+/gu, " ").trim();
   const line = stripped.slice(0, Math.max(0, startIdx)).split("\n").length;
-  return {text: t, file: path.relative(repositoryRoot, file), line};
+  // 常量上一行（或隔一空行再上一行）的 `// d1scan:ignore <原因>` 豁免整块常量：
+  // 维护脚本的全量重建本就是整表操作，逐个语句绕不开，显式豁免比默默记违规可评审。
+  // 仓库文件多为 CRLF，理由捕获到行尾空白（含 \r）为止。
+  const srcLines = src.split("\n");
+  let ignore: string | undefined;
+  for (let back = 2; back <= 3; back += 1) {
+    const marker = srcLines[line - back]?.match(/\/\/\s*d1scan:ignore\s+(.+?)\s*$/u);
+    if (marker) {
+      ignore = marker[1].trim();
+      break;
+    }
+  }
+  return {text: t, file: path.relative(repositoryRoot, file), line, ignore};
 }
 
 // ── 3. EXPLAIN QUERY PLAN 分类 ────────────────────────────────────────────────
@@ -387,14 +451,20 @@ function main(): void {
 
   const files = SCAN_DIRS.flatMap((d) => walk(d, isSourceFile)).filter((f) => !f.includes(I18N_DIR_SEGMENT));
   let statementsExamined = 0;
+  let bulkDeletes = 0;
   const flags: ScanFinding[] = [];
   const seenSmall: {file: string; line: number; table: string; rows: number}[] = [];
   const skipped: {file: string; line: number; reason: string; sql: string}[] = [];
+  const ignored: {file: string; line: number; reason: string}[] = [];
 
   for (const file of files) {
     const src = readFileSync(file, "utf8");
     const blobs = extractSql(file, src);
     for (const blob of blobs) {
+      if (blob.ignore) {
+        ignored.push({file: blob.file, line: blob.line, reason: blob.ignore});
+        continue;
+      }
       const stmts = blob.text.split(";").map((s) => s.trim()).filter(Boolean);
       for (const stmt of stmts) {
         if (!/\b(from|join)\b/iu.test(stmt)) continue;
@@ -406,13 +476,10 @@ function main(): void {
         const plan = db.prepare(`EXPLAIN QUERY PLAN ${stmt}`).all() as {detail: string}[];
         statementsExamined++;
         const details = plan.map((r) => r.detail);
-        // 收集被读表、「无索引的全表扫描」表与「索引全扫」，供大表加权判定。
-        const tables = new Set<string>();
+        // 收集「无索引的全表扫描」表与「索引全扫」，供大表加权判定。
         const indexScans: {table: string; index: string}[] = [];
         let fullScanTable: string | null = null;
         for (const d of details) {
-          const m = d.match(/^(?:SCAN|SEARCH)\s+(\S+)/u);
-          if (m) tables.add(m[1].replace(/"/gu, ""));
           const sm = d.match(/^SCAN\s+(\S+)(?:\s+USING INDEX\s+\S+)?/u);
           if (sm && !/USING INDEX/u.test(d)) fullScanTable = sm[1].replace(/"/gu, "");
           const im = d.match(/^SCAN\s+(\S+)\s+USING INDEX\s+(\S+)/u);
@@ -420,40 +487,63 @@ function main(): void {
         }
         // D1SCAN-001：大表上的真·全表扫描（行数 > 小表阈值）。
         // `sqlite_*` 是 SQLite 自带的元数据表（schema/master），扫描它属于
-        // 检视库结构而非业务数据扫描，不计入性能债。
+        // 检视库结构而非业务数据扫描，不计入性能债。无 WHERE 的整表 DELETE 是
+        // bulk 维护操作（清空派生表再重建），索引无法收窄一次全删，同样不记。
+        const isBulkDelete = /^\s*DELETE\b/iu.test(stmt) && !/\bWHERE\b/iu.test(stmt);
         if (fullScanTable && !fullScanTable.startsWith("sqlite_")) {
-          const rows = rowCount(fullScanTable);
-          const bytes = tableBytes(fullScanTable);
-          if (rows > SMALL_TABLE_LIMIT) {
-            const idx = candidateIndex(stmt, fullScanTable);
-            flags.push({
-              rule: "D1SCAN-001",
-              file: blob.file,
-              line: blob.line,
-              table: fullScanTable,
-              message:
-                `全表扫描 ${fullScanTable}（${rows} 行 / ${bytes} 字节，超过小表阈值 ${SMALL_TABLE_LIMIT}）；` +
-                `候选索引 ${idx || "（未能从语句抽取等值列，需人工判定）"}`,
-              scannedRows: rows,
-              scannedBytes: bytes,
-              sql: stmt,
-            });
-          } else if (rows >= 0) {
-            seenSmall.push({file: blob.file, line: blob.line, table: fullScanTable, rows});
+          if (isBulkDelete) {
+            bulkDeletes++;
+          } else {
+            const rows = rowCount(fullScanTable);
+            const bytes = tableBytes(fullScanTable);
+            if (rows > SMALL_TABLE_LIMIT) {
+              const idx = candidateIndex(stmt, fullScanTable);
+              flags.push({
+                rule: "D1SCAN-001",
+                file: blob.file,
+                line: blob.line,
+                table: fullScanTable,
+                message:
+                  `全表扫描 ${fullScanTable}（${rows} 行 / ${bytes} 字节，超过小表阈值 ${SMALL_TABLE_LIMIT}）；` +
+                  `候选索引 ${idx || "（未能从语句抽取等值列，需人工判定）"}`,
+                scannedRows: rows,
+                scannedBytes: bytes,
+                sql: stmt,
+              });
+            } else if (rows >= 0) {
+              seenSmall.push({file: blob.file, line: blob.line, table: fullScanTable, rows});
+            }
           }
         }
         // D1SCAN-002：大表上的 TEMP B-TREE（小表排序溢出可忽略，与 d1 审计口径一致）。
+        // 行数加权只数「非点查访问」：`(id=?)` 点查每轮最多 1 行，被 join 的大表
+        // 不是排序输入；全部访问都是小表或点查时不记。
         if (details.some((d) => /USE TEMP B-TREE/u.test(d))) {
-          const primary = fullScanTable ?? [...tables][0] ?? null;
-          if (primary && primary.startsWith("sqlite_")) continue; // 元数据表排除
-          const prows = primary ? rowCount(primary) : -1;
-          if (primary === null || prows > SMALL_TABLE_LIMIT || prows < 0) {
+          const aliases = aliasTables(stmt);
+          const bulkTables = new Set<string>();
+          for (const d of details) {
+            const am = d.match(/^(?:SCAN|SEARCH)\s+(\S+)/u);
+            if (!am || isPointLookup(d)) continue;
+            const name = am[1].replace(/"/gu, "");
+            bulkTables.add(aliases.get(name.toLowerCase()) ?? name);
+          }
+          const candidates = [...bulkTables].filter((t) => !t.startsWith("sqlite_"));
+          const rows = candidates.map((t) => rowCount(t));
+          const anyLarge = rows.some((r) => r > SMALL_TABLE_LIMIT);
+          // 全部访问都是主键/rowid 点查（无加权对象）时保守记录；访问对象全是
+          // sqlite_* 元数据表（检视库结构）则不记。
+          const anyUnknown = bulkTables.size === 0 || rows.some((r) => r < 0);
+          if (anyLarge || anyUnknown) {
+            let primary = candidates[0] ?? "?";
+            for (const t of candidates) {
+              if (rowCount(t) > rowCount(primary)) primary = t;
+            }
             const detail = details.find((d) => /USE TEMP B-TREE/u.test(d)) ?? "";
             flags.push({
               rule: "D1SCAN-002",
               file: blob.file,
               line: blob.line,
-              table: primary ?? "?",
+              table: primary,
               message: `排序/去重溢出到临时 B-tree（${detail}）`,
               scannedRows: 0,
               scannedBytes: 0,
@@ -511,10 +601,14 @@ function main(): void {
     `D1SCAN: 检查源文件 ${files.length} 个，抽取并 EXPLAIN 语句 ${statementsExamined} 条，` +
       `动态碎片 ${skipped.length} 条无法静态规划（已逐条列出）；` +
       `大表全表扫描 ${scan001.length} 处、索引全扫 ${scan003.length} 处、TEMP B-TREE ${tempBtree} 处；` +
-      `累计将被全扫的行数 ${totalScannedRows}、字节 ${totalScannedBytes}；小表全扫 ${seenSmall.length} 处（已排除）。`,
+      `累计将被全扫的行数 ${totalScannedRows}、字节 ${totalScannedBytes}；小表全扫 ${seenSmall.length} 处（已排除）；` +
+      `整表 DELETE ${bulkDeletes} 处、d1scan:ignore 豁免 ${ignored.length} 处（均已列出）。`,
   );
   for (const s of skipped) {
     console.log(`D1SCAN: 跳过 ${s.file}:${s.line} ${s.reason} —— ${truncate(s.sql, 80)}`);
+  }
+  for (const g of ignored) {
+    console.log(`D1SCAN: 豁免 ${g.file}:${g.line} ${g.reason}`);
   }
   for (const t of timed) {
     console.log(`D1SCAN: 热点 ${t.file}:${t.line} ${t.rule} 中位数 ${t.ms.toFixed(2)} ms`);

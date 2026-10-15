@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS site_search_title_trigram;
 DELETE FROM site_search_documents;
 `;
 
+// d1scan:ignore 搜索索引全量重建脚本：清表与从 items/pages 兜底回填本就是整表操作，索引无解
 export const CREATE_SITE_SEARCH_INDEX_SQL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS site_search_exact USING fts5(
   content_type UNINDEXED,

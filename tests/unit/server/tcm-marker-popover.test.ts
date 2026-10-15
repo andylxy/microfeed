@@ -184,6 +184,18 @@ const SECTION = (id: string, title: string, description: string, bookId: string)
 const CHAPTER = (id: string, title: string, description: string, bookId: string): SectionRow => ({
   id, book_id: bookId, kind: "chapter", data: {title, description},
 });
+/**
+ * 条文行：结构化 `fangList` 来源（正文无 `$f{}` 标记）—— citations 的第二提取源，
+ * 方剂编辑器反向引用视图（ajax/tcm/fang-references）靠它不再整书扫描。
+ */
+const SECTION_FANGLIST = (
+  id: string,
+  title: string,
+  bookId: string,
+  fangList: string[],
+): SectionRow => ({
+  id, book_id: bookId, data: {title, description: "无正文标记。", _microfeed: {fangList}},
+});
 
 /** The popover payload the runtime ships in `<script type="application/json" id="mf-tcm-data">`. */
 function popoverData(layer: TcmMarkerLayer): Record<string, TcmPopoverEntry> {
@@ -402,6 +414,26 @@ describe("buildTcmMarkerLayer", () => {
     expect(popoverData(await buildTcmMarkerLayer(db, page)).F1!.references?.map((r) => r.id))
       .toEqual(["S1", "S2"]);
     expect(await state()).toBeGreaterThan(0);
+  });
+
+  it("indexes the structured fangList source alongside the body markers", async () => {
+    const fangRows = [FANG("F1", "桂枝汤", 1, "BOOK1", "组成：$u{桂枝}。", 1, [])];
+    const sectionRows = [
+      SECTION("S1", "正文引用", "太阳病，$f{桂枝汤}主之。", "BOOK1"),
+      // 源条目带空格：trim 后应与编辑器传来的 trim 后名字命中
+      SECTION_FANGLIST("S2", "结构化引用", "BOOK1", [" 桂枝汤 "]),
+      SECTION_FANGLIST("S3", "别书的结构化引用", "OTHERBOOK", ["桂枝汤"]),
+    ];
+    const db = makeRealDb(fangRows, [], sectionRows);
+    const layer = await buildTcmMarkerLayer(db, {
+      bodyHtml: "<p>用 $f{桂枝汤} 治之。</p>",
+      title: "论桂枝汤",
+      currentBookId: "BOOK1",
+    });
+    const refs = popoverData(layer).F1!.references ?? [];
+    // 两源都进索引（按 rowid 序：S1 先插入），跨书那条排除
+    expect(refs.map((r) => r.id)).toEqual(["S1", "S2"]);
+    expect(refs.some((r) => r.id === "S3")).toBe(false);
   });
 
   it("lists 条文 citing a 中药, matching the recompute's name normalisation", async () => {
