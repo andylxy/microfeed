@@ -80,6 +80,10 @@ _Avoid_: 白名单（方向相反）
 一本书的阅读单位。本仓库有两种来源，**必须分清**：TCM 典籍里卷是数据库里的一行（见「篇章」）；小说类书里卷只是每章 `_microfeed.volume` 上的一个字符串标签，没有独立实体。自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起卷还是一级阅读单位，有自己的 URL（`/book/<bookId>/v/<篇章 id>/`）。
 _Avoid_: 分卷、册、目录章节（都不是本语境的单位）
 
+**卷键**：
+一个卷在接口上被指认的方式，两种书共用同一个 `key` 字段，所以前端不需要分辨书的种类：TCM 典籍是那行篇章的 11 字符 id，小说类书是 `_microfeed.volume` 里的卷名本身。卷改名不断链靠的是「卷键 = 篇章 id」这一条；小说类书没有篇章行，卷名就是它唯一的键，所以改卷名会让带着旧卷名的地址查不到卷（看板按「这本书没有这一卷」处理）。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+_Avoid_: 卷 id（小说类书没有 id）、卷序号（序号会随中间插入新卷指错卷）
+
 **篇章**：
 TCM 典籍里承载卷的那一行 `items`（`tcm_kind = 'chapter'`）。它是实体、有 11 字符 id，卷名就是它的 `title`；条文靠 `tcm_parent_id` 挂在它下面。
 _Avoid_: 卷（在 TCM 书里二者同指，但「篇章」强调的是数据库里的那一行）
@@ -89,8 +93,12 @@ TCM 典籍里的最小阅读单位（`tcm_kind = 'section'`）。它才是 `$f{�
 _Avoid_: 章节、小节、条目
 
 **扁平条目**：
-没有篇章层的 TCM 书（中药 / 名词）里的条目（`tcm_kind` 为 `yao` / `term`），直接按 `items.book_id` 归属。这类书**没有卷**，书页保持平铺目录、不引入卷。
+没有篇章层的 TCM 书（中药 / 名词）里的条目（`tcm_kind` 为 `yao` / `term`），直接按 `items.book_id` 归属。这类书**没有卷页**，书页保持平铺目录；它们各有一行根篇章，`tcm_parent_id` 为空、`title` 就是书名，条目挂在它下面——所以后台卷看板把它们列成一卷，逐卷计数与写入守卫都要把 `yao` / `term` 算进所属卷，只认 `section` 会把整批条目漏在写入口之外。
 _Avoid_: 无卷书、平铺书（都指同一件事，但「扁平条目」强调条目本身没有父层）
+
+**未归类桶**：
+分组键不指向本书任何一行篇章的那些条文（`tcm_parent_id` 为空、指向别的书、或指向已不存在的行），在看板上作为一个卷行展示、恒排最后，卷名是空串、键是 `UNFILED_VOLUME_KEY`（`"unfiled"`）。挂在**被软删的篇章**下的条文不算未归类：那条篇章查询刻意不带 `status` 条件，被删篇章的 id 仍是合法分组键。未归类只数 `section`——方剂（`fang`）带着本书的 `book_id` 却没有父项，属于独立的方剂目录，混进来会凭空造出一个几百条的桶。小说类书里未归类就是 `_microfeed.volume` 为空的那些章。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+_Avoid_: 孤儿条文（读不出「还没归档」这层意思）、散章
 
 ## 数据层（D1）
 
@@ -98,7 +106,11 @@ _Avoid_: 无卷书、平铺书（都指同一件事，但「扁平条目」强�
 查询无法用索引定位行、必须读整表（或整个索引）再逐行判断。在 D1 上表现为读放大与延迟，是本语境要消除的主要缺陷。2026-10-12 全量审计确认 `items` 上已不存在（见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)）。
 
 **整本读取**：
-一次页面加载读取某本书的全部条目——阅读页标注层、以及引用表**脏标记后的那一次懒自举重算**都如此（书页目录自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起不再如此，改为按需读取）。它的上界由**书的大小**决定，与表大小无关；是全表扫描被消除后剩余的主要读代价来源，靠边缘缓存兜底。判断它贵不贵同样看 `rows_read`（实测素问书页 ≈3,045）。见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)。
+一次页面加载读取某本书的全部条目——阅读页标注层、以及引用表**脏标记后的那一次懒自举重算**都如此（书页目录自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起不再如此，后台卷看板自 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md) 起不再如此，都改为按需读取）。它的上界由**书的大小**决定，与表大小无关；是全表扫描被消除后剩余的主要读代价来源，靠边缘缓存兜底。判断它贵不贵同样看 `rows_read`（实测素问书页 ≈3,045，整本 2,964 行 / 1,233,002 字节）。小说类书的卷列表仍是整本读取：卷名在 `data` 里，没有可用索引，这条分支不加派生真实列。见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)。
+
+**按需读取**：
+一次请求只读当前要展示的那一段范围——点书读那本书的卷（含逐卷条数，走覆盖索引，不回表读正文），点卷只读那一卷的条目；写操作的归属判定同样按提交的每条 id 各做一次主键点查，而不是读全书攒集合。判据是行读随**所选范围**增长而不是随书的大小增长，客户端切片不产生任何行读，所以按需读取与分页控件没有关系。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)、[ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+_Avoid_: 懒加载（那是前端渲染时机，不指行读）、分页（分页控件既可能省行读也可能一行都不省）
 
 **派生真实列**：
 把 `data` JSON 里被高频过滤或排序的字段提升为表上的真实列并建索引（如 `items.book_id`、`items.tcm_parent_id`），使查询走索引，不必在 SQL 里算 `json_extract` 表达式。
@@ -162,3 +174,17 @@ _Avoid_: 断点不一致（碎片化更精确，含原因）
 **网格专属断点**：
 仅用于特定网格布局的断点值（如首页 `.mf-home-grid` 的 `1024px`），不参与全站布局决策。
 _Avoid_: 局部断点（专属更精确，指归属关系）
+
+## 管理后台的删除语义
+
+**软删除（delete）**：
+把行标记为已删而不物理移除：内容表翻 `status` 到删除态（`STATUSES.DELETED`=3；公告用自有机器的 4），配置表写 `deleted_at`。行仍在表里，从界面过滤掉即「消失」，但继续占用唯一键等约束——themes 的 `UNIQUE(package_id, version)` 因此阻止重装同版本（`errors.theme.versionReusedAfterDeletion`）。
+_Avoid_: 删除（未说明硬软时禁用）；归档（UI 文案可用，术语指软删）
+
+**物理删除（purge）**：
+真正 `DELETE FROM` 移除行，且必须同时清理派生物：R2 资产（themes，复用 `cleanupAssetOwner` 的引用计数）、子表行（webhooks 的投递尝试/投递/独占事件；`webhook_daily_usage` 与 `webhook_budget_reservations` 是全局预算账本、无 endpoint_id 列，不属端点删除域，purge 不碰）、状态指针（`theme_state` 的 `active_theme_id` / `previous_theme_id`）。不可恢复。唯一合法路径是管理端点里带守卫的 purge；⛔ 禁止裸 SQL `DELETE FROM themes` 绕过（AGENTS.md:262 同此口径）。
+_Avoid_: 硬删除、彻底删除（术语统一用物理删除；「永久删除」仅作 UI 文案）
+
+**上一版主题**：
+`theme_state.previous_theme_id` 指向的那一行——激活时的回滚点。全局只有一个槽：activate 时写入、rollback 时与激活槽互换、软删/物理删除该行时清空。清理旧版本（AGENTS.md:248 的固定收尾）保留的正是激活行 + 这一行。
+_Avoid_: 上一个主题（指代不明时用术语）

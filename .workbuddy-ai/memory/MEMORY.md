@@ -1,7 +1,7 @@
 # microfeed 项目长期记忆（精简版）
 
 ## 硬约束
-- 禁止自动 git 提交；门禁 = `git diff --check` 无输出 + `yarn typecheck`（非裸 tsc）+ 定向测试。不直提 main，走 `<type>/<short-kebab-case>`；提交信息 `type(scope): 描述`；commit 后 `git rev-parse HEAD` 复核。
+- 禁止自动 git 提交；**门禁仅在用户手动触发 `.microfeed-gate-subset` 技能时跑**（普通任务不跑 `yarn check/test/typecheck`，见 AGENTS.md 最高指令「门禁仅在手动触发时运行」）。不直提 main，走 `<type>/<short-kebab-case>`；提交信息 `type(scope): 描述`；commit 后 `git rev-parse HEAD` 复核。
 - 改 i18n 必跑 `yarn i18n:check`。
 - OpenAPI：`src/shared/OpenApiDocument.ts` 唯一事实来源；改英文原文须同步 `OpenApiTranslations.ts`。生成文件不手改。
 
@@ -33,3 +33,4 @@
 ## 其他
 - 正文按原形保存(`data.description`+`content_format`)；item id 11 位；`STATUSES={1 published,2 unpublished,3 deleted,4 unlisted}`。
 - 两个记忆目录并存 `.workbuddy-ai/memory/` 与 `.workbuddy/memory/`，整理前先问用户。
+- **D1 结论一律以本地快照实测为准，不要连远程 D1**（用户 2026-10-12 明确）。读代价 / 索引 / 缓存测算照旧走本地快照与 tsx 探针；远程连接只在用户明确要求时才做。

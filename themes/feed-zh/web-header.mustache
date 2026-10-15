@@ -1191,7 +1191,8 @@ html:has(.fq-header) {
   gap: 20px !important;
 }
 
-/* Logo */
+/* Logo: 一枚杏仁（苦杏仁）。整枚标记仍由 CSS 绘制 —— 本主题 assets 为空，
+   换成位图会要求目标实例启用 R2。 */
 .fq-logo {
   align-items: center !important;
   color: var(--mf-text) !important;
@@ -1201,37 +1202,20 @@ html:has(.fq-header) {
   gap: 8px !important;
 }
 
+/* 杏仁标记（苦杏仁：一枚带壳整仁 + 一枚裂壳果仁 + 一枝两叶）。
+   画成 data URI 内联 SVG 而不是位图：本主题 assets 为空，位图会要求目标实例
+   启用 R2。代价是墨色固化在 SVG 内，吃不到 design token，所以深色单独换一份
+   浅墨线稿 —— #5b3a1e 落在 #0d1117 上只有约 3:1，28px 下几乎看不见。 */
 .fq-logo-icon {
-  background: var(--mf-brand) !important;
-  border-radius: 50% !important;
-  border-bottom-left-radius: 10px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%235b3a1e' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg fill='%23f6ecdc' fill-opacity='.55'%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3C/g%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M22 8.6C24.6 18 24.6 40 22 53.4' stroke-width='1'/%3E%3Cpath d='M28.4 20C30 26 30.4 34 29 41M26 47C27.4 43 28.2 39 28.4 35' stroke-width='.8' opacity='.75'/%3E%3Cpath d='M27.8 24 26.6 25M28.8 29 27.6 30M29.2 34 28 35M28.6 39 27.4 40M27 44 25.8 45M16.2 24 17.4 25M15.2 29 16.4 30M14.8 34 16 35M15.4 39 16.6 40M17 44 18.2 45' stroke-width='.7' opacity='.55'/%3E%3Cpath d='M15.4 22C14.4 27 14.2 33 15 38' stroke-width='.65' opacity='.5'/%3E%3Cpath d='M41 9C48.5 17 51.5 30 49 41 47 49.5 42.5 55 38.5 54.5 35.5 54 33.5 49.5 33 44L34.6 42 33.4 39.4 35.2 37 33.9 34 35.6 31.5 34.3 28.5 36 26 34.7 23 36.4 20.5 35.2 17.5C36.2 14 38.5 10.5 41 9Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3Cpath d='M42 18.5C39.8 25.5 39.2 37 41.2 45M46 20C47.8 26.5 47.6 37 45.4 43.5M44 17C42.6 23 42.2 32 43.4 40' stroke-width='.8' opacity='.8'/%3E%3Cpath d='M47.6 24C48.8 30 48.4 38 46 44' stroke-width='.7' opacity='.6'/%3E%3Cpath d='M46.5 52C50 53 54 52.5 57 51' stroke-width='.9'/%3E%3Cpath d='M50.5 51C53 45.5 58.5 42 63 42 62 47.5 57 52 51.6 52.4 51 52.4 50.6 51.8 50.5 51Z'/%3E%3Cpath d='M51.6 51.2C55.4 48.6 59.4 45.4 61.8 43.4M53.6 50.4C55.6 49.4 57.4 48.2 59 46.8M55.4 47.6C57 45.8 58.4 44 59.4 42.4' stroke-width='.65' opacity='.7'/%3E%3Cpath d='M48.5 44.5C50.5 40 55 37 59.5 37.2 58.8 41.5 54.8 45 50 45.6 49.2 45.7 48.6 45.2 48.5 44.5Z'/%3E%3Cpath d='M49.6 44.6C52.8 42.4 56.2 39.8 58.3 38.4M51.6 43.6C53.6 42.4 55.4 41 57 39.4' stroke-width='.65' opacity='.7'/%3E%3C/svg%3E") center / contain no-repeat !important;
   display: inline-block !important;
+  flex: 0 0 auto !important;
   height: 28px !important;
-  position: relative !important;
   width: 28px !important;
 }
 
-.fq-logo-icon::after {
-  background: var(--mf-on-accent) !important;
-  border-radius: 50% !important;
-  content: "" !important;
-  height: 6px !important;
-  position: absolute !important;
-  right: 4px !important;
-  top: 4px !important;
-  width: 6px !important;
-}
-
-.fq-logo-icon::before {
-  background: var(--mf-brand-dot) !important;
-  border-radius: 50% 50% 0 0 !important;
-  content: "" !important;
-  height: 8px !important;
-  left: 50% !important;
-  position: absolute !important;
-  top: -4px !important;
-  transform: translateX(-50%) !important;
-  width: 8px !important;
+.dark .fq-logo-icon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23e3bd90' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg fill='%23e3bd90' fill-opacity='.16'%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3C/g%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M22 8.6C24.6 18 24.6 40 22 53.4' stroke-width='1'/%3E%3Cpath d='M28.4 20C30 26 30.4 34 29 41M26 47C27.4 43 28.2 39 28.4 35' stroke-width='.8' opacity='.75'/%3E%3Cpath d='M27.8 24 26.6 25M28.8 29 27.6 30M29.2 34 28 35M28.6 39 27.4 40M27 44 25.8 45M16.2 24 17.4 25M15.2 29 16.4 30M14.8 34 16 35M15.4 39 16.6 40M17 44 18.2 45' stroke-width='.7' opacity='.55'/%3E%3Cpath d='M15.4 22C14.4 27 14.2 33 15 38' stroke-width='.65' opacity='.5'/%3E%3Cpath d='M41 9C48.5 17 51.5 30 49 41 47 49.5 42.5 55 38.5 54.5 35.5 54 33.5 49.5 33 44L34.6 42 33.4 39.4 35.2 37 33.9 34 35.6 31.5 34.3 28.5 36 26 34.7 23 36.4 20.5 35.2 17.5C36.2 14 38.5 10.5 41 9Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3Cpath d='M42 18.5C39.8 25.5 39.2 37 41.2 45M46 20C47.8 26.5 47.6 37 45.4 43.5M44 17C42.6 23 42.2 32 43.4 40' stroke-width='.8' opacity='.8'/%3E%3Cpath d='M47.6 24C48.8 30 48.4 38 46 44' stroke-width='.7' opacity='.6'/%3E%3Cpath d='M46.5 52C50 53 54 52.5 57 51' stroke-width='.9'/%3E%3Cpath d='M50.5 51C53 45.5 58.5 42 63 42 62 47.5 57 52 51.6 52.4 51 52.4 50.6 51.8 50.5 51Z'/%3E%3Cpath d='M51.6 51.2C55.4 48.6 59.4 45.4 61.8 43.4M53.6 50.4C55.6 49.4 57.4 48.2 59 46.8M55.4 47.6C57 45.8 58.4 44 59.4 42.4' stroke-width='.65' opacity='.7'/%3E%3Cpath d='M48.5 44.5C50.5 40 55 37 59.5 37.2 58.8 41.5 54.8 45 50 45.6 49.2 45.7 48.6 45.2 48.5 44.5Z'/%3E%3Cpath d='M49.6 44.6C52.8 42.4 56.2 39.8 58.3 38.4M51.6 43.6C53.6 42.4 55.4 41 57 39.4' stroke-width='.65' opacity='.7'/%3E%3C/svg%3E") !important;
 }
 
 .fq-logo-text {

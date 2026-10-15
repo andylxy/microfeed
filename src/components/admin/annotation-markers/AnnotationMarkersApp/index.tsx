@@ -16,6 +16,32 @@ interface Props {
 /** Fallback colour for the create form — the renderer's own grey. */
 const DEFAULT_MARKER_COLOR = "#808080";
 
+/** `#RGB`, the short form a colour input expands on read-back. */
+const HEX_TRIPLE = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/iu;
+/** `#RRGGBB`, the only shape a native colour input stores. */
+const HEX_FULL = /^#[0-9a-f]{6}$/iu;
+/** `rgb()` / `rgba()` prefixes; the alpha, if any, is dropped on read-back. */
+const RGB_FUNC = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/iu;
+
+/** One channel as two lowercase hex digits, clamped to the 0–255 range. */
+const channelHex = (channel: string | undefined) =>
+  Math.min(255, Math.max(0, Number(channel ?? "0"))).toString(16).padStart(2, "0");
+
+/**
+ * The value a native colour input can display: lowercase `#RRGGBB`.
+ *
+ * `#RGB` is expanded, `rgb()`/`rgba()` keep their channels and drop the alpha
+ * (the native picker has no alpha channel), and anything unrecognised falls
+ * back to the renderer's grey so the swatch never paints as black.
+ */
+export function colorInputValue(color: string): string {
+  if (HEX_TRIPLE.test(color)) return color.toLowerCase().replace(HEX_TRIPLE, "#$1$1$2$2$3$3");
+  if (HEX_FULL.test(color)) return color.toLowerCase();
+  const func = RGB_FUNC.exec(color);
+  if (func) return `#${func.slice(1).map(channelHex).join("")}`;
+  return DEFAULT_MARKER_COLOR;
+}
+
 /** link_type values and the i18n key naming each one. */
 const LINK_TYPES: Array<{value: number; label: string}> = [
   {value: 0, label: "annotationMarkers.linkTypeNone"},
@@ -74,7 +100,7 @@ function MarkerPreview({draft}: {draft: StyleDraft}) {
 }
 
 /** The four style inputs, reused by the edit row and the create form. */
-function StyleFields({
+export function StyleFields({
   draft,
   onChange,
   t,
@@ -86,17 +112,14 @@ function StyleFields({
   return (
     <>
       <span className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="inline-block h-5 w-5 shrink-0 rounded border"
-          style={{background: draft.color}}
-        />
-        <Input
+        <input
           aria-label={t("annotationMarkers.color")}
-          className="w-40 font-mono text-xs"
+          className="h-5 w-5 shrink-0 cursor-pointer appearance-none rounded border p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-moz-color-swatch]:border-none"
           onChange={(event) => onChange({...draft, color: event.target.value})}
-          value={draft.color}
+          type="color"
+          value={colorInputValue(draft.color)}
         />
+        <span className="font-mono text-xs">{draft.color}</span>
       </span>
       <label className="flex items-center gap-2 text-sm">
         <input

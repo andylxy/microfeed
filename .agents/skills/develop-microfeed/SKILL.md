@@ -99,19 +99,18 @@ reference format synchronized through the shared contract:
 
 ## Validate and review
 
-1. Run targeted tests or checks while iterating.
-2. Before committing, run:
-
-   ```console
-   git diff --check
-   yarn check
-   ```
-
-3. If the local sandbox blocks Wrangler logging or Worker test ports, request
-   the minimum permission needed and rerun the same check.
+1. Do not run the gate automatically. `yarn check`, `yarn test`, and
+   `yarn typecheck` run only when the user manually triggers the
+   `.microfeed-gate-subset` gate skill; ordinary tasks skip them (see the
+   repository `AGENTS.md` gate directive).
+2. Run a targeted test or check only when the user explicitly asks for it, and
+   only within the scope they name.
+3. When the user performs a commit, provide the exact validation command
+   (`git diff --check` and `yarn check`) for them or the gate skill to run; do
+   not run it yourself unless asked.
 4. Review `git status --short`, the complete diff, generated files, and the
-   proposed commit scope. Resolve failures before publishing; do not weaken or
-   skip checks to obtain a passing result.
+   proposed commit scope. Do not weaken or skip checks to obtain a passing
+   result.
 
 ## Commit and publish
 

@@ -156,7 +156,7 @@ describe("alias handlers", () => {
       request: request("DELETE", {bieming: "某导入别名", hide: true}),
     } as any);
     expect(response.status).toBe(200);
-    let directive = await extRow("某导入别名");
+    const directive = await extRow("某导入别名");
     expect(directive?.deleted).toBe(1);
     // A hidden bieming with no derived counterpart is not surfaced as a row.
     expect(
