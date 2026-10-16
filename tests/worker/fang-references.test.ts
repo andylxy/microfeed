@@ -80,6 +80,8 @@ afterEach(async () => {
     ...CREATED_ITEM_IDS.map((id) =>
       env.FEED_DB.prepare("DELETE FROM items WHERE id = ?").bind(id),
     ),
+    // 保序回归用的 120 条批量条文（frB000–frB119）
+    env.FEED_DB.prepare("DELETE FROM items WHERE id LIKE 'frB%'"),
     env.FEED_DB.prepare("DELETE FROM channels WHERE id IN (?, ?)").bind(BOOK, OTHER_BOOK),
   ]);
 });
@@ -164,6 +166,39 @@ describe("fang references endpoint", () => {
     expect(items.map((r) => r.id)).toEqual([BODY_SECTION, CROSS_BOOK_SECTION]);
     expect(total).toBe(2);
     expect(items[1]!.bookTitle).toBe("金匮要略");
+  });
+
+  it("returns the receiptNo-ordered top 50, not a rowid-first subset", async () => {
+    // 回归（评审发现）：引用数超过 50 时，旧查询的「前 50 条」是 receiptNo 序的
+    // 全局前 50。物化索引腿若按 section_seq（rowid）先截 50，返回的就是另一
+    // 个子集——桂枝汤在本地一书有 70 条引用，该偏差真实发生。这里用 120 条
+    // （同时超过合并 IN 查询的 90 分片，覆盖分片路径），插入序与 receiptNo
+    // 序刻意相反：按 seq 前 50 是 S000–S049，按 receiptNo 前 50 是 S119–S070。
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare(
+        "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
+      ).bind(BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "伤寒论"})),
+    ]);
+    const inserts = [];
+    for (let i = 0; i < 120; i += 1) {
+      const id = `frB${String(i).padStart(3, "0")}`;
+      inserts.push(item(id, BOOK, "section", STATUSES.PUBLISHED, {
+        title: `第${i}条`,
+        description: "太阳病，$f{桂枝汤}主之。",
+        _microfeed: {receiptNo: 1200000 - i * 100},
+      }));
+    }
+    await env.FEED_DB.batch(inserts);
+
+    const {items, total} = await references("?name=" + encodeURIComponent("桂枝汤") + "&bookId=" + BOOK);
+    expect(total).toBe(120);
+    // receiptNo 最小的 50 条 = 最后插入的 50 条（S119 → S070）
+    expect(items.map((r) => r.id)).toEqual(
+      Array.from({length: 50}, (_, k) => `frB${String(119 - k).padStart(3, "0")}`),
+    );
+    // 首条即 receiptNo 最小者；rowid 序首条（S000）不在结果里
+    expect(items[0]!.id).toBe("frB119");
+    expect(items.some((r) => r.id === "frB000")).toBe(false);
   });
 
   it("rejects a missing name and an unreadable caller", async () => {

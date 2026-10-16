@@ -13,8 +13,9 @@
  *   - `SCAN <表> USING INDEX <索引>` = 索引全扫，比全表扫描便宜仍要记（D1SCAN-003）。
  *   - `USE TEMP B-TREE` = 排序/去重溢出到临时 B-tree（D1SCAN-002，最常被忽略的性能债）。
  *     行数加权只数「非点查访问」：主键/rowid 点查（`(id=?)`）每轮最多贡献 1 行，
- *     被 join 的大表不是排序输入；全部访问都是小表或点查时不记（否则「小表驱动 +
- *     主键点查」的查询会被大表行数误记，实测 8 处噪音）。
+ *     被 join 的大表不是排序输入；全部访问都是小表时不记（否则「小表驱动 +
+ *     主键点查」的查询会被大表行数误记，实测 8 处噪音）。全部访问都是点查时
+ *     无法界定排序输入，保守记录。
  *   - WHERE 子句整体坍缩成单个 `?`（条件 const 带分支拼接、静态内联给不出真条件）
  *     的语句计入 skipped，不按计划结果记违规。
  *   - 源码里 SQL 常量上一行写 `// d1scan:ignore <原因>` 显式豁免整块常量（维护
@@ -534,9 +535,14 @@ function main(): void {
           // sqlite_* 元数据表（检视库结构）则不记。
           const anyUnknown = bulkTables.size === 0 || rows.some((r) => r < 0);
           if (anyLarge || anyUnknown) {
+            // 主表取行数最大的候选（点查已排除，剩下的都是真实加权对象）
             let primary = candidates[0] ?? "?";
-            for (const t of candidates) {
-              if (rowCount(t) > rowCount(primary)) primary = t;
+            let primaryRows = rows[0] ?? -1;
+            for (let i = 1; i < candidates.length; i += 1) {
+              if ((rows[i] ?? -1) > primaryRows) {
+                primary = candidates[i] ?? primary;
+                primaryRows = rows[i] ?? primaryRows;
+              }
             }
             const detail = details.find((d) => /USE TEMP B-TREE/u.test(d)) ?? "";
             flags.push({

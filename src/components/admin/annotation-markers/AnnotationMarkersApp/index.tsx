@@ -354,7 +354,7 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
                     <MarkerPreview draft={draft} />
                   </td>
                   {editing === marker.code ? (
-                    // 每个字段一个单元格，与表头逐列对齐：合在一个 colSpan 里时，
+                    // 每个字段一个单元格，各自对其表头：合在一个 colSpan 里时，
                     // 控件会偏离各自列（比例输入出现在「缩小」列下那种错位）。
                     <>
                       <td className="py-2 pr-4">

@@ -42,8 +42,10 @@ interface CitingSection {
  * `status != 3` 是含草稿的，编辑器视图不能因此漏看自己正在写的条文。
  * 缺 `bookId`（方剂没有 sourceBookId）时保留旧的全书扫描作兜底。
  *
- * 排序沿用旧的 `book_id, receiptNo, id`：物化行按 `section_seq` 取出后与草稿行
- * 合并，回表取 receiptNo（整数，与 SQL 数值序同口径）再排——与改造前同序。
+ * 排序沿用旧的 `book_id, receiptNo, id`：物化行按 `section_seq` **全量**取出
+ * （不设 LIMIT——要复刻旧语义的「前 50 条」必须知道全部候选的 receiptNo，只取
+ * rowid 前 50 会漏掉后期改过编号的条文；物化行约 70B/行，fan-out 成本可忽略），
+ * 与草稿行合并后回表取 receiptNo（整数，与 SQL 数值序同口径）重排并截 50 条。
  */
 export const GET: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(
@@ -77,11 +79,14 @@ export const GET: APIRoute = async ({locals, request}) => {
     // 编辑器是这张表的新读者——不 ensure 就直接查，刚写完的条文会漏。
     await ensureMarkerCitations(env.FEED_DB, bookId);
 
+    // 物化点查：全量取本书该方剂的引用（排序键 section_seq 只是输入顺序，
+    // 最终顺序由合并函数按 receiptNo 定）。不设 LIMIT 的原因见文件头注释——
+    // 旧查询的「前 50 条」是 receiptNo 序的全局前 50，不是 rowid 序前 50。
     const {results} = await env.FEED_DB
       .prepare(
         "SELECT section_id, section_title FROM ext_marker_citations " +
           "WHERE book_id = ? AND marker_code = 'f' AND marker_name = ? " +
-          "ORDER BY section_seq LIMIT 50",
+          "ORDER BY section_seq",
       )
       .bind(bookId, name)
       .all<{section_id: string; section_title: string}>();
@@ -99,40 +104,29 @@ export const GET: APIRoute = async ({locals, request}) => {
       .first<{total: number}>();
 
     // 草稿补齐：本书范围内按 status=2 过滤（items_book_kind 覆盖索引步进，
-    // 只为草稿行取表数据），谓词与旧扫描逐字一致。不带 ORDER BY / LIMIT：
-    // 合并函数统一按 (book_id, receiptNo, id) 重排并截 50 条，SQL 侧再排一次
-    // 只是多余的 TEMP B-TREE（D1SCAN-002）；行数上界由草稿总量决定，正常
-    // 作者态下远小于 50。计数同样不带 LIMIT——旧查询的 total 是全量计数，
-    // 编辑器底部「仅显示前 50 条」靠它对齐。
+    // 只为草稿行取表数据）。数据查询与计数查询共用同一条件常量；不带
+    // ORDER BY / LIMIT——合并函数统一按 (book_id, receiptNo, id) 重排并截
+    // 50 条，SQL 侧再排一次只是多余的 TEMP B-TREE（D1SCAN-002）。计数同样
+    // 不带 LIMIT——旧查询的 total 是全量计数，编辑器底部「仅显示前 50 条」
+    // 的提示靠它保持一致。
+    const draftCondition =
+      "book_id = ? AND tcm_kind = 'section' AND status = ? AND (" +
+      "EXISTS (SELECT 1 FROM json_each(" +
+      "json_extract(data, '$._microfeed.fangList')) WHERE json_each.value = ?) " +
+      "OR data LIKE ? ESCAPE '\\')";
     const draftResult = await env.FEED_DB
       .prepare(
-        "SELECT id, data, book_id, tcm_parent_id FROM items " +
-          "WHERE book_id = ? AND tcm_kind = 'section' AND status = ? AND (" +
-          "EXISTS (SELECT 1 FROM json_each(" +
-          "json_extract(data, '$._microfeed.fangList')) WHERE json_each.value = ?) " +
-          "OR data LIKE ? ESCAPE '\\')",
+        "SELECT id, data FROM items " + `WHERE ${draftCondition}`,
       )
       .bind(bookId, STATUSES.UNPUBLISHED, name, likePattern)
-      .all<{
-        id: string;
-        data: string;
-        book_id: string | null;
-        tcm_parent_id: string | null;
-      }>();
+      .all<{id: string; data: string}>();
+    // book_id / tcm_parent_id 不在这里取：合并函数回表时统一拿，避免两处口径。
     const drafts = (draftResult.results ?? []).map((row) => ({
       id: String(row.id),
       title: titleOf(row.data),
-      bookId: row.book_id ? String(row.book_id) : "",
-      chapterId: row.tcm_parent_id ? String(row.tcm_parent_id) : "",
     }));
     const draftCount = await env.FEED_DB
-      .prepare(
-        "SELECT count(*) AS total FROM items " +
-          "WHERE book_id = ? AND tcm_kind = 'section' AND status = ? AND (" +
-          "EXISTS (SELECT 1 FROM json_each(" +
-          "json_extract(data, '$._microfeed.fangList')) WHERE json_each.value = ?) " +
-          "OR data LIKE ? ESCAPE '\\')",
-      )
+      .prepare("SELECT count(*) AS total FROM items " + `WHERE ${draftCondition}`)
       .bind(bookId, STATUSES.UNPUBLISHED, name, likePattern)
       .first<{total: number}>();
 
@@ -214,35 +208,54 @@ function titleOf(data: string): string {
  * Merge the indexed (published/unlisted) rows with the draft rows into one
  * list ordered by the old scan's key — `book_id, receiptNo, id` — capped at 50.
  *
- * The citations table stores no receiptNo, so the indexed ids are fetched back
- * from `items` by primary key (≤ 50 + ≤ 50 rows) together with the columns the
- * response needs; the sort then runs in JS over that small set. receiptNo is an
- * integer in every section row, ranked numerically to match SQLite's ORDER BY;
- * an absent value ranks first, as SQL NULL does in ASC.
+ * The citations table stores no receiptNo, so every candidate id is fetched
+ * back from `items` by primary key together with the columns the response
+ * needs; the sort then runs in JS over that set and takes the first 50 —
+ * exactly the old query's global top-50, not a rowid-first-50 subset.
+ *
+ * receiptNo is an integer in every section row, ranked numerically to match
+ * SQLite's ORDER BY; an absent value ranks first, as SQL NULL does in ASC.
+ * The id fetch is chunked because D1 caps bound parameters per query at 100
+ * (Cloudflare docs); a fang with more than 90 citing sections is normal
+ * (桂枝汤 cites 70 in one local book).
  */
+const ID_CHUNK = 90;
+
 async function mergeByReceiptNo(
   db: typeof env.FEED_DB,
   indexed: Array<{id: string; title: string}>,
-  drafts: Array<{id: string; title: string; bookId: string; chapterId: string}>,
+  drafts: Array<{id: string; title: string}>,
 ): Promise<CitingSection[]> {
   const ids = [...new Set([...indexed.map((r) => r.id), ...drafts.map((r) => r.id)])];
   if (ids.length === 0) return [];
-  const placeholders = ids.map(() => "?").join(", ");
-  const {results} = await db
-    .prepare(
-      "SELECT id, status, book_id, tcm_parent_id, " +
-        "json_extract(data, '$._microfeed.receiptNo') AS receipt_no " +
-        `FROM items WHERE id IN (${placeholders})`,
-    )
-    .bind(...ids)
-    .all<{
-      id: string;
+  const byId = new Map<
+    string,
+    {
       status: number;
       book_id: string | null;
       tcm_parent_id: string | null;
       receipt_no: number | null;
-    }>();
-  const byId = new Map((results ?? []).map((row) => [String(row.id), row]));
+    }
+  >();
+  for (let start = 0; start < ids.length; start += ID_CHUNK) {
+    const chunk = ids.slice(start, start + ID_CHUNK);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const {results} = await db
+      .prepare(
+        "SELECT id, status, book_id, tcm_parent_id, " +
+          "json_extract(data, '$._microfeed.receiptNo') AS receipt_no " +
+          `FROM items WHERE id IN (${placeholders})`,
+      )
+      .bind(...chunk)
+      .all<{
+        id: string;
+        status: number;
+        book_id: string | null;
+        tcm_parent_id: string | null;
+        receipt_no: number | null;
+      }>();
+    for (const row of results ?? []) byId.set(String(row.id), row);
+  }
   const titleOfId = new Map([
     ...indexed.map((r) => [r.id, r.title] as const),
     ...drafts.map((r) => [r.id, r.title] as const),
