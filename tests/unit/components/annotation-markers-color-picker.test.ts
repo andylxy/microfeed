@@ -60,8 +60,7 @@ describe("Annotation markers colour picker", () => {
       {
         id: "am_f",
         code: "f",
-        title: "$f 方剂",
-        multi: false,
+        title: "方剂",
         sortOrder: 1,
         color: "#a1b2c3",
         smallFont: false,

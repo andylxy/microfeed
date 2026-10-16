@@ -1,15 +1,22 @@
 /**
  * `GET /api/app/version` —— App 的升级描述符（spec §6.5）。
  *
- * 刻意做成匿名：被强制升级的客户端（或从未登录的客户端）也要能拿到「必须升级」这件事
- * 本身以及新包的下载地址。因此它读取地板，但**永不**返回 426 —— 426 只出现在内容端点
- * 命名空间 `/api/AppBookRequest/*`（ADR-0020）。
+ * **2026-10-16 起要求登录凭证**（权限码 `app:version:read`）。此前刻意匿名，理由是
+ * 「被强制升级的客户端、或从未登录的客户端也要能拿到『必须升级』」；该理由已作废 ——
+ * 全新安装的 App 会带 `SecurityConfig.getApiKey()` 的内置凭证（实测就是 logcat 里那个
+ * `mflc_…`，`mUserInfoToken` 为空时由 `loginBearer` 回落），所以不存在「没有凭证的
+ * 客户端」。仍**永不**返回 426 —— 426 只出现在内容端点命名空间 `/api/AppBookRequest/*`
+ * （ADR-0020）。
+ *
+ * 鉴权形态照 `search-permission` / `mingci-permission`：`resolveVersionPermission` 只回答
+ * 「允许吗」，本文件把事实翻译成状态码（`missing/invalid-bearer` → 401、
+ * `resolution-failed` → 500、`ok` 但无码 → 403）。
  *
  * **副作用：每次调用记一条登录**（需求 3 追加，2026-10-04）。App 每次启动只检查一次
  * （工单 18），所以「一次启动 = 一次登录」，写入 `ext_app_login_log`：更新最后登录时间、
- * 登录次数 +1。放在这个端点而不是设备登记，正是为了覆盖**未登录启动**（本端点匿名，
- * 设备登记在身份验证之后）—— 否则「找出启动过的 App」永远查不到未登录的那部分。
- * 带了 Bearer 的检查会解析出用户并一并写入；解析失败只影响归属，不影响响应。
+ * 登录次数 +1。放在这个端点而不是设备登记，是为了覆盖**身份解析失败/凭证无效的启动**
+ * —— 那种情况下 `verified` 为 null，登录日志仍按设备记录，否则「找出启动过的 App」
+ * 会漏掉这部分。带了有效 Bearer 的检查会解析出用户并一并写入。
  *
  * **刻意不限流**（spec §12，票据 15 已定）。⚠️ 但该决定的前提是「只读不写」，而登录日志
  * 引入后本端点**每次请求都会写一行**（一次 upsert），前提已变：现在它是一个（很小的）
@@ -28,6 +35,7 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
+import {resolveVersionPermission} from "@/server/app/permission/version";
 import {readAppVersionConfig} from "@/server/app/version/config";
 import {recordLoginLog} from "@/server/app/version/login-log";
 import {
@@ -40,16 +48,16 @@ import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
 import {deviceIdFromRequest} from "@/server/rbac/resolve";
 import {jsonResponse} from "@/server/http";
 
+const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};
+
 export const GET: APIRoute = async ({request}) => {
   const db = env.FEED_DB;
-  const deviceId = deviceIdFromRequest(request);
-  const [config, resolved] = await Promise.all([
-    readAppVersionConfig(db),
-    resolveMinVersionForRequest(db, {deviceId}),
-  ]);
 
-  // 需求 3 追加：每个检查算一次登录。**不**阻断响应 —— 这是日志，写失败不该让客户端
-  // 拿不到升级信息（拿不到就等于把它挡在门外）。没有 `X-Device-Id` 时无法归属设备，跳过。
+  // 需求 3 追加：每个检查算一次登录。**写在鉴权之前** —— 这条日志的用途是「找出启动过的
+  // App」，而最需要被找出的恰恰是**凭证缺失 / 无效**的那部分（它们随后会被 401 挡掉）。
+  // 放在鉴权之后就等于把目标人群排除在日志外（评审第 12 轮指出的回归）。
+  // **不**阻断响应：写失败不该影响升级检查。没有 `X-Device-Id` 时无法归属设备，跳过。
+  const deviceId = deviceIdFromRequest(request);
   if (deviceId) {
     try {
       // 复用既有的 bearer 解析（`mflc_…` 前缀校验也在里面）：不在本文件重写一份。
@@ -62,6 +70,30 @@ export const GET: APIRoute = async ({request}) => {
       console.warn("app/version: 登录日志写入失败，忽略", error);
     }
   }
+
+  // 鉴权。错误措辞与 search-permission / mingci-permission **逐字一致**
+  // （`"missing bearer"` 空格版；此前发 `{error: outcome.kind}` 会变成连字符形态，评审第 12 轮）。
+  const outcome = await resolveVersionPermission(db, request);
+  if (outcome.kind === "missing-bearer") {
+    return jsonResponse({error: "missing bearer"}, {status: 401, headers: NO_STORE});
+  }
+  if (outcome.kind === "invalid-bearer") {
+    return jsonResponse({error: "invalid bearer"}, {status: 401, headers: NO_STORE});
+  }
+  if (outcome.kind === "resolution-failed") {
+    return jsonResponse(
+      {error: "permission resolution failed"},
+      {status: 500, headers: NO_STORE},
+    );
+  }
+  if (!outcome.allowed) {
+    return jsonResponse({error: "forbidden"}, {status: 403, headers: NO_STORE});
+  }
+
+  const [config, resolved] = await Promise.all([
+    readAppVersionConfig(db),
+    resolveMinVersionForRequest(db, {deviceId}),
+  ]);
 
   // `force` 回答的是「**这个调用方**是否必须升级」，而不是「有没有地板」。
   // 只有**已配置地板**（minVersionCode > 0）且调用方低于它（或压根没上报版本）才是硬阻；
@@ -84,7 +116,7 @@ export const GET: APIRoute = async ({request}) => {
       minVersionCode: resolved.minVersionCode,
       updateLog: config.updateLog,
     },
-    {headers: {"cache-control": "no-store"}},
+    {headers: NO_STORE},
   );
 };
 

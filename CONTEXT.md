@@ -70,9 +70,45 @@ _Avoid_: 私有端点
 `/api/AppBookRequest/*` 中无需登录的接口（login / replaceToken / getPicCaptcha / GetProjectInfo / GetLoginInfo / getAboutInfo），刻意匿名，等同旧后端行为。
 _Avoid_: 公开端点（易与站点公开资源混淆）
 
+**App 能力端点（`/api/app/*`）**：
+App 自身的四个非内容端点 —— `version`（升级描述符）、`announcements`（运营公告）、`search-permission`、`mingci-permission`。**四个都要登录凭证**，各按一个 App 能力权限码判定：`app:version:read` / `app:announcement:read` / `app:search:global`+`app:search:book` / `app:mingci:view`；在 middleware 里登记为 `integration`，因此同样受限流、账号封禁、设备吊销与访问日志约束。
+注意它们**不属于** `/api/AppBookRequest/*`（那套走三张登记表），也不走 `{code,data,msg}` 信封。
+_Avoid_: 「App 匿名端点」—— version 与 announcements 在 2026-10-16 之前确实匿名，现在不是；也不存在「没有凭证的客户端」（全新安装的 App 带 `SecurityConfig.getApiKey()` 内置凭证）。
+
 **反向白名单**：
 App 命名空间的安全模型（实为 fail-open）：「未登记进集成清单即视为匿名」。名称「反向」仅指登记方向与常规白名单相反；其风险是新增敏感端点若漏登记会静默公开，以回归测试约束，不翻转为 fail-closed。
 _Avoid_: 白名单（方向相反）
+
+## 标注标记（行内语义）
+
+**标注标记**：
+中医正文里的行内语义外壳，写法 `$<code>{内容}`（如 `$f{桂枝汤}`），`<code>` 为 1–10 个字母。
+目录存在 `ext_annotation_markers`，由后台 `/admin/annotation-markers/` 维护；**码不可改** —— 它已经烘进正文。
+_Avoid_: 富文本标签、注释（本仓的「修改留痕 / 审计留痕」是另一套东西）
+
+**linkType**：
+标记的链接语义，样式目录里的一列：`0` = 无链接（纯样式）、`1` = 中药、`2` = 方剂、`3` = 名词。
+**两端口径不同**（[ADR-0028](docs/novel-cms/adr/0028-annotation-marker-parity-and-app-config-chain.md)）：
+web 公开页只对 `1`/`2` 生成链接与弹层，`3` 只上色不链接；App 端则 `linkType ≠ 0` 一律可点击，`3` 打开名词弹窗。
+_Avoid_: 类型、kind —— `fang` / `yao` 是引用表按 linkType 归并后的分桶名，不是 linkType 本身
+
+**样式目录**：
+`ext_annotation_markers` 这张表本身：每个码的颜色 / 是否缩小 / 缩小比例 / linkType。
+web 渲染器与 App 都**按码**查它。`title` 只是后台表格与编辑器按钮的显示名，**不参与渲染**。
+_Avoid_: 配置、主题（主题是另一套，见「书的结构」之外的 theme 体系）
+
+**引用表**：
+`ext_marker_citations`（迁移 0111）—— 物化的「哪些条文引用了某个方剂 / 中药」反向索引，
+按 `(book_id, marker_code, marker_name, section_id)` 存。`marker_code` 是**按 linkType 归并后的分桶**（`f` / `u`），
+不是原始码 —— 所以第二个中药类的码会和 `$u` 共用同一个桶。
+_Avoid_: 索引（易与 D1 的索引混淆）
+
+**样式目录版本号**：
+`ext_annotation_markers` 的 `MAX(updated_at_ms)`，即「目录最后一次被**新增或编辑**的时间」，随 `GetTipsStyleConfig` 下发；
+App 把它连同本地缓存一起落盘，用来判断手里的配置是否最新。
+**注意**：请求参数里那个 `version` **不是**它 —— 那是 App 本地的自增计数器，服务端既不读也不回。
+**也注意**：**删除**一个标记不会推高这个版本号（`DELETE` 不碰任何行的 `updated_at_ms`）⇒ 删除在 App 端不可见，只有新增/编辑才会触发客户端刷新。
+_Avoid_: 配置版本、configVersion（App 内部那个计数器叫这个名字，是个不同且无意义的数）
 
 ## 书的结构（典籍与小说）
 
@@ -91,6 +127,10 @@ _Avoid_: 卷（在 TCM 书里二者同指，但「篇章」强调的是数据库
 **条文**：
 TCM 典籍里的最小阅读单位（`tcm_kind = 'section'`）。它才是 `$f{方剂}` / `$u{中药}` 标注标记的宿主，也是阅读页 `/i/<slug>` 的粒度。
 _Avoid_: 章节、小节、条目
+
+**附注**：
+条文正文之外的补充说明文字，存 `_microfeed.note`（源字段 `BookBody.SectionNote`）。内容形态是纯文本：`\n` 分段，可原样携带 `$<code>{}` 标注标记。只有 App 章节接口输出它，公开阅读页不渲染。它不参与条文签名（`signature = md5(text)`），所以修改附注不会让移动端把该条文判为过期。
+_Avoid_: 注释、笔记、解说（「解说」在样式目录里是标记码 `n` 的显示名，指行内标记）；与「标注标记」是两回事
 
 **扁平条目**：
 没有篇章层的 TCM 书（中药 / 名词）里的条目（`tcm_kind` 为 `yao` / `term`），直接按 `items.book_id` 归属。这类书**没有卷页**，书页保持平铺目录；它们各有一行根篇章，`tcm_parent_id` 为空、`title` 就是书名，条目挂在它下面——所以后台卷看板把它们列成一卷，逐卷计数与写入守卫都要把 `yao` / `term` 算进所属卷，只认 `section` 会把整批条目漏在写入口之外。

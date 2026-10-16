@@ -206,12 +206,10 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
   const [creating, setCreating] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [newTitle, setNewTitle] = useState("");
-  const [newMulti, setNewMulti] = useState(false);
   const [newDraft, setNewDraft] = useState<StyleDraft>(EMPTY_DRAFT);
 
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [editMulti, setEditMulti] = useState(false);
   const [editDraft, setEditDraft] = useState<StyleDraft>(EMPTY_DRAFT);
 
   const refresh = (next: AnnotationMarker[]) => setMarkers(next);
@@ -224,7 +222,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
         body: JSON.stringify({
           code: newCode,
           title: newTitle,
-          multi: newMulti,
           color: newDraft.color,
           smallFont: newDraft.smallFont,
           smallFontScale: Number(newDraft.smallFontScale),
@@ -241,7 +238,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
       setCreating(false);
       setNewCode("");
       setNewTitle("");
-      setNewMulti(false);
       setNewDraft(EMPTY_DRAFT);
       showToast(t("annotationMarkers.created"), "success");
     } catch (error) {
@@ -254,7 +250,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
   const startEdit = (marker: AnnotationMarker) => {
     setEditing(marker.code);
     setEditTitle(marker.title);
-    setEditMulti(marker.multi);
     setEditDraft(draftOf(marker));
   };
 
@@ -266,7 +261,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
         body: JSON.stringify({
           code,
           title: editTitle,
-          multi: editMulti,
           color: editDraft.color,
           smallFont: editDraft.smallFont,
           smallFontScale: Number(editDraft.smallFontScale),
@@ -330,7 +324,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
               <th className="py-2 pr-4">{t("annotationMarkers.smallFont")}</th>
               <th className="py-2 pr-4">{t("annotationMarkers.smallFontScale")}</th>
               <th className="py-2 pr-4">{t("annotationMarkers.linkType")}</th>
-              <th className="py-2 pr-4">{t("annotationMarkers.multi")}</th>
               <th className="annotation-markers__actions py-2">{t("annotationMarkers.actions")}</th>
             </tr>
           </thead>
@@ -387,22 +380,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
                       <td className="py-2 pr-4">{linkTypeLabel(marker.linkType)}</td>
                     </>
                   )}
-                  <td className="py-2 pr-4">
-                    {editing === marker.code ? (
-                      <label className="annotation-markers__multi">
-                        <input
-                          checked={editMulti}
-                          onChange={(event) => setEditMulti(event.target.checked)}
-                          type="checkbox"
-                        />
-                        {t("annotationMarkers.multi")}
-                      </label>
-                    ) : marker.multi ? (
-                      <span className="annotation-markers__badge">{t("annotationMarkers.multi")}</span>
-                    ) : (
-                      ""
-                    )}
-                  </td>
                   <td className="annotation-markers__actions py-2">
                     {editing === marker.code ? (
                       <>
@@ -466,14 +443,6 @@ export default function AnnotationMarkersApp({initialMarkers}: Props) {
             <MarkerPreview draft={newDraft} />
           </span>
           <StyleFields draft={newDraft} onChange={setNewDraft} t={t} />
-          <label className="annotation-markers__multi">
-            <input
-              checked={newMulti}
-              onChange={(event) => setNewMulti(event.target.checked)}
-              type="checkbox"
-            />
-            {t("annotationMarkers.multi")}
-          </label>
           <Button disabled={busy} onClick={create} size="sm">
             {t("annotationMarkers.add")}
           </Button>

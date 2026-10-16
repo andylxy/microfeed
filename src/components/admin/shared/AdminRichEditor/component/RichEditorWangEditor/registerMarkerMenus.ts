@@ -22,7 +22,6 @@ import type {IButtonMenu, IDomEditor} from "@wangeditor/editor";
 export interface MarkerConfig {
   code: string;
   title: string;
-  multi?: boolean;
 }
 
 /** Toolbar menu key for a marker code, e.g. `marker-f`. */
@@ -31,16 +30,16 @@ export function markerMenuKey(code: string): string {
 }
 
 /**
- * The four TCM markers seeded into `ext_annotation_markers` by migration 0068.
- * Used as a fallback so the editor always has buttons even if the list fetch
- * fails (e.g. a permission or network hiccup); the live DB list overrides these
- * on a successful fetch.
+ * 0068 播种的标记的兜底按钮，即便列表拉取失败（如权限或网络抖动）编辑器也
+ * 始终有按钮可用。实时库列表才是权威 —— 但 `Boot.registerMenu` 遇重复 key 会抛错、
+ * 且没有反注册接口，所以这些预注册标签就是「被改名的标记」在下次整页刷新前
+ * 一直显示的内容。让它们与播种行保持同步（标签与 migration 0117 去前缀后一致）。
  */
 export const DEFAULT_MARKER_CONFIGS: MarkerConfig[] = [
-  {code: "f", title: "$f 方剂"},
-  {code: "a", title: "$a 中药"},
-  {code: "u", title: "$u 穴位"},
-  {code: "x", title: "$x 西医/检验", multi: true},
+  {code: "f", title: "方剂"},
+  {code: "a", title: "按语"},
+  {code: "u", title: "中药"},
+  {code: "x", title: "橙字"},
 ];
 
 class MarkerButtonMenu implements IButtonMenu {

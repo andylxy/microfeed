@@ -54,10 +54,23 @@ export interface TcmMarkerRenderContext {
   resolveHref?: (linkType: number, name: string) => string | null | undefined;
 }
 
-// Sticky: `renderSegment` / `plainSegment` 在已定位的下标上起步扫描。
-const MARKER_START = /\$([a-zA-Z]{1,10})\{/y;
+/**
+ * 标记码语法 —— 代码库中每个标记正则都从它派生的字符类与长度。单一定义，
+ * 让渲染器、纯文本出口、popover 的实体扫描与后台写入层对「哪些码存在」的
+ * 认知不会分歧。仅限字母：解析器认不出数字与下划线，所以落在这个集合外的码
+ * 能存进库、之后却按字面 `$z1{…}` 渲染。`tests/unit/tcm-markers.test.ts`
+ * 断言 {@link MARKER_CODE_PATTERN} 接受的正是解析器能渲染的那些。
+ */
+export const MARKER_CODE_BODY = "[a-zA-Z]{1,10}";
+
+/** 后台写入层校验，锚定到 {@link MARKER_CODE_BODY}。 */
+export const MARKER_CODE_PATTERN = new RegExp(`^${MARKER_CODE_BODY}$`, "u");
+
+// sticky（粘性标志）：`renderSegment` / `plainSegment` 从已定位的下标起步扫描。
+// 捕获组是承重的：`renderSegment` 从 `match[1]` 取 code。
+const MARKER_START = new RegExp(`\\$(${MARKER_CODE_BODY})\\{`, "y");
 // 非 sticky 副本：只用来判断「整段文本里有没有标记」，与扫描用的那个同源同形。
-const MARKER_ANY = /\$[a-zA-Z]{1,10}\{/;
+const MARKER_ANY = new RegExp(`\\$${MARKER_CODE_BODY}\\{`);
 
 /** Ratio used by a `smallFont` marker whose row carries no explicit ratio. */
 export const DEFAULT_SMALL_FONT_SCALE = 0.7;

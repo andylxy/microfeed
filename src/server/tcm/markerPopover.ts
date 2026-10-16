@@ -1,11 +1,13 @@
 /**
  * TCM inline-annotation marker layer for the public reader page (`/i/[slug]`).
  *
- * `renderTcmMarkers` (shared) turns `$f{方剂}` / `$u{药名}` markers into
- * clickable `<a data-tcm-kind>` anchors when a name resolves in the current
- * book. This module supplies that resolver and the popover runtime (a
- * `<dialog>` + JSON data + click handler) so a click shows composition / herb
- * detail instead of navigating away (no-JS falls back to the real link).
+ * `renderTcmMarkers` (shared) turns `$X{…}` markers into clickable
+ * `<a data-tcm-kind>` anchors when a name resolves in the current book — for
+ * whichever codes the marker catalogue marks linkable (`link_type` 1 = 中药,
+ * 2 = 方剂; 3 renders styled but unlinked). This module supplies that resolver
+ * and the popover runtime (a `<dialog>` + JSON data + click handler) so a click
+ * shows composition / herb detail instead of navigating away (no-JS falls back
+ * to the real link).
  *
  * Resolution scope (see spec `.scratch/tcm-import/spec.md` and the
  * `fang-marker` investigation):
@@ -23,11 +25,17 @@
  *  - `tcm_kind` is an equality single value, never `IN (...)`.
  */
 
-import {renderTcmMarkers, type TcmMarkerStyle} from "@/shared/TcmMarkers";
+import {
+  MARKER_CODE_BODY,
+  renderTcmMarkers,
+  type TcmMarkerStyle,
+} from "@/shared/TcmMarkers";
 import {getAppStyleConfig, type AppStyleItem} from "./reads";
 
 /**
- * The two marker codes that carry a reverse index (`ext_marker_citations`).
+ * `ext_marker_citations` 的引用分桶 —— 每个实体 KIND 一桶，不是每个 code 一桶。
+ * 目录给 `link_type` 2 的标记进 `f`，给 `link_type` 1 的进 `u`（见
+ * {@link extractMarkerNames}），所以第二个类中药的码与 `$u` 共用 `u` 桶。
  * `$a{}` 之类纯样式标记不进表，`$g{}` 也不（`linkType=3` 不生成链接）。
  */
 type MarkerCode = "f" | "u";
@@ -103,17 +111,49 @@ export function mapStyles(list: AppStyleItem[]): TcmMarkerStyle[] {
   }));
 }
 
-/** Collect `$f{…}` / `$u{…}` names from raw marker text (not rendered HTML). */
-function extractMarkerNames(source: string): {fang: Set<string>; yao: Set<string>} {
+/**
+ * 可链接到实体的码，映射到其 link_type —— 从标记目录推导，不写死。
+ * `resolveHref` 按 link_type 分派（1 = 中药，2 = 方剂）；本 map 决定「哪些码」
+ * 喂给它，所以后台用 `link_type` 1 或 2 新增的标记无需改代码即可被拾取。
+ */
+function linkableCodes(styles: TcmMarkerStyle[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const style of styles) {
+    // 只有 `resolveHref` 真正能链接的两种 linkType。linkType 3（名词）只上色
+    // 不生成链接，所以不能进这张 map。
+    if (style.linkType === 1 || style.linkType === 2) {
+      map.set(style.code, style.linkType);
+    }
+  }
+  return map;
+}
+
+/** 一次遍历里匹配全部 `$X{…}`，从共享的标记语法派生。带 `g` 以便调用方在循环里
+ *  反复 `exec` —— 每次扫描前重置 `lastIndex`，因为带 `g` 的正则会记住上次扫到的位置。
+ *  捕获组是承重的：`extractMarkerNames` 从 `m[1]` 取 code、从 `m[2]` 取 name。 */
+const ENTITY_MARKER_ANY = new RegExp(`\\$(${MARKER_CODE_BODY})\\{([^}]*)\\}`, "g");
+
+/**
+ * 从原始标记文本（非渲染后的 HTML）里收集实体名，只收目录标为可链接的码。
+ * 分桶按 link_type —— 2 → 方剂，1 → 中药 —— 这也正是引用表存的 `marker_code`
+ * （见 `ensureMarkerCitations`）：索引按 KIND 而非按 code，所以第二个类中药的码
+ * 与 `$u` 共用 `u` 桶。
+ */
+function extractMarkerNames(
+  source: string,
+  linkable: Map<string, number>,
+): {fang: Set<string>; yao: Set<string>} {
   const fang = new Set<string>();
   const yao = new Set<string>();
-  const re = /\$([fu])\{([^}]*)\}/g;
+  ENTITY_MARKER_ANY.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
+  while ((m = ENTITY_MARKER_ANY.exec(source)) !== null) {
+    const linkType = linkable.get(m[1] ?? "");
+    if (linkType === undefined) continue;
     const name = (m[2] ?? "").trim();
     if (!name) continue;
-    if (m[1] === "f") fang.add(name);
-    else yao.add(normalizeYaoName(stripYaoNo(name)));
+    if (linkType === 2) fang.add(name);
+    else if (linkType === 1) yao.add(normalizeYaoName(stripYaoNo(name)));
   }
   return {fang, yao};
 }
@@ -441,6 +481,10 @@ export async function ensureMarkerCitations(
     .first<{computed_at_ms: number}>();
   if (state && Number(state.computed_at_ms) !== 0) return;
 
+  // 可链接码来自渲染器用的同一份目录，所以用 link_type 1/2 新增的标记无需改
+  // 代码即可被索引。每个变更周期只跑一次（上面的 state 行短路掉重复计算）。
+  const linkable = linkableCodes(mapStyles(await getAppStyleConfig(db)));
+
   // Walks `items_book_kind (book_id, tcm_kind, status, pub_date)` — 实测计划为
   // `SEARCH items USING INDEX items_book_kind (book_id=? AND tcm_kind=? AND status=?)`，
   // 本书 847 rows_read / 839 行。这是「整本读取」：行数由书的大小决定，无法用索引消除，
@@ -456,7 +500,7 @@ export async function ensureMarkerCitations(
   const rows: D1PreparedStatement[] = [];
   for (const row of results ?? []) {
     const d = parseData(row.data);
-    const names = extractMarkerNames(String(d.description ?? ""));
+    const names = extractMarkerNames(String(d.description ?? ""), linkable);
     // 结构化来源（fangList）与正文来源（$f{}）合并去重后同以 'f' 写入：主键
     // (book_id, marker_code, marker_name, section_id) 对两源命中同一条文的情况
     // 本就去重，合并只为省掉一次空写的 INSERT OR REPLACE。
@@ -554,6 +598,7 @@ export async function buildTcmMarkerLayer(
   opts: {bodyHtml: string; title: string; currentBookId: string | null},
 ): Promise<TcmMarkerLayer> {
   const styles = mapStyles(await getAppStyleConfig(db));
+  const linkable = linkableCodes(styles);
   const bodyHtmlIn = String(opts.bodyHtml ?? "");
   const titleIn = String(opts.title ?? "");
 
@@ -584,7 +629,7 @@ export async function buildTcmMarkerLayer(
 
   // Preload every herb referenced by the page body/title so resolveHref is
   // synchronous during the render pass.
-  const initial = extractMarkerNames(`${bodyHtmlIn}\n${titleIn}`);
+  const initial = extractMarkerNames(`${bodyHtmlIn}\n${titleIn}`, linkable);
   for (const name of initial.yao) await loadYao(name);
 
   const renderedBody = renderTcmMarkers(bodyHtmlIn, styles, {resolveHref});
@@ -650,7 +695,7 @@ export async function buildTcmMarkerLayer(
     const entryData = item.data;
     // Load any herbs referenced by this entry's body before rendering it, so
     // nested marker links resolve inside the dialog too.
-    const childNames = extractMarkerNames(String(entryData.description ?? ""));
+    const childNames = extractMarkerNames(String(entryData.description ?? ""), linkable);
     for (const name of childNames.yao) await loadYao(name);
     const entry =
       item.kind === "fang"

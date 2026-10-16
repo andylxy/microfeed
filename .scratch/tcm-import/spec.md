@@ -221,8 +221,7 @@ ALTER TABLE ext_annotation_markers ADD COLUMN link_type INTEGER NOT NULL DEFAULT
 > 全部公开读、无鉴权；**不进 OpenAPI 契约**（App 专用，非公共 API）。
 >
 > **⚠️ 响应信封与字段名以 golden 实测为准（2026-09-28 工单 15）**：旧后端框架把每个返回包成
-> `{code:200, data:<载荷>, msg:"请求成功"}`，载荷字段名**全小驼峰**（spec 初稿按 .NET C# 属性名写成的
-> PascalCase 是错的）；部分数值字段旧后端序列化为**字符串**（如方剂行的 `yaoCount:"5"`、`height:"0"`、
+> `{code:200, data:<载荷>, msg:"请求成功"}`，载荷字段名**全小驼峰**（非 .NET C# 的 PascalCase）；部分数值字段旧后端序列化为**字符串**（如方剂行的 `yaoCount:"5"`、`height:"0"`、
 > `weight:"300"`）；空值发 `null`。新端点已逐字节对齐（`src/server/tcm/envelope.ts` 的 `appEnvelope` 包装）。
 
 | 端点 | 参数 | 响应载荷（信封内 `data`；小驼峰，id 值按 §6.0 换成当前项目 id） |
@@ -231,10 +230,10 @@ ALTER TABLE ext_annotation_markers ADD COLUMN link_type INTEGER NOT NULL DEFAULT
 | `GET GetBookChapter` | `bookId`（**当前项目 11 位 channel id**） | `[{bookId, chapterSection, chapterHeader, signatureId}]`——`signatureId` 字段名沿用旧后端（App 解析键），**值 = 篇章条目 11 位 id**（App 端后续把 long 改 String，见 §6.0 #3）；每本书独立，无合并特例 |
 | `GET GetChapterContent` | `chapterId`（**篇章 item 的 11 位 id**） | `[{section, header, signatureId(=篇章条目 id), data:[{id(条文 11 位 id), text, note(null 可空), sectionvideo(null 可空), height:0, fangList[]}]}]`；按篇章 id 取其下条文，按 `receiptNo` 排序；条文行内的旧 `signature`/`signatureId` 签名字段已移除 |
 | `GET GetBookIdFang` | `bookId`（**当前项目 11 位 channel id**） | `[{yaoCount(字符串), height:"0", name, ID(方剂 11 位 id), drinkNum(字符串), text, fangList[], yaoList[], standardYaoList:[{suffix(null 可空), amount, yaoID(中药 11 位 id 或 null), weight(字符串), showName, extraProcess}]}]`——旧后端把这几个数值字段序列化成字符串，照抄；行内旧 `signature`/`signatureId` 已移除；按源 `FangNo` 排序（`_microfeed.no`） |
-| `GET GetAllZhongYao` | — | `[{name, text}]`——**实测只有这两个字段**（spec 初稿的 YaoName/YaoText/AllYaoText/YaoEnum 是错的）；旧按本草书逐本拼接（同名药重复），新为容器频道去重 + 按源 `YaoNo` 排序 |
+| `GET GetAllZhongYao` | — | `[{name, text}]`——**实测只有这两个字段**；旧按本草书逐本拼接（同名药重复），新为容器频道去重 + 按源 `YaoNo` 排序 |
 | `GET GetAliaZhongYao` | — | `[{bieming, name}]`（三源合并，照抄旧后端 `ZhongYaoService.GetAliaZhongYao`：① `yaoAlias` 表 ② 源 `Yao.YaoList` 切分（每 token→药名）③ 源 `BookBody.BieMing` 切分（result[0]=正名，其余→别名）；切分符 `[,,；; 。.、]+`；重复别名后者覆盖前者，处理顺序 ①→②→③；空 token 丢弃） |
 | `GET GetAllMingCi` | — | `[{id, mingCiList[], name(源列原样，不 trim), imageUrl, text}]`——`mingCiList` = 源 `MingCiList` 列按英文逗号劈成的数组，空白→`[]`；按源 `MingCiNo` 排序 |
-| `GET GetTipsStyleConfig` | `version=0` | `{styles:[{marker, color, isSmallFont, linkType}]}`——**旧后端从未实现此端点**（App 端本地兜底），属新增端点，无 golden 可比。**故意不包信封**：App 的 `StyleConfigApiBean` 直接反序列化顶层 `styles` 字段，且 `RequestHandler` 只对 `HttpData` 类型做信封拆包，所以此处发裸 `{styles}`，否则 App 会拿到 `null`（`code-review` 曾误报为"未包信封的接口规范破坏"，实为 App 契约要求） |
+| `GET GetTipsStyleConfig` | `version=0` | `{code:200, data:{styles:[{marker, color, isSmallFont, smallFontScale, linkType}], version}}`（走统一 App 信封）。App 的 bean 虽有顶层 `styles` 字段，但其**回调类型是 `HttpCallback<HttpData<…>>`**，传输层要信封、会拆包，故必须走统一信封（ADR-0028 D4）。另注：`enableStyleConfig` 长期为 false，历史上没有任何已发布 App 真正调用过它，故改形状无在野消费者 |
 | `POST login` | `LoginInfo` | `{Account, Name, …}` + 签发的 API Key 凭证（**不再有 `AccessKeyId/Secret`**，见 §6.1） |
 | `POST replaceToken` | — | 新 Token |
 | `GET GetProjectInfo` | — | 字典 `ProjectInfo` |
@@ -506,5 +505,5 @@ export function renderTcmMarkers(body: string, styles: TcmMarkerStyle[]): string
 本迁移有三个"以后一定会再问一遍"的决定，已沉淀为独立 ADR，与本文档互相引用、不重复维护同一事实：
 
 - [ADR-01 源模型映射](./adr-01-source-model.md) — 为什么不建表、`tcm_kind`/`tcm_parent_id` 两列索引列的取舍、派生关系与源 int64 不落库。
-- [ADR-02 App 端点契约](./adr-02-endpoint-contract.md) — 响应形状来源、两处反直觉特例（`GetTipsStyleConfig` 不包信封、`GetBookIdFang` 按 `sourceBookId` 过滤）、golden 比对策略。
+- [ADR-02 App 端点契约](./adr-02-endpoint-contract.md) — 响应形状来源、两处反直觉特例（`GetBookIdFang` 按 `sourceBookId` 过滤；`GetTipsStyleConfig` 走统一信封，见 ADR-0028 D4）、golden 比对策略。
 - [ADR-03 标记协议](./adr-03-marker-protocol.md) — 13 枚标记的语义/配色/`linkType`、嵌套与脏括号两个坑、当前渲染状态。

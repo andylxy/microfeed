@@ -25,11 +25,8 @@ import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 import {jsonResponse, localizedError} from "@/server/http";
 import {PERMISSION_CODES} from "@/shared/Constants";
-import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
+import {DEFAULT_SMALL_FONT_SCALE, MARKER_CODE_PATTERN} from "@/shared/TcmMarkers";
 import {requireRbac} from "@/server/rbac/guard";
-
-/** 1–8 chars: lowercase letters, digits, underscore. Mirrors the role-code rule. */
-const MARKER_CODE_PATTERN = /^[a-z0-9_]{1,8}$/u;
 
 /** One 0–255 colour channel. */
 const RGB_CHANNEL = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
@@ -61,7 +58,6 @@ interface AnnotationMarkerRow {
   id: string;
   code: string;
   title: string;
-  multi: number;
   sort_order: number;
   color: string | null;
   small_font: number;
@@ -73,7 +69,6 @@ export interface AnnotationMarker {
   id: string;
   code: string;
   title: string;
-  multi: boolean;
   sortOrder: number;
   /** CSS-ready colour: `#RRGGBB` or `rgba(...)`. */
   color: string;
@@ -89,7 +84,6 @@ function toMarker(row: AnnotationMarkerRow): AnnotationMarker {
     id: row.id,
     code: row.code,
     title: row.title,
-    multi: row.multi === 1,
     sortOrder: row.sort_order,
     color: row.color ?? DEFAULT_MARKER_COLOR,
     smallFont: row.small_font === 1,
@@ -99,7 +93,7 @@ function toMarker(row: AnnotationMarkerRow): AnnotationMarker {
 }
 
 const MARKER_COLUMNS =
-  "id, code, title, multi, sort_order, color, small_font, small_font_scale, link_type";
+  "id, code, title, sort_order, color, small_font, small_font_scale, link_type";
 
 export async function listAnnotationMarkers(db: D1Database): Promise<AnnotationMarker[]> {
   const result = await db
@@ -126,8 +120,8 @@ export const listAnnotationMarkersEndpoint: APIRoute = async ({locals, request})
  * The presentation fields, read out of a request body.
  *
  * `undefined` means "not supplied" and leaves the stored value alone — the
- * update endpoint is a patch, so an older client that only sends
- * `title`/`multi` keeps working and never resets a colour it cannot see.
+ * update endpoint is a patch, so an older client that only sends `title`
+ * keeps working and never resets a colour it cannot see.
  */
 interface StylePatch {
   color?: string;
@@ -187,7 +181,6 @@ export const createAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
   const body = readBody(await request.json().catch(() => null));
   const code = typeof body?.code === "string" ? body.code.trim().toLowerCase() : "";
   const title = typeof body?.title === "string" ? body.title.trim() : "";
-  const multi = body?.multi === true || body?.multi === 1;
   const style = body ? readStylePatch(body) : null;
   if (!MARKER_CODE_PATTERN.test(code) || !title || !style) {
     return localizedError(request, "errors.annotationMarkers.invalidInput", 400);
@@ -205,15 +198,14 @@ export const createAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
   await env.FEED_DB
     .prepare(
       "INSERT INTO ext_annotation_markers " +
-        "(id, code, title, multi, sort_order, color, small_font, small_font_scale, " +
+        "(id, code, title, sort_order, color, small_font, small_font_scale, " +
         "link_type, created_at_ms, updated_at_ms) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       `am_${code}`,
       code,
       title,
-      multi ? 1 : 0,
       999,
       style.color ?? DEFAULT_MARKER_COLOR,
       style.smallFont ? 1 : 0,
@@ -238,7 +230,6 @@ export const updateAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
   const body = readBody(await request.json().catch(() => null));
   const code = typeof body?.code === "string" ? body.code.trim().toLowerCase() : "";
   const title = typeof body?.title === "string" ? body.title.trim() : "";
-  const multi = body?.multi === true || body?.multi === 1;
   const style = body ? readStylePatch(body) : null;
   if (!code || !title || !style) {
     return localizedError(request, "errors.annotationMarkers.invalidInput", 400);
@@ -254,8 +245,8 @@ export const updateAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
 
   // Only the supplied style fields are written, so a partial payload cannot
   // blank out a colour it never carried.
-  const assignments = ["title = ?", "multi = ?", "updated_at_ms = ?"];
-  const binds: unknown[] = [title, multi ? 1 : 0, Date.now()];
+  const assignments = ["title = ?", "updated_at_ms = ?"];
+  const binds: unknown[] = [title, Date.now()];
   if (style.color !== undefined) {
     assignments.push("color = ?");
     binds.push(style.color);

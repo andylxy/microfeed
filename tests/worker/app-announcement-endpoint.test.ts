@@ -7,20 +7,28 @@ import {
   createAnnouncement,
   setStatus,
 } from "@/server/app/announcement/store";
+import {createLoginCredential} from "@/server/auth/login-credentials";
+import {permissionId} from "@/server/rbac/seed";
 
 /**
- * 公开端点 `GET /api/app/announcements` 的运行时契约（DESIGN §5.3）。
+ * 端点 `GET /api/app/announcements` 的运行时契约（DESIGN §5.3）。
  *
  * 锁住三件客户端真正依赖的事：
  * - 空列表返回 `{announcements: []}` 而不是 404/空体 —— 客户端据此静默（INV-2）；
- * - 字段是驼峰unix 毫秒，与 `/api/app/version` 同风格；
+ * - 字段是驼峰 unix 毫秒，与 `/api/app/version` 同风格；
  * - **不写登录日志**（D4）：登录日志的写入点只有版本检查一处，若这里也写，
  *   「一次启动」会被计成两次登录。
+ *
+ * 2026-10-16：本端点**不再是匿名**，改为要求登录凭证 + 权限码 `app:announcement:read`
+ * （与 `search-permission` / `mingci-permission` 同形）。夹具照
+ * `tests/worker/app-search-permission.test.ts`：造账号 → 挂合成角色 → 授权限码 → 签凭证。
  */
 
 const db = env.FEED_DB;
 const URL_ = "https://app.example.com/api/app/announcements";
 const NOW = Date.now();
+const USER = "u_announcement";
+const CODE = "app:announcement:read";
 
 interface AnnouncementBody {
   announcements: Array<{
@@ -34,13 +42,59 @@ interface AnnouncementBody {
   }>;
 }
 
-async function callGet(): Promise<Response> {
-  return announcementsGet({request: new Request(URL_)} as never);
+async function seedUser(id: string): Promise<void> {
+  await db.prepare(
+    'INSERT OR IGNORE INTO "auth_user" (id, name, email, emailVerified, createdAt, updatedAt, role, banned) ' +
+      "VALUES (?, ?, ?, 1, '2024-01-01', '2024-01-01', 'user', 0)",
+  )
+    .bind(id, id.toUpperCase(), `${id}@example.com`)
+    .run();
+}
+
+async function grantCode(userId: string, code: string): Promise<void> {
+  const roleId = `r_test_${userId}`;
+  await db.prepare(
+    "INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES (?, ?, ?)",
+  )
+    .bind(roleId, roleId, roleId)
+    .run();
+  await db.prepare(
+    "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
+  )
+    .bind(userId, roleId)
+    .run();
+  // 复用 seed 的 id 公式，不在本文件重写第三份 `p_${code.replace(...)}`。
+  const permId = permissionId(code);
+  await db.prepare(
+    "INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES (?, ?, ?)",
+  )
+    .bind(permId, code, code)
+    .run();
+  await db.prepare(
+    "INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES (?, ?)",
+  )
+    .bind(roleId, permId)
+    .run();
+}
+
+/** 默认凭证（持 `app:announcement:read`）；传 `null` 走匿名路径。 */
+let bearer: string;
+
+async function callGet(secret: string | null = bearer): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (secret) headers.authorization = `Bearer ${secret}`;
+  return announcementsGet({request: new Request(URL_, {headers})} as never);
 }
 
 beforeEach(async () => {
   await db.prepare("DELETE FROM ext_app_announcement").run();
   await db.prepare("DELETE FROM ext_app_login_log").run();
+  // `createLoginCredential` 有每用户数量上限，不清会撞 LoginCredentialLimitError
+  // （照 tests/worker/app-search-permission.test.ts 的 beforeEach）。
+  await db.prepare("DELETE FROM ext_login_credentials").run();
+  await seedUser(USER);
+  await grantCode(USER, CODE);
+  bearer = (await createLoginCredential(db, {name: "api", userId: USER})).secret;
 });
 
 describe("GET /api/app/announcements", () => {

@@ -10,9 +10,10 @@ import {
 import {PERMISSION_CODES} from "@/shared/Constants";
 import type {RbacLocals} from "@/server/rbac/guard";
 
-// The 13-marker catalogue migration 0071 seeds (source app defaults, spec §4.2).
+// The catalogue migrations 0071 / 0115 seed (source app defaults, spec §4.2):
+// 0071 the thirteen core markers, 0115 the two site-local ones (`s` / `l`).
 const SEED_CODES = [
-  "f", "a", "u", "x", "w", "q", "m", "n", "g", "r", "v", "y", "h",
+  "f", "a", "u", "x", "w", "q", "m", "n", "g", "r", "v", "y", "h", "s", "l",
 ];
 
 const SEED_CODES_SORTED = [...SEED_CODES].sort();
@@ -47,15 +48,14 @@ afterEach(async () => {
 });
 
 describe("annotation marker handlers", () => {
-  it("lists the thirteen seed markers for a reader", async () => {
+  it("lists the fifteen seed markers for a reader", async () => {
     const response = await listAnnotationMarkersEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_READ])),
       request: new Request("https://example.test/ajax/annotation-markers/list"),
     } as any);
     expect(response.status).toBe(200);
-    const data = (await response.json()) as {markers: {code: string; title: string; multi: boolean}[]};
+    const data = (await response.json()) as {markers: {code: string; title: string}[]};
     expect(data.markers.map((m) => m.code).sort()).toEqual(SEED_CODES_SORTED);
-    expect(data.markers.find((m) => m.code === "x")?.multi).toBe(true);
   });
 
   it("seeds the source app styles: colours, small fonts and link types", async () => {
@@ -79,18 +79,25 @@ describe("annotation marker handlers", () => {
     expect(byCode.get("f")?.link_type).toBe(2);
     expect(byCode.get("g")?.link_type).toBe(3);
 
-    // Small-font markers per the source app: $r / $a / $w render at 0.7x.
-    for (const code of ["r", "a", "w"]) {
+    // Small-font markers: $r / $a / $w per the source app, plus $s / $l which
+    // 0115 seeded as the two site-local ones.
+    const smallFontCodes = ["r", "a", "w", "s", "l"];
+    for (const code of smallFontCodes) {
       expect(byCode.get(code)?.small_font).toBe(1);
     }
-    for (const code of SEED_CODES.filter((c) => !["r", "a", "w"].includes(c))) {
+    for (const code of SEED_CODES.filter((c) => !smallFontCodes.includes(c))) {
       expect(byCode.get(code)?.small_font).toBe(0);
     }
 
-    // 0068 seeded three titles against the source semantics; 0071 fixed them.
-    expect(byCode.get("a")?.title).toBe("$a 按语");
-    expect(byCode.get("u")?.title).toBe("$u 中药");
-    expect(byCode.get("x")?.title).toBe("$x 橙字");
+    // 0068 seeded three titles against the source semantics; 0071 fixed the
+    // names, and 0117 stripped the `$x ` prefix so `title` is a plain label
+    // (the `code` column carries the grammar).
+    expect(byCode.get("a")?.title).toBe("按语");
+    expect(byCode.get("u")?.title).toBe("中药");
+    expect(byCode.get("x")?.title).toBe("橙字");
+    // 0115 added the two site-local codes; 0117 stripped their prefixes too.
+    expect(byCode.get("s")?.title).toBe("总起");
+    expect(byCode.get("l")?.title).toBe("异文");
     // 0110 aligned these two colours with the source app's own definitions:
     // $w was a softer green than Color.GREEN, and $y had no colour at all.
     expect(byCode.get("w")?.color).toBe("#00FF00");
@@ -116,14 +123,14 @@ describe("annotation marker handlers", () => {
   it("creates a marker and rejects duplicates and bad codes", async () => {
     const created = await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸", multi: false}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
     expect(created.status).toBe(200);
     expect(await listCodes()).toEqual([...SEED_CODES_SORTED, "z"]);
 
     const dup = await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸"}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
     expect(dup.status).toBe(409);
 
@@ -140,21 +147,20 @@ describe("annotation marker handlers", () => {
     expect(noTitle.status).toBe(400);
   });
 
-  it("updates title and multi, and deletes a marker", async () => {
+  it("updates the title and deletes a marker", async () => {
     await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸"}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
 
     const updated = await updateAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸科", multi: true}),
+      request: post({code: "z", title: "针灸科"}),
     } as any);
     expect(updated.status).toBe(200);
-    const data = (await updated.json()) as {markers: {code: string; title: string; multi: boolean}[]};
+    const data = (await updated.json()) as {markers: {code: string; title: string}[]};
     const z = data.markers.find((m) => m.code === "z");
-    expect(z?.title).toBe("$z 针灸科");
-    expect(z?.multi).toBe(true);
+    expect(z?.title).toBe("针灸科");
 
     const deleted = await deleteAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
@@ -181,15 +187,14 @@ describe("annotation marker handlers", () => {
   it("writes the style fields, and a partial payload leaves them alone", async () => {
     await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸"}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
 
     const styled = await updateAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
       request: post({
         code: "z",
-        title: "$z 针灸",
-        multi: false,
+        title: "针灸",
         color: "#123456",
         smallFont: true,
         smallFontScale: 0.55,
@@ -217,13 +222,13 @@ describe("annotation marker handlers", () => {
     // must not blank out the ones it never mentioned.
     const renamed = await updateAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸科", multi: true}),
+      request: post({code: "z", title: "针灸科"}),
     } as any);
     expect(renamed.status).toBe(200);
     const after = ((await renamed.json()) as {markers: (typeof data)["markers"]}).markers.find(
       (m) => m.code === "z",
     );
-    expect(after?.title).toBe("$z 针灸科");
+    expect(after?.title).toBe("针灸科");
     expect(after?.color).toBe("#123456");
     expect(after?.smallFontScale).toBe(0.55);
   });
@@ -231,7 +236,7 @@ describe("annotation marker handlers", () => {
   it("rejects an invalid colour, scale or link type", async () => {
     await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸"}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
 
     const badBodies = [
@@ -247,7 +252,7 @@ describe("annotation marker handlers", () => {
     for (const bad of badBodies) {
       const response = await updateAnnotationMarkerEndpoint({
         locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-        request: post({code: "z", title: "$z 针灸", ...bad}),
+        request: post({code: "z", title: "针灸", ...bad}),
       } as any);
       expect(response.status, JSON.stringify(bad)).toBe(400);
     }
@@ -255,7 +260,7 @@ describe("annotation marker handlers", () => {
     // The seeded rgba() value is the reason the alpha form must be accepted.
     const accepted = await updateAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE])),
-      request: post({code: "z", title: "$z 针灸", color: "rgba(0, 128, 255, 0.90)"}),
+      request: post({code: "z", title: "针灸", color: "rgba(0, 128, 255, 0.90)"}),
     } as any);
     expect(accepted.status).toBe(200);
   });
@@ -263,7 +268,7 @@ describe("annotation marker handlers", () => {
   it("refuses mutations to an account without the manage permission", async () => {
     const response = await createAnnotationMarkerEndpoint({
       locals: locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_READ])),
-      request: post({code: "z", title: "$z 针灸"}),
+      request: post({code: "z", title: "针灸"}),
     } as any);
     expect(response.status).toBe(403);
   });

@@ -151,22 +151,20 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     env.MICROFEED_ADMIN_AUTH_MODE,
   );
 
-  // Public App endpoints (ADR-0020 / §6.5). They are anonymous and deliberately
-  // served before canonicalisation, so the app's exact URLs do not take a 308
-  // round-trip to a trailing slash. Returning here also skips the `/api/` auth
-  // block below, which is what actually keeps them anonymous — `/api/app/version`
-  // must stay reachable for a client that is itself below the floor (it is how
-  // such a client learns it must upgrade), and `announcements` is the broadcast
-  // notice channel (DESIGN §5.3), which must reach those same clients. Neither
-  // is subject to the version gate, which only guards `/api/AppBookRequest/*`.
-  if (
-    pathname === "/api/app/version" ||
-    pathname === "/api/app/version/" ||
-    pathname === "/api/app/announcements" ||
-    pathname === "/api/app/announcements/"
-  ) {
-    return next();
-  }
+  // 2026-10-16（评审第 12 轮）：`/api/app/version` 与 `/api/app/announcements` 原先在此
+  // **早退** —— 匿名，且不经规范化（省一次 308）。现已与 `search-permission` /
+  // `mingci-permission` 同形，所以**删掉这个早退**，让它们走下面 `/api/` 的鉴权块
+  // （`decideLoginCredentialApiRequest`）。
+  //
+  // 代价：这两个 URL 会经 `canonicalPathname` 规范化，无尾斜杠时 308 到带斜杠形态 ——
+  // 与 `search-permission` 的现状一致（App 侧跟随重定向）。
+  //
+  // 换来的：限流 429、`accountIsBlocked` / `isDeviceRevoked` 401（`X-Device-Revoked`）、
+  // `app:mobile:access` 门、以及 `ext_api_access_log` 一行。此前只靠路由内那一道检查，
+  // 被吊销的设备与禁用的账号仍能从这两个端点拿到 200。
+  //
+  // 二者仍**不受版本门**约束：版本门只管 `/api/AppBookRequest/*`（ADR-0020），
+  // 且 `/api/app/version` 正是低于地板的客户端学习「必须升级」的通道。
 
   const canonicalPath = isBetterAuthPath(pathname)
     ? pathname

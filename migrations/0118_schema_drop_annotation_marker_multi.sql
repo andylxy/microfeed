@@ -1,0 +1,21 @@
+-- 0118_schema_drop_annotation_marker_multi.sql
+--
+-- `multi` (0068) was never read by anything. Checked 2026-10-16:
+--   - the renderer's catalogue (`getAppStyleConfig`) does not even SELECT it;
+--   - the editor's `MarkerConfig` accepts `multi?` but drops it when building
+--     `MarkerButtonMenu` (only code + title survive);
+--   - the source Android app's `StyleConfigApiBean.StyleItem` has no such field
+--     at all (marker / color / isSmallFont / linkType only);
+--   - the original commit (21855ff) added the column and the seed `x: true` but
+--     no consumer.
+-- Its i18n label was 「可多条」 / "Multiple" — an intent that was never
+-- implemented, so the admin showed a checkbox that changed nothing.
+--
+-- Drop it rather than keep a switch nobody can act on. Measured before applying
+-- (local D1 snapshot): 15 rows, only `x` carried 1.
+--
+-- rollback:
+--   ALTER TABLE ext_annotation_markers ADD COLUMN multi INTEGER NOT NULL DEFAULT 0;
+--   UPDATE ext_annotation_markers SET multi = 1 WHERE code = 'x';  -- the 0068 seed
+
+ALTER TABLE ext_annotation_markers DROP COLUMN multi;

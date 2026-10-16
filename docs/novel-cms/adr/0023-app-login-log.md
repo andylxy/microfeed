@@ -45,7 +45,7 @@ D1 无会话时区，`log_date` 与 `login_at` 都按 UTC 生成。后台的 6 �
 ### 5. 覆盖范围
 
 - `migrations/0084`：写入点在 `src/server/rbac/resolve.ts` 的 `registerUserDevice`，其两个调用方都在身份验证之后，故当时 `user_id` 永不为 NULL
-- `migrations/0085`：写入点改为匿名 `GET /api/app/version`，覆盖联网的启动；`user_id` 允许 NULL
+- `migrations/0085`：写入点改为 `GET /api/app/version`，覆盖联网的启动；`user_id` 允许 NULL。**2026-10-16 补注**：该端点已**不再匿名**（改为要登录凭证 + 权限码 `app:version:read`，见 ADR-0028 之后的 App 端点鉴权），但登录日志的写入被**刻意留在鉴权之前** —— 理由不变：这条日志要覆盖的正是「凭证缺失 / 无效的启动」，放在鉴权之后等于把目标人群排除掉。所以「覆盖联网的启动」与 `user_id` 可空两点**依旧成立**。
 - 完全离线的启动无痕迹（业务侧接受；要覆盖需 App 本地排队后补报，未做）
 
 ### 6. 保留天数

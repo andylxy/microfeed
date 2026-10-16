@@ -69,7 +69,17 @@ async function seed(): Promise<{chapterId: string; fangId: string}> {
       JSON.stringify({
         title: "伤寒金匮・(宋版)",
         description: "宋版原文",
-        _microfeed: {author: "张仲景", chengShu: "汉", sourceImagePath: "Upload/a.jpg", case: "5"},
+        // `_microfeed.genre` 必须给：迁移 0113 的 `AFTER INSERT` 触发器会用
+        // `json_extract(NEW.data, '$._microfeed.genre')` 覆写 `genre` 列（JSON 是 SSOT、
+        // 列是镜像）。只写列不写 JSON ⇒ 列被覆盖成 NULL ⇒ `getAppNav` 的
+        // `ch.genre = c.id` JOIN 匹配不上，分类凭空消失（本测试曾因此失败）。
+        _microfeed: {
+          author: "张仲景",
+          chengShu: "汉",
+          sourceImagePath: "Upload/a.jpg",
+          case: "5",
+          genre: "1runoCsI7dr",
+        },
       }),
     )
     .run();
@@ -84,7 +94,9 @@ async function seed(): Promise<{chapterId: string; fangId: string}> {
       JSON.stringify({
         title: "方剂",
         description: "中医方剂库",
-        _microfeed: {tcmContainer: "fang"},
+        // 同上：容器频道也要给 `_microfeed.genre`，否则 0113 的触发器把列刷成 NULL。
+        // 它仍会被 `getAppNav` 的 `tcmContainer IS NULL` 过滤掉 —— 这正是本用例要验的。
+        _microfeed: {tcmContainer: "fang", genre: "1runoCsI7dr"},
       }),
     )
     .run();

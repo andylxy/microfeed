@@ -3,9 +3,12 @@ import {describe, expect, it} from "vitest";
 import {
   buildPermissionTree,
   permissionBranchState,
+  RBAC_ANNOUNCEMENT_PAGE,
   RBAC_MINGCI_PAGE,
+  RBAC_OPERATIONS_GROUP,
   RBAC_OTHER_GROUP,
   RBAC_OTHER_PAGE,
+  RBAC_VERSION_PAGE,
   togglePermissionBranch,
   type RbacPermissionTreeInput,
 } from "@/shared/Rbac";
@@ -135,6 +138,51 @@ describe("buildPermissionTree App 能力权限分流（合成 page）", () => {
     });
     expect(groups).toEqual([
       {code: "group_content", pages: [{code: "books", codes: ["app:mingci:view"]}]},
+    ]);
+  });
+
+  it("routes app:version:* / app:announcement:* to synthetic pages under 运营管理", () => {
+    // 运营管理组带一个既有页面（system:* 管理码），两个 App 读码 unmapped
+    const groups = build({
+      menu: [{code: RBAC_OPERATIONS_GROUP, pages: ["app_versions"]}],
+      mapping: {
+        app_versions: ["system:app-version:read", "system:app-version:manage"],
+      },
+      permissions: [
+        {code: "*", name: "Everything"},
+        {code: "system:app-version:read", name: "版本查看"},
+        {code: "system:app-version:manage", name: "版本管理"},
+        {code: "app:version:read", name: "版本(App)"},
+        {code: "app:announcement:read", name: "公告(App)"},
+      ],
+    });
+    const ops = groups.find((group) => group.code === RBAC_OPERATIONS_GROUP);
+    expect(ops?.pages).toEqual([
+      {
+        code: "app_versions",
+        codes: ["system:app-version:manage", "system:app-version:read"],
+      },
+      {code: RBAC_VERSION_PAGE, codes: ["app:version:read"]},
+      {code: RBAC_ANNOUNCEMENT_PAGE, codes: ["app:announcement:read"]},
+    ]);
+    // 两个 App 码不再落 group_other 兜底（与后台管理页解耦）
+    expect(groups.find((group) => group.code === RBAC_OTHER_GROUP)).toBeUndefined();
+  });
+
+  it("falls back to group_other when the target group is absent from the menu", () => {
+    // 运营管理组不在 menu 里 → app:version:* 合成页回落兜底组
+    const groups = build({
+      permissions: [
+        {code: "*", name: "Everything"},
+        {code: "app:version:read", name: "版本(App)"},
+      ],
+      mapping: {},
+    });
+    expect(groups).toEqual([
+      {
+        code: RBAC_OTHER_GROUP,
+        pages: [{code: RBAC_VERSION_PAGE, codes: ["app:version:read"]}],
+      },
     ]);
   });
 });

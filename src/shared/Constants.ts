@@ -281,6 +281,14 @@ export const PERMISSION_CODES = {
   // 名词解释查看（MingCi View Permission，G3 全局单开关 → 一个码）。App 能力权限，
   // 不进菜单/后台页面，由 group_other/unmapped 兜底组承接（镜像 APP_SEARCH_* 的处置）。
   APP_MINGCI_VIEW: 'app:mingci:view',
+  // App 版本升级 / 运营公告（2026-10-16 起要求登录凭证，此前匿名）。与 APP_SEARCH_* /
+  // APP_MINGCI_VIEW 同族：App 能力权限，不进 ext_menu / ext_menu_permissions，由
+  // group_other / unmapped 兜底组承接（无后台菜单行）。**差别在授权**：
+  // search / mingci 由运营按需手工挂到角色，这两个**默认授予 editor 角色**（见 seed.ts）
+  // —— App 每次启动都要查升级、拉公告，缺了它们刚装好的 App 就是残废的，
+  // 而它用的内置凭证（SecurityConfig.getApiKey()）正是这个角色。
+  APP_VERSION_READ: 'app:version:read',
+  APP_ANNOUNCEMENT_READ: 'app:announcement:read',
   WILDCARD: '*',
 } as const;
 

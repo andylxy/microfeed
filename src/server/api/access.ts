@@ -195,6 +195,28 @@ export function apiPathDetails(pathname: string): ApiPathDetails | null {
     };
   }
 
+  // 版本升级 / 运营公告（2026-10-16，评审第 12 轮）。与 search-permission /
+  // mingci-permission 逐条同理：这两个端点原先在 middleware 里**早退**（匿名、不规范化），
+  // 现已同形 —— 要登录凭证 + 一个权限码，走 `/api/` 的鉴权块。登记成 `integration` 是为了
+  // 拿到限流、账号封禁 / 设备吊销判定、`app:mobile:access` 门与访问日志；
+  // `legacy: false` 的理由与上面两条一致（`/api/v1/app/*` 不存在，报 legacy 会挂上指向
+  // 404 后继的 deprecation 头）。
+  if (pathname === `${LEGACY_API_BASE_PATH}app/version/`) {
+    return {
+      canonicalPath: `${API_BASE_PATH}app/version/`,
+      kind: "integration",
+      legacy: false,
+    };
+  }
+
+  if (pathname === `${LEGACY_API_BASE_PATH}app/announcements/`) {
+    return {
+      canonicalPath: `${API_BASE_PATH}app/announcements/`,
+      kind: "integration",
+      legacy: false,
+    };
+  }
+
   const bases = [
     {base: API_BASE_PATH, legacy: false},
     {base: LEGACY_API_BASE_PATH, legacy: true},

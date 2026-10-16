@@ -58,7 +58,7 @@ describe("RichEditorWangEditor content ownership", () => {
       React.createElement(RichEditorWangEditor, {
         value: "<p>handover body</p>",
         onChange: () => {},
-        initialMarkers: [{code: "f", title: "$f 方剂"}],
+        initialMarkers: [{code: "f", title: "方剂"}],
       }),
     );
 
@@ -75,7 +75,7 @@ describe("RichEditorWangEditor content ownership", () => {
       React.createElement(RichEditorWangEditor, {
         value: "<p>seed</p>",
         onChange,
-        initialMarkers: [{code: "f", title: "$f 方剂"}],
+        initialMarkers: [{code: "f", title: "方剂"}],
       }),
     );
 
@@ -98,8 +98,8 @@ describe("RichEditorWangEditor content ownership", () => {
         value: "<p>seed</p>",
         onChange: () => {},
         initialMarkers: [
-          {code: "f", title: "$f 方剂"},
-          {code: "y", title: "$y 测试"},
+          {code: "f", title: "方剂"},
+          {code: "y", title: "测试"},
         ],
       }),
     );

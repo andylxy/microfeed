@@ -11,9 +11,9 @@ import {menuGroupLabelKey, menuItemLabelKey} from "@/shared/AdminNavigation";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {
   permissionBranchState,
-  RBAC_MINGCI_PAGE,
   RBAC_OTHER_GROUP,
   RBAC_OTHER_PAGE,
+  syntheticPageLabelKey,
   togglePermissionBranch,
   type RbacBoard,
 } from "@/shared/Rbac";
@@ -44,7 +44,8 @@ const ROOT_NODE = "permission_root";
 /** A tree page heading. A menu page reads `menu.item.<code>`. */
 function pageLabelKey(code: string): string {
   if (code === RBAC_OTHER_PAGE) return "rbac.uncategorised";
-  if (code === RBAC_MINGCI_PAGE) return "rbac.mingci";
+  const synthetic = syntheticPageLabelKey(code);
+  if (synthetic) return synthetic;
   return menuItemLabelKey(code);
 }
 

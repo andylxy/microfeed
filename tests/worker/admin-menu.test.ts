@@ -178,7 +178,7 @@ describe("readAdminMenu", () => {
     expect(codes).not.toContain(ADMIN_MENU_CODES.API);
   });
 
-  it("shows a read-only account only the content read menus", async () => {
+  it("shows a readonly account the same menus as editor (readonly == editor)", async () => {
     const permissions = await seedAccount(READONLY, "r_readonly", "user");
     const menu = await readAdminMenu(
       env.FEED_DB,
@@ -189,19 +189,21 @@ describe("readAdminMenu", () => {
     );
     const codes = menuIds(menu);
 
+    // 2026-10-16 起 readonly 与 editor 相同（用户要求同步）：content + pages + site-files。
     expect(codes).toContain(ADMIN_MENU_CODES.ADMIN_HOME);
     expect(codes).toContain(ADMIN_MENU_CODES.ALL_ITEMS);
     expect(codes).toContain(ADMIN_MENU_CODES.BOOKS);
     expect(codes).toContain(ADMIN_MENU_CODES.CATEGORIES);
     expect(codes).toContain(ADMIN_MENU_CODES.VOLUMES);
-    // Read-only means no create/manage menus.
-    expect(codes).not.toContain(ADMIN_MENU_CODES.PAGES);
-    expect(codes).not.toContain(ADMIN_MENU_CODES.SITE_FILES);
+    expect(codes).toContain(ADMIN_MENU_CODES.PAGES);
+    expect(codes).toContain(ADMIN_MENU_CODES.SITE_FILES);
+    // Admin-only menus stay hidden (no system:*/content:review/audit/settings/api codes).
     expect(codes).not.toContain(ADMIN_MENU_CODES.REVIEW);
     expect(codes).not.toContain(ADMIN_MENU_CODES.AUDIT);
     expect(codes).not.toContain(ADMIN_MENU_CODES.USERS);
     expect(codes).not.toContain(ADMIN_MENU_CODES.RBAC);
     expect(codes).not.toContain(ADMIN_MENU_CODES.SETTINGS);
+    expect(codes).not.toContain(ADMIN_MENU_CODES.API);
   });
 
   it("shows a wildcard holder everything, and a legacy admin only its grants", async () => {

@@ -225,6 +225,68 @@ describe("app mingci-permission endpoint (/api/app/mingci-permission/)", () => {
   });
 });
 
+describe("app version endpoint (/api/app/version/)", () => {
+  // 与上面两条 app 端点一一对应，但门是「权限码本身」而非 `app:mobile:access`：
+  // `app:version:read` 默认授予 editor 角色（migrations/0119 播种、0120 授予，
+  // 属「运营管理」叶子结点下的默认授权）。handler 再用同一码复核一次。
+  it("is an integration path under the legacy base", () => {
+    expect(isIntegrationApiPath("/api/app/version/")).toBe(true);
+    expect(apiPathDetails("/api/app/version/")).toEqual({
+      canonicalPath: "/api/v1/app/version/",
+      kind: "integration",
+      legacy: false,
+    });
+  });
+
+  it("survives the canonical trailing-slash redirect the middleware applies", () => {
+    const requested = "/api/app/version";
+    const dispatched = canonicalPathname(requested);
+    expect(dispatched).toBe("/api/app/version/");
+    expect(isIntegrationApiPath(dispatched)).toBe(true);
+    expect(requiredApiPermission(dispatched, "GET")).toBe("app:version:read");
+  });
+
+  it("requires the app:version:read code at the path level", () => {
+    expect(requiredApiPermission("/api/app/version/", "GET")).toBe(
+      "app:version:read",
+    );
+  });
+
+  it("carries no deprecation headers (the /api/v1 successor does not exist)", () => {
+    expect(apiPathDetails("/api/app/version/")?.legacy).toBe(false);
+  });
+});
+
+describe("app announcements endpoint (/api/app/announcements/)", () => {
+  // 与 version 同构：门是 `app:announcement:read`（默认授予 editor 角色，migrations/0119 / 0120）。
+  it("is an integration path under the legacy base", () => {
+    expect(isIntegrationApiPath("/api/app/announcements/")).toBe(true);
+    expect(apiPathDetails("/api/app/announcements/")).toEqual({
+      canonicalPath: "/api/v1/app/announcements/",
+      kind: "integration",
+      legacy: false,
+    });
+  });
+
+  it("survives the canonical trailing-slash redirect the middleware applies", () => {
+    const requested = "/api/app/announcements";
+    const dispatched = canonicalPathname(requested);
+    expect(dispatched).toBe("/api/app/announcements/");
+    expect(isIntegrationApiPath(dispatched)).toBe(true);
+    expect(requiredApiPermission(dispatched, "GET")).toBe("app:announcement:read");
+  });
+
+  it("requires the app:announcement:read code at the path level", () => {
+    expect(requiredApiPermission("/api/app/announcements/", "GET")).toBe(
+      "app:announcement:read",
+    );
+  });
+
+  it("carries no deprecation headers (the /api/v1 successor does not exist)", () => {
+    expect(apiPathDetails("/api/app/announcements/")?.legacy).toBe(false);
+  });
+});
+
 describe("AppBookRequest route registry is fail-open-safe", () => {
   // Routes that are deliberately anonymous (pre-auth / config). The middleware
   // skips the /api/ auth block for any AppBookRequest path that is NOT an

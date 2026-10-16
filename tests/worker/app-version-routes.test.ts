@@ -11,7 +11,9 @@ import {
   saveRolloutRules,
 } from "@/server/app/version/config";
 import {resolveMinVersionForRequest} from "@/server/app/version/resolve";
+import {createLoginCredential} from "@/server/auth/login-credentials";
 import {requireAccountAccess, requireAppVersion} from "@/server/rbac/guard";
+import {permissionId} from "@/server/rbac/seed";
 import {
   deviceIdFromRequest,
   isDeviceRevoked,
@@ -43,6 +45,8 @@ async function reset(): Promise<void> {
     // 版本端点现在会写登录日志（需求 3 追加），任何调用它的用例都会留下行，
     // 所以每个用例前都要清干净，否则计数会跨用例累加。
     db.prepare("DELETE FROM ext_app_login_log"),
+    // `createLoginCredential` 有每用户数量上限，不清会撞 LoginCredentialLimitError。
+    db.prepare("DELETE FROM ext_login_credentials"),
     db.prepare('DELETE FROM "auth_user"'),
   ]);
 }
@@ -57,7 +61,48 @@ async function seedUser(id: string): Promise<void> {
     .run();
 }
 
-beforeEach(reset);
+// 2026-10-16：`GET /api/app/version` 不再匿名，要求登录凭证 + 权限码 `app:version:read`
+// （与 search-permission / mingci-permission 同形）。夹具照 `app-search-permission.test.ts`。
+const VERSION_USER = "u_app_version";
+const VERSION_CODE = "app:version:read";
+
+async function grantCode(userId: string, code: string): Promise<void> {
+  const roleId = `r_test_${userId}`;
+  await db.prepare("INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES (?, ?, ?)")
+    .bind(roleId, roleId, roleId)
+    .run();
+  await db.prepare("INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)")
+    .bind(userId, roleId)
+    .run();
+  // 复用 seed 的 id 公式，不在本文件重写第三份 `p_${code.replace(...)}`。
+  const permId = permissionId(code);
+  await db.prepare("INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES (?, ?, ?)")
+    .bind(permId, code, code)
+    .run();
+  await db.prepare("INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES (?, ?)")
+    .bind(roleId, permId)
+    .run();
+}
+
+/** 持 `app:version:read` 的凭证；`beforeEach` 里刷新。 */
+let bearer = "";
+
+/**
+ * 造一个带默认凭证的版本端点请求。签名与 `versionReq(init)` 同参，
+ * 所以调用点只改了函数名（见文件末尾的 `new Request(VERSION_URL…)` 全量替换）。
+ */
+function versionReq(init: RequestInit = {}): Request {
+  const headers = new Headers(init.headers);
+  headers.set("authorization", `Bearer ${bearer}`);
+  return new Request(VERSION_URL, {...init, headers});
+}
+
+beforeEach(async () => {
+  await reset();
+  await seedUser(VERSION_USER);
+  await grantCode(VERSION_USER, VERSION_CODE);
+  bearer = (await createLoginCredential(db, {name: "api", userId: VERSION_USER})).secret;
+});
 
 describe("app version configuration", () => {
   it("round-trips the singleton config row", async () => {
@@ -262,7 +307,7 @@ describe("public /api/app/version endpoint", () => {
       updateLog: "Changelog",
     });
     const response = await appVersionGet({
-      request: new Request(VERSION_URL, {headers: {"app-version": "1"}}),
+      request: versionReq({headers: {"app-version": "1"}}),
     } as never);
     expect(response.status).toBe(200);
     const body = await response.json() as Record<string, unknown>;
@@ -285,7 +330,7 @@ describe("public /api/app/version endpoint", () => {
       minVersionCode: 18,
     });
     const response = await appVersionGet({
-      request: new Request(VERSION_URL, {headers: {"app-version": "19"}}),
+      request: versionReq({headers: {"app-version": "19"}}),
     } as never);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({minVersionCode: 18});
@@ -294,7 +339,7 @@ describe("public /api/app/version endpoint", () => {
   it("reports force=true when the caller sends no app-version at all", async () => {
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 18});
     const response = await appVersionGet({
-      request: new Request(VERSION_URL),
+      request: versionReq(),
     } as never);
     expect(await response.json()).toMatchObject({force: true});
   });
@@ -306,13 +351,13 @@ describe("public /api/app/version endpoint", () => {
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
 
     const withoutHeader = await appVersionGet({
-      request: new Request(VERSION_URL),
+      request: versionReq(),
     } as never);
     expect(await withoutHeader.json()).toMatchObject({minVersionCode: 0});
 
     // 同一地板下，低于某个"假想地板"的版本号同样不该被强制。
     const withHeader = await appVersionGet({
-      request: new Request(VERSION_URL, {headers: {"app-version": "3"}}),
+      request: versionReq({headers: {"app-version": "3"}}),
     } as never);
     expect(await withHeader.json()).toMatchObject({minVersionCode: 0});
   });
@@ -486,23 +531,45 @@ describe("login log write point", () => {
   it("records one login per check, counting repeats", async () => {
     const check = () =>
       appVersionGet({
-        request: new Request(VERSION_URL, {headers: {"x-device-id": "dev-login"}}),
+        request: versionReq({headers: {"x-device-id": "dev-login"}}),
       } as never);
 
     await check();
     expect(await loginRows()).toEqual([
-      {deviceId: "dev-login", loginCount: 1, userId: null},
+      {deviceId: "dev-login", loginCount: 1, userId: VERSION_USER},
     ]);
 
     // 第二次检查：同一行累加，不新增行（每天 1 条不变）。
     await check();
     expect(await loginRows()).toEqual([
-      {deviceId: "dev-login", loginCount: 2, userId: null},
+      {deviceId: "dev-login", loginCount: 2, userId: VERSION_USER},
+    ]);
+  });
+
+  it("still logs an anonymous / invalid-credential startup with user_id null", async () => {
+    // 2026-10-16：登录日志的写入**刻意留在鉴权之前**（ADR-0023 §5）。这条日志要覆盖的正是
+    // 「凭证缺失 / 无效的启动」—— 那些请求随后会被 401 挡掉，但设备标识仍要留下，
+    // 否则「找出启动过的 App」会漏掉它们。放在鉴权之后就等于把目标人群排除在外。
+    const anonymous = await appVersionGet({
+      request: new Request(VERSION_URL, {headers: {"x-device-id": "dev-anon"}}),
+    } as never);
+    expect(anonymous.status).toBe(401);
+
+    const invalid = await appVersionGet({
+      request: new Request(VERSION_URL, {
+        headers: {"x-device-id": "dev-anon", authorization: "Bearer mflc_does_not_exist"},
+      }),
+    } as never);
+    expect(invalid.status).toBe(401);
+
+    // 两种失败共用同一台设备：同一条行，loginCount 累加，user_id 仍为 null。
+    expect(await loginRows()).toEqual([
+      {deviceId: "dev-anon", loginCount: 2, userId: null},
     ]);
   });
 
   it("records nothing without a device header", async () => {
-    await appVersionGet({request: new Request(VERSION_URL)} as never);
+    await appVersionGet({request: versionReq()} as never);
     expect(await loginRows()).toEqual([]);
   });
 
@@ -512,7 +579,7 @@ describe("login log write point", () => {
     await registerUserDevice(
       env.FEED_DB,
       "u-login",
-      new Request(VERSION_URL, {headers: {"x-device-id": "dev-reg"}}),
+      versionReq({headers: {"x-device-id": "dev-reg"}}),
     );
     expect(await loginRows()).toEqual([]);
   });

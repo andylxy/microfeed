@@ -5,9 +5,9 @@
  * `tests/unit/tcm-golden.test.ts` 里被比对，而该组在 CI 因 golden 快照不入 git
  * 整组跳过，等同零覆盖。本测试直接命中 14 个 `src/pages/api/AppBookRequest/*`
  * 路由处理器，锁定：
- *   - 13 个端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）；
- *   - GetTipsStyleConfig 故意发裸 `{styles:[...]}`（顶层字段，App 的
- *     StyleConfigApiBean 直接反序列化顶层 `styles`，不走信封拆包 —— 见 spec.md §6）。
+ *   - 14 个端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）。
+ *     2026-10-16（ADR-0028 D4）：GetTipsStyleConfig 此前是唯一例外（故意发裸 `{styles}`），
+ *     已改为同形 —— App 的声明 `HttpCallback<HttpData<…>>` 要信封，裸包实测解析失败。
  *
  * 数据用独立前缀 `rt*` 播种，afterEach 清理，与 tcm-app-reads.test.ts 互不干扰。
  */
@@ -85,7 +85,17 @@ beforeEach(async () => {
       JSON.stringify({
         title: "伤寒金匮・测试",
         description: "测试",
-        _microfeed: {author: "张仲景", chengShu: "汉", sourceImagePath: "Upload/a.jpg", case: "5"},
+        // `_microfeed.genre` 必须给：迁移 0113 的 `AFTER INSERT` 触发器会用
+        // `json_extract(NEW.data, '$._microfeed.genre')` 覆写 `genre` 列（JSON 是 SSOT、
+        // 列是镜像）。只写列不写 JSON ⇒ 列被覆盖成 NULL ⇒ `getAppNav` 的
+        // `ch.genre = c.id` JOIN 匹配不上，分类凭空消失（本测试曾因此失败）。
+        _microfeed: {
+          author: "张仲景",
+          chengShu: "汉",
+          sourceImagePath: "Upload/a.jpg",
+          case: "5",
+          genre: CAT,
+        },
       }),
       CAT,
     )
@@ -198,15 +208,24 @@ describe("TCM app route wire contract", () => {
   // GetAllMingCi 现已加服务端纵深防御（需 `app:mingci:view`），单独由
   // tests/worker/app-mingci-getall.test.ts 覆盖（含码 / 缺码 / 无凭证三类）。
 
-  it("GetTipsStyleConfig is deliberately BARE (top-level styles, NOT enveloped)", async () => {
+  it("GetTipsStyleConfig wraps the envelope and carries a server version", async () => {
+    // 2026-10-16（ADR-0028 D4）：本端点曾**故意**发裸 `{styles}` —— 旧注释称「App 用本地兜底、
+    // RequestHandler 对非 HttpData 不做拆包」。但 App 的实际声明是 `HttpCallback<HttpData<…>>`
+    // （要信封、会拆包），联调实测裸包 `Http request fail`。且 `enableStyleConfig` 长期为 false
+    // ⇒ 历史上没有任何已发布 App 真正调用过它，没有在野消费者 ⇒ 改成与其余端点同形。
     const res = await GetTipsStyleConfig.GET(ctx("/api/AppBookRequest/GetTipsStyleConfig"));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    // 关键：不走信封（无 code/msg），App 的 StyleConfigApiBean 直接读顶层 styles。
-    expect(body.code).toBeUndefined();
-    expect(body.msg).toBeUndefined();
-    expect(Array.isArray(body.styles)).toBe(true);
-    expect((body.styles as Array<unknown>).length).toBeGreaterThanOrEqual(13);
+    const body = (await res.json()) as {
+      code?: number;
+      msg?: string;
+      data?: {styles?: unknown[]; version?: number};
+    };
+    expect(body.code).toBe(200);
+    expect(body.msg).toBe("请求成功");
+    expect(Array.isArray(body.data?.styles)).toBe(true);
+    expect(body.data!.styles!.length).toBeGreaterThanOrEqual(13);
+    // 版本号 = MAX(updated_at_ms)，App 靠它判断手里的缓存是否最新（ADR-0028 D3）。
+    expect(typeof body.data!.version).toBe("number");
   });
 
   it("config endpoints (ProjectInfo/LoginInfo/AboutInfo/PicCaptcha) wrap the envelope", async () => {

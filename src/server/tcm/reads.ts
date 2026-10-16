@@ -811,7 +811,9 @@ export async function getAppStyleConfig(
   return withEmpty("getAppStyleConfig", async () => {
     const {results} = await db
       .prepare(
-        "SELECT code, title, color, small_font, small_font_scale, link_type " +
+        // `title` 刻意不选：它只是后台表格与编辑器工具栏的 UI 标签，
+        // 从不进渲染器。
+        "SELECT code, color, small_font, small_font_scale, link_type " +
           "FROM ext_annotation_markers " +
           "ORDER BY sort_order",
       )

@@ -91,6 +91,11 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // App 能力权限，不进菜单，由 group_other/unmapped 兜底组承接；运营在「角色管理」
   // 页挂到角色叶子即开放阅读页 `$g{名词解释}` 的底层名词数据（无权限时列表不加载）。
   {code: "app:mingci:view", name: "名词解释查看"},
+  // 版本升级 / 运营公告（2026-10-16，migration 0119）。与 app:search:* / app:mingci:view
+  // 同族：App 能力权限，不建菜单行、不进 ext_menu / ext_menu_permissions，
+  // 由 group_other/unmapped 兜底组承接。
+  {code: "app:version:read", name: "版本升级检查"},
+  {code: "app:announcement:read", name: "运营公告"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -101,6 +106,55 @@ export interface RbacRoleDef {
   permissions: string[];
 }
 
+// editor 的权限集。readonly 现在与 editor 相同（用户 2026-10-16 要求同步），故两者
+// 共用这份列表——若以后需要分化，把 readonly 拆成独立列表即可。各码理由见下方注释。
+const EDITOR_PERMISSIONS: readonly string[] = [
+  "content:book:read",
+  "content:book:update",
+  "content:book:create",
+  "content:category:read",
+  "content:category:update",
+  "content:volume:read",
+  "content:volume:update",
+  // Content menus bind `content:chapter:read` / `content:chapter:create`, so
+  // an editor without these cannot even see the item list or the import
+  // page. `content:chapter:update` was already required by the feed write
+  // path — without it an editor could not edit or add a chapter at all.
+  // `content:chapter:delete` is deliberately withheld.
+  "content:chapter:read",
+  "content:chapter:create",
+  "content:chapter:update",
+  // Pages and site files are content work; review, audit, channel settings
+  // and the API area stay admin-only.
+  "content:page:manage",
+  "content:site_file:manage",
+  // Annotation markers are content work: an editor's rich-text editor
+  // fetches the marker list (`:read`) to build its `$X{...}` toolbar
+  // buttons. Managing the list stays admin-only.
+  "content:annotation-markers:read",
+  // Fang (方剂) board is read-only on the page (rows link out to the item
+  // editor, which is gated by the generic item permissions): an editor can
+  // open it, but composition/status editing happens on the item page.
+  "content:fang:read",
+  "content:alias:read",
+  "content:alias:manage",
+  // 中药 / 名词 boards own their rows' identity + publishing state (add /
+  // rename / publish / soft-delete / restore), which is content work an
+  // editor already does on the item page — so it also gets the `manage`
+  // codes. The full body still opens in the item editor.
+  "content:yao:read",
+  "content:yao:manage",
+  "content:term:read",
+  "content:term:manage",
+  // App 自身要用的两个能力码（migration 0119）。与 `app:search:*` /
+  // `app:mingci:view` 不同 —— 那两个由运营按需手工授权，这两个**默认授予**：
+  // `/api/app/version` 是 App 每次启动的升级检查，`/api/app/announcements`
+  // 是运营公告通道；缺了它们，一个刚装好的 App 查不了升级、收不到公告，
+  // 而 App 的内置凭证（`SecurityConfig.getApiKey()`）用的正是这个角色。
+  "app:version:read",
+  "app:announcement:read",
+];
+
 export const RBAC_ROLES: RbacRoleDef[] = [
   {
     code: "super_admin",
@@ -110,69 +164,17 @@ export const RBAC_ROLES: RbacRoleDef[] = [
   {
     code: "editor",
     name: "编辑",
-    permissions: [
-      "content:book:read",
-      "content:book:update",
-      "content:book:create",
-      "content:category:read",
-      "content:category:update",
-      "content:volume:read",
-      "content:volume:update",
-      // Content menus bind `content:chapter:read` / `content:chapter:create`, so
-      // an editor without these cannot even see the item list or the import
-      // page. `content:chapter:update` was already required by the feed write
-      // path — without it an editor could not edit or add a chapter at all.
-      // `content:chapter:delete` is deliberately withheld.
-      "content:chapter:read",
-      "content:chapter:create",
-      "content:chapter:update",
-      // Pages and site files are content work; review, audit, channel settings
-      // and the API area stay admin-only.
-      "content:page:manage",
-      "content:site_file:manage",
-      // Annotation markers are content work: an editor's rich-text editor
-      // fetches the marker list (`:read`) to build its `$X{...}` toolbar
-      // buttons. Managing the list stays admin-only.
-      "content:annotation-markers:read",
-      // Fang (方剂) board is read-only on the page (rows link out to the item
-      // editor, which is gated by the generic item permissions): an editor can
-      // open it, but composition/status editing happens on the item page.
-      "content:fang:read",
-      "content:alias:read",
-      "content:alias:manage",
-      // 中药 / 名词 boards own their rows' identity + publishing state (add /
-      // rename / publish / soft-delete / restore), which is content work an
-      // editor already does on the item page — so it also gets the `manage`
-      // codes. The full body still opens in the item editor.
-      "content:yao:read",
-      "content:yao:manage",
-      "content:term:read",
-      "content:term:manage",
-    ],
+    permissions: [...EDITOR_PERMISSIONS],
   },
   {
-    // Read-only content role, seeded by migration 0043 and the default handed
-    // to a newly created account (see `DEFAULT_USER_ROLE`). Read codes only —
-    // no writes, no `*:manage`, no API grants.
+    // 默认角色（`DEFAULT_USER_ROLE`，新账号默认拿到）。2026-10-16 起与 editor 相同
+    // （用户要求同步）：不再只读，而是完整编辑权限（含内容写、manage、App 能力码）。
+    // 与 editor 共用 {@link EDITOR_PERMISSIONS}——若以后需要分化，拆成独立列表。
+    // 注：角色 code 仍是 `readonly`（历史遗留，r_readonly 被多处引用），但 name 已
+    // 改为「默认编辑」以反映实际权限。
     code: "readonly",
-    name: "只读",
-    permissions: [
-      "content:chapter:read",
-      "content:book:read",
-      "content:category:read",
-      // Fang list is read-only content work for a read-only account: it may
-      // open the dedicated board and inspect a prescription's composition, but
-      // not edit it (no `content:fang:update`).
-      "content:fang:read",
-      "content:alias:read",
-      "content:volume:read",
-      // 中药 / 名词 lists are read-only content work for a read-only account.
-      "content:term:read",
-      "content:yao:read",
-      // Without this the editor's marker-list fetch 403s and the account only
-      // ever sees the four seed buttons, never the live list (0069).
-      "content:annotation-markers:read",
-    ],
+    name: "默认编辑",
+    permissions: [...EDITOR_PERMISSIONS],
   },
 ];
 

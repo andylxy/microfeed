@@ -403,8 +403,11 @@ describe("RBAC catalog integrity", () => {
     // term boards are read-only too (rows link out to the item editor).
     // 21 since 0079 added `content:yao:manage` + `content:term:manage` — the
     // boards own their rows' identity / publishing state, which is content work.
+    // 23 since 0119/0120 added `app:version:read` + `app:announcement:read` —
+    // default-granted to the editor under the 运营管理 leaf (see migrations 0119
+    // seeding the codes and 0120 granting them to the editor).
     // Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(21);
+    expect(editorCount?.c).toBe(23);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -414,35 +417,28 @@ describe("RBAC catalog integrity", () => {
     expect(superAdminWildcard?.c).toBe(1);
   });
 
-  it("seeds the read-only role granted only content read codes", async () => {
+  it("grants readonly the same permissions as editor", async () => {
     const role = await env.FEED_DB.prepare(
       "SELECT code FROM ext_roles WHERE code = ?",
     ).bind(DEFAULT_USER_ROLE).first<{code: string}>();
     expect(role?.code).toBe(DEFAULT_USER_ROLE);
 
-    const grants = await env.FEED_DB.prepare(
-      "SELECT p.code AS code FROM ext_role_permissions rp " +
-        "JOIN ext_permissions p ON p.id = rp.permission_id " +
-        "WHERE rp.role_id = 'r_readonly' ORDER BY p.code",
-    ).all<{code: string}>();
-    expect((grants.results ?? []).map((row) => row.code)).toEqual([
-      // Alphabetical by code (the query orders by code). 0069 added the
-      // annotation-markers read code: the editor toolbar needs the live list.
-      // 0073 added `content:fang:read` — a read-only account may open the fang
-      // board and inspect a prescription, but not edit one.
-      // 0074 added `content:alias:read` — the alias board is a read-only mirror.
-      // 0077 added `content:term:read` + `content:yao:read` — the herb and term
-      // boards are read-only content work for a read-only account.
-      "content:alias:read",
-      "content:annotation-markers:read",
-      "content:book:read",
-      "content:category:read",
-      "content:chapter:read",
-      "content:fang:read",
-      "content:term:read",
-      "content:volume:read",
-      "content:yao:read",
-    ]);
+    const grantsFor = async (roleId: string): Promise<string[]> => {
+      const rows = await env.FEED_DB.prepare(
+        "SELECT p.code AS code FROM ext_role_permissions rp " +
+          "JOIN ext_permissions p ON p.id = rp.permission_id " +
+          "WHERE rp.role_id = ? ORDER BY p.code",
+      ).bind(roleId).all<{code: string}>();
+      return (rows.results ?? []).map((row) => row.code);
+    };
+    const readonly = await grantsFor("r_readonly");
+    const editor = await grantsFor("r_editor");
+    // 2026-10-16 起 readonly 与 editor 相同（用户要求同步；seed.ts 复用 editor 列表 +
+    // migration 0122 把 editor 授权复制给 readonly）。
+    expect(readonly).toEqual(editor);
+    expect(readonly).toContain("content:book:create");
+    expect(readonly).toContain("app:version:read");
+    expect(readonly).not.toContain("*");
   });
 });
 
@@ -469,8 +465,9 @@ describe("RBAC administration", () => {
     // `content:fang:read`; 16 since 0074 added `content:alias:read`; 17 since 0075
     // added `content:alias:manage`; 19 since 0077 added `content:yao:read` +
     // `content:term:read`; 21 since 0079 added `content:yao:manage` +
-    // `content:term:manage`.
-    expect(editor?.permissions).toHaveLength(21);
+    // `content:term:manage`; 23 since 0119/0120 added `app:version:read` +
+    // `app:announcement:read` (default-granted to editor under 运营管理 leaf).
+    expect(editor?.permissions).toHaveLength(23);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

@@ -21,6 +21,9 @@ const STYLES = [
   // 票 01：$a 按语与生产 ext_annotation_markers 一致——灰色小字、linkType=0。
   // 它代表一整类「有样式、无链接」的码（a/m/w/q/n/x/r/v/h/y）。
   {code: "a", color: "#808080", small_font: 1, small_font_scale: 0.7, link_type: 0},
+  // 票 02：非 f/u 的码。link_type=1 让 $z 也解析成中药链接 —— 「可链接码集合」
+  // 现在来自目录本身，而不是写死的 [fu] 扫描。
+  {code: "z", color: "#2a7", small_font: 0, small_font_scale: 0.7, link_type: 1},
 ];
 
 interface FangRow { id: string; data: any; }
@@ -278,6 +281,23 @@ describe("buildTcmMarkerLayer", () => {
     // Runtime HTML carries the dialog + handler.
     expect(layer.runtimeHtml).toContain('id="mf-tcm-dialog"');
     expect(layer.titleHtml).toBe("第九条");
+  });
+
+  it("links a code the catalogue marks linkable, with no code change", async () => {
+    // `$z` is neither `$u` nor `$f`: the linkable set now comes from the marker
+    // catalogue (link_type 1 = 中药, 2 = 方剂) instead of a hard-coded `[fu]`
+    // scan, so a marker added in the admin resolves without touching this file.
+    const yaoRows = [YAO("Y1", "1、桂枝", "桂枝正文。", [])];
+    const db = makeRealDb([], yaoRows);
+
+    const layer = await buildTcmMarkerLayer(db, {
+      bodyHtml: "<p>用 $z{桂枝} 治之。</p>",
+      title: "第一条",
+      currentBookId: "BOOK1",
+    });
+
+    expect(layer.bodyHtml).toContain('<a href="/i/Y1/"');
+    expect(Object.keys(popoverData(layer))).toEqual(["Y1"]);
   });
 
   it("falls back to plain content_html for non-TCM items", async () => {

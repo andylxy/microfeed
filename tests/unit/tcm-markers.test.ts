@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 
 import {
   hasTcmMarker,
+  MARKER_CODE_PATTERN,
   markersToPlainText,
   renderTcmMarkers,
   type TcmMarkerStyle,
@@ -137,5 +138,25 @@ describe("hasTcmMarker", () => {
   it("reports false for marker-free text", () => {
     expect(hasTcmMarker("太阳病，发热")).toBe(false);
     expect(hasTcmMarker("")).toBe(false);
+  });
+});
+
+describe("MARKER_CODE_PATTERN", () => {
+  it("accepts exactly the codes the parser can render", () => {
+    // The admin write layer validates new codes with this pattern. If it were
+    // wider than the parser, an operator could save a code that never renders —
+    // the body would keep the literal `$z1{…}` text. Assert the two agree by
+    // rendering each candidate and comparing the result with the pattern.
+    const candidates = [
+      "f", "u", "z", "yao", "Z",
+      "a_b", "z1", "1", "abcdefghij", "abcdefghijk",
+    ];
+    for (const code of candidates) {
+      const html = renderTcmMarkers(`$${code}{x}`, [
+        {code, color: "#000000", smallFont: false, linkType: 0},
+      ]);
+      const rendered = html.includes(`mf-mk-${code}"`);
+      expect([code, rendered]).toEqual([code, MARKER_CODE_PATTERN.test(code)]);
+    }
   });
 });

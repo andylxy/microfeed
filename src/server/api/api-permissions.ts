@@ -119,6 +119,22 @@ const DOMAIN_RULES: DomainRule[] = [
     read: "app:mobile:access",
     write: "app:mobile:access",
   },
+  // App 版本升级描述符端点（`GET /api/app/version`，spec §6.5）。门即权限码
+  // `app:version:read` 本身 —— 该码默认授予 editor 角色（migrations/0119 播种码、
+  // 0120 授予，属「运营管理」叶子结点下的默认授权）。端点的 `version.ts` 再用同一码
+  // 复核一次（防御纵深）。read-only，故 read/write 同码。
+  {
+    prefix: "app/version",
+    read: "app:version:read",
+    write: "app:version:read",
+  },
+  // App 运营公告端点（`GET /api/app/announcements`，DESIGN §5.3）。与 version 同构：
+  // 门即权限码 `app:announcement:read`，默认授予 editor 角色（migrations/0119 / 0120）。
+  {
+    prefix: "app/announcements",
+    read: "app:announcement:read",
+    write: "app:announcement:read",
+  },
 ];
 
 function requiredCode(rule: DomainRule, method: string): string {
