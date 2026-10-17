@@ -24,6 +24,9 @@ interface Props {
   bookId?: string;
   /** Whether a save can currently run (mirrors the editor's autosave phase). */
   disabled?: boolean;
+  /** 编辑器地址上的返回查询串（不带 `?`），互参链接带上它，点进另一条条目后
+   *  的返回链接才指得回同一个看板（ADR-0036）。 */
+  returnQuery?: string;
 }
 
 interface FangReference {
@@ -90,6 +93,7 @@ export default function FangEditor({
   disabled = false,
   fangName,
   onChange,
+  returnQuery,
   value,
 }: Props) {
   const {t} = useTranslation();
@@ -327,7 +331,7 @@ export default function FangEditor({
                       {index > 0 ? "、" : ""}
                       <a
                         className="text-primary hover:underline"
-                        href={ADMIN_URLS.editItem(reference.id)}
+                        href={ADMIN_URLS.editItem(reference.id, returnQuery)}
                       >
                         {reference.title || reference.id}
                       </a>

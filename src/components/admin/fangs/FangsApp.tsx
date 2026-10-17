@@ -8,8 +8,10 @@ import AdminPagination, {
   paginate,
 } from "@/components/admin/shared/AdminPagination";
 import {useTranslation} from "@/client/i18n";
+import {readBoardParam, writeBoardParams} from "@/client/ClientUrlUtils";
 import {STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
+import {adminReturnQuery} from "@/shared/AdminReturnTarget";
 import type {FangBoard, FangRow} from "@/shared/ExtVolume";
 
 interface CategoryOption {
@@ -40,11 +42,18 @@ export default function FangsApp({itemsPerPage}: Props) {
   const [books, setBooks] = useState<{id: string; title: string}[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [categoryId, setCategoryId] = useState("");
-  const [bookId, setBookId] = useState("");
+  const [bookId, setBookId] = useState(() => readBoardParam("bookId"));
   const [board, setBoard] = useState<FangBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+
+  // 选中的书存在地址里，刷新和返回都回到这本书；条目编辑页的返回链接也靠它
+  // 指回这个看板（ADR-0036）。
+  const selectBook = (id: string) => {
+    setBookId(id);
+    writeBoardParams({bookId: id});
+  };
 
   const load = useCallback(async (id: string, category = categoryId) => {
     setLoading(true);
@@ -119,7 +128,7 @@ export default function FangsApp({itemsPerPage}: Props) {
               : "text-muted-foreground"}`}
             onClick={() => {
               setCategoryId("");
-              setBookId("");
+              selectBook("");
             }}
             type="button"
           >
@@ -133,7 +142,7 @@ export default function FangsApp({itemsPerPage}: Props) {
               key={category.id}
               onClick={() => {
                 setCategoryId(category.id);
-                setBookId("");
+                selectBook("");
               }}
               type="button"
             >
@@ -154,7 +163,7 @@ export default function FangsApp({itemsPerPage}: Props) {
                 ? "border-primary text-primary"
                 : "text-muted-foreground"}`}
               key={book.id}
-              onClick={() => setBookId(book.id)}
+              onClick={() => selectBook(book.id)}
               type="button"
             >
               {book.title}
@@ -206,7 +215,11 @@ export default function FangsApp({itemsPerPage}: Props) {
                   >
                     <a
                       className="min-w-0 flex-1 truncate text-sm hover:underline"
-                      href={ADMIN_URLS.editItem(fang.id)}
+                      href={ADMIN_URLS.editItem(
+                        fang.id,
+                        // 让编辑页的返回链接指回这本书的方剂看板（ADR-0036）。
+                        adminReturnQuery("fangs", {bookId}),
+                      )}
                     >
                       {fang.name}
                     </a>

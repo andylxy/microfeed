@@ -10,8 +10,10 @@ import AdminPagination, {
 } from "@/components/admin/shared/AdminPagination";
 import {Button} from "@/components/ui/button";
 import {useTranslation} from "@/client/i18n";
+import {readBoardParam, writeBoardParams} from "@/client/ClientUrlUtils";
 import {STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
+import {adminReturnQuery} from "@/shared/AdminReturnTarget";
 import type {TcmEntryBoard, TcmEntryRow} from "@/shared/ExtVolume";
 
 interface TcmEntryResponse {
@@ -48,7 +50,7 @@ export default function TcmEntryBoardApp({
 }: Props) {
   const {t} = useTranslation();
   const [books, setBooks] = useState<{id: string; title: string}[]>([]);
-  const [bookId, setBookId] = useState("");
+  const [bookId, setBookId] = useState(() => readBoardParam("bookId"));
   const [board, setBoard] = useState<TcmEntryBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +98,13 @@ export default function TcmEntryBoardApp({
     setPage(0);
     void load(bookId, showDeleted);
   }, [bookId, showDeleted, load]);
+
+  // 选中的书存在地址里，刷新和返回都回到这本书；条目编辑页的返回链接也靠它
+  // 指回这个看板（ADR-0036）。
+  const selectBook = (id: string) => {
+    setBookId(id);
+    writeBoardParams({bookId: id});
+  };
 
   const mutate = useCallback(
     async (
@@ -247,7 +256,7 @@ export default function TcmEntryBoardApp({
                 ? "border-primary text-primary"
                 : "text-muted-foreground"}`}
               key={book.id}
-              onClick={() => setBookId(book.id)}
+              onClick={() => selectBook(book.id)}
               type="button"
             >
               {book.title}
@@ -367,7 +376,12 @@ export default function TcmEntryBoardApp({
                   >
                     <a
                       className="min-w-0 flex-1 truncate text-sm hover:underline"
-                      href={ADMIN_URLS.editItem(entry.id)}
+                      href={ADMIN_URLS.editItem(
+                        entry.id,
+                        // 让编辑页的返回链接指回这本书的看板（ADR-0036）。
+                        // 看板名就是 `kind`，与注册表里的 `yao` / `term` 同名。
+                        adminReturnQuery(kind, {bookId}),
+                      )}
                     >
                       {entry.name}
                     </a>

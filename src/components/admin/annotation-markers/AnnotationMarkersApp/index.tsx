@@ -7,7 +7,7 @@ import {Input} from "@/components/ui/input";
 import {cn} from "@/lib/utils";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
-import type {AnnotationMarker} from "@/server/admin/annotation-marker-handlers";
+import type {AnnotationMarker} from "@/shared/AnnotationMarker";
 
 interface Props {
   initialMarkers: AnnotationMarker[];

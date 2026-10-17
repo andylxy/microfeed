@@ -102,6 +102,9 @@ interface Props {
   feedContent: FeedContent;
   itemId?: string;
   onboardingResult: OnboardingResult;
+  /** 返回链接指向哪里：只有从自报家门的看板（`?from=…`）进来时才有值，
+   *  其余入口留空，仍回「全部条目」——见 `AdminReturnTarget`。 */
+  returnUrl?: string;
 }
 
 interface ItemSnapshot {
@@ -328,7 +331,9 @@ export default class EditItemApp extends React.Component<Props, any> {
         showToast(i18n.t('items.deleted'), 'success');
         this.setState({submitStatus: null}, () => {
           setTimeout(() => {
-            void navigate(ADMIN_URLS.allItems());
+            // 删除后回到进来时的看板（ADR-0036）：从卷看板进来的条目，删除后
+            // 回到那一卷；其余入口仍回「全部条目」。
+            void navigate(this.props.returnUrl ?? ADMIN_URLS.allItems());
           }, 1000);
         });
       })
@@ -484,6 +489,14 @@ export default class EditItemApp extends React.Component<Props, any> {
     };
   }
 
+  /** 返回链接的查询串（不带 `?`）。页面内的互参链接带上它，点进另一条条目后的
+   *  返回链接才指得回同一个看板（ADR-0036）。 */
+  private returnQuery(): string {
+    const url = this.props.returnUrl;
+    if (!url) return '';
+    return new URL(url, window.location.origin).search.replace(/^\?/u, '');
+  }
+
   render() {
     const t = i18n.t.bind(i18n);
     const {autosaveState, submitStatus, itemId, item, action, feed} = this.state;
@@ -607,6 +620,7 @@ export default class EditItemApp extends React.Component<Props, any> {
                 : undefined}
               disabled={autosaveState.phase === "saving"}
               fangName={String(item.title ?? "")}
+              returnQuery={this.returnQuery()}
               onChange={(next: FangYaoEntry[]) =>
                 this.onUpdateItemMicrofeedMeta('fangYaoList', next)}
               value={(microfeed.fangYaoList as unknown as FangYaoEntry[])}

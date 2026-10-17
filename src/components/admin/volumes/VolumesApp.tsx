@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
+import {readBoardParam, writeBoardParams} from "@/client/ClientUrlUtils";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import {Button} from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
 import {STATUSES} from "@/shared/Constants";
 import {ADMIN_URLS} from "@/shared/StringUtils";
+import {adminReturnQuery} from "@/shared/AdminReturnTarget";
 import type {
   VolumeBookOption,
   VolumeEntry,
@@ -48,26 +50,6 @@ function entryStatusLabelKey(status: number): string {
   return ENTRY_STATUS_LABEL_KEYS[status] ?? "items.statusUnpublished";
 }
 
-/** 地址里的展开态：`bookId` 选书，`volume` 选卷。 */
-function readLocationState(): {bookId: string; volume: string} {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    bookId: params.get("bookId") ?? "",
-    volume: params.get("volume") ?? "",
-  };
-}
-
-function writeLocationState(bookId: string, volume: string): void {
-  const params = new URLSearchParams(window.location.search);
-  if (bookId) params.set("bookId", bookId);
-  else params.delete("bookId");
-  if (volume) params.set("volume", volume);
-  else params.delete("volume");
-  const query = params.toString();
-  const url = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-  window.history.replaceState({}, "", url);
-}
-
 /**
  * Volume board: one book's volumes, and one volume's entries.
  *
@@ -85,8 +67,8 @@ export default function VolumesApp() {
   const [books, setBooks] = useState<VolumeBookOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [categoryId, setCategoryId] = useState("");
-  const [bookId, setBookId] = useState(() => readLocationState().bookId);
-  const [volumeKey, setVolumeKey] = useState(() => readLocationState().volume);
+  const [bookId, setBookId] = useState(() => readBoardParam("bookId"));
+  const [volumeKey, setVolumeKey] = useState(() => readBoardParam("volume"));
   const [volumeList, setVolumeList] = useState<VolumeList | null>(null);
   const [entries, setEntries] = useState<VolumeEntryList | null>(null);
   const [entriesLoading, setEntriesLoading] = useState(false);
@@ -175,9 +157,8 @@ export default function VolumesApp() {
   // 浏览器后退/前进改写了这两个查询参数时，跟着回到对应的那一卷。
   useEffect(() => {
     const onPopState = () => {
-      const state = readLocationState();
-      setBookId(state.bookId);
-      setVolumeKey(state.volume);
+      setBookId(readBoardParam("bookId"));
+      setVolumeKey(readBoardParam("volume"));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -186,13 +167,13 @@ export default function VolumesApp() {
   const selectBook = (id: string) => {
     setBookId(id);
     setVolumeKey("");
-    writeLocationState(id, "");
+    writeBoardParams({bookId: id, volume: ""});
   };
 
   const toggleVolume = (key: string) => {
     const next = volumeKey === key ? "" : key;
     setVolumeKey(next);
-    writeLocationState(bookId, next);
+    writeBoardParams({volume: next});
   };
 
   const post = useCallback(async (
@@ -298,6 +279,9 @@ export default function VolumesApp() {
               setCategoryId("");
               setBookId("");
               setVolumeKey("");
+              // 换分类同时清掉地址上的书与卷，否则刷新或后退会把人送回一本
+              // 已经被清掉的书。
+              writeBoardParams({bookId: "", volume: ""});
             }}
             type="button"
           >
@@ -313,6 +297,7 @@ export default function VolumesApp() {
                 setCategoryId(category.id);
                 setBookId("");
                 setVolumeKey("");
+                writeBoardParams({bookId: "", volume: ""});
               }}
               type="button"
             >
@@ -509,7 +494,16 @@ export default function VolumesApp() {
                                 </span>
                                 <a
                                   className="min-w-0 flex-1 truncate text-sm hover:underline"
-                                  href={ADMIN_URLS.editItem(entry.id)}
+                                  href={ADMIN_URLS.editItem(
+                                    entry.id,
+                                    // 把这一卷的展开态交给编辑页，它才能把返回链接指回这一卷
+                                    // （ADR-0036）。卷键原样透传：TCM 书的键是篇章 id，
+                                    // 从条目反推只能得到卷名。
+                                    adminReturnQuery("volumes", {
+                                      bookId,
+                                      volume: volumeKey,
+                                    }),
+                                  )}
                                 >
                                   {entry.title}
                                 </a>

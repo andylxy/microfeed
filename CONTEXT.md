@@ -120,6 +120,10 @@ _Avoid_: 分卷、册、目录章节（都不是本语境的单位）
 一个卷在接口上被指认的方式，两种书共用同一个 `key` 字段，所以前端不需要分辨书的种类：TCM 典籍是那行篇章的 11 字符 id，小说类书是 `_microfeed.volume` 里的卷名本身。卷改名不断链靠的是「卷键 = 篇章 id」这一条；小说类书没有篇章行，卷名就是它唯一的键，所以改卷名会让带着旧卷名的地址查不到卷（看板按「这本书没有这一卷」处理）。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
 _Avoid_: 卷 id（小说类书没有 id）、卷序号（序号会随中间插入新卷指错卷）
 
+**卷看板**：
+后台按书整理卷与条目的那一页（`/[adminPath]/volumes/`）：选书 → 列这本书的卷 → 展开一卷读它的条目。它的展开态（书 + 卷键）存在地址里，所以刷新、后退、把链接发给同事都回到同一卷；条目编辑页的返回目标也由它报出（[ADR-0036](docs/novel-cms/adr/0036-admin-editor-return-target.md)）。读取口径见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+_Avoid_: 目录（读者侧的「目录」指书页目录，是另一件事）、章节管理（页面名是「卷章管理」）
+
 **篇章**：
 TCM 典籍里承载卷的那一行 `items`（`tcm_kind = 'chapter'`）。它是实体、有 11 字符 id，卷名就是它的 `title`；条文靠 `tcm_parent_id` 挂在它下面。
 _Avoid_: 卷（在 TCM 书里二者同指，但「篇章」强调的是数据库里的那一行）

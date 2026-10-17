@@ -405,8 +405,12 @@ export const ADMIN_URLS = {
     urlJoin(baseUrl, adminUrl("", browserAdminPath())),
   editPrimaryChannel: () =>
     adminUrl("channels/primary", browserAdminPath()),
-  editItem: (itemId: any) =>
-    adminUrl(`items/${itemId}`, browserAdminPath()),
+  /** `query` 是裸查询串（不带 `?`），供那些在链接上自报家门的看板使用，
+   *  编辑器据此把返回链接指回去——见 `src/shared/AdminReturnTarget.ts`。 */
+  editItem: (itemId: any, query?: string) => {
+    const url = adminUrl(`items/${itemId}`, browserAdminPath());
+    return query ? `${url}?${query}` : url;
+  },
   newItem: (baseUrl: any = '/') =>
     urlJoin(baseUrl, adminUrl("items/new", browserAdminPath())),
   allItems: () => adminUrl("items/list", browserAdminPath()),

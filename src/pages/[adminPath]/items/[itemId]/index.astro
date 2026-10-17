@@ -3,6 +3,7 @@ import {env} from "cloudflare:workers";
 
 import {ADMIN_MENU_CODES, STATUSES, PERMISSION_CODES} from "@/shared/Constants";
 import {adminUrl} from "@/shared/AdminPath";
+import {resolveAdminReturnTarget} from "@/shared/AdminReturnTarget";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import EditItemApp from "@/components/admin/items/EditItemApp";
@@ -29,10 +30,26 @@ if (missing) {
 } else {
   loaded.content.item = item;
 }
+
+// 返回链接跟随来源（ADR-0036）：从卷看板点进来的条目回到那一卷，其余入口
+// 维持原来的「查看全部条目」。来源由看板在链接上自报，未知或残缺的来源
+// 一律退回默认目标，所以手改地址最多只是回到列表，不会被带到别处。
+const returnTarget = resolveAdminReturnTarget(
+  Astro.url.searchParams,
+  Astro.params.adminPath,
+);
+const breadcrumb = {
+  kind: "back" as const,
+  name: translate(
+    returnTarget?.labelKey ?? "menu.item.all_items",
+    adminLanguage,
+  ),
+  url: returnTarget?.url ?? adminUrl("items/list", Astro.params.adminPath),
+};
 ---
 
 <AdminShell
-  activeNavItem={ADMIN_MENU_CODES.ALL_ITEMS}
+  activeNavItem={returnTarget?.menuCode ?? ADMIN_MENU_CODES.ALL_ITEMS}
   documentTitle={missing
     ? translate("pageDocumentTitle.itemNotFound", adminLanguage)
     : `${translate("pageMessage.editItemTitle", adminLanguage, {id: itemId})} | microfeed.org`}
@@ -41,11 +58,7 @@ if (missing) {
   pageTitle={missing
     ? translate("pageTitle.itemNotFound", adminLanguage)
     : translate("pageTitle.editItem", adminLanguage)}
-  breadcrumb={{
-    kind: "back",
-    name: translate("menu.item.all_items", adminLanguage),
-    url: adminUrl("items/list", Astro.params.adminPath),
-  }}
+  breadcrumb={breadcrumb}
 >
   {
     missing ? (
@@ -58,6 +71,7 @@ if (missing) {
         client:only="react"
         feedContent={loaded.content}
         onboardingResult={loaded.onboarding}
+        returnUrl={returnTarget?.url}
         {itemId}
       >
         <AdminPageFallback slot="fallback" kind="form" />

@@ -6,7 +6,7 @@ import AnnotationMarkersApp, {
   colorInputValue,
   StyleFields,
 } from "@/components/admin/annotation-markers/AnnotationMarkersApp";
-import type {AnnotationMarker} from "@/server/admin/annotation-marker-handlers";
+import type {AnnotationMarker} from "@/shared/AnnotationMarker";
 
 const draft = {
   color: "rgba(0, 128, 255, 0.90)",

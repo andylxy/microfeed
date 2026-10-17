@@ -23,6 +23,7 @@
 import {env} from "cloudflare:workers";
 
 import type {APIRoute} from "astro";
+import type {AnnotationMarker} from "@/shared/AnnotationMarker";
 import {jsonResponse, localizedError} from "@/server/http";
 import {PERMISSION_CODES} from "@/shared/Constants";
 import {DEFAULT_SMALL_FONT_SCALE, MARKER_CODE_PATTERN} from "@/shared/TcmMarkers";
@@ -63,20 +64,6 @@ interface AnnotationMarkerRow {
   small_font: number;
   small_font_scale: number | null;
   link_type: number;
-}
-
-export interface AnnotationMarker {
-  id: string;
-  code: string;
-  title: string;
-  sortOrder: number;
-  /** CSS-ready colour: `#RRGGBB` or `rgba(...)`. */
-  color: string;
-  /** True when the marker renders at `smallFontScale`. */
-  smallFont: boolean;
-  /** Ratio applied when `smallFont` is set, e.g. `0.7` for 70%. */
-  smallFontScale: number;
-  linkType: number;
 }
 
 function toMarker(row: AnnotationMarkerRow): AnnotationMarker {

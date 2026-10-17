@@ -172,6 +172,13 @@ test('application page URLs always include a trailing slash', () => {
   expect(urls.every((url) => url.endsWith("/"))).toBe(true);
 });
 
+test('item editor URL carries the board query only when one is given', () => {
+  expect(ADMIN_URLS.editItem("abcdefghijk"))
+    .toBe("/admin/items/abcdefghijk/");
+  expect(ADMIN_URLS.editItem("abcdefghijk", "from=volumes&bookId=bk123456789"))
+    .toBe("/admin/items/abcdefghijk/?from=volumes&bookId=bk123456789");
+});
+
 test('literal file endpoints do not include a trailing slash', () => {
   expect(PUBLIC_URLS.jsonFeedOpenApiYaml()).toBe("/api/v1/openapi.yaml");
   expect(PUBLIC_URLS.jsonFeedOpenApiHtml()).toBe("/api/v1/");
