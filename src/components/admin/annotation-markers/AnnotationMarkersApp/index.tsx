@@ -193,7 +193,7 @@ export function StyleFields({draft, onChange, t}: StyleFieldProps) {
 
 /**
  * Admin screen for the annotation markers. The markers are the toolbar buttons
- * the wangEditor body editor turns into `$<code>{...}` wrappers, and the same
+ * the Markdown body editor inserts as `$<code>{...}` wrappers, and the same
  * catalogue is what the public pages paint those wrappers with — so the colour,
  * the reduced size (and its ratio) and the link type are all edited here rather
  * than in a migration. Changes take effect on the next page load, no redeploy.

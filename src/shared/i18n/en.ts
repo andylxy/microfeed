@@ -636,7 +636,7 @@ export const en = {
     visualEditor: "visual editor",
     htmlSource: "html source",
     markdownEditor: "Markdown",
-    wangEditor: "WangEditor",
+    annotationMarkerToolbar: "Annotation markers",
     // RichEditorMediaDialog
     insert: "Insert",
     r2UnavailableUseUrl: "File uploads are unavailable until R2 media storage is enabled. Use From URL instead.",

@@ -8,9 +8,9 @@
  * (`small_font_scale`) instead of the hard-coded 0.7.
  *
  * All of those are editable here, so the catalogue is configuration rather than
- * migration SQL. The wangEditor rich-text editor fetches the list on mount and
- * registers one toolbar button per row, so adding a marker needs no redeploy —
- * the next page load shows the new button.
+ * migration SQL. The Markdown body editor fetches the list on mount and shows
+ * one toolbar button per row, so adding a marker needs no redeploy — the next
+ * page load shows the new button.
  *
  * Permissions:
  *   - `content:annotation-markers:read`   — list (anyone who may edit content)

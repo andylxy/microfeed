@@ -635,7 +635,7 @@ export const zhCN: TranslationKey = {
     visualEditor: "可视化编辑器",
     htmlSource: "HTML 源码",
     markdownEditor: "Markdown 编辑器",
-    wangEditor: "WangEditor 编辑器",
+    annotationMarkerToolbar: "标注标记",
     // RichEditorMediaDialog
     insert: "插入",
     r2UnavailableUseUrl: "在启用 R2 媒体存储之前，文件上传不可用。请改用「从 URL 添加」。",

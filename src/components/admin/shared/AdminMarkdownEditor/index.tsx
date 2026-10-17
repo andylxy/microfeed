@@ -4,6 +4,11 @@ import AdminCodeEditor from "@/components/admin/shared/AdminCodeEditor";
 import EditorFormatToolbar from "@/components/admin/shared/EditorFormatToolbar";
 import {applyMarkdownAction, type EditorToolbarAction} from "@/client/markdownActions";
 import {useTranslation} from "@/client/i18n";
+import {
+  fetchAnnotationMarkers,
+  type MarkerConfig,
+  wrapWithMarker,
+} from "@/client/annotationMarkers";
 import {renderMarkdown} from "@/shared/BodyFormat";
 
 interface Props {
@@ -24,11 +29,25 @@ export default function AdminMarkdownEditor({
 }: Props) {
   const {t} = useTranslation();
   const [preview, setPreview] = useState(true);
+  const [markers, setMarkers] = useState<MarkerConfig[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   // Where the caret should land after an action. The textarea is owned by
   // AdminCodeEditor, so the selection is restored once the new value has been
   // rendered.
   const pendingSelection = useRef<{start: number; end: number} | null>(null);
+
+  // 标注标记工具栏：拉取后台标记列表（回退种子），提供一键插入 `$<code>{}`。
+  // 原由 wangEditor 提供，现迁移到 Markdown 编辑器，所有 Markdown 编辑场景通用。
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await fetchAnnotationMarkers();
+      if (!cancelled) setMarkers(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const findTextarea = (): HTMLTextAreaElement | null => (
     containerRef.current?.querySelector("textarea") ?? null
@@ -46,6 +65,22 @@ export default function AdminMarkdownEditor({
       textarea.selectionStart,
       textarea.selectionEnd,
       action,
+    );
+    pendingSelection.current = {
+      start: result.selectionStart,
+      end: result.selectionEnd,
+    };
+    onChange(result.value);
+  };
+
+  const onMarkerClick = (code: string) => {
+    const textarea = findTextarea();
+    if (!textarea) return;
+    const result = wrapWithMarker(
+      value,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      code,
     );
     pendingSelection.current = {
       start: result.selectionStart,
@@ -76,6 +111,26 @@ export default function AdminMarkdownEditor({
   return (
     <div className="admin-markdown-editor" ref={containerRef}>
       <EditorFormatToolbar onAction={onToolbarAction} />
+      {markers.length > 0 && (
+        <div
+          className="mb-2 flex flex-wrap gap-1 rounded-[10px] border bg-muted/40 p-1.5"
+          role="toolbar"
+          aria-label={t("shared.annotationMarkerToolbar")}
+        >
+          {markers.map((marker) => (
+            <button
+              aria-label={marker.title}
+              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
+              key={marker.code}
+              onClick={() => onMarkerClick(marker.code)}
+              title={marker.title}
+              type="button"
+            >
+              {marker.title}
+            </button>
+          ))}
+        </div>
+      )}
       <AdminCodeEditor
         ariaLabel={t("shared.markdownSourceAria")}
         code={value}
