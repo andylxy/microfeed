@@ -22,6 +22,15 @@ export interface FeedSettings {
   contentReview?: {
     enabled?: boolean;
   };
+  /**
+   * Item-editor section visibility toggles. `mediaPodcast` controls whether the
+   * media-file card (upload + external URL) and the podcast-fields card render
+   * on the dashboard item editor. Off by default: both cards stay hidden until
+   * an operator turns this on.
+   */
+  itemEditorSections?: {
+    mediaPodcast?: boolean;
+  };
   subscribeMethods?: {
     methods?: Array<{
       editable?: boolean;

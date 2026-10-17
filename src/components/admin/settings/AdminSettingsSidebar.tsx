@@ -3,6 +3,7 @@ import {
   ActivityIcon,
   ArrowLeftIcon,
   Code2Icon,
+  EyeIcon,
   GlobeIcon,
   HardDriveIcon,
   ImageIcon,
@@ -32,6 +33,7 @@ interface Props {
 const sectionIcons: Record<AdminSettingsSection["icon"], typeof ActivityIcon> = {
   activity: ActivityIcon,
   code: Code2Icon,
+  eye: EyeIcon,
   globe: GlobeIcon,
   image: ImageIcon,
   "list-checks": ListChecksIcon,

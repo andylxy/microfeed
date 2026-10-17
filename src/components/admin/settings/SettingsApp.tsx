@@ -9,6 +9,7 @@ import SiteSettingsApp, {
   SITE_TITLE_SUBMIT_KEY,
 } from "./SiteSettingsApp";
 import ContentReviewSettingsApp from "./ContentReviewSettingsApp";
+import ItemEditorSectionsSettingsApp from "./ItemEditorSectionsSettingsApp";
 import ItemsSettingsApp, {
   ITEMS_PER_PAGE_SUBMIT_KEY,
 } from "./ItemsSettingsApp";
@@ -204,6 +205,15 @@ export default class SettingsApp extends React.Component<Props, any> {
             feed={feed}
             onSubmit={this.onSubmit}
             setChanged={() => this.setChanged(ITEMS_PER_PAGE_SUBMIT_KEY)}
+          />
+        </section>
+        <section className="scroll-mt-6" id="item-editor-sections">
+          <ItemEditorSectionsSettingsApp
+            submitting={submitting}
+            submitForType={submitForType}
+            feed={feed}
+            onSubmit={this.onSubmit}
+            setChanged={() => this.setChanged(SETTINGS_CATEGORIES.ITEM_EDITOR_SECTIONS)}
           />
         </section>
         <section className="scroll-mt-6" id="favicon">

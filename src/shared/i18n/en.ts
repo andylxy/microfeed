@@ -228,6 +228,13 @@ export const en = {
     subscribeMethods: "Subscribe methods",
     mediaFileStorage: "Media file storage",
     itemsSettings: "Items settings",
+    // Item editor sections
+    itemEditorSections: "Item editor sections",
+    itemEditorSectionsDescription: "Whether the item editor shows the media-file and podcast-fields cards.",
+    itemEditorSectionsOff: "Hidden (default)",
+    itemEditorSectionsOffDescription: "Both cards stay hidden on the editor; their fields keep saving and stay readable, and you can turn this on anytime.",
+    itemEditorSectionsOn: "Shown",
+    itemEditorSectionsOnDescription: "The editor shows the media-file card (upload + external URL) and the podcast-fields card.",
     favicon: "Favicon",
     // Site
     site: "Site title",

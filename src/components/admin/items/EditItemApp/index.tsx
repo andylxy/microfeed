@@ -488,6 +488,10 @@ export default class EditItemApp extends React.Component<Props, any> {
     const t = i18n.t.bind(i18n);
     const {autosaveState, submitStatus, itemId, item, action, feed} = this.state;
     const microfeed = (item._microfeed as Record<string, unknown>) || {};
+    // 媒体文件与播客专属字段两块的显示由设置开关控制
+    // （settings.itemEditorSections.mediaPodcast，后台「设置 → 条目编辑区块」）；
+    // 未配置时默认隐藏，两块不渲染，字段数据与保存路径保持不变。
+    const showMediaPodcast = feed.settings?.itemEditorSections?.mediaPodcast === true;
     const {onboardingResult} = this.props;
     const deleting = submitStatus === SUBMIT_STATUS__START;
     const {mediaFile} = item;
@@ -506,6 +510,7 @@ export default class EditItemApp extends React.Component<Props, any> {
     return (<AdminPageApp>
       <form className="grid grid-cols-1 gap-4 xl:grid-cols-12" onSubmit={this.onSubmit}>
         <div className="grid grid-cols-1 gap-4 xl:col-span-9">
+          {showMediaPodcast && (
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <MediaManager
               labelComponent={<AdminHelpLabel help={CONTROLS_TEXTS_DICT[ITEM_CONTROLS.MEDIA_FILE]}/>}
@@ -523,6 +528,7 @@ export default class EditItemApp extends React.Component<Props, any> {
               }}
             />
           </div>
+          )}
           {/* 章节信息排在条目图片之前（用户要求，2026-09-25）。 */}
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <h2 className="text-lg font-semibold">{t('items.novelFields')}</h2>
@@ -746,6 +752,7 @@ export default class EditItemApp extends React.Component<Props, any> {
               <p className="mt-2 text-xs text-muted-foreground">{t('items.tcmPocketHint')}</p>
             </div>
           </div>
+          {showMediaPodcast && (
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
             <details>
               <summary className="m-page-summary">{t('items.podcastFields')}</summary>
@@ -826,6 +833,7 @@ export default class EditItemApp extends React.Component<Props, any> {
               </div>
             </details>
           </div>
+          )}
         </div>
         <div className="xl:col-span-3">
           <div className="grid gap-4 xl:sticky xl:top-4">

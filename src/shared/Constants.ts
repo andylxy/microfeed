@@ -15,6 +15,7 @@ export const SETTINGS_CATEGORIES = {
   ACCESS: 'access',
   API_SETTINGS: 'apiSettings',
   CONTENT_REVIEW: 'contentReview',
+  ITEM_EDITOR_SECTIONS: 'itemEditorSections',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;

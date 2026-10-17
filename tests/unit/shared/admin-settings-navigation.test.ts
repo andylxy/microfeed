@@ -23,6 +23,7 @@ describe("admin settings navigation", () => {
       ["subscribe-methods", "settings.subscribeMethods", "rss"],
       ["media-file-storage", "settings.mediaFileStorage", "storage"],
       ["items-settings", "settings.itemsSettings", "list"],
+      ["item-editor-sections", "settings.itemEditorSections", "eye"],
       ["favicon", "settings.favicon", "image"],
       ["site", "settings.site", "globe"],
     ]);

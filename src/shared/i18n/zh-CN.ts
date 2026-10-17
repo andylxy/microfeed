@@ -227,6 +227,13 @@ export const zhCN: TranslationKey = {
     subscribeMethods: "订阅方式",
     mediaFileStorage: "媒体文件存储",
     itemsSettings: "条目设置",
+    // 条目编辑区块
+    itemEditorSections: "条目编辑区块",
+    itemEditorSectionsDescription: "控制后台条目编辑页是否显示媒体文件与播客专属字段两组卡片。",
+    itemEditorSectionsOff: "隐藏（默认）",
+    itemEditorSectionsOffDescription: "编辑页不显示这两组卡片；字段数据与保存路径保持不变，随时可开启。",
+    itemEditorSectionsOn: "显示",
+    itemEditorSectionsOnDescription: "编辑页显示媒体文件卡片（含上传与外部 URL）与播客专属字段卡片。",
     favicon: "网站图标",
     // Site
     site: "站点标题",

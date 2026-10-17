@@ -513,15 +513,12 @@ describe("admin editor autosave", () => {
     );
   });
 
-  it("saves ordinary item radio changes when the form is submitted", async () => {
+  it("keeps saving hidden podcast metadata when the form is submitted", async () => {
+    // 播客字段 UI 默认隐藏（settings.itemEditorSections.mediaPodcast 未开启），
+    // 数据保存路径保持可用：写入 itunes 字段后提交仍可保存。
     const app = mount(new EditItemApp(props()));
-    const explicitControl = findElement(
-      app.render(),
-      (element) => element.type === AdminRadioGroup &&
-        element.props.name === "lh-explicit",
-    );
 
-    explicitControl?.props.onValueChange("yes");
+    app.onUpdateItemMeta({"itunes:explicit": true});
     await app.onSubmit({preventDefault: vi.fn()});
 
     expect(Requests.axiosPost).toHaveBeenCalledOnce();

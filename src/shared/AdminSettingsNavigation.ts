@@ -37,6 +37,11 @@ export const ADMIN_SETTINGS_SECTIONS = [
     nameKey: "settings.itemsSettings",
   },
   {
+    icon: "eye",
+    id: "item-editor-sections",
+    nameKey: "settings.itemEditorSections",
+  },
+  {
     icon: "image",
     id: "favicon",
     nameKey: "settings.favicon",
