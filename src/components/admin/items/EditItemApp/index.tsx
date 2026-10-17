@@ -4,7 +4,7 @@ import {Trash2Icon} from "lucide-react";
 import {navigate} from 'astro:transitions/client';
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
 import AdminInput from "@/components/admin/shared/AdminInput";
-import AdminTextarea from "@/components/admin/shared/AdminTextarea";
+import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
 import Requests from "@/client/requests";
 import {
   randomShortUUID,
@@ -725,24 +725,20 @@ export default class EditItemApp extends React.Component<Props, any> {
                 }}
               />
             </div>
-            {/* 条文注文（App GetChapterContent 接口字段，ADR-0029）：原样存取，清空写空串 */}
+            {/* 条文注文（App GetChapterContent 接口字段，ADR-0029 / ADR-0032）：
+                原样存取，清空写空串；编辑器升级为 Markdown（含 TCM 互参标记），
+                数据仍为逐字字符串，沿用 ADR-0029 的存取约定。 */}
             <div className="mt-8 pt-8 border-t">
-              <AdminTextarea
-                label={t('items.tcmNoteLabel')}
-                maxRows={20}
-                minRows={8}
-                placeholder={t('items.tcmNotePlaceholder')}
+              <div className="mb-2 font-semibold">{t('items.tcmNoteLabel')}</div>
+              <AdminMarkdownEditor
                 value={typeof microfeed.note === "string" ? microfeed.note : ""}
-                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('note', e.target.value)}
+                onChange={(value: string) => this.onUpdateItemMicrofeedMeta('note', value)}
               />
               <div className="mt-4">
-                <AdminTextarea
-                  label={t('items.tcmVideoLabel')}
-                  maxRows={12}
-                  minRows={4}
-                  placeholder={t('items.tcmVideoPlaceholder')}
+                <div className="mb-2 font-semibold">{t('items.tcmVideoLabel')}</div>
+                <AdminMarkdownEditor
                   value={typeof microfeed.videoMemo === "string" ? microfeed.videoMemo : ""}
-                  onChange={(e: any) => this.onUpdateItemMicrofeedMeta('videoMemo', e.target.value)}
+                  onChange={(value: string) => this.onUpdateItemMicrofeedMeta('videoMemo', value)}
                 />
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t('items.tcmPocketHint')}</p>

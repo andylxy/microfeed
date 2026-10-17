@@ -3,7 +3,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 import Requests from "@/client/requests";
 import EditItemApp from "@/components/admin/items/EditItemApp";
-import AdminTextarea from "@/components/admin/shared/AdminTextarea";
+import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
 import {STATUSES} from "@/shared/Constants";
 
 vi.mock("@/client/ToastUtils", () => ({showToast: vi.fn()}));
@@ -16,6 +16,10 @@ vi.mock("@/components/admin/shared/AdminRichEditor", () => ({
 }));
 vi.mock("@/components/admin/items/EditItemApp/components/MediaManager", () => ({
   default: () => null,
+}));
+vi.mock("@/components/admin/shared/AdminMarkdownEditor", () => ({
+  default: ({value, onChange}: any) =>
+    React.createElement("div", {"data-editor": "markdown", value, onChange}),
 }));
 
 const mountedComponents: React.Component[] = [];
@@ -30,17 +34,14 @@ function useSynchronousState(component: React.Component<any, any>) {
   }) as typeof component.setState;
 }
 
-function findElement(
-  value: React.ReactNode,
-  predicate: (element: React.ReactElement<any>) => boolean,
-): React.ReactElement<any> | undefined {
-  for (const child of React.Children.toArray(value)) {
+function findMarkdownEditors(root: React.ReactNode): React.ReactElement<any>[] {
+  const found: React.ReactElement<any>[] = [];
+  for (const child of React.Children.toArray(root)) {
     if (!React.isValidElement<any>(child)) continue;
-    if (predicate(child)) return child;
-    const nested = findElement(child.props.children, predicate);
-    if (nested) return nested;
+    if (child.type === AdminMarkdownEditor) found.push(child);
+    found.push(...findMarkdownEditors(child.props.children));
   }
-  return undefined;
+  return found;
 }
 
 function feed(item?: Record<string, unknown>) {
@@ -74,18 +75,15 @@ function mount<T extends React.Component<any, any>>(component: T): T {
   return component;
 }
 
-function noteTextarea(app: EditItemApp) {
-  return findElement(
-    app.render(),
-    (element) => element.type === AdminTextarea && element.props.minRows === 8,
-  );
+// 注文卡片里恰好两个 AdminMarkdownEditor（note 在前、videoMemo 在后）；描述用
+// AdminRichEditor，不进入本查找。「渲染两个编辑器」用例断言 length===2，将来他处若
+// 也引入 AdminMarkdownEditor，会先在那一用例失败，不会让这两个下标静默错位。
+function noteEditor(app: EditItemApp) {
+  return findMarkdownEditors(app.render())[0];
 }
 
-function videoMemoTextarea(app: EditItemApp) {
-  return findElement(
-    app.render(),
-    (element) => element.type === AdminTextarea && element.props.minRows === 4,
-  );
+function videoMemoEditor(app: EditItemApp) {
+  return findMarkdownEditors(app.render())[1];
 }
 
 beforeEach(() => {
@@ -118,17 +116,17 @@ afterEach(() => {
 });
 
 describe("TCM section annotation fields (note / videoMemo)", () => {
-  it("shows both annotation textareas on the new-item form", () => {
+  it("shows both annotation Markdown editors on the new-item form", () => {
     // The new-item page runs the same component in create mode, where the
     // _microfeed pocket does not exist yet. The fields must still render —
     // a pocket-key condition would hide them on the one page that was asked
     // for them by name.
     const app = mount(new EditItemApp(props()));
+    const editors = findMarkdownEditors(app.render());
 
-    expect(noteTextarea(app)).toBeDefined();
-    expect(noteTextarea(app)?.props.value).toBe("");
-    expect(videoMemoTextarea(app)).toBeDefined();
-    expect(videoMemoTextarea(app)?.props.value).toBe("");
+    expect(editors.length).toBe(2);
+    expect(editors[0]?.props.value).toBe("");
+    expect(editors[1]?.props.value).toBe("");
   });
 
   it("prefills the stored note and videoMemo when editing a section", () => {
@@ -142,14 +140,14 @@ describe("TCM section annotation fields (note / videoMemo)", () => {
       itemId: "tcmsec0001",
     }));
 
-    expect(noteTextarea(app)?.props.value).toBe("旧注文");
-    expect(videoMemoTextarea(app)?.props.value).toBe("旧备注");
+    expect(noteEditor(app)?.props.value).toBe("旧注文");
+    expect(videoMemoEditor(app)?.props.value).toBe("旧备注");
   });
 
   it("saves an edited note into the _microfeed pocket verbatim", async () => {
     const app = mount(new EditItemApp(props()));
 
-    noteTextarea(app)?.props.onChange({target: {value: "新注文"}});
+    noteEditor(app)?.props.onChange("新注文");
     await app.onSubmit({preventDefault: vi.fn()});
 
     expect(Requests.axiosPost).toHaveBeenCalledOnce();
@@ -157,6 +155,30 @@ describe("TCM section annotation fields (note / videoMemo)", () => {
       expect.objectContaining({
         item: expect.objectContaining({
           _microfeed: expect.objectContaining({note: "新注文"}),
+        }),
+      }),
+    );
+  });
+
+  it("writes an empty string into the pocket when an annotation field is cleared", async () => {
+    const app = mount(new EditItemApp({
+      ...props({
+        _microfeed: {note: "旧注文", videoMemo: "旧备注"},
+        id: "tcmsec0001",
+        status: STATUSES.PUBLISHED,
+        title: "辨太阳病脉证并治",
+      }),
+      itemId: "tcmsec0001",
+    }));
+
+    noteEditor(app)?.props.onChange("");
+    await app.onSubmit({preventDefault: vi.fn()});
+
+    expect(Requests.axiosPost).toHaveBeenCalledOnce();
+    expect(vi.mocked(Requests.axiosPost).mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({
+          _microfeed: expect.objectContaining({note: ""}),
         }),
       }),
     );
