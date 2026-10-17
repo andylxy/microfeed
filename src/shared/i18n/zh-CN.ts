@@ -1284,6 +1284,12 @@ export const zhCN: TranslationKey = {
     bookId: "归属书本",
     bookIdPlaceholder: "选择本章所属的书籍",
     noBook: "未归属（不归类）",
+    // 条文注文（TCM section 专用，App GetChapterContent 接口字段，ADR-0029）
+    tcmNoteLabel: "注释",
+    tcmNotePlaceholder: "保存在 _microfeed.note，App 端 note 字段原样下发",
+    tcmVideoLabel: "附注",
+    tcmVideoPlaceholder: "保存在 _microfeed.videoMemo，App 端 sectionvideo 字段原样下发",
+    tcmPocketHint: "两者对应移动端接口的 note 与 sectionvideo 字段。改动不参与 App 缓存签名（签名仅含正文），将随下一次正文修改一起生效；清空保存后 App 收到 null。",
     // 方剂组成编辑器（tcm_kind='fang' 条目专用）
     fangEditorTitle: "药味组成",
     fangEditorIntro: "方剂条目的组成保存在 _microfeed.fangYaoList 中，App 端 GetBookIdFang 按此返回。选择药名会自动写入中药条目 ID；保存后其余口袋字段不受影响。",

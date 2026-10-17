@@ -1285,6 +1285,12 @@ export const en = {
     bookId: "Belongs to book",
     bookIdPlaceholder: "Pick the book this chapter belongs to",
     noBook: "Not assigned (uncategorized)",
+    // Section annotations (TCM sections only; App GetChapterContent contract fields, ADR-0029)
+    tcmNoteLabel: "Note",
+    tcmNotePlaceholder: "Stored in _microfeed.note; sent verbatim as the App's note field",
+    tcmVideoLabel: "Video memo",
+    tcmVideoPlaceholder: "Stored in _microfeed.videoMemo; sent verbatim as the App's sectionvideo field",
+    tcmPocketHint: "These map to the App's note and sectionvideo fields. Edits do not take part in the App cache signature (text only), so they reach the App with the next body edit; clearing and saving sends null.",
     // Fang composition editor (tcm_kind='fang' items only)
     fangEditorTitle: "Ingredients",
     fangEditorIntro: "A formula's ingredients live in _microfeed.fangYaoList, which the App's GetBookIdFang reads. Picking a herb writes its item ID; saving leaves the other pocket fields untouched.",

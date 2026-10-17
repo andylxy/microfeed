@@ -4,6 +4,7 @@ import {Trash2Icon} from "lucide-react";
 import {navigate} from 'astro:transitions/client';
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
 import AdminInput from "@/components/admin/shared/AdminInput";
+import AdminTextarea from "@/components/admin/shared/AdminTextarea";
 import Requests from "@/client/requests";
 import {
   randomShortUUID,
@@ -721,6 +722,28 @@ export default class EditItemApp extends React.Component<Props, any> {
                   mediaStorageReady,
                 }}
               />
+            </div>
+            {/* 条文注文（App GetChapterContent 接口字段，ADR-0029）：原样存取，清空写空串 */}
+            <div className="mt-8 pt-8 border-t">
+              <AdminTextarea
+                label={t('items.tcmNoteLabel')}
+                maxRows={20}
+                minRows={8}
+                placeholder={t('items.tcmNotePlaceholder')}
+                value={typeof microfeed.note === "string" ? microfeed.note : ""}
+                onChange={(e: any) => this.onUpdateItemMicrofeedMeta('note', e.target.value)}
+              />
+              <div className="mt-4">
+                <AdminTextarea
+                  label={t('items.tcmVideoLabel')}
+                  maxRows={12}
+                  minRows={4}
+                  placeholder={t('items.tcmVideoPlaceholder')}
+                  value={typeof microfeed.videoMemo === "string" ? microfeed.videoMemo : ""}
+                  onChange={(e: any) => this.onUpdateItemMicrofeedMeta('videoMemo', e.target.value)}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{t('items.tcmPocketHint')}</p>
             </div>
           </div>
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
