@@ -144,7 +144,7 @@
 ### src/server/ 顶层目录白名单
 
 - 判断理由：`src/server/` 顶层原有 23 项（18 目录 + 5 文件），其中 4 个是按特性命名的 `app-*` 目录，把共享层（`cache/`、`auth/`、`api/`）和领域层混在同一级。2026-10-12 重排把四个 `app-*` 特性收入 `src/server/app/{announcement,permission,version}/`、`tcm/app-cache.ts` 移入 `cache/`，顶层变为 20 项（15 目录 + 5 文件）。新增功能若继续开新顶层目录，会重新把共享层淹没在特性目录里。
-- 门禁：`scripts/check-server-layout.ts` 维护 20 项白名单。新增任何顶层项必须同时修改脚本白名单，否则 `yarn layout:check` 失败。
+- 门禁：`scripts/check-server-layout.ts` 维护 21 项白名单（2026-10-18 新增 `cloud-usage`）。新增任何顶层项必须同时修改脚本白名单，否则 `yarn layout:check` 失败。
 
 ### 新增端点登记
 

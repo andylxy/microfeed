@@ -2,6 +2,7 @@ import {useEffect, useMemo, useState} from "react";
 import {
   ActivityIcon,
   ArrowLeftIcon,
+  CloudIcon,
   Code2Icon,
   EyeIcon,
   GlobeIcon,
@@ -32,6 +33,7 @@ interface Props {
 
 const sectionIcons: Record<AdminSettingsSection["icon"], typeof ActivityIcon> = {
   activity: ActivityIcon,
+  cloud: CloudIcon,
   code: Code2Icon,
   eye: EyeIcon,
   globe: GlobeIcon,

@@ -34,6 +34,9 @@ const WHITELIST = new Set([
   "app",
   "auth",
   "cache",
+  // Cloudflare 使用情况看板（D1 / R2 / Workers 只读转发）的限额常量、R2 操作分级、
+  // Token 密文存取与官方接口客户端。2026-10-18 新增，与 `webhooks` 先例同为特性目录。
+  "cloud-usage",
   "feed",
   "items",
   "media",

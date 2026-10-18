@@ -1,0 +1,38 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import CloudUsageApp from "@/components/admin/cloud-usage/CloudUsageApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// Guarded with the same code its menu row binds (`system:cloud-usage:read`,
+// migration 0123). The board is read-only, so there is no `:manage` gate.
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_CLOUD_USAGE_READ,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.CLOUD_USAGE}
+  documentTitle={translate("pageDocumentTitle.cloudUsage", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.cloudUsage", adminLanguage)}
+>
+  <CloudUsageApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </CloudUsageApp>
+</AdminShell>

@@ -20,6 +20,7 @@ describe("admin settings navigation", () => {
       ["tracking-urls", "settings.trackingUrls", "activity"],
       ["access-control", "settings.accessControl", "shield"],
       ["content-review", "settings.contentReview", "list-checks"],
+      ["cloudflare-token", "settings.cloudflareToken", "cloud"],
       ["subscribe-methods", "settings.subscribeMethods", "rss"],
       ["media-file-storage", "settings.mediaFileStorage", "storage"],
       ["items-settings", "settings.itemsSettings", "list"],

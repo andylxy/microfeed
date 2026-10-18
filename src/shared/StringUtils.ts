@@ -518,6 +518,12 @@ export const ADMIN_URLS = {
   ajaxAnnouncements: () => adminUrl("ajax/announcements", browserAdminPath()),
   ajaxAnnouncementsSave: () =>
     adminUrl("ajax/announcements/save", browserAdminPath()),
+  /** Cloudflare 使用情况看板：一次打开取一份快照（三分区）。 */
+  cloudUsage: () => adminUrl("cloud-usage", browserAdminPath()),
+  ajaxCloudUsage: () => adminUrl("ajax/cloud-usage", browserAdminPath()),
+  /** Cloudflare API Token：GET 状态 / POST 保存 / DELETE 清除。 */
+  ajaxCloudUsageToken: () =>
+    adminUrl("ajax/cloud-usage/token", browserAdminPath()),
   ajaxReview: () => adminUrl("ajax/review", browserAdminPath()),
   ajaxReviewItem: (id: string) =>
     adminUrl(`ajax/review/${id}`, browserAdminPath()),

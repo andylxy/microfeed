@@ -17,6 +17,13 @@ const axiosGet = (
   return axios.get(url, config);
 };
 
+const axiosDelete = (
+  url: any,
+  config: AxiosRequestConfig = {},
+) => {
+  return axios.delete(url, config);
+};
+
 const deleteImage = (
   imageUrl: string,
   target?: ImageMetadataTarget,
@@ -85,6 +92,7 @@ function uploadFile(file: any, cdnFilename: any, onProgress: any, onUploaded: an
 const Requests = {
   axiosPost,
   axiosGet,
+  axiosDelete,
   deleteImage,
   upload: uploadFile,
 };

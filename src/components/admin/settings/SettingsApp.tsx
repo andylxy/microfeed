@@ -9,6 +9,7 @@ import SiteSettingsApp, {
   SITE_TITLE_SUBMIT_KEY,
 } from "./SiteSettingsApp";
 import ContentReviewSettingsApp from "./ContentReviewSettingsApp";
+import CloudflareTokenSettingsApp from "./CloudflareTokenSettingsApp";
 import ItemEditorSectionsSettingsApp from "./ItemEditorSectionsSettingsApp";
 import ItemsSettingsApp, {
   ITEMS_PER_PAGE_SUBMIT_KEY,
@@ -179,6 +180,9 @@ export default class SettingsApp extends React.Component<Props, any> {
             onSubmit={this.onSubmit}
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.CONTENT_REVIEW)}
           />
+        </section>
+        <section className="scroll-mt-6" id="cloudflare-token">
+          <CloudflareTokenSettingsApp />
         </section>
         <section className="scroll-mt-6" id="subscribe-methods">
           <SubscribeSettingsApp

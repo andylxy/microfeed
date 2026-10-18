@@ -41,7 +41,12 @@ async function encryptionKey(secret: string): Promise<CryptoKey> {
   ]);
 }
 
-export async function encryptWebhookSecret(
+/**
+ * AES-GCM 封装（通用）。D1 里的一切秘密都走这一份实现：webhook 签名 secret
+ * 与 Cloudflare API Token。函数名里的 `Webhook` 是历史遗留（首个使用者），
+ * 对外的通用名是 {@link encryptSecret} / {@link decryptSecret}。
+ */
+async function seal(
   plaintext: string,
   encryptionSecret: string,
 ): Promise<string> {
@@ -58,16 +63,18 @@ export async function encryptWebhookSecret(
   });
 }
 
-export async function decryptWebhookSecret(
+/** {@link seal} 的反向操作；`unsupportedKey` 是该调用方自己的错误文案键。 */
+async function open(
   encrypted: string,
   encryptionSecret: string,
+  unsupportedKey: string,
 ): Promise<string> {
   const parsed = JSON.parse(encrypted) as Record<string, unknown>;
   if (
     parsed.version !== 1 || typeof parsed.iv !== "string" ||
     typeof parsed.ciphertext !== "string"
   ) {
-    throw new AppError("errors.webhook.unsupportedSecretFormat");
+    throw new AppError(unsupportedKey);
   }
   const plaintext = await crypto.subtle.decrypt(
     {name: "AES-GCM", iv: arrayBuffer(base64UrlDecode(parsed.iv))},
@@ -75,6 +82,42 @@ export async function decryptWebhookSecret(
     arrayBuffer(base64UrlDecode(parsed.ciphertext)),
   );
   return textDecoder.decode(plaintext);
+}
+
+export async function encryptWebhookSecret(
+  plaintext: string,
+  encryptionSecret: string,
+): Promise<string> {
+  return seal(plaintext, encryptionSecret);
+}
+
+export async function decryptWebhookSecret(
+  encrypted: string,
+  encryptionSecret: string,
+): Promise<string> {
+  return open(encrypted, encryptionSecret, "errors.webhook.unsupportedSecretFormat");
+}
+
+/**
+ * 通用秘密加密（Cloudflare API Token 等）。与 {@link encryptWebhookSecret} 同一份
+ * 实现，独立命名是为了让新调用方读起来名实相符。
+ */
+export async function encryptSecret(
+  plaintext: string,
+  encryptionSecret: string,
+): Promise<string> {
+  return seal(plaintext, encryptionSecret);
+}
+
+/**
+ * 通用秘密解密。密文形状不认识时抛 `errors.cloudUsage.unsupportedSecretFormat`
+ * ——调用方据此把「解不开」与「没配置」区分成两种引导态。
+ */
+export async function decryptSecret(
+  encrypted: string,
+  encryptionSecret: string,
+): Promise<string> {
+  return open(encrypted, encryptionSecret, "errors.cloudUsage.unsupportedSecretFormat");
 }
 
 export function generateWebhookSecret(): string {

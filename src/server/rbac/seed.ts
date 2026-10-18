@@ -96,6 +96,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // 由 group_other/unmapped 兜底组承接。
   {code: "app:version:read", name: "版本升级检查"},
   {code: "app:announcement:read", name: "运营公告"},
+  // Cloudflare 使用情况看板（migration 0123）。只读运维看板，一个码覆盖 D1 / R2 /
+  // Workers 三个分区；只授 super_admin（拍板 B1），不进 EDITOR_PERMISSIONS。
+  // Mirror of PERMISSION_CODES in src/shared/Constants.ts.
+  {code: "system:cloud-usage:read", name: "Cloudflare 用量查看"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];

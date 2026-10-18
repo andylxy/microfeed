@@ -207,6 +207,7 @@ export const ADMIN_MENU_CODES = {
   APP_VERSIONS: 'app_versions',
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
+  CLOUD_USAGE: 'cloud_usage',
 } as const;
 
 /**
@@ -290,6 +291,10 @@ export const PERMISSION_CODES = {
   // 而它用的内置凭证（SecurityConfig.getApiKey()）正是这个角色。
   APP_VERSION_READ: 'app:version:read',
   APP_ANNOUNCEMENT_READ: 'app:announcement:read',
+  // Cloudflare 使用情况看板（migration 0123）。只读运维看板单码：一个码覆盖
+  // D1 / R2 / Workers 三个分区，与 `SYSTEM_LOGIN_LOG_READ` 同族。挂在
+  // group_operations（0089）的 `cloud_usage` 菜单行上，只授 super_admin。
+  SYSTEM_CLOUD_USAGE_READ: 'system:cloud-usage:read',
   WILDCARD: '*',
 } as const;
 

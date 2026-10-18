@@ -22,6 +22,11 @@ export const ADMIN_SETTINGS_SECTIONS = [
     nameKey: "settings.contentReview",
   },
   {
+    icon: "cloud",
+    id: "cloudflare-token",
+    nameKey: "settings.cloudflareToken",
+  },
+  {
     icon: "rss",
     id: "subscribe-methods",
     nameKey: "settings.subscribeMethods",
