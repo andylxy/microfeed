@@ -175,9 +175,9 @@ export const en = {
       review: "Review",
       site: "Site",
     },
-    // Labels for the icon picker on the menu admin page (ADR-0007): one key per
-    // name in MENU_ICON_NAMES (`src/shared/MenuIconNames.ts`). Dash-containing
-    // names stay quoted so the key shape mirrors zh-CN exactly.
+    // Labels for the icon picker on the menu admin page: one key per name in
+    // MENU_ICON_NAMES (`src/shared/MenuIconNames.ts`). Dash-containing names stay
+    // quoted so the key shape mirrors zh-CN exactly.
     icon: {
       activity: "Activity",
       blocks: "Blocks",

@@ -146,7 +146,7 @@ export default function AdminMenuItemLink({
   const hasChildren = children.length > 0;
   const containsActive = hasActiveDescendant(item);
   // 服务端快照同取 store：本组件只经 client:only 上岛，真服务端渲染走不到；
-  // 服务端没有 window 时 store 恒为空集合，快照恒 false，与写死 false 等价。
+  // 服务端没有 window 时 store 恒为空集合，快照恒 false，与默认 false 等价。
   const open = useSyncExternalStore(
     subscribeMenuState,
     () => isMenuCodeOpen(item.id),
@@ -209,7 +209,7 @@ export default function AdminMenuItemLink({
         <span className="min-w-0 flex-1">{label}</span>
       </button>
       {open && (
-        <ul className="mt-1 grid gap-1 border-l border-sidebar-border pl-3">
+        <ul className="mt-1 grid gap-1 border-l border-sidebar-border pl-4">
           {children.map((child) => (
             <AdminMenuItemLink
               depth={depth + 1}
