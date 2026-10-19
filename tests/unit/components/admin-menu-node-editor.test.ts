@@ -6,6 +6,8 @@ import "@/client/i18n";
 import {
   MenuGroupCreator,
   MenuNodeEditor,
+  menuIconNoneDisabled,
+  menuParentCandidates,
   type MenuGroupDraft,
 } from "@/components/admin/menu/MenuNodeEditor";
 import type {MenuRow} from "@/components/admin/menu/MenuTreeNode";
@@ -146,18 +148,48 @@ describe("MenuNodeEditor", () => {
       row({code: "mm_child", id: "mm_child", parentCode: "mm_custom", path: "", permissionCode: null, sort: 1, deletable: true}),
     ];
     // 编辑 mm_custom 时，候选里不能有它自己，也不能有它的后代 mm_child。
-    const html = renderEditor(
-      row({code: "mm_custom", id: "mm_custom", parentCode: "group_content", path: "", permissionCode: null, sort: 203, deletable: true}),
-      rows,
+    const codes = menuParentCandidates(rows, "mm_custom").map(
+      (entry) => entry.code,
     );
-    // 父级下拉是唯一带 max-w-40 的 select；React 把 defaultValue 渲染成 option 的 selected。
-    // option 文本是生效名（单测语言固定 en，走 i18n 回退）：group_content → Content；
-    // value 属性仍是 code，所以被排除的行连 value 属性都不该出现。
-    const selectStart = html.indexOf("max-w-40");
-    const selectBlock = html.slice(selectStart, selectStart + 800);
-    expect(selectBlock).toContain(">Content<");
-    expect(selectBlock).not.toContain('value="mm_custom"');
-    expect(selectBlock).not.toContain('value="mm_child"');
+    expect(codes).toContain("group_content");
+    expect(codes).not.toContain("mm_custom");
+    expect(codes).not.toContain("mm_child");
+  });
+
+  it("shows the selected parent and icon in the AdminSelect value area", () => {
+    // AdminSelect 的选项列表只在弹出层渲染（portal），静态渲染查选中态：
+    // `data-slot="admin-select-value"` 里是生效名（en 回退）与图标标签；
+    // select 的 value 语义仍是 code，服务端 parentCode / icon 收到的值不变。
+    const html = renderEditor(row());
+    expect(html).toContain('data-slot="admin-select-value"');
+    expect(html).toContain(">Content<");
+    expect(html).toContain(">Book<");
+    expect(html).toContain('aria-label="Parent"');
+    expect(html).toContain('aria-label="Icon"');
+  });
+
+  it("locks the no-icon choice on page rows", () => {
+    // 页面行（path 非空）不允许清空图标；分组行可以没有图标。
+    expect(menuIconNoneDisabled(row())).toBe(true);
+    expect(menuIconNoneDisabled(row({path: ""}))).toBe(false);
+    // 分组行当前无图标时，选中态是「无图标」。
+    const group = renderEditor(
+      row({code: "group_content", i18nKey: "menu.item.group_content", id: "m_group_content", icon: null, parentCode: null, path: "", permissionCode: null, sort: 200}),
+    );
+    expect(group).toContain(">No icon<");
+  });
+
+  it("shows the built-in default names in the empty name inputs", () => {
+    const html = renderEditor(row());
+    // 空的自定义名输入框：placeholder 带「默认：」前缀与内置默认名。前缀是界面
+    // 提示用语、跟随查看者的界面语言；默认名是该列的数据、按列的语言取——
+    // 中文名列显示中文默认名，英文名列显示英文默认名（单测语言固定 en）。
+    expect(html).toContain('placeholder="Default: 书籍"');
+    expect(html).toContain('placeholder="Default: Books"');
+    // 有自定义名时输入框带值（placeholder 属性仍在 DOM 里，但值非空时浏览器不显示）。
+    const custom = renderEditor(row({nameEn: "Custom", nameZh: "自定义名"}));
+    expect(custom).toContain('value="自定义名"');
+    expect(custom).toContain('value="Custom"');
   });
 });
 
@@ -181,11 +213,16 @@ describe("MenuGroupCreator", () => {
     expect(html).toContain("Top level");
   });
 
-  it("lists every existing row as a parent candidate", () => {
-    const html = renderCreator({...draft, parentCode: "group_content"});
-    // option 文本是生效名（单测语言固定 en，走 i18n 回退）；value 属性仍是 code。
-    expect(html).toContain(">Content<");
-    expect(html).toContain(">Books<");
-    expect(html).toContain(">Volume board<");
+  it("offers every existing row as a parent candidate", () => {
+    // 选项列表只在弹出层渲染（portal）；逐行把 draft.parentCode 设为该行 code，
+    // 选中态能渲染出它的生效名即证明它在候选里（候选里没有就 find 不到、不渲染值）。
+    const cases: [string, string][] = [
+      ["group_content", "Content"],
+      ["books", "Books"],
+      ["volumes", "Volume board"],
+    ];
+    for (const [parentCode, label] of cases) {
+      expect(renderCreator({...draft, parentCode})).toContain(`>${label}<`);
+    }
   });
 });

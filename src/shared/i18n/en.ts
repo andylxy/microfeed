@@ -219,13 +219,14 @@ export const en = {
   menuAdmin: {
     title: "Menu management",
     intro:
-      "Rename, reorder, hide, re-parent and group the admin navigation. Page paths and permission codes stay locked.",
+      "Rename, reorder, hide, re-parent and group the admin navigation. The Chinese and English names are custom display names; leave either empty to use the built-in default. Page paths and permission codes stay locked.",
     emptyBoard: "There are no menu rows yet.",
     effectiveName: "Effective name",
     nameZh: "Chinese name",
     nameEn: "English name",
     nameZhPlaceholder: "Chinese name",
     nameEnPlaceholder: "English name",
+    nameDefault: "Default: ",
     icon: "Icon",
     iconNone: "No icon",
     parent: "Parent",

@@ -1,8 +1,10 @@
 import {useEffect, useState} from "react";
 
+import AdminSelect, {type AdminSelectOption} from "@/components/admin/shared/AdminSelect";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
+import {menuRowLabelKey} from "@/shared/AdminNavigation";
 import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
 import {menuDescendantCodes, type MenuUpdatePatch} from "@/shared/MenuAdminOps";
@@ -15,6 +17,7 @@ import {
 /**
  * 名称输入：受控 + 失焦提交。局部 state 承接输入，值变化时回填；
  * 「恢复默认」清空库名后输入框必须跟着清空，所以非受控 defaultValue 不适用。
+ * 高度用 Input 默认的 `h-10`，与 AdminSelect 的 `min-h-10` 齐高。
  */
 export function MenuNameInput({
   disabled,
@@ -33,7 +36,7 @@ export function MenuNameInput({
   }, [value]);
   return (
     <Input
-      className="h-8 w-full min-w-24 text-sm"
+      className="w-full min-w-24 text-sm"
       disabled={disabled}
       maxLength={64}
       onBlur={() => {
@@ -61,6 +64,21 @@ export interface MenuNodeEditorProps {
 }
 
 /**
+ * 父级候选：排除自身与自身后代——把行挂到自己下面会成环，挂到后代下面会让
+ * 归属关系错乱。新建分组没有「自身」，`MenuGroupCreator` 直接收全部行。
+ */
+export function menuParentCandidates(rows: MenuRow[], code: string): MenuRow[] {
+  const excluded = menuDescendantCodes(rows, code);
+  excluded.add(code);
+  return rows.filter((candidate) => !excluded.has(candidate.code));
+}
+
+/** 页面行的图标不允许清空：`path` 非空即页面行，「无图标」入口对它禁用。 */
+export function menuIconNoneDisabled(row: MenuRow): boolean {
+  return row.path !== "";
+}
+
+/**
  * 右栏节点详情面板（v4）：树行里搬过来的全部编辑能力都在这里。
  *
  * 外壳与头部对齐 rbac 右栏（`RbacApp/index.tsx` L406–497）：`section` 由管理页提供，
@@ -81,7 +99,7 @@ export function MenuNodeEditor({
   row,
   rows,
 }: MenuNodeEditorProps) {
-  const {t} = useTranslation();
+  const {t, i18n} = useTranslation();
 
   // 同层兄弟序列里自己的位置，决定上/下移按钮禁用态（与服务端 move 同口径）。
   const siblings = childrenOf(rows, row.parentCode ?? "");
@@ -91,8 +109,36 @@ export function MenuNodeEditor({
 
   const label = menuRowEffectiveLabel(row, language, t);
   const hasCustomName = Boolean(row.nameZh || row.nameEn);
-  // 父级候选排除自身与自身后代（与树行内旧版同口径）。
-  const descendants = menuDescendantCodes(rows, row.code);
+
+  // 内置默认名按各自列的语言取：中文名框显示中文默认名、英文名框显示英文默认名，
+  // 与查看者当前界面语言无关——两个框各自说明自己这一列的默认值。
+  const defaultNameZh = i18n.getFixedT("zh-CN")(menuRowLabelKey(row.code));
+  const defaultNameEn = i18n.getFixedT("en")(menuRowLabelKey(row.code));
+
+  const iconOptions: AdminSelectOption[] = [
+    // 分组可以没有图标；页面行已带图标时不给「无图标」入口，没带时给但禁用
+    // （页面行的图标不允许清空，与旧版下拉同口径）。
+    ...(row.path === "" || row.icon === null
+      ? [{label: t("menuAdmin.iconNone"), value: ""}]
+      : []),
+    ...MENU_ICON_NAMES.map((name) => ({
+      label: t(`menu.icon.${name}`),
+      value: name,
+    })),
+  ];
+  const iconValue =
+    iconOptions.find((option) => option.value === (row.icon ?? "")) ?? null;
+
+  const parentOptions: AdminSelectOption[] = [
+    {label: t("menuAdmin.parentNone"), value: ""},
+    ...menuParentCandidates(rows, row.code).map((candidate) => ({
+      label: menuRowEffectiveLabel(candidate, language, t),
+      value: candidate.code,
+    })),
+  ];
+  const parentValue =
+    parentOptions.find((option) => option.value === (row.parentCode ?? "")) ??
+    null;
 
   return (
     <>
@@ -159,7 +205,7 @@ export function MenuNodeEditor({
           <MenuNameInput
             disabled={busy}
             onCommit={(next) => onField(row, {nameZh: next})}
-            placeholder={t("menuAdmin.nameZhPlaceholder")}
+            placeholder={`${t("menuAdmin.nameDefault")}${defaultNameZh}`}
             value={row.nameZh}
           />
         </label>
@@ -168,59 +214,38 @@ export function MenuNodeEditor({
           <MenuNameInput
             disabled={busy}
             onCommit={(next) => onField(row, {nameEn: next})}
-            placeholder={t("menuAdmin.nameEnPlaceholder")}
+            placeholder={`${t("menuAdmin.nameDefault")}${defaultNameEn}`}
             value={row.nameEn}
           />
         </label>
         <label className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center sm:gap-4">
           <span className="text-muted-foreground">{t("menuAdmin.icon")}</span>
-          <select
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            defaultValue={row.icon ?? ""}
+          <AdminSelect
+            ariaLabel={t("menuAdmin.icon")}
             disabled={busy}
-            key={row.icon ?? ""}
-            onChange={(event) => onField(row, {icon: event.target.value || null})}
-          >
-            {(row.path === "" || row.icon === null) && (
-              <option disabled={row.path !== ""} value="">
-                {t("menuAdmin.iconNone")}
-              </option>
-            )}
-            {MENU_ICON_NAMES.map((name) => (
-              <option key={name} value={name}>
-                {t(`menu.icon.${name}`)}
-              </option>
-            ))}
-          </select>
+            isOptionDisabled={(option) =>
+              option.value === "" && menuIconNoneDisabled(row)
+            }
+            onChange={(option) => onField(row, {icon: option.value || null})}
+            options={iconOptions}
+            value={iconValue}
+          />
         </label>
         <label className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center sm:gap-4">
           <span className="text-muted-foreground">{t("menuAdmin.parent")}</span>
-          <select
-            className="h-8 max-w-40 rounded-md border bg-background px-2 text-sm"
-            defaultValue={row.parentCode ?? ""}
+          <AdminSelect
+            ariaLabel={t("menuAdmin.parent")}
             disabled={busy}
-            key={row.parentCode ?? ""}
-            onChange={(event) => {
-              const next = event.target.value || null;
-              if (!confirmPageParent(next)) {
-                event.target.value = row.parentCode ?? "";
-                return;
-              }
+            onChange={(option) => {
+              const next = option.value || null;
+              // 受控控件：确认被拒时不发 op，值仍由 row.parentCode 派生，
+              // 下拉自动保持原值（旧版原生 select 需要手动回写 DOM）。
+              if (!confirmPageParent(next)) return;
               onField(row, {parentCode: next});
             }}
-          >
-            <option value="">{t("menuAdmin.parentNone")}</option>
-            {rows
-              .filter(
-                (candidate) =>
-                  !descendants.has(candidate.code) && candidate.code !== row.code,
-              )
-              .map((candidate) => (
-                <option key={candidate.code} value={candidate.code}>
-                  {menuRowEffectiveLabel(candidate, language, t)}
-                </option>
-              ))}
-          </select>
+            options={parentOptions}
+            value={parentValue}
+          />
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -299,6 +324,20 @@ export function MenuGroupCreator({
   rows: MenuRow[];
 }) {
   const {t} = useTranslation();
+  // 新建分组没有「无图标」入口：草稿默认带 `list` 图标，与旧版下拉同口径。
+  const creatorIconOptions: AdminSelectOption[] = MENU_ICON_NAMES.map(
+    (name) => ({
+      label: t(`menu.icon.${name}`),
+      value: name,
+    }),
+  );
+  const creatorParentOptions: AdminSelectOption[] = [
+    {label: t("menuAdmin.parentNone"), value: ""},
+    ...rows.map((row) => ({
+      label: menuRowEffectiveLabel(row, language, t),
+      value: row.code,
+    })),
+  ];
   return (
     <>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -334,31 +373,31 @@ export function MenuGroupCreator({
             placeholder={t("menuAdmin.nameEnPlaceholder")}
             value={draft.nameEn}
           />
-          <select
-            className="rounded-md border bg-background px-3 py-2 text-sm"
-            disabled={busy}
-            onChange={(event) => onDraftChange({icon: event.target.value})}
-            value={draft.icon}
-          >
-            {MENU_ICON_NAMES.map((name) => (
-              <option key={name} value={name}>
-                {t(`menu.icon.${name}`)}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded-md border bg-background px-3 py-2 text-sm"
-            disabled={busy}
-            onChange={(event) => onDraftChange({parentCode: event.target.value})}
-            value={draft.parentCode}
-          >
-            <option value="">{t("menuAdmin.parentNone")}</option>
-            {rows.map((row) => (
-              <option key={row.code} value={row.code}>
-                {menuRowEffectiveLabel(row, language, t)}
-              </option>
-            ))}
-          </select>
+          <div className="w-36">
+            <AdminSelect
+              ariaLabel={t("menuAdmin.icon")}
+              disabled={busy}
+              onChange={(option) => onDraftChange({icon: option.value})}
+              options={creatorIconOptions}
+              placeholder={t("menuAdmin.icon")}
+              value={
+                creatorIconOptions.find(({value}) => value === draft.icon) ?? null
+              }
+            />
+          </div>
+          <div className="w-44">
+            <AdminSelect
+              ariaLabel={t("menuAdmin.parent")}
+              disabled={busy}
+              onChange={(option) => onDraftChange({parentCode: option.value})}
+              options={creatorParentOptions}
+              value={
+                creatorParentOptions.find(
+                  ({value}) => value === draft.parentCode,
+                ) ?? null
+              }
+            />
+          </div>
         </div>
         <div className="flex gap-2">
           <Button disabled={busy} onClick={onSubmit} size="xs" type="button">
