@@ -233,6 +233,7 @@ export const en = {
     reparentToPageConfirm:
       "Menu row {{code}} is a page. Rows with children only expand and no longer link anywhere, so its own sidebar entry would disappear. Move it under this page anyway?",
     visible: "Visibility",
+    hiddenBadge: "Hidden",
     show: "Show",
     hide: "Hide",
     order: "Order",
@@ -253,6 +254,8 @@ export const en = {
     cancel: "Cancel",
     lockedHint:
       "Paths and permission codes are maintained by migrations, so every menu entry keeps agreeing with its page guard.",
+    pathReadonly: "Path (read-only)",
+    permissionCodeReadonly: "Permission code (read-only)",
     searchPlaceholder: "Search by code or name",
     treeRoot: "Menu permissions",
     expandAll: "Expand all",
