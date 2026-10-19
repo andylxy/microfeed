@@ -242,12 +242,9 @@ export const en = {
     deleteConfirm:
       "Delete menu row {{code}}? Only rows created on this page can be deleted.",
     createGroup: "New group",
-    createGroupTitle: "Create a group",
     createGroupHint:
       "Groups are pure headings (no path, no permission code). Only groups created here can be deleted; migration-seeded rows can only be hidden.",
     codePlaceholder: "Group code (letters, digits, underscore)",
-    groupTag: "Group",
-    publicEntry: "Public",
     exportSql: "Export SQL",
     exportFailed: "Could not export the menu snapshot.",
     loadFailed: "Could not load the menu rows.",
@@ -262,7 +259,6 @@ export const en = {
     collapseAll: "Collapse all",
     addChildGroup: "Add sub-group",
     dragHandle: "Drag to reorder",
-    dragToReorder: "Drag a row onto another to reorder or nest it.",
     toggleBranch: "Toggle {{name}}",
     moveUp: "Move up one row",
     moveDown: "Move down one row",
