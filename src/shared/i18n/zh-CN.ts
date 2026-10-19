@@ -252,8 +252,8 @@ export const zhCN: TranslationKey = {
     addChildGroup: "加子分组",
     dragHandle: "拖拽排序",
     toggleBranch: "展开或折叠 {{name}}",
-    moveUp: "上移到上一行",
-    moveDown: "下移到下一行",
+    moveUp: "上移",
+    moveDown: "下移",
     noResults: "没有菜单行匹配你的搜索。",
   },
   forbidden: {

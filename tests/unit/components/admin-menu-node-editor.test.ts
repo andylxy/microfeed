@@ -95,12 +95,12 @@ describe("MenuNodeEditor", () => {
   it("gates the move buttons at the sibling edges", () => {
     // books 是 group_content 的第一个子节点：上移禁用、下移可用。
     const first = renderEditor(row());
-    expect(first).toMatch(/<button[^>]*disabled=""[^>]*>\s*Move up one row/u);
-    expect(first).not.toMatch(/<button[^>]*disabled=""[^>]*>\s*Move down one row/u);
+    expect(first).toMatch(/<button[^>]*disabled=""[^>]*>\s*Move up/u);
+    expect(first).not.toMatch(/<button[^>]*disabled=""[^>]*>\s*Move down/u);
     // volumes 是最后一个子节点：下移禁用、上移可用。
     const last = renderEditor(row({code: "volumes", i18nKey: "menu.item.volumes", id: "m_volumes", sort: 202}));
-    expect(last).not.toMatch(/<button[^>]*disabled=""[^>]*>\s*Move up one row/u);
-    expect(last).toMatch(/<button[^>]*disabled=""[^>]*>\s*Move down one row/u);
+    expect(last).not.toMatch(/<button[^>]*disabled=""[^>]*>\s*Move up/u);
+    expect(last).toMatch(/<button[^>]*disabled=""[^>]*>\s*Move down/u);
   });
 
   it("shows delete only on self-created rows", () => {

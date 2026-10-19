@@ -259,8 +259,8 @@ export const en = {
     addChildGroup: "Add sub-group",
     dragHandle: "Drag to reorder",
     toggleBranch: "Toggle {{name}}",
-    moveUp: "Move up one row",
-    moveDown: "Move down one row",
+    moveUp: "Move up",
+    moveDown: "Move down",
     noResults: "No menu rows match your search.",
   },
   forbidden: {
