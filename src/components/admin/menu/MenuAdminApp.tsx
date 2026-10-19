@@ -14,8 +14,6 @@ import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
   type MenuAdminOp,
-  type MenuAdminRowWithMeta,
-  type MenuUpdatePatch,
 } from "@/shared/MenuAdminOps";
 import {
   childrenOf,
@@ -35,15 +33,6 @@ interface MenuRowsResponse {
   error?: string;
   rows?: MenuRow[];
 }
-
-/** patch 的键 → 行字段名（`isVisible` 在行上叫 `visible`）。 */
-const PATCH_TO_ROW_KEY: Record<keyof MenuUpdatePatch, keyof MenuAdminRowWithMeta> = {
-  icon: "icon",
-  isVisible: "visible",
-  nameEn: "nameEn",
-  nameZh: "nameZh",
-  parentCode: "parentCode",
-};
 
 /**
  * 菜单管理页（票 03 骨架 + 票 04 编辑 + 票 05 图标名文案 + 树形改造）。
@@ -73,6 +62,8 @@ export default function MenuAdminApp() {
   });
   // 树折叠态：缺席即展开（默认全展开）；搜索态由命中祖先强制展开覆盖。
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // 树选中态：点一行选中它，编辑在右侧详情面板里做（v4）。null = 尚未选中。
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
   // 搜索框（按 code 或生效名称过滤；命中祖先强制展开、命中高亮）。
   const [search, setSearch] = useState("");
   // 拖拽状态：draggedCode 当前被拖节点；dropTarget 当前放置位置（节点 + 三段位置）。
@@ -132,19 +123,6 @@ export default function MenuAdminApp() {
     [t],
   );
 
-  const updateField = useCallback(
-    (row: MenuRow, patch: MenuUpdatePatch) => {
-      // 失焦即保存：值没有变化时不发请求（避免无意义写与行集重放）。
-      // patch 的键与行字段不同名（`isVisible` ↔ `visible`），逐键映射后再比对。
-      const changed = (Object.entries(patch) as [keyof MenuUpdatePatch, unknown][]).some(
-        ([key, value]) => (row[PATCH_TO_ROW_KEY[key]] as unknown) !== value,
-      );
-      if (!changed) return;
-      void postOps([{code: row.code, op: "update", patch}]);
-    },
-    [postOps],
-  );
-
   // 父节点候选是「全部已有菜单行」，但有子节点的行在侧栏只展开不跳转——
   // 页面行一旦有了孩子，它自己的侧栏入口就消失了。候选保留、事前警告，
   // 点确认才提交。
@@ -156,21 +134,6 @@ export default function MenuAdminApp() {
         window.confirm(t("menuAdmin.reparentToPageConfirm", {code: parent.code}));
     },
     [rows, t],
-  );
-
-  const restoreDefault = useCallback(
-    (row: MenuRow) => {
-      void postOps([{code: row.code, op: "update", patch: {nameEn: null, nameZh: null}}]);
-    },
-    [postOps],
-  );
-
-  const removeRow = useCallback(
-    (row: MenuRow) => {
-      if (!window.confirm(t("menuAdmin.deleteConfirm", {code: row.code}))) return;
-      void postOps([{code: row.code, op: "delete"}]);
-    },
-    [postOps, t],
   );
 
   const submitCreateGroup = useCallback(async () => {
@@ -466,10 +429,7 @@ export default function MenuAdminApp() {
       ) : (
         <MenuTreeCtx.Provider
           value={{
-            addChildGroup: openCreateGroup,
             collapsed,
-            confirmPageParent,
-            disabled: busy,
             drag: {
               draggingCode: draggedCode,
               dropTarget,
@@ -477,16 +437,15 @@ export default function MenuAdminApp() {
             },
             language,
             move,
-            removeRow,
-            restoreDefault,
+            onSelect: (code) => setSelectedCode(code),
             rows,
             search: {
               isForcedOpen: (code) => searchMatch.ancestors.has(code),
               isHighlighted: (code) => searchMatch.codes.has(code),
               query: search,
             },
+            selectedCode,
             toggleOpen,
-            updateField,
           }}
         >
           {/* 合成根：对齐 rbac 的 `ROOT_NODE` 行（L500–510），不是菜单行，

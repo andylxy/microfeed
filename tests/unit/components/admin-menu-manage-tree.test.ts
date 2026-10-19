@@ -47,18 +47,14 @@ const SAMPLE: MenuRow[] = [
 
 function baseCtx(overrides: Partial<MenuTreeCtxValue> = {}): MenuTreeCtxValue {
   return {
-    addChildGroup: () => {},
     collapsed: {},
-    confirmPageParent: () => true,
-    disabled: false,
     language: "en",
     move: () => {},
-    removeRow: () => {},
-    restoreDefault: () => {},
+    onSelect: () => {},
     rows: SAMPLE,
     search: {isForcedOpen: () => false, isHighlighted: () => false, query: ""},
+    selectedCode: null,
     toggleOpen: () => {},
-    updateField: () => {},
     ...overrides,
   };
 }
@@ -151,15 +147,32 @@ describe("MenuTreeNode recursive render", () => {
     expect(html).toContain('data-menu-node="volumes"');
   });
 
-  it("shows the add sub-group button only on group rows (empty path)", () => {
+  it("keeps every row free of inline form controls", () => {
     const html = renderTree(SAMPLE);
-    // 分组行（path 空）含 Add sub-group；本例 group_content / custom_dir / child_of_custom 三个分组 → 三次。
-    expect((html.match(/Add sub-group/gu) ?? []).length).toBe(3);
-    // 仅截出 books 节点自身（到下一个 data-menu-node 之前），确认页面行不含该按钮。
+    // v4：行内不再放输入框与下拉，编辑全部移到右侧详情面板。
+    expect(html).not.toContain("<input");
+    expect(html).not.toContain("<select");
+  });
+
+  it("marks the selected row with aria-current", () => {
+    const html = renderTree(SAMPLE, {selectedCode: "books"});
     const booksStart = html.indexOf('data-menu-node="books"');
     const nextNode = html.indexOf('data-menu-node="', booksStart + 1);
     const booksBlock = html.slice(booksStart, nextNode === -1 ? undefined : nextNode);
-    expect(booksBlock).not.toContain("Add sub-group");
+    expect(booksBlock).toContain('aria-current="true"');
+    // 只有选中行带 aria-current（其余行一个都没有）。
+    expect((html.match(/aria-current/gu) ?? []).length).toBe(1);
+  });
+
+  it("marks hidden rows with the Hidden badge", () => {
+    const rows = SAMPLE.map((entry) =>
+      entry.code === "books" ? {...entry, visible: false} : entry,
+    );
+    const html = renderTree(rows);
+    const booksStart = html.indexOf('data-menu-node="books"');
+    const nextNode = html.indexOf('data-menu-node="', booksStart + 1);
+    const booksBlock = html.slice(booksStart, nextNode === -1 ? undefined : nextNode);
+    expect(booksBlock).toContain("Hidden");
   });
 
   it("renders a drag handle on every node", () => {

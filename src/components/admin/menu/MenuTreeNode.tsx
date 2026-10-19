@@ -1,8 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -10,18 +8,14 @@ import {
   GripVerticalIcon,
 } from "lucide-react";
 
-import {Button} from "@/components/ui/button";
-import {Input} from "@/components/ui/input";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
-import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
 import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
 import {
   compareMenuRows,
   menuDescendantCodes,
   type MenuAdminRowWithMeta,
-  type MenuUpdatePatch,
 } from "@/shared/MenuAdminOps";
 
 /** 与 `GET /ajax/menu` 的响应行一致。 */
@@ -43,25 +37,27 @@ export interface MenuDragCtx {
   onHandlePointerDown: (event: ReactPointerEvent<HTMLButtonElement>, code: string) => void;
 }
 
-/** 树节点经 context 拿到的全部共享数据与控制。 */
+/**
+ * 树节点经 context 拿到的共享数据与控制。
+ *
+ * 行内不再放任何编辑控件（v4：编辑全部移到右侧详情面板），所以这里只留
+ * 树本身需要的东西：行集、折叠态、选中态、搜索态、拖拽与键盘移动。
+ * 改名 / 图标 / 父级 / 显隐 / 删除等编辑回调由面板直接从管理页拿 props。
+ */
 export interface MenuTreeCtxValue {
-  rows: MenuRow[];
   collapsed: Record<string, boolean>;
-  toggleOpen: (code: string) => void;
-  updateField: (row: MenuRow, patch: MenuUpdatePatch) => void;
-  confirmPageParent: (parentCode: string | null) => boolean;
-  restoreDefault: (row: MenuRow) => void;
-  removeRow: (row: MenuRow) => void;
-  addChildGroup: (parentCode: string) => void;
-  move: (row: MenuRow, direction: "up" | "down") => void;
+  drag?: MenuDragCtx;
   language: AdminLanguage;
-  disabled: boolean;
+  move: (row: MenuRow, direction: "up" | "down") => void;
+  onSelect: (code: string) => void;
+  rows: MenuRow[];
   search: {
     query: string;
     isForcedOpen: (code: string) => boolean;
     isHighlighted: (code: string) => boolean;
   };
-  drag?: MenuDragCtx;
+  selectedCode: string | null;
+  toggleOpen: (code: string) => void;
 }
 
 export const MenuTreeCtx = createContext<MenuTreeCtxValue | null>(null);
@@ -184,44 +180,11 @@ export function MenuBranchToggle({
 }
 
 /**
- * 名称输入：受控 + 失焦提交。局部 state 承接输入，值变化时回填；
- * 「恢复默认」清空库名后输入框必须跟着清空，所以非受控 defaultValue 不适用。
- */
-export function MenuNameInput({
-  disabled,
-  onCommit,
-  placeholder,
-  value,
-}: {
-  disabled: boolean;
-  onCommit: (next: string | null) => void;
-  placeholder: string;
-  value: string | null;
-}) {
-  const [draft, setDraft] = useState(value ?? "");
-  useEffect(() => {
-    setDraft(value ?? "");
-  }, [value]);
-  return (
-    <Input
-      className="h-8 w-full min-w-24 text-sm"
-      disabled={disabled}
-      maxLength={64}
-      onBlur={() => {
-        const next = draft.trim() || null;
-        if (next !== (value ?? null)) onCommit(next);
-      }}
-      onChange={(event) => setDraft(event.target.value)}
-      placeholder={placeholder}
-      value={draft}
-    />
-  );
-}
-
-/**
- * 递归树节点：行首（折叠箭头 + 拖拽手柄）+ 标签块（名称在上、mono code 在下）+
- * 管理操作（名称中/英、图标、父级、显隐、移动、恢复默认、删除、加子分组）+
- * 递归子节点。任意深度；缩进来自子节点的 `border-l pl-4` 嵌套容器。
+ * 递归树节点（v4）：行首（折叠箭头 + 拖拽手柄）+ 可点选标签块（名称在上、mono code 在下）+
+ * 隐藏标记 + 递归子节点。任意深度；缩进来自子节点的 `border-l pl-4` 嵌套容器。
+ *
+ * 行内不放任何编辑控件——点一行只是选中它，编辑在右侧详情面板里做
+ * （对齐 rbac「权限管理」：树负责呈现与选择，编辑集中在面板）。
  *
  * 节点最外层包 `data-menu-node`：拖拽时用 `elementFromPoint` 反查目标节点。
  */
@@ -229,19 +192,15 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   const ctx = useContext(MenuTreeCtx);
   if (!ctx) throw new Error("MenuTreeNode 必须包在 MenuTreeCtx.Provider 内");
   const {
-    rows,
     collapsed,
-    toggleOpen,
-    updateField,
-    confirmPageParent,
-    restoreDefault,
-    removeRow,
-    addChildGroup,
-    move,
-    language,
-    disabled,
-    search,
     drag,
+    language,
+    move,
+    onSelect,
+    rows,
+    search,
+    selectedCode,
+    toggleOpen,
   } = ctx;
   const {t} = useTranslation();
 
@@ -260,7 +219,7 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   const open = hasChildren && !(isCollapsed && !forcedOpen);
   // 搜索态：只保留命中节点与其祖先链，其余不渲染。
   const visible = !searchActive || highlighted || forcedOpen;
-  const hasCustomName = Boolean(row.nameZh || row.nameEn);
+  const selected = selectedCode === row.code;
 
   if (!visible) return null;
 
@@ -273,13 +232,12 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   const label =
     adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
     t(menuRowLabelKey(row.code));
-  const descendants = menuDescendantCodes(rows, row.code);
 
   return (
     <div data-menu-node={row.code}>
       <div
         className={cn(
-          "relative flex flex-wrap items-center gap-2",
+          "relative flex items-center gap-1",
           isDragging && "opacity-60",
           dragTarget && "z-10 bg-muted/40 ring-1 ring-inset ring-primary",
           dragTarget === "before" &&
@@ -316,143 +274,39 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
           </button>
         </div>
 
-        <span className="min-w-0 max-w-56">
-          <span
-            className={cn(
-              "block truncate text-sm",
-              highlighted
-                ? "font-semibold text-primary"
-                : hasChildren
-                  ? "font-semibold text-foreground"
-                  : undefined,
-            )}
-            title={t("menuAdmin.effectiveName")}
-          >
-            {label}
+        <button
+          aria-current={selected ? "true" : undefined}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2 py-1 text-left text-sm",
+            selected
+              ? "bg-muted font-medium text-foreground"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+          onClick={() => onSelect(row.code)}
+          type="button"
+        >
+          <span className="min-w-0 flex-1">
+            <span
+              className={cn(
+                "block truncate text-sm",
+                highlighted
+                  ? "font-semibold text-primary"
+                  : hasChildren
+                    ? "font-semibold text-foreground"
+                    : undefined,
+              )}
+              title={t("menuAdmin.effectiveName")}
+            >
+              {label}
+            </span>
+            <span className="block font-mono text-xs text-muted-foreground">{row.code}</span>
           </span>
-          <span className="block font-mono text-xs text-muted-foreground">{row.code}</span>
-        </span>
-
-        <MenuNameInput
-          disabled={disabled}
-          onCommit={(next) => updateField(row, {nameZh: next})}
-          placeholder={t("menuAdmin.nameZhPlaceholder")}
-          value={row.nameZh}
-        />
-        <MenuNameInput
-          disabled={disabled}
-          onCommit={(next) => updateField(row, {nameEn: next})}
-          placeholder={t("menuAdmin.nameEnPlaceholder")}
-          value={row.nameEn}
-        />
-
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          defaultValue={row.icon ?? ""}
-          disabled={disabled}
-          key={row.icon ?? ""}
-          onChange={(event) => updateField(row, {icon: event.target.value || null})}
-        >
-          {(row.path === "" || row.icon === null) && (
-            <option disabled={row.path !== ""} value="">
-              {t("menuAdmin.iconNone")}
-            </option>
+          {!row.visible && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {t("menuAdmin.hiddenBadge")}
+            </span>
           )}
-          {MENU_ICON_NAMES.map((name) => (
-            <option key={name} value={name}>
-              {t(`menu.icon.${name}`)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className="h-8 max-w-40 rounded-md border bg-background px-2 text-sm"
-          defaultValue={row.parentCode ?? ""}
-          disabled={disabled}
-          key={row.parentCode ?? ""}
-          onChange={(event) => {
-            const next = event.target.value || null;
-            if (!confirmPageParent(next)) {
-              event.target.value = row.parentCode ?? "";
-              return;
-            }
-            updateField(row, {parentCode: next});
-          }}
-        >
-          <option value="">{t("menuAdmin.parentNone")}</option>
-          {rows
-            .filter((candidate) => !descendants.has(candidate.code) && candidate.code !== row.code)
-            .map((candidate) => (
-              <option key={candidate.code} value={candidate.code}>
-                {candidate.code}
-              </option>
-            ))}
-        </select>
-
-        <span className="ml-auto flex flex-wrap items-center gap-1">
-          <Button
-            disabled={disabled}
-            onClick={() => updateField(row, {isVisible: !row.visible})}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {row.visible ? t("menuAdmin.hide") : t("menuAdmin.show")}
-          </Button>
-          <Button
-            aria-label={t("menuAdmin.moveUp")}
-            disabled={disabled || !canUp}
-            onClick={() => move(row, "up")}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            ↑
-          </Button>
-          <Button
-            aria-label={t("menuAdmin.moveDown")}
-            disabled={disabled || !canDown}
-            onClick={() => move(row, "down")}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            ↓
-          </Button>
-          {hasCustomName && (
-            <Button
-              disabled={disabled}
-              onClick={() => restoreDefault(row)}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              {t("menuAdmin.restoreDefault")}
-            </Button>
-          )}
-          {row.deletable && (
-            <Button
-              disabled={disabled}
-              onClick={() => removeRow(row)}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              {t("menuAdmin.delete")}
-            </Button>
-          )}
-          {row.path === "" && (
-            <Button
-              disabled={disabled}
-              onClick={() => addChildGroup(row.code)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              + {t("menuAdmin.addChildGroup")}
-            </Button>
-          )}
-        </span>
+        </button>
       </div>
 
       {open && (
@@ -465,4 +319,3 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
     </div>
   );
 }
-
