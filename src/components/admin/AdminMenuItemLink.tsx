@@ -161,7 +161,7 @@ export default function AdminMenuItemLink({
   // 数据库维护的展示名优先（0125 的 name_zh / name_en），两列都为空时回退到
   // i18n 文案。回退必须保留，否则改一个名称就得发一次版本。
   const label = adminMenuItemLabel(
-    item,
+    item.label,
     parseAdminLanguage(i18n.language),
   ) ?? t(item.labelKey ?? menuEntryLabelKey(item));
 

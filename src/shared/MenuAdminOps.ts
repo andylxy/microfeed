@@ -82,6 +82,9 @@ export type MenuAdminOp =
       };
     };
 
+/** 单条 `update` 操作的字段补丁：管理页的行内编辑与保存校验共用同一份形状。 */
+export type MenuUpdatePatch = Extract<MenuAdminOp, {op: "update"}>["patch"];
+
 export type MenuPlanResult =
   | {error: MenuOpError; statements?: undefined}
   | {error?: undefined; statements: MenuSqlStatement[]};
@@ -135,11 +138,21 @@ export function menuDescendantCodes(
   return found;
 }
 
+/**
+ * 菜单行的读取顺序：先按 `sort`，同一 `sort` 按 `code`。服务端移动判定
+ * （`siblingsOf`）、导出 SQL 的排序、客户端上移/下移的禁用态都读这一份，
+ * 免得行序在两个端口径不一致时，按钮禁用状态与 `errors.menu.moveBlocked`
+ * 对不上。
+ */
+export function compareMenuRows(a: MenuAdminRow, b: MenuAdminRow): number {
+  return a.sort - b.sort || a.code.localeCompare(b.code, "en");
+}
+
 /** 同层兄弟（父级相同，含「同为根」），按读取顺序 `(sort, code)` 排列。 */
 function siblingsOf(rows: Map<string, MenuAdminRow>, row: MenuAdminRow): MenuAdminRow[] {
   return [...rows.values()]
     .filter((entry) => entry.parentCode === row.parentCode)
-    .sort((a, b) => (a.sort - b.sort) || a.code.localeCompare(b.code, "en"));
+    .sort(compareMenuRows);
 }
 
 const UPDATE_STATEMENTS = {
@@ -159,10 +172,28 @@ const INSERT_GROUP =
 
 const DELETE_ROW = "DELETE FROM ext_menu WHERE id = ?";
 
+type MenuNameField = "nameZh" | "nameEn";
+
+// 中英文名两列的处理完全一致，只是字段名与对应语句不同，抽出来避免重复。
+function planNameUpdate(
+  row: MenuAdminRow,
+  next: MenuAdminRow,
+  field: MenuNameField,
+  raw: string | null | undefined,
+  statements: MenuSqlStatement[],
+): MenuPlanResult | null {
+  if (raw === undefined) return null;
+  const value = normalizeName(raw);
+  if (isInvalidName(value)) return {error: value.invalid};
+  next[field] = value;
+  statements.push({params: [value, row.id], sql: UPDATE_STATEMENTS[field]});
+  return null;
+}
+
 function planUpdate(
   rows: Map<string, MenuAdminRow>,
   code: string,
-  patch: Extract<MenuAdminOp, {op: "update"}>["patch"],
+  patch: MenuUpdatePatch,
 ): MenuPlanResult | MenuSqlStatement[] {
   const row = rows.get(code);
   if (!row) return {error: error("errors.menu.notFound", 404, {code})};
@@ -170,18 +201,11 @@ function planUpdate(
   const statements: MenuSqlStatement[] = [];
   const next: MenuAdminRow = {...row};
 
-  if (patch.nameZh !== undefined) {
-    const value = normalizeName(patch.nameZh);
-    if (isInvalidName(value)) return {error: value.invalid};
-    statements.push({params: [value, row.id], sql: UPDATE_STATEMENTS.nameZh});
-    next.nameZh = value;
-  }
-  if (patch.nameEn !== undefined) {
-    const value = normalizeName(patch.nameEn);
-    if (isInvalidName(value)) return {error: value.invalid};
-    statements.push({params: [value, row.id], sql: UPDATE_STATEMENTS.nameEn});
-    next.nameEn = value;
-  }
+  const nameErr =
+    planNameUpdate(row, next, "nameZh", patch.nameZh, statements) ??
+    planNameUpdate(row, next, "nameEn", patch.nameEn, statements);
+  if (nameErr) return nameErr;
+
   if (patch.icon !== undefined) {
     if (patch.icon !== null && !isMenuIconName(patch.icon)) {
       return {error: error("errors.menu.invalidIcon", 400, {icon: String(patch.icon)})};
@@ -414,9 +438,7 @@ function sqlLiteral(value: string | number | null): string {
  */
 export function buildMenuExportSql(rows: MenuAdminRow[], generatedAtMs: number): string {
   const generatedAt = new Date(generatedAtMs).toISOString();
-  const ordered = [...rows].sort(
-    (a, b) => (a.sort - b.sort) || a.code.localeCompare(b.code, "en"),
-  );
+  const ordered = [...rows].sort(compareMenuRows);
   const lines = [
     "-- NNNN_data_menu_snapshot.sql",
     "--",

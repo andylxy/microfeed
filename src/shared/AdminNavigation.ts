@@ -74,18 +74,21 @@ export function menuEntryLabelKey(item: AdminMenuItem): string {
 }
 
 /**
- * Display name for one rendered entry (plan §2.3.1): the database value wins,
- * the current language's column first, the other column when it is blank.
- * Returns `null` only when both columns are empty — the caller then translates
- * `menuEntryLabelKey(item)`. Keeping the precedence in one shared function is
- * what stops the sidebar and every other renderer from drifting apart.
+ * Display name for one menu entry (plan §2.3.1): the database value wins, the
+ * current language's column first, the other column when it is blank. Takes the
+ * label pair itself rather than the whole entry, so the menu management table
+ * can hand it the `name_zh` / `name_en` columns it already holds; returns `null`
+ * only when both columns are empty — the caller then falls back to the
+ * `menu.item.*` / `menu.group.*` text. Keeping the precedence in one shared
+ * function is what stops the sidebar and every other renderer from drifting
+ * apart.
  */
 export function adminMenuItemLabel(
-  item: AdminMenuItem,
+  label: AdminMenuItem["label"],
   language: AdminLanguage,
 ): string | null {
-  if (!item.label) return null;
-  const preferred = language === "zh-CN" ? item.label.zh : item.label.en;
-  const other = language === "zh-CN" ? item.label.en : item.label.zh;
+  if (!label) return null;
+  const preferred = language === "zh-CN" ? label.zh : label.en;
+  const other = language === "zh-CN" ? label.en : label.zh;
   return preferred.trim() || other.trim() || null;
 }

@@ -6,15 +6,18 @@ import {
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
-import {menuRowLabelKey} from "@/shared/AdminNavigation";
-import type {AdminLanguage} from "@/shared/AdminLanguage";
+import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
+import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
+  compareMenuRows,
   menuDescendantCodes,
   type MenuAdminOp,
   type MenuAdminRowWithMeta,
+  type MenuUpdatePatch,
 } from "@/shared/MenuAdminOps";
 
 /** 与 `GET /ajax/menu` 的响应行一致。 */
@@ -31,10 +34,8 @@ interface FlatRow {
   row: MenuRow;
 }
 
-type PatchKey = "icon" | "isVisible" | "nameEn" | "nameZh" | "parentCode";
-
 /** patch 的键 → 行字段名（`isVisible` 在行上叫 `visible`）。 */
-const PATCH_TO_ROW_KEY: Record<PatchKey, keyof MenuAdminRowWithMeta> = {
+const PATCH_TO_ROW_KEY: Record<keyof MenuUpdatePatch, keyof MenuAdminRowWithMeta> = {
   icon: "icon",
   isVisible: "visible",
   nameEn: "nameEn",
@@ -72,24 +73,6 @@ function flattenTree(rows: MenuRow[]): FlatRow[] {
 }
 
 /**
- * 生效名称：与侧栏 `adminMenuItemLabel` 同一优先级——当前语言列优先，
- * 该列为空时取另一列，两列皆空才回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。
- * 管理表格直接显示这一列，运营就能看到改完之后的菜单实际叫什么，
- * 不用去切语言或翻 i18n 键。
- */
-function effectiveName(
-  row: MenuRow,
-  language: AdminLanguage,
-  t: (key: string) => string,
-): string {
-  const preferred = language === "zh-CN" ? row.nameZh : row.nameEn;
-  const other = language === "zh-CN" ? row.nameEn : row.nameZh;
-  return (
-    (preferred ?? "").trim() || (other ?? "").trim() || t(menuRowLabelKey(row.code))
-  );
-}
-
-/**
  * 名称输入：受控 + 失焦提交。
  *
  * 用局部 state 承接输入，`value` 变化时同步回填——「恢复默认」把库里的名称
@@ -111,8 +94,8 @@ function MenuNameInput({
     setDraft(value ?? "");
   }, [value]);
   return (
-    <input
-      className="w-full min-w-28 rounded-md border bg-background px-2 py-1 text-sm"
+    <Input
+      className="h-8 w-full min-w-28 text-sm"
       disabled={disabled}
       maxLength={64}
       onBlur={() => {
@@ -136,7 +119,7 @@ export default function MenuAdminApp() {
   const {t, i18n} = useTranslation();
   // 当前后台语言：生效名称按查看者语言取「中文名 → 英文名 → i18n 回退」，
   // 与侧栏 `adminMenuItemLabel` 的口径一致，避免管理表格与线上菜单各说各话。
-  const language: AdminLanguage = i18n.language === "zh-CN" ? "zh-CN" : "en";
+  const language = parseAdminLanguage(i18n.language);
   const [rows, setRows] = useState<MenuRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,10 +179,10 @@ export default function MenuAdminApp() {
   );
 
   const updateField = useCallback(
-    (row: MenuRow, patch: {icon?: string | null; isVisible?: boolean; nameEn?: string | null; nameZh?: string | null; parentCode?: string | null}) => {
+    (row: MenuRow, patch: MenuUpdatePatch) => {
       // 失焦即保存：值没有变化时不发请求（避免无意义写与行集重放）。
       // patch 的键与行字段不同名（`isVisible` ↔ `visible`），逐键映射后再比对。
-      const changed = (Object.entries(patch) as [PatchKey, unknown][]).some(
+      const changed = (Object.entries(patch) as [keyof MenuUpdatePatch, unknown][]).some(
         ([key, value]) => (row[PATCH_TO_ROW_KEY[key]] as unknown) !== value,
       );
       if (!changed) return;
@@ -290,6 +273,9 @@ export default function MenuAdminApp() {
     }
     const flags = new Map<string, {canDown: boolean; canUp: boolean}>();
     for (const bucket of byParent.values()) {
+      // 与服务端 siblingsOf 同一个排序口径：按钮禁用态才不会与
+      // errors.menu.moveBlocked 的判定不一致。
+      bucket.sort(compareMenuRows);
       bucket.forEach((row, index) => {
         flags.set(row.code, {canDown: index < bucket.length - 1, canUp: index > 0});
       });
@@ -334,21 +320,21 @@ export default function MenuAdminApp() {
         <section className="grid gap-3 rounded-[14px] border bg-card p-4 shadow-xs">
           <h2 className="text-sm font-semibold">{t("menuAdmin.createGroupTitle")}</h2>
           <div className="flex flex-wrap items-center gap-3">
-            <input
+            <Input
               autoFocus
-              className="rounded-md border bg-background px-3 py-2 text-sm"
+              className="w-44"
               onChange={(event) => setDraft((prev) => ({...prev, code: event.target.value}))}
               placeholder={t("menuAdmin.codePlaceholder")}
               value={draft.code}
             />
-            <input
-              className="rounded-md border bg-background px-3 py-2 text-sm"
+            <Input
+              className="w-36"
               onChange={(event) => setDraft((prev) => ({...prev, nameZh: event.target.value}))}
               placeholder={t("menuAdmin.nameZhPlaceholder")}
               value={draft.nameZh}
             />
-            <input
-              className="rounded-md border bg-background px-3 py-2 text-sm"
+            <Input
+              className="w-36"
               onChange={(event) => setDraft((prev) => ({...prev, nameEn: event.target.value}))}
               placeholder={t("menuAdmin.nameEnPlaceholder")}
               value={draft.nameEn}
@@ -426,8 +412,13 @@ export default function MenuAdminApp() {
                       </span>
                     </div>
                   </td>
+                  {/* 生效名称：侧栏的同一条优先级（数据库名 → i18n 文案），
+                      运营在这里直接看到菜单当前显示的文本。 */}
                   <td className="px-4 py-2 text-sm text-muted-foreground">
-                    {effectiveName(row, language, t)}
+                    {adminMenuItemLabel(
+                      {en: row.nameEn ?? "", zh: row.nameZh ?? ""},
+                      language,
+                    ) ?? t(menuRowLabelKey(row.code))}
                   </td>
                   <td className="px-2 py-2">
                     <MenuNameInput
