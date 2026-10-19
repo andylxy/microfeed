@@ -20,6 +20,8 @@ import {
 import {
   childrenOf,
   dropPositionFromY,
+  MENU_ROOT_NODE,
+  MenuBranchToggle,
   MenuTreeCtx,
   MenuTreeNode,
   reorderMenuRows,
@@ -223,7 +225,7 @@ export default function MenuAdminApp() {
 
   const expandAll = useCallback(() => setCollapsed({}), []);
   const collapseAll = useCallback(() => {
-    const next: Record<string, boolean> = {};
+    const next: Record<string, boolean> = {[MENU_ROOT_NODE]: true};
     for (const row of rows) next[row.code] = true;
     setCollapsed(next);
   }, [rows]);
@@ -261,6 +263,10 @@ export default function MenuAdminApp() {
   }, [rows, search, language, t]);
 
   const roots = useMemo(() => childrenOf(rows, ""), [rows]);
+
+  // 合成根的折叠态与真实行共用同一份 `collapsed` 字典（缺席即展开）；
+  // 搜索态下强制展开，否则命中节点会被藏在折叠的根后面。
+  const rootOpen = search.trim().length > 0 || collapsed[MENU_ROOT_NODE] !== true;
 
   // 拖拽内核（镜像 categories 的 Pointer 拖拽，扩展为树感知的三段放置位置）。
   // 放置位置写回走 `reorder` op，以服务端返回的权威行集为准。
@@ -349,15 +355,25 @@ export default function MenuAdminApp() {
   }
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-[14px] border bg-card p-5 shadow-xs">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("menuAdmin.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("menuAdmin.intro")}</p>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={busy} onClick={exportSql} size="sm" type="button" variant="outline">
+            <DownloadIcon aria-hidden="true" />
+            {t("menuAdmin.exportSql")}
+          </Button>
+          <Button disabled={busy} onClick={() => openCreateGroup("")} size="sm" type="button">
+            <PlusIcon aria-hidden="true" />
+            {t("menuAdmin.createGroup")}
+          </Button>
+        </div>
+      </header>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           className="max-w-xs"
           onChange={(event) => setSearch(event.target.value)}
@@ -370,27 +386,17 @@ export default function MenuAdminApp() {
         <Button disabled={busy} onClick={collapseAll} size="sm" type="button" variant="outline">
           {t("menuAdmin.collapseAll")}
         </Button>
-        <span className="flex-1" />
-        <Button disabled={busy} onClick={exportSql} size="sm" type="button" variant="outline">
-          <DownloadIcon aria-hidden="true" />
-          {t("menuAdmin.exportSql")}
-        </Button>
-        <Button disabled={busy} onClick={() => openCreateGroup("")} size="sm" type="button">
-          <PlusIcon aria-hidden="true" />
-          {t("menuAdmin.createGroup")}
-        </Button>
       </div>
 
       {formError && (
-        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           {formError}
         </p>
       )}
 
       {creating && (
-        <section className="grid gap-3 rounded-[14px] border bg-card p-4 shadow-xs">
-          <h2 className="text-sm font-semibold">{t("menuAdmin.createGroupTitle")}</h2>
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="mb-4 flex flex-col gap-2 rounded-[10px] border bg-background p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               autoFocus
               className="w-44"
@@ -433,7 +439,9 @@ export default function MenuAdminApp() {
                 </option>
               ))}
             </select>
-            <Button disabled={busy} onClick={() => void submitCreateGroup()} size="sm" type="button">
+          </div>
+          <div className="flex gap-2">
+            <Button disabled={busy} onClick={() => void submitCreateGroup()} size="xs" type="button">
               {t("menuAdmin.save")}
             </Button>
             <Button
@@ -442,54 +450,71 @@ export default function MenuAdminApp() {
                 setCreating(false);
                 setFormError(null);
               }}
-              size="sm"
+              size="xs"
               type="button"
-              variant="outline"
+              variant="ghost"
             >
               {t("menuAdmin.cancel")}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">{t("menuAdmin.createGroupHint")}</p>
-        </section>
+        </div>
       )}
 
-      <section className="overflow-x-auto rounded-[14px] border bg-card shadow-xs">
-        {search.trim() && searchMatch.codes.size === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">{t("menuAdmin.noResults")}</p>
-        ) : (
-          <MenuTreeCtx.Provider
-            value={{
-              addChildGroup: openCreateGroup,
-              collapsed,
-              confirmPageParent,
-              disabled: busy,
-              drag: {
-                draggingCode: draggedCode,
-                dropTarget,
-                onHandlePointerDown: beginDragging,
-              },
-              language,
-              move,
-              removeRow,
-              restoreDefault,
-              rows,
-              search: {
-                isForcedOpen: (code) => searchMatch.ancestors.has(code),
-                isHighlighted: (code) => searchMatch.codes.has(code),
-                query: search,
-              },
-              toggleOpen,
-              updateField,
-            }}
-          >
-            {roots.map((root) => (
-              <MenuTreeNode depth={0} key={root.code} row={root} />
-            ))}
-          </MenuTreeCtx.Provider>
-        )}
-      </section>
+      {search.trim() && searchMatch.codes.size === 0 ? (
+        <p className="py-6 text-sm text-muted-foreground">{t("menuAdmin.noResults")}</p>
+      ) : (
+        <MenuTreeCtx.Provider
+          value={{
+            addChildGroup: openCreateGroup,
+            collapsed,
+            confirmPageParent,
+            disabled: busy,
+            drag: {
+              draggingCode: draggedCode,
+              dropTarget,
+              onHandlePointerDown: beginDragging,
+            },
+            language,
+            move,
+            removeRow,
+            restoreDefault,
+            rows,
+            search: {
+              isForcedOpen: (code) => searchMatch.ancestors.has(code),
+              isHighlighted: (code) => searchMatch.codes.has(code),
+              query: search,
+            },
+            toggleOpen,
+            updateField,
+          }}
+        >
+          {/* 合成根：对齐 rbac 的 `ROOT_NODE` 行（L500–510），不是菜单行，
+              因此不加 `data-menu-node`，也不参与拖拽。 */}
+          <div>
+            <div className="flex items-center gap-1">
+              <MenuBranchToggle
+                expanded={rootOpen}
+                label={t("menuAdmin.treeRoot")}
+                onToggle={() => toggleOpen(MENU_ROOT_NODE)}
+              />
+              <span className="text-sm font-semibold text-foreground">
+                {t("menuAdmin.treeRoot")}
+              </span>
+            </div>
 
-      <p className="text-xs text-muted-foreground">{t("menuAdmin.lockedHint")}</p>
-    </div>
+            {rootOpen && (
+              <div className="mt-2 flex flex-col gap-3 border-l pl-4">
+                {roots.map((root) => (
+                  <MenuTreeNode key={root.code} row={root} />
+                ))}
+              </div>
+            )}
+          </div>
+        </MenuTreeCtx.Provider>
+      )}
+
+      <p className="mt-4 text-xs text-muted-foreground">{t("menuAdmin.lockedHint")}</p>
+    </section>
   );
 }

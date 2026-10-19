@@ -27,6 +27,12 @@ import {
 /** 与 `GET /ajax/menu` 的响应行一致。 */
 export type MenuRow = MenuAdminRowWithMeta;
 
+/**
+ * 树的合成根（对齐 rbac「权限管理」的 `ROOT_NODE = "permission_root"`）。
+ * 它不是菜单行、也不是权限码，只给整棵树一个统一的展开入口。
+ */
+export const MENU_ROOT_NODE = "menu_root";
+
 /** 拖拽放置位置的三段：同层前 / 同层后 / 作为子节点挂到目标下。 */
 export type DropPosition = "before" | "after" | "inside";
 
@@ -147,6 +153,37 @@ export function reorderMenuRows(
 }
 
 /**
+ * 折叠箭头：类名、图标与 `aria-label` 逐字照抄 rbac「权限管理」的 `branchToggle`
+ * （`RbacApp/index.tsx` L115–128）。根行与各分支行共用这一个组件，
+ * 避免两处箭头各写一份后慢慢漂开。
+ */
+export function MenuBranchToggle({
+  expanded,
+  label,
+  onToggle,
+}: {
+  expanded: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  const {t} = useTranslation();
+  return (
+    <button
+      aria-expanded={expanded}
+      aria-label={t("menuAdmin.toggleBranch", {name: label})}
+      className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+      onClick={onToggle}
+      type="button"
+    >
+      <ChevronRightIcon
+        aria-hidden="true"
+        className={cn("size-4 transition-transform", expanded && "rotate-90")}
+      />
+    </button>
+  );
+}
+
+/**
  * 名称输入：受控 + 失焦提交。局部 state 承接输入，值变化时回填；
  * 「恢复默认」清空库名后输入框必须跟着清空，所以非受控 defaultValue 不适用。
  */
@@ -182,12 +219,13 @@ export function MenuNameInput({
 }
 
 /**
- * 递归树节点：折叠箭头 + 主体（code / 生效名称 / 名称输入 / 图标 / 父级 / 显隐 /
- * 移动 / 操作）+ 递归子节点。任意深度，rbac 侧只支持三层。
+ * 递归树节点：行首（折叠箭头 + 拖拽手柄）+ 标签块（名称在上、mono code 在下）+
+ * 管理操作（名称中/英、图标、父级、显隐、移动、恢复默认、删除、加子分组）+
+ * 递归子节点。任意深度；缩进来自子节点的 `border-l pl-4` 嵌套容器。
  *
  * 节点最外层包 `data-menu-node`：拖拽时用 `elementFromPoint` 反查目标节点。
  */
-export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
+export function MenuTreeNode({row}: {row: MenuRow}) {
   const ctx = useContext(MenuTreeCtx);
   if (!ctx) throw new Error("MenuTreeNode 必须包在 MenuTreeCtx.Provider 内");
   const {
@@ -232,13 +270,16 @@ export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
   const canUp = index > 0;
   const canDown = index < siblings.length - 1;
 
+  const label =
+    adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
+    t(menuRowLabelKey(row.code));
   const descendants = menuDescendantCodes(rows, row.code);
 
   return (
     <div data-menu-node={row.code}>
       <div
         className={cn(
-          "relative flex flex-wrap items-center gap-2 border-t py-2 first:border-t-0",
+          "relative flex flex-wrap items-center gap-2",
           isDragging && "opacity-60",
           dragTarget && "z-10 bg-muted/40 ring-1 ring-inset ring-primary",
           dragTarget === "before" &&
@@ -246,54 +287,50 @@ export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
           dragTarget === "after" &&
             "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary",
         )}
-        style={{paddingLeft: `${8 + depth * 18}px`}}
       >
-        {hasChildren ? (
-          <button
-            aria-expanded={open}
-            aria-label={open ? t("menuAdmin.collapseAll") : t("menuAdmin.expandAll")}
-            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted"
-            type="button"
-            onClick={() => toggleOpen(row.code)}
-          >
-            <ChevronRightIcon
-              aria-hidden="true"
-              className={open ? "h-4 w-4 rotate-90 transition-transform" : "h-4 w-4 transition-transform"}
+        <div className="flex items-center gap-1">
+          {hasChildren && (
+            <MenuBranchToggle
+              expanded={open}
+              label={label}
+              onToggle={() => toggleOpen(row.code)}
             />
+          )}
+          <button
+            aria-label={t("menuAdmin.dragHandle")}
+            className="shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+            type="button"
+            onKeyDown={(event) => {
+              // 键盘移动与「↑ / ↓」按钮同一条 `move` op；越出同层边界时服务端会拒绝。
+              if (event.key === "ArrowUp" && canUp) {
+                event.preventDefault();
+                move(row, "up");
+              } else if (event.key === "ArrowDown" && canDown) {
+                event.preventDefault();
+                move(row, "down");
+              }
+            }}
+            onPointerDown={(event) => drag?.onHandlePointerDown(event, row.code)}
+          >
+            <GripVerticalIcon aria-hidden="true" className="h-4 w-4" />
           </button>
-        ) : (
-          <span aria-hidden="true" className="inline-block h-4 w-4 shrink-0" />
-        )}
-
-        <button
-          aria-label={t("menuAdmin.dragHandle")}
-          className="shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
-          type="button"
-          onKeyDown={(event) => {
-            // 键盘移动与「↑ / ↓」按钮同一条 `move` op；越出同层边界时服务端会拒绝。
-            if (event.key === "ArrowUp" && canUp) {
-              event.preventDefault();
-              move(row, "up");
-            } else if (event.key === "ArrowDown" && canDown) {
-              event.preventDefault();
-              move(row, "down");
-            }
-          }}
-          onPointerDown={(event) => drag?.onHandlePointerDown(event, row.code)}
-        >
-          <GripVerticalIcon aria-hidden="true" className="h-4 w-4" />
-        </button>
-
-        <div className="grid min-w-32">
-          <span className={highlighted ? "font-semibold text-primary" : "font-medium"}>{row.code}</span>
-          <span className="text-xs text-muted-foreground">
-            {row.path || t("menuAdmin.groupTag")} · {row.permissionCode ?? t("menuAdmin.publicEntry")}
-          </span>
         </div>
 
-        <span className="min-w-28 text-sm text-muted-foreground" title={t("menuAdmin.effectiveName")}>
-          {adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
-            t(menuRowLabelKey(row.code))}
+        <span className="min-w-0 max-w-56">
+          <span
+            className={cn(
+              "block truncate text-sm",
+              highlighted
+                ? "font-semibold text-primary"
+                : hasChildren
+                  ? "font-semibold text-foreground"
+                  : undefined,
+            )}
+            title={t("menuAdmin.effectiveName")}
+          >
+            {label}
+          </span>
+          <span className="block font-mono text-xs text-muted-foreground">{row.code}</span>
         </span>
 
         <MenuNameInput
@@ -352,17 +389,16 @@ export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
             ))}
         </select>
 
-        <Button
-          disabled={disabled}
-          onClick={() => updateField(row, {isVisible: !row.visible})}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          {row.visible ? t("menuAdmin.hide") : t("menuAdmin.show")}
-        </Button>
-
-        <span className="flex items-center gap-1">
+        <span className="ml-auto flex flex-wrap items-center gap-1">
+          <Button
+            disabled={disabled}
+            onClick={() => updateField(row, {isVisible: !row.visible})}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            {row.visible ? t("menuAdmin.hide") : t("menuAdmin.show")}
+          </Button>
           <Button
             aria-label={t("menuAdmin.moveUp")}
             disabled={disabled || !canUp}
@@ -383,9 +419,6 @@ export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
           >
             ↓
           </Button>
-        </span>
-
-        <span className="flex items-center gap-1">
           {hasCustomName && (
             <Button
               disabled={disabled}
@@ -422,8 +455,13 @@ export function MenuTreeNode({row, depth}: {row: MenuRow; depth: number}) {
         </span>
       </div>
 
-      {open &&
-        children.map((child) => <MenuTreeNode key={child.code} depth={depth + 1} row={child} />)}
+      {open && (
+        <div className="mt-2 flex flex-col gap-3 border-l pl-4">
+          {children.map((child) => (
+            <MenuTreeNode key={child.code} row={child} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
