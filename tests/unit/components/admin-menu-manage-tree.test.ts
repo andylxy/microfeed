@@ -6,6 +6,8 @@ import "@/client/i18n";
 import {
   childrenOf,
   dropPositionFromY,
+  MENU_ROOT_NODE,
+  MenuBranchToggle,
   MenuTreeNode,
   MenuTreeCtx,
   reorderMenuRows,
@@ -72,7 +74,7 @@ function renderTree(rows: MenuRow[], overrides: Partial<MenuTreeCtxValue> = {}):
         "div",
         null,
         ...roots.map((entry) =>
-          React.createElement(MenuTreeNode, {key: entry.code, depth: 0, row: entry}),
+          React.createElement(MenuTreeNode, {key: entry.code, row: entry}),
         ),
       ),
     ),
@@ -99,9 +101,22 @@ describe("MenuTreeNode recursive render", () => {
     expect(html).toContain('data-menu-node="volumes"');
     expect(html).toContain('data-menu-node="custom_dir"');
     expect(html).toContain('data-menu-node="child_of_custom"');
-    // 缩进随深度递增：child 的 paddingLeft 大于 parent。
-    expect(html).toContain("padding-left:8px");
-    expect(html).toContain("padding-left:44px");
+    // 缩进来自子节点的嵌套容器 `border-l pl-4`（每个展开分支一个），
+    // 不是行内 padding 累加。
+    expect(html).toContain("border-l pl-4");
+    expect((html.match(/border-l pl-4/gu) ?? []).length).toBe(2);
+    expect(html).not.toContain("padding-left:");
+  });
+
+  it("renders the name-over-code label block with two weight levels", () => {
+    const html = renderTree(SAMPLE);
+    // 标签块：显示名在上、mono code 在下（对齐 rbac 的叶子结构）。
+    expect(html).toContain("font-mono text-xs text-muted-foreground");
+    // 有子节点的分组行走 `text-sm font-semibold text-foreground` 字重。
+    expect(html).toContain("font-semibold text-foreground");
+    // 行与行之间没有横向分隔线；`border-transparent` 是按钮自身的类，不算分隔线。
+    expect(html).not.toMatch(/ border-t /u);
+    expect(html).not.toContain("border-t-0");
   });
 
   it("hides children of a collapsed group", () => {
@@ -151,6 +166,40 @@ describe("MenuTreeNode recursive render", () => {
     const html = renderTree(SAMPLE);
     // dragHandle 文案 "Drag to reorder" 出现次数 = 节点数（5）。
     expect((html.match(/Drag to reorder/gu) ?? []).length).toBe(5);
+  });
+});
+
+describe("MenuBranchToggle", () => {
+  const render = (expanded: boolean) =>
+    renderToStaticMarkup(
+      React.createElement(MenuBranchToggle, {
+        expanded,
+        label: "Books",
+        onToggle: () => {},
+      }),
+    );
+
+  it("renders the rbac branch arrow classes and rotates the chevron when open", () => {
+    const html = render(true);
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("focus-visible:ring-3");
+    expect(html).toContain("rotate-90");
+  });
+
+  it("keeps the chevron pointing right when closed", () => {
+    const html = render(false);
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("rotate-90");
+  });
+
+  it("labels the arrow with the branch name", () => {
+    expect(render(true)).toContain('aria-label="Toggle Books"');
+  });
+});
+
+describe("MENU_ROOT_NODE", () => {
+  it("is a synthetic code, so childrenOf never resolves it to rows", () => {
+    expect(childrenOf(SAMPLE, MENU_ROOT_NODE)).toEqual([]);
   });
 });
 
