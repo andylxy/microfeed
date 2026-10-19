@@ -208,6 +208,7 @@ export const ADMIN_MENU_CODES = {
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
   CLOUD_USAGE: 'cloud_usage',
+  MENU_MANAGEMENT: 'menu_management',
 } as const;
 
 /**
@@ -295,6 +296,11 @@ export const PERMISSION_CODES = {
   // D1 / R2 / Workers 三个分区，与 `SYSTEM_LOGIN_LOG_READ` 同族。挂在
   // group_operations（0089）的 `cloud_usage` 菜单行上，只授 super_admin。
   SYSTEM_CLOUD_USAGE_READ: 'system:cloud-usage:read',
+  // 菜单管理页（/admin/menu，migration 0126）。单码读写共用：打开看板与保存
+  // 改动都是「运营在整理导航」的同一件事，只用一个 :manage 码覆盖读写。
+  // 只授 super_admin（不写 ext_role_permissions），挂在
+  // menu_management 菜单行上——页面守卫与菜单可见性绑同一个码。
+  SYSTEM_MENU_MANAGE: 'system:menu:manage',
   WILDCARD: '*',
 } as const;
 

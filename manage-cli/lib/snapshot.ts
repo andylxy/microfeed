@@ -17,7 +17,10 @@ import {
   MICROFEED_OAUTH_CLIENT_ID,
   OAUTH_SCOPES,
 } from "../../src/shared/OAuth";
-import {ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES} from "../../src/shared/ItemSearchSql";
+import {
+  DROP_ADMIN_TYPEAHEAD_INDEX_SQL,
+  ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES,
+} from "../../src/shared/ItemSearchSql";
 import {repositoryRoot} from "./process";
 
 export const SNAPSHOT_FORMAT = "microfeed-portable-snapshot";
@@ -92,12 +95,42 @@ export const SNAPSHOT_TABLES = {
     // PC web renderer (TcmMarkers) and the App GetTipsStyleConfig payload, so a
     // restored site must keep them or TCM tips lose their styling.
     "ext_annotation_markers",
+    // Manual TCM aliases (migration 0075). Admin-authored rows maintained through
+    // /admin/aliases/ that override same-name derived aliases on the App side, so a
+    // restore that dropped them would silently lose hand-entered synonyms.
+    "ext_tcm_aliases",
+    // App version floor (migration 0080). The single-row min_version_code / latest
+    // version config read by GET /api/app/version and requireAppVersion is operator
+    // policy: a restored site has to keep it or the upgrade gate resets to "no
+    // forced upgrade".
+    "ext_app_version",
+    // App staged-rollout rules (migration 0081). device/user/percent/all force
+    // upgrades are operator policy, not session state, so they travel with the
+    // version floor above.
+    "ext_app_rollout",
+    // App login history (migration 0084). One row per device per day, no expiry — a
+    // durable audit trail like ext_api_access_log above. Dropping it would erase the
+    // "which days did this device appear" record the dashboard reads.
+    "ext_app_login_log",
+    // App announcements (migration 0086). Operator-authored push messages kept as soft
+    // deletes (status=4) for audit; the content itself is data, so a restore must keep
+    // both published and retired rows.
+    "ext_app_announcement",
   ],
   ephemeral: [
     "item_create_idempotency",
     "item_search_metadata",
     "site_search_documents",
     "site_search_metadata",
+    // Materialised per-book chapter/word counts (migration 0103). Purely derived from
+    // items: the read path recomputes any missing or stale row lazily, so nothing here
+    // is worth carrying across a snapshot boundary.
+    "ext_book_stats",
+    // Reverse "which section cites which marker" index and its per-book dirty flag
+    // (migration 0111). Same lazy-recompute shape as ext_book_stats above: rebuilt from
+    // item bodies on first read, so a restore can drop it and let it self-heal.
+    "ext_marker_citations",
+    "ext_marker_citation_state",
     // Anti-replay nonce ledger (migration 0030). Rows expire within minutes, so
     // there is nothing worth carrying across a snapshot boundary.
     "ext_replay_nonces",
@@ -130,6 +163,12 @@ export const SNAPSHOT_TABLES = {
     "webhook_events",
     "webhook_settings",
     "webhook_subscriptions",
+    // Cloudflare usage-dashboard API token (migration 0124). AES-GCM ciphertext keyed
+    // by the per-instance UPLOAD_SIGNING_KEY, which is generated locally and pushed at
+    // deploy, so a different instance cannot decrypt it — the same deployment-specific-
+    // key nature as the webhook secrets above. Operators re-save the token on the
+    // restored site.
+    "ext_cloud_usage_token",
   ],
   internal: ["_cf_KV", "d1_kv"],
   targetSpecific: ["microfeed_installation"],
@@ -146,6 +185,11 @@ export interface SnapshotIndexDefinition {
   name: string;
   sql: string;
 }
+
+// 迁移里一条索引 DDL 的按序操作：create 携带可重放的建表语句，drop 只记名字。
+export type SnapshotIndexOperation =
+  | {kind: "create"; name: string; sql: string}
+  | {kind: "drop"; name: string};
 
 export interface SnapshotR2HttpMetadata {
   cacheControl?: string;
@@ -594,7 +638,17 @@ function indexName(statement: string): string | null {
     /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?/iu,
   );
   if (!prefix) return null;
-  const remaining = statement.slice(prefix[0].length);
+  return quotedIdentifier(statement.slice(prefix[0].length));
+}
+
+function droppedIndexName(statement: string): string | null {
+  const prefix = statement.match(/^DROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?/iu);
+  if (!prefix) return null;
+  return quotedIdentifier(statement.slice(prefix[0].length));
+}
+
+// 引号包裹或裸标识符的索引名解析，CREATE 与 DROP 两条语句共用。
+function quotedIdentifier(remaining: string): string | null {
   const marker = remaining[0];
   if (marker === '"' || marker === "`" || marker === "[") {
     const closing = marker === "[" ? "]" : marker;
@@ -616,11 +670,29 @@ function indexName(statement: string): string | null {
   return remaining.match(/^[^\s(]+/u)?.[0] ?? null;
 }
 
+// 迁移内按语句顺序的索引操作。同一份迁移里既 DROP 又重建同名索引（0102 加宽
+// items_updated_at、0022 重建 webhook_events_created）时，只有保留语句顺序才能算出
+// 最终仍在——先建后删与先删后建结果相反，拆成两份列表会丢掉这个先后。
+export function migrationIndexOperations(
+  sql: string,
+): SnapshotIndexOperation[] {
+  return splitSqlStatements(sql).flatMap(
+    (statement): SnapshotIndexOperation[] => {
+      const created = indexName(statement);
+      if (created) return [{kind: "create", name: created, sql: `${statement};`}];
+      const dropped = droppedIndexName(statement);
+      if (dropped) return [{kind: "drop", name: dropped}];
+      return [];
+    },
+  );
+}
+
 export function migrationIndexDefinitions(sql: string): SnapshotIndexDefinition[] {
-  return splitSqlStatements(sql).flatMap((statement) => {
-    const name = indexName(statement);
-    return name ? [{name, sql: `${statement};`}] : [];
-  });
+  return migrationIndexOperations(sql).flatMap((operation) =>
+    operation.kind === "create"
+      ? [{name: operation.name, sql: operation.sql}]
+      : [],
+  );
 }
 
 export function assertClassifiedTables(
@@ -821,6 +893,11 @@ export function buildRestoreSql(input: {
     "PRAGMA defer_foreign_keys=TRUE;",
     ...tablesToDrop.map((table) => `DROP TABLE IF EXISTS ${sqlIdentifier(table)};`),
     unwrapD1Export(input.schemaSql),
+    // 派生索引 ext_admin_typeahead 不进快照，但挂在主表 items 上的三个同步触发器会随
+    // schema 一起还原，而 SQLite 在 CREATE TRIGGER 阶段不校验它引用的表：留下它们会让
+    // 紧随其后的 data 导入在写 items 时报 no such table（本地实测）。故必须在 data 导入
+    // 之前清掉；索引由 prepareItemSearch 在还原流程里随后重建。
+    DROP_ADMIN_TYPEAHEAD_INDEX_SQL,
     unwrapD1Export(input.dataSql),
     "",
   ].join("\n");

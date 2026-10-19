@@ -8,7 +8,7 @@ import {
   saveCloudflareToken,
   type CloudUsageTokenEnv,
 } from "@/server/cloud-usage/token-store";
-import {decryptSecret, encryptSecret} from "@/server/webhooks/crypto";
+import {decryptSecret, encryptSecret} from "@/server/cloud-usage/secret-crypto";
 
 /**
  * Cloudflare Token 存取的往返测试。

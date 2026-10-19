@@ -1,0 +1,39 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import MenuAdminApp from "@/components/admin/menu/MenuAdminApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// Guarded with the same code its menu row binds (`system:menu:manage`).
+// Single code for read and write by design (migration 0126): opening the board
+// and saving edits are the one operation of curating the navigation.
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_MENU_MANAGE,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.MENU_MANAGEMENT}
+  documentTitle={translate("pageDocumentTitle.menuManagement", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.menuManagement", adminLanguage)}
+>
+  <MenuAdminApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </MenuAdminApp>
+</AdminShell>

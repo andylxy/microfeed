@@ -42,8 +42,6 @@ const siteUrl = new URL(Astro.request.url).origin;
   {feedContent}
   {onboardingResult}
   pageTitle={translate("pageTitle.themes", adminLanguage)}
-  settingsActiveSection="custom-code"
-  settingsNavigation
   breadcrumb={{
     name: translate("pageTitle.settings", adminLanguage),
     url: adminUrl("settings", Astro.params.adminPath),

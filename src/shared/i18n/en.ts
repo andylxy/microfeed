@@ -24,11 +24,17 @@ export const en = {
     mismatch: "Input does not match",
   },
   richEditor: {
+    heading: "Heading",
+    heading1: "Heading 1",
     heading2: "Heading 2",
     heading3: "Heading 3",
+    heading4: "Heading 4",
+    heading5: "Heading 5",
+    heading6: "Heading 6",
     textStyle: "Text style",
     bold: "Bold",
     italic: "Italic",
+    strikethrough: "Strikethrough",
     underline: "Underline",
     blockQuote: "Block quote",
     inlineCode: "Inline code",
@@ -38,6 +44,11 @@ export const en = {
     decreaseIndent: "Decrease indent",
     increaseIndent: "Increase indent",
     insertLink: "Insert link",
+    image: "Insert image",
+    autoLink: "Auto link",
+    taskList: "Task list",
+    table: "Table",
+    horizontalRule: "Horizontal rule",
     insertImage: "Insert image",
     insertVideo: "Insert video",
     clearFormatting: "Clear formatting",
@@ -154,6 +165,7 @@ export const en = {
       login_logs: "Login log",
       announcements: "Announcements",
       cloud_usage: "Cloud usage",
+      menu_management: "Menu management",
     },
     group: {
       account: "Account",
@@ -163,8 +175,87 @@ export const en = {
       review: "Review",
       site: "Site",
     },
+    // Labels for the icon picker on the menu admin page (ADR-0007): one key per
+    // name in MENU_ICON_NAMES (`src/shared/MenuIconNames.ts`). Dash-containing
+    // names stay quoted so the key shape mirrors zh-CN exactly.
+    icon: {
+      activity: "Activity",
+      blocks: "Blocks",
+      book: "Book",
+      cloud: "Cloud",
+      code: "Code tag",
+      "code-2": "Code",
+      database: "Database",
+      download: "Download",
+      eye: "Eye",
+      "file-code-2": "Code file",
+      "file-text": "Document",
+      "flask-conical": "Flask",
+      globe: "Globe",
+      history: "History",
+      home: "Home",
+      image: "Image",
+      "key-round": "Key",
+      layers: "Layers",
+      leaf: "Leaf",
+      list: "List",
+      "list-checks": "Checklist",
+      pencil: "Pencil",
+      pill: "Pill",
+      rss: "RSS",
+      settings: "Settings",
+      shield: "Shield",
+      "shield-check": "Shield check",
+      smartphone: "Smartphone",
+      storage: "Storage",
+      tags: "Tags",
+      upload: "Upload",
+      users: "Users",
+      webhook: "Webhook",
+    },
     noPermissions:
       "Your account has no role permissions yet. Ask an administrator to assign a role.",
+  },
+  menuAdmin: {
+    title: "Menu management",
+    intro:
+      "Rename, reorder, hide, re-parent and group the admin navigation. Page paths and permission codes stay locked.",
+    entry: "Entry",
+    effectiveName: "Effective name",
+    nameZh: "Chinese name",
+    nameEn: "English name",
+    nameZhPlaceholder: "Chinese name",
+    nameEnPlaceholder: "English name",
+    icon: "Icon",
+    iconNone: "No icon",
+    parent: "Parent",
+    parentNone: "Top level",
+    reparentToPageConfirm:
+      "Menu row {{code}} is a page. Rows with children only expand and no longer link anywhere, so its own sidebar entry would disappear. Move it under this page anyway?",
+    visible: "Visibility",
+    show: "Show",
+    hide: "Hide",
+    order: "Order",
+    actions: "Actions",
+    restoreDefault: "Restore default",
+    delete: "Delete",
+    deleteConfirm:
+      "Delete menu row {{code}}? Only rows created on this page can be deleted.",
+    createGroup: "New group",
+    createGroupTitle: "Create a group",
+    createGroupHint:
+      "Groups are pure headings (no path, no permission code). Only groups created here can be deleted; migration-seeded rows can only be hidden.",
+    codePlaceholder: "Group code (letters, digits, underscore)",
+    groupTag: "Group",
+    publicEntry: "Public",
+    exportSql: "Export SQL",
+    exportFailed: "Could not export the menu snapshot.",
+    loadFailed: "Could not load the menu rows.",
+    saveFailed: "Could not save the menu changes.",
+    save: "Save",
+    cancel: "Cancel",
+    lockedHint:
+      "Paths and permission codes are maintained by migrations, so every menu entry keeps agreeing with its page guard.",
   },
   forbidden: {
     title: "You don't have access to this page",
@@ -216,6 +307,12 @@ export const en = {
     },
   },
   settings: {
+    // The section filter lives on the page itself: the sidebar injects the
+    // sections as third-level menu rows, so the old sidebar search box has no
+    // home there. Filtering hides non-matching cards without unmounting them.
+    searchSections: "Search settings sections",
+    searchSectionsPlaceholder: "Search settings sections by name",
+    noSectionsMatch: "No settings section matches that name.",
     websiteAppearance: "Website appearance & code",
     trackingUrls: "Tracking URLs",
     accessControl: "Access control",
@@ -231,6 +328,7 @@ export const en = {
     cloudflareTokenDescription: "Read-only token used by the Cloud usage board to fetch D1, R2 and Workers metrics from the Cloudflare API. Stored encrypted; the token itself never leaves the server.",
     cloudflareTokenInputLabel: "API token",
     cloudflareTokenPlaceholder: "Paste the token created in the Cloudflare dashboard",
+    cloudflareTokenWriteOnlyHint: "The saved token is never shown again. Leave the field empty to keep the current token; paste a new value and save to replace it.",
     cloudflareTokenSave: "Save token",
     cloudflareTokenSaving: "Saving…",
     cloudflareTokenClear: "Clear",
@@ -694,6 +792,8 @@ export const en = {
     markdownPreview: "Preview",
     markdownEmptyPreview: "Nothing to preview yet.",
     markdownHint: "Saved as the Markdown you type; the reader page renders it to HTML.",
+    markdownHintApp: "Saved as the Markdown you type; the API returns it unchanged.",
+    markdownSourcePlaceholderGeneric: "Write in Markdown",
     markdownToHtmlWarning: "This chapter is Markdown. Saving from the visual or HTML-source mode converts it to HTML for good — the Markdown source is overwritten. Switch back to Markdown to keep editing the source.",
 
     // RichEditorMediaSettingsDialog
@@ -1313,7 +1413,7 @@ export const en = {
     // Section annotations (TCM sections only; App GetChapterContent contract fields, ADR-0029)
     tcmNoteLabel: "Note",
     tcmVideoLabel: "Video memo",
-    tcmPocketHint: "These map to the App's note and sectionvideo fields. Both fields hold Markdown source, stored verbatim and rendered as Markdown by the App; edits do not take part in the App cache signature (text only), so they reach the App with the next body edit; clearing and saving sends null.",
+    tcmPocketHint: "These map to the App's note and sectionvideo fields. Both fields hold Markdown source, stored verbatim and returned unchanged by the API; edits do not take part in the App cache signature (text only), so they reach the App with the next body edit; clearing and saving sends null.",
     // Fang composition editor (tcm_kind='fang' items only)
     fangEditorTitle: "Ingredients",
     fangEditorIntro: "A formula's ingredients live in _microfeed.fangYaoList, which the App's GetBookIdFang reads. Picking a herb writes its item ID; saving leaves the other pocket fields untouched.",
@@ -2182,7 +2282,7 @@ export const en = {
     note: {
       d1RowsRead: "Rows read counts every row scanned, including rows a query filters out.",
       d1Storage: "The free plan caps a single database at 500 MB.",
-      d1MeteredStorage: "Converted as this month's daily storage summed / 1024. This figure does not match the dashboard's \"Metered storage\"; trust the dashboard.",
+      d1MeteredStorage: "Converted as this month's daily storage summed / 1024. It cannot be lined up with the dashboard's \"Metered storage\" — Cloudflare never published how that one is computed, and the two can differ by orders of magnitude (a 44.51 MB database converts to about 44,510 kB-mo while the dashboard showed 370.93 kB-mo). Trust the dashboard.",
       r2Operations: "Free operations (delete) are excluded. Other actions: {{count}}.",
       r2Egress: "R2 egress is free for every storage class, so it is not shown here; the official dataset is r2BandwidthUsageAdaptiveGroups.",
       workersSubrequests: "Subrequests are not billed.",
@@ -2248,6 +2348,7 @@ export const en = {
     announcements: "Announcements",
     loginLogs: "Login log",
     cloudUsage: "Cloud usage",
+    menuManagement: "Menu management",
   },
   publicBook: {
     unknownAuthor: "Unknown author",
@@ -2357,6 +2458,7 @@ export const en = {
     appVersions: "App versions | microfeed.org",
     announcements: "Announcements | microfeed.org",
     cloudUsage: "Cloud usage | microfeed.org",
+    menuManagement: "Menu management | microfeed.org",
   },
   pageMessage: {
     itemNotFound: "The requested item does not exist or has been deleted.",
@@ -2500,7 +2602,6 @@ export const en = {
       invalidRule: "One of the rollout rules is invalid.",
     },
     cloudUsage: {
-      unsupportedSecretFormat: "The saved Cloudflare API token cannot be read. Save it again in Settings.",
       invalidToken: "Paste a Cloudflare API token: non-empty, at most 200 characters, and no spaces inside.",
       missingEncryptionKey: "The server's encryption key is missing, so the token cannot be stored.",
       requestFailed: "Cloudflare API request failed: {{message}}",
@@ -2555,6 +2656,25 @@ export const en = {
       invalidInput: "Send a non-empty alias and canonical name.",
       duplicate: "That alias already exists.",
       notFound: "That alias does not exist.",
+    },
+    menu: {
+      invalidInput: "That menu request is not valid.",
+      notFound: "Menu row {{code}} does not exist.",
+      invalidIcon: "Icon {{icon}} is not one of the available menu icons.",
+      iconRequired:
+        "Menu row {{code}} is a page, so it needs one of the available icons. Only group rows can be icon-less.",
+      invalidCode:
+        "Group codes use 2 to 64 characters: a lowercase letter first, then lowercase letters, digits, or underscores.",
+      duplicateCode: "A menu row with code {{code}} already exists.",
+      nameRequired: "Enter a Chinese or English name for the group.",
+      nameTooLong: "The name is too long (64 characters at most).",
+      cycle: "A menu row cannot be moved under itself or one of its descendants.",
+      moveBlocked:
+        "That row is already at the edge of its group, so it cannot move further.",
+      seedProtected:
+        "Migration-seeded rows cannot be deleted here; hide them instead.",
+      hasChildren: "This row still has child rows. Move or delete them first.",
+      tooManyOps: "Too many operations in one save (100 at most).",
     },
     tcmEntries: {
       invalidInput: "Please provide a non-empty name.",

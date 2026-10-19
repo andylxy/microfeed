@@ -19,10 +19,8 @@ export const D1_FREE_LIMITS = {
   rowsReadPerDay: 5_000_000,
   /** 每日写入行数（同上） */
   rowsWrittenPerDay: 100_000,
-  /** 账号总储存 */
+  /** 账号总储存（单库上限 500 MB 写在卡片附注文案里，不在这里重复一份） */
   storageBytesPerAccount: 5 * 1024 ** 3,
-  /** 单库储存上限（卡片附注用，不作为进度条分母） */
-  storageBytesPerDatabase: 500 * 1024 ** 2,
 } as const;
 
 /** R2 免费额度。操作计费是账号级、按月累计。 */
@@ -48,10 +46,11 @@ export const R2_GB_MONTH_DIVISOR = 30;
  */
 export const D1_METERED_STORAGE_DIVISOR = 1024;
 
-/** Workers 免费额度。子请求不计费，CPU 超出单次上限直接报错。 */
+/**
+ * Workers 免费额度。子请求不计费；单次 CPU 上限不作为卡片限额（卡片只展示
+ * P99 实测值），其 10 毫秒写在 `cloudUsage.note.workersCpuP99` 的附注文案里。
+ */
 export const WORKERS_FREE_LIMITS = {
   /** 每日请求数（UTC 00:00 重置） */
   requestsPerDay: 100_000,
-  /** 单次调用的 CPU 时间上限（毫秒） */
-  cpuTimeMsPerInvocation: 10,
 } as const;

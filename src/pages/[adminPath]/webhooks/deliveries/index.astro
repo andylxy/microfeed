@@ -32,7 +32,6 @@ const [initialDeliveries, endpoints, initialSelected] = await Promise.all([
   {onboardingResult}
   pageTitle={translate("pageTitle.webhookDeliveries", adminLanguage)}
   webhookActivePage="deliveries"
-  webhookNavigation
 >
   <WebhookDeliveriesApp client:only="react" {endpoints} {initialDeliveries} initialSelected={initialSelected ?? undefined} />
 </AdminShell>

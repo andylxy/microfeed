@@ -7,17 +7,13 @@ import ApiAuthenticationApp, {
 } from "@/components/admin/api/ApiAuthenticationApp";
 import ApiOverviewApp from "@/components/admin/api/ApiOverviewApp";
 import ApiSettingsApp from "@/components/admin/api/ApiSettingsApp";
-import AdminApiSidebar from "@/components/admin/api/AdminApiSidebar";
 import {
   buildApiExampleCode,
   highlightApiExampleCode,
 } from "@/components/admin/api/ApiTryIt";
 import {type ApiKeyRecord, updateApiAccessEnabled} from "@/shared/Api";
-
-const deployment = {
-  deployedAt: "2026-08-05T12:00:00.000Z",
-  protected: true,
-};
+import {ADMIN_API_PAGES, adminApiPageUrl} from "@/shared/AdminApiNavigation";
+import {isMenuIconName} from "@/shared/MenuIconNames";
 
 const apiKey: ApiKeyRecord = {
   apiKey: "mf_abcdefghijklmnopqrstuvwxyz",
@@ -54,26 +50,30 @@ describe("API admin pages", () => {
     });
   });
 
-  it("renders explicit four-page API navigation", () => {
-    const output = renderToStaticMarkup(React.createElement(AdminApiSidebar, {
-      data: {
-        activePage: "authentication",
-        backUrl: "/admin/",
-        deployment,
-        pageUrls: {
-          authentication: "/admin/api/auth/",
-          explorer: "/admin/api/explorer/",
-          overview: "/admin/api/",
-          settings: "/admin/api/settings/",
-        },
-      },
-    }));
-    expect(output).toContain("API Overview");
-    expect(output).toContain("API Authentication");
-    expect(output).toContain("API Explorer");
-    expect(output).toContain("API Settings");
-    expect(output).toContain('href="/admin/"');
-    expect(output).toContain('aria-current="page"');
+  it("keeps the four-page API navigation as the single source for the menu", () => {
+    expect(ADMIN_API_PAGES.map(({id}) => id)).toEqual([
+      "overview",
+      "authentication",
+      "explorer",
+      "settings",
+    ]);
+    expect(ADMIN_API_PAGES.map(({path}) => path)).toEqual([
+      "api",
+      "api/auth",
+      "api/explorer",
+      "api/settings",
+    ]);
+    // 主菜单把这几页注入为「集成 → API」的第三级：文案走 i18n 键，图标名
+    // 必须在共享清单里登记，否则渲染会静默回退 ListIcon。
+    for (const page of ADMIN_API_PAGES) {
+      expect(page.nameKey.startsWith("api.")).toBe(true);
+      expect(isMenuIconName(page.icon)).toBe(true);
+    }
+    // 三级子项的 URL 必须带上实际 admin 路径：漏传会静默回退默认 "admin"，
+    // 自定义 MICROFEED_ADMIN_PATH 的部署里点子项即 404。
+    expect(adminApiPageUrl(ADMIN_API_PAGES[1], "console")).toBe(
+      "/console/api/auth/",
+    );
   });
 
   it("renders overview status and gates the AI-agent prompt", () => {

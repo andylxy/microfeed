@@ -77,3 +77,11 @@ export function filterAdminSettingsSections(
     label(section).toLocaleLowerCase().includes(normalizedQuery)
   );
 }
+
+/** 从 `#hash`（可带或不带 `#`）解析设置分区；未命中返回 null。 */
+export function settingsSectionFromHash(
+  hash: string,
+): AdminSettingsSection["id"] | null {
+  const id = hash.replace(/^#/u, "");
+  return ADMIN_SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? null;
+}

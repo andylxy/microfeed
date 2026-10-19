@@ -11,30 +11,18 @@ import {
 } from "@/components/ui/sheet";
 import {useTranslation} from "@/client/i18n";
 import AdminSidebar from "./AdminSidebar";
-import AdminGroupSidebar from "./AdminGroupSidebar";
-import AdminSettingsSidebar from "./settings/AdminSettingsSidebar";
-import AdminApiSidebar from "./api/AdminApiSidebar";
 import AdminAccountSidebar from "./account/AdminAccountSidebar";
-import AdminWebhookSidebar from "./webhooks/AdminWebhookSidebar";
 import type {
   AdminAccountSidebarData,
-  AdminApiSidebarData,
-  AdminGroupSidebarData,
-  AdminSettingsSidebarData,
   AdminSidebarData,
-  AdminWebhookSidebarData,
 } from "./admin-shell-types";
 
 interface Props {
   accountSidebar?: AdminAccountSidebarData;
-  apiSidebar?: AdminApiSidebarData;
-  groupSidebar?: AdminGroupSidebarData;
-  settingsSidebar?: AdminSettingsSidebarData;
   sidebar: AdminSidebarData;
-  webhookSidebar?: AdminWebhookSidebarData;
 }
 
-export default function AdminMobileNavigation({accountSidebar, apiSidebar, groupSidebar, settingsSidebar, sidebar, webhookSidebar}: Props) {
+export default function AdminMobileNavigation({accountSidebar, sidebar}: Props) {
   const {t} = useTranslation();
   const [navigationOpen, setNavigationOpen] = useState(false);
 
@@ -60,26 +48,6 @@ export default function AdminMobileNavigation({accountSidebar, apiSidebar, group
         {accountSidebar ? (
           <AdminAccountSidebar
             data={accountSidebar}
-            onNavigate={() => setNavigationOpen(false)}
-          />
-        ) : apiSidebar ? (
-          <AdminApiSidebar
-            data={apiSidebar}
-            onNavigate={() => setNavigationOpen(false)}
-          />
-        ) : webhookSidebar ? (
-          <AdminWebhookSidebar
-            data={webhookSidebar}
-            onNavigate={() => setNavigationOpen(false)}
-          />
-        ) : settingsSidebar ? (
-          <AdminSettingsSidebar
-            data={settingsSidebar}
-            onNavigate={() => setNavigationOpen(false)}
-          />
-        ) : groupSidebar ? (
-          <AdminGroupSidebar
-            data={groupSidebar}
             onNavigate={() => setNavigationOpen(false)}
           />
         ) : (

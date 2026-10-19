@@ -8,7 +8,7 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 
-import {scrollToAdminSettingsSection} from "@/client/AdminSettingsScroll";
+import {activeAnchorSectionId, observeScrollAndResize, scrollToAdminSettingsSection} from "@/client/AdminSettingsScroll";
 import {useTranslation} from "@/client/i18n";
 import {Input} from "@/components/ui/input";
 import {
@@ -55,33 +55,9 @@ export default function AdminAccountSidebar({data, onNavigate}: Props) {
   useEffect(() => {
     const root = document.getElementById("admin-page-content");
     if (!root) return;
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (root.scrollHeight - root.clientHeight - root.scrollTop <= 4) {
-          setActive(ADMIN_ACCOUNT_SECTIONS.at(-1)!.id);
-          return;
-        }
-        const threshold = root.getBoundingClientRect().top + 56;
-        let next: AdminAccountSection["id"] = ADMIN_ACCOUNT_SECTIONS[0].id;
-        for (const section of ADMIN_ACCOUNT_SECTIONS) {
-          const element = document.getElementById(section.id);
-          if (element && element.getBoundingClientRect().top <= threshold) {
-            next = section.id;
-          }
-        }
-        setActive(next);
-      });
-    };
-    update();
-    root.addEventListener("scroll", update, {passive: true});
-    window.addEventListener("resize", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      root.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
+    return observeScrollAndResize(root, () =>
+      setActive(activeAnchorSectionId(ADMIN_ACCOUNT_SECTIONS, root)),
+    );
   }, []);
 
   const open = (section: AdminAccountSection) => {

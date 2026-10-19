@@ -2,6 +2,7 @@ import React from "react";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 import Requests from "@/client/requests";
+import i18n from "@/client/i18n";
 import EditItemApp from "@/components/admin/items/EditItemApp";
 import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
 import {STATUSES} from "@/shared/Constants";
@@ -182,6 +183,20 @@ describe("TCM section annotation fields (note / videoMemo)", () => {
         }),
       }),
     );
+  });
+
+  it("gives the annotation editors App-side copy instead of chapter-body wording", () => {
+    // Web 阅读页不显示 note / videoMemo，两者只经接口逐字下发。共享编辑器
+    // 的默认文案是章节正文语法的（「用 Markdown 编写章节正文」与「阅读页
+    // 渲染时再转成 HTML」），用在这两个字段下与事实不符，且与同卡片的
+    // items.tcmPocketHint 互相矛盾。
+    const app = mount(new EditItemApp(props()));
+
+    for (const editor of [noteEditor(app), videoMemoEditor(app)]) {
+      expect(editor?.props.placeholder)
+        .toBe(i18n.t("shared.markdownSourcePlaceholderGeneric"));
+      expect(editor?.props.hint).toBe(i18n.t("shared.markdownHintApp"));
+    }
   });
 
   it("keeps the pocket clean when the annotation fields are untouched", async () => {

@@ -64,7 +64,6 @@ export interface R2StorageRow {
   datetime: string;
   payloadSize: number;
   metadataSize: number;
-  objectCount: number;
 }
 
 export interface WorkersInvocationsRow {
@@ -72,7 +71,6 @@ export interface WorkersInvocationsRow {
   requests: number;
   errors: number;
   subrequests: number;
-  cpuTimeP50: number;
   cpuTimeP99: number;
 }
 
@@ -119,13 +117,12 @@ interface GraphQLAccountNode {
     max?: {
       payloadSize?: number | null;
       metadataSize?: number | null;
-      objectCount?: number | null;
     } | null;
     dimensions?: {bucketName?: string; datetime?: string} | null;
   }>;
   workersInvocationsAdaptive?: Array<{
     sum?: {requests?: number | null; errors?: number | null; subrequests?: number | null} | null;
-    quantiles?: {cpuTimeP50?: number | null; cpuTimeP99?: number | null} | null;
+    quantiles?: {cpuTimeP99?: number | null} | null;
     dimensions?: {datetime?: string} | null;
   }>;
 }
@@ -202,7 +199,7 @@ function buildUsageQuery(window: UsageQueryWindow): string {
         filter: {datetime_geq: ${quoted(window.monthFromIso)}, datetime_leq: ${quoted(window.nowIso)}}
         limit: ${DATASET_LIMIT}
       ) {
-        max { payloadSize metadataSize objectCount }
+        max { payloadSize metadataSize }
         dimensions { bucketName datetime }
       }
       workersInvocationsAdaptive(
@@ -210,7 +207,7 @@ function buildUsageQuery(window: UsageQueryWindow): string {
         limit: ${DATASET_LIMIT}
       ) {
         sum { requests errors subrequests }
-        quantiles { cpuTimeP50 cpuTimeP99 }
+        quantiles { cpuTimeP99 }
         dimensions { datetime }
       }
     }
@@ -283,7 +280,6 @@ export async function fetchUsageGraphQL(
       datetime: row.dimensions?.datetime ?? "",
       payloadSize: numberOrZero(row.max?.payloadSize),
       metadataSize: numberOrZero(row.max?.metadataSize),
-      objectCount: numberOrZero(row.max?.objectCount),
     }));
   }
   if (account.workersInvocationsAdaptive) {
@@ -292,7 +288,6 @@ export async function fetchUsageGraphQL(
       requests: numberOrZero(row.sum?.requests),
       errors: numberOrZero(row.sum?.errors),
       subrequests: numberOrZero(row.sum?.subrequests),
-      cpuTimeP50: numberOrZero(row.quantiles?.cpuTimeP50),
       cpuTimeP99: numberOrZero(row.quantiles?.cpuTimeP99),
     }));
   }

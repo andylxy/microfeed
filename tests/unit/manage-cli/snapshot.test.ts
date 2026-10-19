@@ -28,6 +28,7 @@ import {
   createSnapshotArchive,
   extractSnapshotArchive,
   migrationIndexDefinitions,
+  migrationIndexOperations,
   repositoryMigrations,
   type SnapshotManifest,
   SNAPSHOT_FORMAT,
@@ -38,7 +39,11 @@ import {
   validateSnapshotMigrations,
   writeSnapshotManifest,
   } from "../../../manage-cli/lib/snapshot";
-import {ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES} from "../../../src/shared/ItemSearchSql";
+import {
+  ADMIN_TYPEAHEAD_TRIGGER_PREFIX,
+  CREATE_SITE_SEARCH_INDEX_SQL,
+  ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES,
+} from "../../../src/shared/ItemSearchSql";
 import {repositoryRoot} from "../../../manage-cli/lib/process";
 import {
 } from "../../../manage-cli/commands";
@@ -340,6 +345,7 @@ function snapshotSql(
     !name.startsWith("items_site_search_") &&
     !name.startsWith("pages_site_search_") &&
     !name.startsWith("site_search_documents_after_") &&
+    !name.startsWith(ADMIN_TYPEAHEAD_TRIGGER_PREFIX) &&
     !ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES.some((prefix) =>
       name === prefix || name.startsWith(`${prefix}_`)
     )
@@ -371,6 +377,25 @@ function snapshotSql(
 describe("migration upgrades from historical snapshot positions", () => {
   it("upgrades both a normal database and a schema/data snapshot from every released head", async () => {
     const migrations = await repositoryMigrations();
+    // 每个迁移里的索引 DDL 操作，按语句顺序保留 create/drop，预读一次供两处重放使用。
+    const migrationIndexOps = await Promise.all(migrations.map(async (migration) =>
+      migrationIndexOperations(await readFile(
+        path.join(repositoryRoot, "migrations", migration.filename),
+        "utf8",
+      ))
+    ));
+    // 最终索引集：按迁移顺序重放每一条 create/drop，扣除像 0091 那样被后续 DROP 掉的
+    // 冗余索引，同时保留 0102/0022 那种「先删后建」重建出来的索引——只看语句顺序才分得清。
+    const expectedIndexes: string[] = (() => {
+      const names = new Set<string>();
+      for (const operations of migrationIndexOps) {
+        for (const operation of operations) {
+          if (operation.kind === "create") names.add(operation.name);
+          else names.delete(operation.name);
+        }
+      }
+      return [...names].sort();
+    })();
     for (let position = 1; position <= migrations.length; position += 1) {
       const normal = new DatabaseSync(":memory:");
       createMigrationLedger(normal);
@@ -389,15 +414,29 @@ describe("migration upgrades from historical snapshot positions", () => {
         `PRAGMA defer_foreign_keys=ON; BEGIN TRANSACTION;\n${exported.data}\nCOMMIT;`,
       );
       const repairedIndexes = new Map<string, string>();
-      for (const migration of migrations.slice(0, position)) {
-        for (const definition of migrationIndexDefinitions(await readFile(
-          path.join(repositoryRoot, "migrations", migration.filename),
-          "utf8",
-        ))) {
-          repairedIndexes.set(definition.name, definition.sql);
+      for (const operations of migrationIndexOps.slice(0, position)) {
+        for (const operation of operations) {
+          if (operation.kind === "create") {
+            repairedIndexes.set(operation.name, operation.sql);
+          } else {
+            // 撤销在 position 之前已被后续迁移删除的索引，避免把 0091 删掉的冗余索引
+            // 重新建回去（这一段之后的迁移不会再删它，重建后就再也删不掉）。
+            repairedIndexes.delete(operation.name);
+          }
         }
       }
       restored.exec([...repairedIndexes.values()].join("\n"));
+      // 快照 schema 会剔除派生的 site_search FTS 虚拟表（导出时 byItemSearchIndexesSuspended
+      // 挂起了它们）。当 released head 落在建 FTS 的 0013 之后、重建触发器的 0090 之前时，
+      // 重放的 0090 会 CREATE TRIGGER 引用不存在的 site_search_exact 而报错。生产在恢复后
+      // 用 prepareItemSearch 补建这份派生索引；这里同步补建，测试才能继续校验账本/索引/分类不变量。
+      // 仅在 pages 已存在（0013 已在 position 之前应用）时补建，否则 FTS 与触发器由重放的
+      // 0013 正常创建，低水位无需补建（此时 pages 尚不存在，补建会引用缺表）。
+      if (restored.prepare(
+        "SELECT 1 AS present FROM sqlite_schema WHERE type = 'table' AND name = 'pages'",
+      ).get()) {
+        restored.exec(CREATE_SITE_SEARCH_INDEX_SQL);
+      }
       await applyMigrationRange(restored, migrations, position, migrations.length);
 
       for (const database of [normal, restored]) {
@@ -409,7 +448,8 @@ describe("migration upgrades from historical snapshot positions", () => {
         );
         expect(database.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
         expect(database.prepare(
-          "SELECT json_extract(data, '$.title') AS title FROM channels",
+          "SELECT json_extract(data, '$.title') AS title FROM channels " +
+            "WHERE id = 'channel0001'",
         ).get()).toEqual({title: "Saved channel"});
         expect(database.prepare(
           "SELECT id, name, api_key FROM api_keys WHERE id = 'snapshot-api-key'",
@@ -422,14 +462,7 @@ describe("migration upgrades from historical snapshot positions", () => {
           "SELECT name FROM sqlite_schema WHERE type = 'index' AND " +
             "sql IS NOT NULL ORDER BY name",
         ).all() as Array<{name: string}>;
-        expect(indexes.map(({name}) => name)).toEqual(
-          [...new Set((await Promise.all(migrations.map(async (migration) =>
-            migrationIndexDefinitions(await readFile(
-              path.join(repositoryRoot, "migrations", migration.filename),
-              "utf8",
-            ))
-          ))).flat().map(({name}) => name))].sort(),
-        );
+        expect(indexes.map(({name}) => name)).toEqual(expectedIndexes);
         const tables = database.prepare(
           "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
         ).all() as Array<{name: string}>;

@@ -5,7 +5,7 @@
  * key renders as `errors.foo.bar` in the dashboard. `tsc` cannot catch that:
  * keys are plain strings at every call site. This script is the only guard.
  *
- * It asserts six things:
+ * It asserts seven things:
  *   unresolved       - a referenced key that `translate()` cannot resolve.
  *   only en / only zh - the two resource files drifted apart.
  *   placeholder mis  - same key, different `{{placeholders}}` per language.
@@ -14,6 +14,8 @@
  *   lone braces      - a value with a single-braced `{name}` group. i18next
  *                      interpolates `{{name}}` only, so the group renders
  *                      literally in the UI.
+ *   dynamic keys     - labels built from a value set (nav ids, review actions,
+ *                      menu icon names) that the literal scan cannot see.
  *
  * Run with `yarn i18n:check`. It exits non-zero when anything is wrong.
  */
@@ -25,6 +27,7 @@ import {ADMIN_MENU_CODES} from "../src/shared/Constants";
 import {en} from "../src/shared/i18n/en";
 import {flatten, translate} from "../src/shared/i18n/index";
 import {zhCN} from "../src/shared/i18n/zh-CN";
+import {MENU_ICON_NAMES} from "../src/shared/MenuIconNames";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const sourceRoot = path.join(repositoryRoot, "src");
@@ -138,6 +141,15 @@ const missingReviewLabels = [
   ...REPORT_CATEGORIES.map((category) => `review.category.${category}`),
 ].filter((key) => translate(key) === key);
 
+// The menu admin page renders icon labels through a dynamic key
+// (`menu.icon.${name}`), so the literal scan above cannot see them: a missing
+// one would show the raw key name (e.g. `menu.icon.list`) in the picker.
+// Enumerate the registry instead - this is the gap that let the three icons
+// added for the cloud-usage batch ship untranslated.
+const missingIconLabels = MENU_ICON_NAMES.map(
+  (name) => `menu.icon.${name}`,
+).filter((key) => translate(key) === key);
+
 const failures: string[] = [];
 if (unresolved.length > 0) {
   failures.push(
@@ -187,6 +199,13 @@ if (missingReviewLabels.length > 0) {
     `review labels with no translation (${missingReviewLabels.length}) - the ` +
       `review pages would show the key itself:\n    ` +
       missingReviewLabels.join("\n    "),
+  );
+}
+if (missingIconLabels.length > 0) {
+  failures.push(
+    `menu icon labels with no translation (${missingIconLabels.length}) - the ` +
+      `icon picker would show the key itself:\n    ` +
+      missingIconLabels.join("\n    "),
   );
 }
 

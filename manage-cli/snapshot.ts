@@ -80,6 +80,7 @@ import {
   createSnapshotArchive,
   extractSnapshotArchive,
   migrationIndexDefinitions,
+  migrationIndexOperations,
   repositoryMigrations,
   type SnapshotIndexDefinition,
   type SnapshotManifest,
@@ -1115,8 +1116,18 @@ async function repositoryIndexDefinitions(
   const definitions = new Map<string, SnapshotIndexDefinition>();
   for (const migration of selectedMigrations) {
     const sql = await readFile(path.join(repositoryRoot, "migrations", migration.filename), "utf8");
-    for (const definition of migrationIndexDefinitions(sql)) {
-      definitions.set(definition.name, definition);
+    // 按语句顺序重放 create/drop：只并 CREATE 会把被后续迁移删掉的索引（0091 删掉 11 条
+    // 与 UNIQUE/PK 重复的冗余索引）误算成仍存在，导致 status 校验与恢复补索引都偏多。
+    // 也保留 0102/0022 那种「先删后建」重建出来的索引，因为最终仍在。
+    for (const operation of migrationIndexOperations(sql)) {
+      if (operation.kind === "create") {
+        definitions.set(operation.name, {
+          name: operation.name,
+          sql: operation.sql,
+        });
+      } else {
+        definitions.delete(operation.name);
+      }
     }
   }
   return [...definitions.values()];

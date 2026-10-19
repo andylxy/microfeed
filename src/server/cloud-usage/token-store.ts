@@ -2,9 +2,9 @@
  * Cloudflare API Token 的存取中枢（migration 0124）。
  *
  * 单行密文表 `ext_cloud_usage_token`：id 固定 1，列 `token_cipher` / `token_hint` /
- * `updated_at_ms`。加密走 `src/server/webhooks/crypto.ts` 的 AES-GCM 实现
- * （通用导出 `encryptSecret` / `decryptSecret`），KEK 取 `UPLOAD_SIGNING_KEY`
- * ——`requiredSecrets()` 常驻的随机值，本功能不新增任何环境变量。
+ * `updated_at_ms`。加密走 `secret-crypto.ts` 的 `encryptSecret` / `decryptSecret`
+ * （转发 `webhooks/crypto.ts` 那份 AES-GCM，上游文件保持零改动），KEK 取
+ * `UPLOAD_SIGNING_KEY`——`requiredSecrets()` 常驻的随机值，本功能不新增任何环境变量。
  *
  * 读取分三态，界面据此给不同引导：
  *   - `absent`      没有密文行 → 去设置页配置；
@@ -14,7 +14,7 @@
  * 明文与密文都不出服务端：状态接口只回 `{configured, tokenHint, updatedAtMs}`。
  */
 
-import {encryptSecret, decryptSecret} from "@/server/webhooks/crypto";
+import {decryptSecret, encryptSecret} from "@/server/cloud-usage/secret-crypto";
 import {AppError} from "@/shared/errors";
 
 /** 本模块只用到这两个绑定；窄接口让测试可以传入替身。 */

@@ -9,7 +9,8 @@
 
 ### 远程 D1 每日额度
 
-- 远程 D1 每天只有 5M 读取额度。本项目部署在 Cloudflare Workers 上，业务查询全部走远程 D1，额度耗尽当天即不可用。
+- 远程 D1 每天**读取**额度为 5M 行（`rows_read`）。本项目部署在 Cloudflare Workers 上，业务查询全部走远程 D1，读取额度耗尽当天即不可用。
+- 远程 D1 每天还有 **100K 写入行数上限**（`rows_written`，即 `INSERT`/`UPDATE`/`DELETE` 的影响行数）。它与 5M 读取额度**相互独立**：读没爆也可能写爆。整库覆盖 / FTS 重建（触发器往 `site_search_*` 影子表写海量 token 行）等大批量写会迅速打爆写额度，之后当天任何写（含 `site_search_metadata` 的 ready 切换、`migrations apply`、`manage deploy`）都会被拒（`[code:7500] exceeded D1's free tier daily row write limit`），直到 **UTC 次日 0 点**重置，读不受影响。大批量写前先评估当日写额度，别把写和 deploy / 搜索 ready 挤在同一天。
 - 添加功能时，必须避免全表扫描：每个新查询先确认所走索引，把预计扫描行数与读取字节数写清楚再动手。
 - 出现全表扫描时，必须给出修复方案，并以量化方式显示：当前扫描行数、当前读取字节数、修复后预计读取字节数、所走索引或需新增的索引定义。
 
@@ -18,6 +19,16 @@
 - 一切内容回复按量化方式给出，禁止模糊不清。禁止「大概」「以后」「可能」这类没有边界的措辞。
 - 结论必须明确：可以就是可以，不可以就不可以，没有折中的方式。
 - 涉及数值、范围、时间、数量的判断，必须给出具体数字或可验证的条件；暂时给不出数字时，写明缺什么数据、从哪里取，禁止用形容词代替数值。
+
+## 最高指令：主题安装 / 主题写库必须用绑定参数（优化优先级最高）
+
+- 一切向 `themes` / `theme_drafts` 写行的代码——Worker `src/server/themes/ThemeStore.ts`、管理 CLI `manage-cli/theme.ts`，以及任何后续新增的主题安装 / 发布 / 草稿 / 迁移路径——都必须使用**绑定参数**：SQL 里只写 `?` 占位，值经 `.bind(...)` / `queryD1WithParameters(...)` 传。严禁把 `bundle_json` 等大列用模板插值拼进 SQL 字面量。
+- 理由（量化）：D1 对**单条 SQL 语句的字面量长度有上限，实测约 100KB**（75KB 可通过、135KB 报 `SQLITE_TOOBIG`）。中文主题 `feed-zh` 单个 `bundle_json` 达 **125KB**，按字面量拼必失败；绑定参数不计入 SQL 文本长度，可正常入库。
+- 改动任何主题安装 / 写库代码前、以及安装主题时，必须先确认走的是绑定参数方式（不是拼字面量）。
+- 该不变量由 `tests/unit/theme-install-bound-params.test.ts` 守护：写 `themes` / `theme_drafts` 的 INSERT SQL 中不得出现 `${` 插值。
+- **数据同步场景同样适用**：本地→远程同步、整库覆盖、差量补推等一切向 `themes` / `theme_drafts` 写行的路径（含 `.scratch` 下的一次性同步脚本、D1 REST 批量接口）都必须走绑定参数——SQL 文本只写 `?` 占位，值经 `.bind(...)`、`queryD1WithParameters(...)` 或 REST `{sql, params}` 传。把大列拼成 SQL 字面量（`VALUES ('<大列文本>')`）、以及「占位 INSERT + 分块 UPDATE 拼列」都是历史应急通道，不作为常规方案。
+- **安装或同步主题前的确认清单**（三条全部满足才算通过）：① 写库 SQL 文本中只有 `?` 占位、无任何大列字面量；② 全部值（含 `bundle_json`、`preview_fixture_json`）经绑定参数传递；③ 预期效果：feed-zh 整行 `bundle_json` **一条 INSERT 即可入库**，不出现为绕过文本长度上限而做的分块 UPDATE。若不满足（例如拿到的是字面量 SQL 文件），先改造通道再执行。
+- **同步额度纪律**（2026-10-18 实测教训）：单表同步失败不得触发全表补跑——整表重推会把日写额度（100,000 行）翻倍烧光；核对通过即零写入；一次到位、不重推。
 
 ## 最高指令：门禁仅在手动触发时运行（普通任务不跑）
 
@@ -31,6 +42,7 @@
 ## 目录
 
 - 最高指令：远程 D1 额度与量化回复
+- 最高指令：主题安装 / 主题写库必须用绑定参数（优化优先级最高）
 - 最高指令：门禁仅在手动触发时运行（普通任务不跑）
 - 最高指令：git 提交检查
   - 本环境：提交由用户手动执行（AI 不代为提交）
@@ -50,6 +62,7 @@
 - API 规范与文档
 - 前端组件
   - 管理后台列表页：取数代价按行读判断
+- 管理后台左侧菜单（导航树）
 - 交互样式
 - 管理后台国际化
 - 内容管理 CLI
@@ -185,6 +198,43 @@
 
 - 列表/看板类页面（`.astro` + React 组件）的取数代价以 D1 **行读**为准：一次请求只读页面当前要展示的范围。不得为了在客户端凑一个分页控件而把整本或整表读回来——客户端切片不产生任何行读，代价在那一次请求本身。
 - 行数可能很大的列表走服务端分页（`themes` 走 `listing.pagination` 与 `THEME_LIST_PAGE_SIZE`），或按实体按需读取（卷看板：点书只读该书的书目，点卷才读该卷的条目）。
+
+## 管理后台左侧菜单（导航树）
+
+左侧导航是一棵任意深度树，由 `ext_menu` 数据表驱动，前端在 `AdminSidebar` 里递归渲染 `AdminMenuItemLink`。分组节点可展开/收起；当前页所在的祖先链自动展开；展开态按账号记进 `localStorage`。
+
+### 数据来源与结构
+
+- `ext_menu` 是自引用表：`parent_code` 指向同表父行，迁移 0041 建有 `ix_ext_menu_parent` 索引。读取走 `src/server/admin/menu.ts` 的 `readAdminMenu`（递归的 `pruneEmptyParents` / `linkGroups`），能吐出任意深度树，前端无需改动即可支持三级与更深层级。
+- 每行携带 `path`（页面路径，空串表示该行是纯分组）、`permission_code`、`icon`、`sort`、`is_visible`，以及迁移 0125 加的 `name_zh` / `name_en`（均可空，作为可选项覆盖）。
+- 可见性由 `permission_code` 加 `rbacAllows` 决定；页面可达性由页面自身的 `requirePagePermission` 决定。两者一致由迁移人工比对与 `tests/worker/admin-page-guards.test.ts` 静态重放迁移保证。
+
+### 三级子项的注入
+
+`SETTINGS`、`API`、`WEBHOOKS` 三个二级节点在 `ext_menu` 里没有第三层子行，它们的第三级由 `AdminSidebar.SUB_SECTION_BUILDERS` 在渲染时注入（这些子项不是数据树的一部分，是页面分区或真实子页）：
+
+- `SETTINGS` → `ADMIN_SETTINGS_SECTIONS`（11 个同页锚点，形如 `设置#custom-code`），活动项跟随正文滚动所在分区（`settings-section-state` store 同步）。
+- `API` → `ADMIN_API_PAGES`（真实子页）。
+- `WEBHOOKS` → `ADMIN_WEBHOOK_PAGES`（真实子页）。
+
+新增一个域（又一个需要三级的二级节点）就在 `SUB_SECTION_BUILDERS` 加一行，并把清单写进对应模块（`AdminSettingsNavigation` / `AdminApiNavigation` / `AdminWebhookNavigation`）。每个二级节点保留自己的 `menu.item.*` 文案键——`menuEntryLabelKey` 按 `group_` 前缀判分组、不看有没有子节点，所以带注入子项的页面节点不会变成分组键。
+
+### 名称解析
+
+渲染优先级（见 `src/shared/AdminNavigation.ts` 的 `adminMenuItemLabel`）：当前语言列优先，该列为空取另一列，两列皆空回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。管理页表格（`/admin/menu`）有一列「生效名称」显示这条优先级算出的当前实际文本，运营无需切换语言即可看到改完后的菜单显示内容。
+
+### 菜单管理页 `/admin/menu`
+
+- 开放的操作：重命名（`name_zh` / `name_en`，留空即回退 i18n）、改图标（从 `MENU_ICON_NAMES` 选）、上移/下移（改 `sort`）、显/隐（改 `is_visible`）、改父节点（禁止挂到自身子孙下）、新建纯分组（空 `path`、空 `permission_code`）、删除管理页自建行。
+- 不开放的操作：`path` 与 `permission_code`。这两列是「菜单可见 ⇔ 页面可达」的前提，运行时改动会破坏该不变量，可达性继续由迁移 + 门禁测试保证；新建指向新页面的叶子也不开放（`ADMIN_MENU_CODES` 是编译期常量，后台新建的 code 进不去枚举、高亮会失配）。
+- 行 id 前缀：迁移种子行以 `m_` 开头（只可隐藏、不可删）；管理页自建行以 `mm_` 开头（`MENU_ROW_CUSTOM_ID_PREFIX`，可删除）。删除种子行被 `errors.menu.seedProtected` 拒绝。
+- 「导出 SQL」按钮（`buildMenuExportSql`）把当前运行时改动导成 data 迁移文本交用户提交：种子行按 id 发 `UPDATE` 只写可变字段（不改 `path` / `permission_code` / `i18n_key` / `created_at_ms`），自建行按 id 发 `INSERT`。
+- 保存校验的额外守门：`errors.menu.iconRequired`（页面行清空图标会在侧栏静默回退成 list 图标、两端显示对不上，故拒绝）、`reparentToPageConfirm`（把页面行挂到非空父级前确认，因为有子节点的行在侧栏只展开不跳转、自身入口会消失）、`MENU_ADMIN_MAX_OPS`（单次保存操作数上限，防误发整表重放）。
+- 图标名清单：`src/shared/MenuIconNames.ts` 的 `MENU_ICON_NAMES` 与 `AdminMenuItemLink.MENU_ICONS` 必须一一对应，由 `tests/unit/menu-admin-ops.test.ts` 守护；新增图标名要同时改这两处并与 i18n 的 `menu.icon.*` 键（en/zh 镜像）对齐。设置三级需要的 9 个图标名（`cloud` / `code` / `eye` / `globe` / `image` / `list-checks` / `rss` / `shield` / `storage`）已加进清单。
+
+### 渲染防闪烁
+
+`AdminShell.astro` 给 `AdminSidebar` 岛加了 `transition:persist="admin-menu-sidebar"`，导航时组件实例保留、只换 props，避免每次切换都重建侧栏造成的闪烁。其余四个侧栏岛不加该属性。
 
 ## 交互样式
 

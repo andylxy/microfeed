@@ -136,3 +136,7 @@ src/worker-configuration.d.ts
 .workbuddy-ai/memory/
 .scratch_*.xml
 dev-local.bat.bak-*
+
+# CDP 实机探针的 headless Chrome profile（探针路径意外在仓库根时的兜底；
+# 探针本身已改放 .scratch/md-toolbar-probe/，此处防止历史遗留目录被误提交）。
+chrome-profile/

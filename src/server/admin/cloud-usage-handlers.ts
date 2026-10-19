@@ -15,6 +15,7 @@ import {
   fetchUsageGraphQL,
   listD1Databases,
   utcDateOf,
+  type UsageGraphQLPayload,
   type UsageQueryWindow,
 } from "@/server/cloud-usage/CloudflareClient";
 import {
@@ -157,6 +158,26 @@ function unavailableCard(
   return card(key, 0, limits, "—", {unavailableKey: reasonKey});
 }
 
+/**
+ * 取到数就出正常卡，没取到就出「不可用」卡。
+ *
+ * `value` 为 `null` 表示这一项没取到数——与「取到了，就是 0」是两件事：0 画成
+ * 空进度条，null 画成破折号并带原因，运维不会把两者看混。`display` 只在有值
+ * 时才调用，所以格式化函数里不必再判空。
+ */
+function cardOrUnavailable(
+  key: UsageCard["key"],
+  value: number | null,
+  limits: CardLimits,
+  display: (value: number) => string,
+  reasonKey: string,
+  extra: Pick<UsageCard, "noteKey" | "noteParams" | "asOfUtc"> = {},
+): UsageCard {
+  return value === null
+    ? unavailableCard(key, limits, reasonKey)
+    : card(key, value, limits, display(value), extra);
+}
+
 function emptySection<T>(reasonKey: string): UsageSection<T> {
   return {available: false, unavailableKey: reasonKey, data: null};
 }
@@ -272,7 +293,7 @@ const WORKERS_REQUESTS_LIMIT: CardLimits = {
 function assembleD1(
   period: UsagePeriod,
   window: UsageQueryWindow,
-  payload: Awaited<ReturnType<typeof fetchUsageGraphQL>>,
+  payload: UsageGraphQLPayload,
   databaseCount: number | null,
 ): UsageSection<D1Usage> {
   const analytics = payload.d1Analytics;
@@ -312,54 +333,49 @@ function assembleD1(
   const meteredKbMonth = storagePeaks.allDaysTotal / D1_METERED_STORAGE_DIVISOR;
 
   const cards: UsageCard[] = [
-    databaseCount === null
-      ? unavailableCard(
-        "d1Databases",
-        D1_DATABASE_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.d1ListFailed,
-      )
-      : card("d1Databases", databaseCount, D1_DATABASE_LIMIT, String(databaseCount)),
-    analytics
-      ? card("d1RowsRead", rowsReadToday, D1_ROWS_READ_LIMIT, compact(rowsReadToday), {
-        noteKey: "cloudUsage.note.d1RowsRead",
-      })
-      : unavailableCard(
-        "d1RowsRead",
-        D1_ROWS_READ_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
-      ),
-    analytics
-      ? card("d1RowsWritten", rowsWrittenToday, D1_ROWS_WRITTEN_LIMIT, compact(rowsWrittenToday))
-      : unavailableCard(
-        "d1RowsWritten",
-        D1_ROWS_WRITTEN_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
-      ),
-    storage
-      ? card("d1Storage", totalStorage, D1_STORAGE_LIMIT, bytes(totalStorage), {
+    cardOrUnavailable(
+      "d1Databases",
+      databaseCount,
+      D1_DATABASE_LIMIT,
+      String,
+      CLOUD_USAGE_UNAVAILABLE.d1ListFailed,
+    ),
+    cardOrUnavailable(
+      "d1RowsRead",
+      analytics ? rowsReadToday : null,
+      D1_ROWS_READ_LIMIT,
+      compact,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+      {noteKey: "cloudUsage.note.d1RowsRead"},
+    ),
+    cardOrUnavailable(
+      "d1RowsWritten",
+      analytics ? rowsWrittenToday : null,
+      D1_ROWS_WRITTEN_LIMIT,
+      compact,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+    ),
+    cardOrUnavailable(
+      "d1Storage",
+      storage ? totalStorage : null,
+      D1_STORAGE_LIMIT,
+      bytes,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+      {
         noteKey: "cloudUsage.note.d1Storage",
         asOfUtc: !latestStorageDate || latestStorageDate === today
           ? undefined
           : startOfUtcDateIso(latestStorageDate),
-      })
-      : unavailableCard(
-        "d1Storage",
-        D1_STORAGE_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
-      ),
-    storage
-      ? card(
-        "d1MeteredStorage",
-        meteredKbMonth,
-        NO_LIMIT,
-        `${Math.round(meteredKbMonth)} kB-mo`,
-        {noteKey: "cloudUsage.note.d1MeteredStorage"},
-      )
-      : unavailableCard(
-        "d1MeteredStorage",
-        NO_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
-      ),
+      },
+    ),
+    cardOrUnavailable(
+      "d1MeteredStorage",
+      storage ? meteredKbMonth : null,
+      NO_LIMIT,
+      (value) => `${Math.round(value)} kB-mo`,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+      {noteKey: "cloudUsage.note.d1MeteredStorage"},
+    ),
   ];
 
   const trend: D1TrendPoint[] = dateRange(window.dayFromDate, window.dayToDate)
@@ -379,7 +395,7 @@ function assembleD1(
 function assembleR2(
   period: UsagePeriod,
   window: UsageQueryWindow,
-  payload: Awaited<ReturnType<typeof fetchUsageGraphQL>>,
+  payload: UsageGraphQLPayload,
 ): UsageSection<R2Usage> {
   const operations = payload.r2Operations;
   const storage = payload.r2Storage;
@@ -423,32 +439,42 @@ function assembleR2(
   const gbMonth = storagePeaks.allDaysTotal / (1024 ** 3) / R2_GB_MONTH_DIVISOR;
 
   const cards: UsageCard[] = [
-    storage
-      ? card("r2Storage", currentBytes, NO_LIMIT, bytes(currentBytes), {
+    cardOrUnavailable(
+      "r2Storage",
+      storage ? currentBytes : null,
+      NO_LIMIT,
+      bytes,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+      {
         asOfUtc: !latestStorageDate || latestStorageDate === window.dayToDate
           ? undefined
           : startOfUtcDateIso(latestStorageDate),
-      })
-      : unavailableCard("r2Storage", NO_LIMIT, CLOUD_USAGE_UNAVAILABLE.graphqlFailed),
-    storage
-      ? card("r2StorageGbMonth", gbMonth, R2_GB_MONTH_LIMIT, `${gbMonth.toFixed(2)} GB-month`)
-      : unavailableCard(
-        "r2StorageGbMonth",
-        R2_GB_MONTH_LIMIT,
-        CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
-      ),
-    operations
-      ? card("r2ClassA", classA, R2_CLASS_A_LIMIT, compact(classA), {
-        noteKey: "cloudUsage.note.r2Operations",
-        noteParams: {count: other},
-      })
-      : unavailableCard("r2ClassA", R2_CLASS_A_LIMIT, CLOUD_USAGE_UNAVAILABLE.graphqlFailed),
-    operations
-      ? card("r2ClassB", classB, R2_CLASS_B_LIMIT, compact(classB), {
-        noteKey: "cloudUsage.note.r2Operations",
-        noteParams: {count: other},
-      })
-      : unavailableCard("r2ClassB", R2_CLASS_B_LIMIT, CLOUD_USAGE_UNAVAILABLE.graphqlFailed),
+      },
+    ),
+    cardOrUnavailable(
+      "r2StorageGbMonth",
+      storage ? gbMonth : null,
+      R2_GB_MONTH_LIMIT,
+      (value) => `${value.toFixed(2)} GB-month`,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+    ),
+    cardOrUnavailable(
+      "r2ClassA",
+      operations ? classA : null,
+      R2_CLASS_A_LIMIT,
+      compact,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+      // 「清单外操作」的计数只挂在 Class A 卡上：两张卡共用同一个 `other` 计数，
+      // 各挂一次会让同一句附注在页面上重复出现两遍。
+      {noteKey: "cloudUsage.note.r2Operations", noteParams: {count: other}},
+    ),
+    cardOrUnavailable(
+      "r2ClassB",
+      operations ? classB : null,
+      R2_CLASS_B_LIMIT,
+      compact,
+      CLOUD_USAGE_UNAVAILABLE.graphqlFailed,
+    ),
   ];
 
   const trend: R2TrendPoint[] = dateRange(window.monthFromDate, window.dayToDate)
@@ -465,7 +491,7 @@ function assembleR2(
 function assembleWorkers(
   period: UsagePeriod,
   window: UsageQueryWindow,
-  payload: Awaited<ReturnType<typeof fetchUsageGraphQL>>,
+  payload: UsageGraphQLPayload,
 ): UsageSection<WorkersUsage> {
   const invocations = payload.workersInvocations;
   if (!invocations) {

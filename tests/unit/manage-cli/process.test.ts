@@ -8,6 +8,7 @@ import {
   relativePathFromDirectory,
   repositoryCommitSha,
   repositoryRoot,
+  runAstroDev,
   runCommand,
   runWrangler,
   runYarnScript,
@@ -138,6 +139,62 @@ describe("Wrangler command execution", () => {
     expect(executable).toContain(path.join("wrangler", "bin", "wrangler.js"));
     expect(args).toEqual(["d1", "list", "--json"]);
     expect(options).toEqual({cwd: repositoryRoot});
+  });
+});
+
+describe("Astro dev command execution", () => {
+  it("starts the dev server directly instead of through a Yarn middle layer", async () => {
+    const runner = vi.fn<CommandRunner>().mockResolvedValue({
+      exitCode: 0,
+      stderr: "",
+      stdout: "",
+    });
+    await runAstroDev(runner, ["dev", "--host", "0.0.0.0"], {
+      env: {MICROFEED_INSTANCE: "local"},
+    });
+
+    const [executable, args, options] = runner.mock.calls[0]!;
+    expect(executable).toContain(path.join("astro", "bin", "astro.mjs"));
+    expect(args).toEqual(["dev", "--host", "0.0.0.0"]);
+    expect(options?.cwd).toBe(repositoryRoot);
+    // The dev server outlives every stdin state its ancestors can produce, so
+    // the child must be marked long-running.
+    expect(options?.longRunning).toBe(true);
+    expect(options?.env).toMatchObject({
+      MICROFEED_INSTANCE: "local",
+      PATH: expect.stringContaining(path.join("node_modules", ".bin")),
+    });
+  });
+});
+
+describe("Long-running command execution", () => {
+  // A flowing stdin that reaches EOF exits with code 7, mirroring how Vite's
+  // dev server shuts down when `astro dev` sees its stdin end.
+  const stdinProbeSource = [
+    "process.stdin.resume();",
+    "process.stdin.on('end', () => process.exit(7));",
+    "setTimeout(() => process.exit(0), 1500);",
+  ].join("\n");
+
+  async function writeStdinProbe(): Promise<string> {
+    const root = await mkdtemp(path.join(tmpdir(), "microfeed-long-running-"));
+    temporaryDirectories.push(root);
+    const entry = path.join(root, "stdin-probe.mjs");
+    await writeFile(entry, stdinProbeSource, {mode: 0o600});
+    return entry;
+  }
+
+  it("keeps the child's stdin open so an EOF cannot terminate it", async () => {
+    const entry = await writeStdinProbe();
+
+    await expect(runCommand(entry, [], {longRunning: true}))
+      .resolves.toMatchObject({exitCode: 0});
+  });
+
+  it("ends the child's stdin for short-lived commands", async () => {
+    const entry = await writeStdinProbe();
+
+    await expect(runCommand(entry, [])).rejects.toThrow(/exit code 7/u);
   });
 });
 

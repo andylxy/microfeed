@@ -3,10 +3,24 @@ export const SITE_SEARCH_VIRTUAL_TABLE_PREFIXES = [
   "site_search_title_trigram",
 ] as const;
 
+// 后台事件源 typeahead 的专用 FTS 表，同样是派生数据，快照导出时一并排除。
+// 表名在此单点定义：语句文本里用模板插值引用它——派生表不在本地门禁库里，
+// 直写表名会让 check-d1-scan 的 EXPLAIN 报 no such table，插值则由 canPlan
+// 判为动态名字并计入 skipped；快照排除名单也由这个常量派生。
+export const ADMIN_TYPEAHEAD_TABLE = "ext_admin_typeahead";
+
+// 挂在主表 items 上的三个同步触发器共用的名字前缀，快照导出时同样排除。
+export const ADMIN_TYPEAHEAD_TRIGGER_PREFIX = "items_admin_typeahead_";
+
+export const ADMIN_TYPEAHEAD_VIRTUAL_TABLE_PREFIXES = [
+  ADMIN_TYPEAHEAD_TABLE,
+] as const;
+
 // Compatibility export used by portable-snapshot code. Search now covers
 // both feed items and Pages, but these tables remain derived and disposable.
 export const ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES = [
   ...SITE_SEARCH_VIRTUAL_TABLE_PREFIXES,
+  ...ADMIN_TYPEAHEAD_VIRTUAL_TABLE_PREFIXES,
   "item_search_exact",
   "item_search_title_trigram",
 ] as const;
@@ -186,6 +200,75 @@ SELECT
   published_at, updated_at, NULL
 FROM pages
 WHERE status != 3 AND slug != '404' COLLATE NOCASE;
+`;
+
+// 后台事件源 typeahead 的专用索引：把 `标题 + 空格 + lower(id)` 逐字切成空格分隔的
+// token 存进 unicode61 FTS5，查询侧用短语 `MATCH '"黄 芪"'` 表达子串语义。
+// d1scan:ignore 与 CREATE_SITE_SEARCH_INDEX_SQL 同一口径：重建时清表并从 items 兜底回填本就是整表操作
+export const CREATE_ADMIN_TYPEAHEAD_INDEX_SQL = `
+CREATE VIRTUAL TABLE IF NOT EXISTS ext_admin_typeahead USING fts5(
+  haystack,
+  content_id UNINDEXED,
+  tokenize = 'unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS items_admin_typeahead_after_insert
+AFTER INSERT ON items
+WHEN NEW.status != 3
+BEGIN
+  INSERT INTO ext_admin_typeahead(rowid, haystack, content_id)
+  SELECT (SELECT COALESCE(MAX(rowid), 0) + 1 FROM ext_admin_typeahead),
+         (WITH RECURSIVE
+            src(t) AS (SELECT COALESCE(json_extract(NEW.data, '$.title'), '') || ' ' || lower(NEW.id)),
+            chars(t, i, ch) AS (
+              SELECT t, 1, substr(t, 1, 1) FROM src WHERE t <> ''
+              UNION ALL
+              SELECT t, i + 1, substr(t, i + 1, 1) FROM chars WHERE i < length(t)
+            )
+          SELECT group_concat(ch, ' ') FROM chars),
+         NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS items_admin_typeahead_after_update
+AFTER UPDATE ON items
+BEGIN
+  DELETE FROM ext_admin_typeahead WHERE content_id = OLD.id;
+  INSERT INTO ext_admin_typeahead(rowid, haystack, content_id)
+  SELECT (SELECT COALESCE(MAX(rowid), 0) + 1 FROM ext_admin_typeahead),
+         (WITH RECURSIVE
+            src(t) AS (SELECT COALESCE(json_extract(NEW.data, '$.title'), '') || ' ' || lower(NEW.id)),
+            chars(t, i, ch) AS (
+              SELECT t, 1, substr(t, 1, 1) FROM src WHERE t <> ''
+              UNION ALL
+              SELECT t, i + 1, substr(t, i + 1, 1) FROM chars WHERE i < length(t)
+            )
+          SELECT group_concat(ch, ' ') FROM chars),
+         NEW.id
+  WHERE NEW.status != 3;
+END;
+CREATE TRIGGER IF NOT EXISTS items_admin_typeahead_after_delete
+AFTER DELETE ON items
+BEGIN
+  DELETE FROM ext_admin_typeahead WHERE content_id = OLD.id;
+END;
+DELETE FROM ext_admin_typeahead;
+INSERT INTO ext_admin_typeahead(rowid, haystack, content_id)
+WITH RECURSIVE
+src(id, t) AS (
+  SELECT id, COALESCE(json_extract(data, '$.title'), '') || ' ' || lower(id)
+  FROM items WHERE status != 3
+),
+chars(id, t, i, ch) AS (
+  SELECT id, t, 1, substr(t, 1, 1) FROM src WHERE t <> ''
+  UNION ALL
+  SELECT id, t, i + 1, substr(t, i + 1, 1) FROM chars WHERE i < length(t)
+)
+SELECT ROW_NUMBER() OVER (ORDER BY id), group_concat(ch, ' '), id FROM chars GROUP BY id;
+`;
+
+export const DROP_ADMIN_TYPEAHEAD_INDEX_SQL = `
+DROP TRIGGER IF EXISTS items_admin_typeahead_after_insert;
+DROP TRIGGER IF EXISTS items_admin_typeahead_after_update;
+DROP TRIGGER IF EXISTS items_admin_typeahead_after_delete;
+DROP TABLE IF EXISTS ext_admin_typeahead;
 `;
 
 // Keep the old names while deployment and snapshot callers migrate. Their

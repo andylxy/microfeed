@@ -31,7 +31,6 @@ const initialQuickstart = Astro.url.searchParams.get("quickstart") === "1";
   {onboardingResult}
   pageTitle={translate("pageTitle.webhookEndpoints", adminLanguage)}
   webhookActivePage="endpoints"
-  webhookNavigation
 >
   <div class="mx-auto max-w-6xl">
     <WebhookEndpointsApp client:only="react" enabled={overview.enabled} {initialEndpoints} {initialQuickstart} />

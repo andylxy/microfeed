@@ -8,6 +8,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import Requests from "@/client/requests";
+import {errorMessage} from "@/client/request-error";
 import {
   CLOUD_USAGE_UNAVAILABLE,
   type CloudUsageSnapshot,
@@ -17,7 +18,12 @@ import {
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 import UsageCard from "./UsageCard";
-import UsageTrendChart, {type TrendSeries} from "./UsageTrendChart";
+import UsageTrendChart, {
+  TREND_ERROR_COLOR,
+  TREND_PRIMARY_COLOR,
+  TREND_SECONDARY_COLOR,
+  trendSeries,
+} from "./UsageTrendChart";
 
 /** 倒计时每分钟走一格；三张卡共用同一个时钟，避免各起一个定时器。 */
 const COUNTDOWN_TICK_MS = 60_000;
@@ -31,12 +37,6 @@ interface SnapshotResponse {
   ok?: boolean;
   data?: CloudUsageSnapshot;
   error?: string;
-}
-
-/** 从 axios 错误里取出服务端已本地化好的文案。 */
-function errorMessage(error: unknown, fallback: string): string {
-  const response = (error as {response?: {data?: {error?: string}}})?.response;
-  return response?.data?.error || fallback;
 }
 
 function countdownParts(nextResetUtc: string, nowMs: number) {
@@ -110,11 +110,6 @@ function SectionShell({
     </section>
   );
 }
-
-/** 趋势图配色。三条线的含义靠图例文字区分，颜色只做辅助。 */
-const PRIMARY_COLOR = "#2563eb";
-const SECONDARY_COLOR = "#f59e0b";
-const ERROR_COLOR = "#dc2626";
 
 /**
  * Cloudflare 使用情况仪表盘（`/admin/cloud-usage`，migration 0123）。
@@ -215,48 +210,45 @@ export default function CloudUsageApp() {
     );
   }
 
-  const d1Trend: TrendSeries[] = snapshot.d1.data
-    ? [
-      {
-        labelKey: "cloudUsage.trend.rowsRead",
-        color: PRIMARY_COLOR,
-        values: snapshot.d1.data.trend.map((point) => point.rowsRead),
-      },
-      {
-        labelKey: "cloudUsage.trend.rowsWritten",
-        color: SECONDARY_COLOR,
-        values: snapshot.d1.data.trend.map((point) => point.rowsWritten),
-      },
-    ]
-    : [];
-  const r2Trend: TrendSeries[] = snapshot.r2.data
-    ? [
-      {
-        labelKey: "cloudUsage.trend.classA",
-        color: PRIMARY_COLOR,
-        values: snapshot.r2.data.trend.map((point) => point.classA),
-      },
-      {
-        labelKey: "cloudUsage.trend.classB",
-        color: SECONDARY_COLOR,
-        values: snapshot.r2.data.trend.map((point) => point.classB),
-      },
-    ]
-    : [];
-  const workersTrend: TrendSeries[] = snapshot.workers.data
-    ? [
-      {
-        labelKey: "cloudUsage.trend.requests",
-        color: PRIMARY_COLOR,
-        values: snapshot.workers.data.trend.map((point) => point.requests),
-      },
-      {
-        labelKey: "cloudUsage.trend.errors",
-        color: ERROR_COLOR,
-        values: snapshot.workers.data.trend.map((point) => point.errors),
-      },
-    ]
-    : [];
+  const d1Trend = trendSeries(
+    snapshot.d1.data?.trend,
+    {
+      labelKey: "cloudUsage.trend.rowsRead",
+      pick: (point) => point.rowsRead,
+      color: TREND_PRIMARY_COLOR,
+    },
+    {
+      labelKey: "cloudUsage.trend.rowsWritten",
+      pick: (point) => point.rowsWritten,
+      color: TREND_SECONDARY_COLOR,
+    },
+  );
+  const r2Trend = trendSeries(
+    snapshot.r2.data?.trend,
+    {
+      labelKey: "cloudUsage.trend.classA",
+      pick: (point) => point.classA,
+      color: TREND_PRIMARY_COLOR,
+    },
+    {
+      labelKey: "cloudUsage.trend.classB",
+      pick: (point) => point.classB,
+      color: TREND_SECONDARY_COLOR,
+    },
+  );
+  const workersTrend = trendSeries(
+    snapshot.workers.data?.trend,
+    {
+      labelKey: "cloudUsage.trend.requests",
+      pick: (point) => point.requests,
+      color: TREND_PRIMARY_COLOR,
+    },
+    {
+      labelKey: "cloudUsage.trend.errors",
+      pick: (point) => point.errors,
+      color: TREND_ERROR_COLOR,
+    },
+  );
 
   const trendDates = (section: UsageSection<{trend: {date: string}[]}>) =>
     section.data?.trend.map((point) => point.date) ?? [];

@@ -47,16 +47,22 @@ ADR-0029 在 `EditItemApp` 的描述（`AdminRichEditor`）块正下方新增「
 
 - 两字段仍置于描述块正下方同一注文卡片（沿用 ADR-0029 D1 布局），**无条件渲染**（新建 / 编辑所有条目可见）不变。
 - `AdminMarkdownEditor` 当前无 `label` prop，标签（`items.tcmNoteLabel` / `items.tcmVideoLabel`）改为在组件外手动渲染（风格与 `AdminRichEditor` 内部 label 的 `mb-2 font-semibold` 一致），保持卡片视觉结构一致。
-- 预览默认开启（组件内 `preview` state），附 Markdown / 预览开关，与描述 Markdown 模式体验一致。
+- 组件内 `preview` state 控制**渲染预览**显隐（默认开启）：预览区用 `@uiw/react-markdown-preview` 渲染 `value`，配 `remark-breaks` 让换行与阅读页 marked 的行为一致（ADR-0035）。保存与下发仍为逐字 Markdown——预览只改显示，不改数据（ADR-0034 D2/D3/D5）。
 
 ### D6：占位/提示文案
 
-`AdminMarkdownEditor` 自带独立占位符（`shared.markdownSourcePlaceholder`）与底部提示（`shared.markdownHint`），不再消费 `items.tcmNotePlaceholder` / `items.tcmVideoPlaceholder`。为避免遗留无用键，本次**删除**这两个占位键（zh-CN / en 同步移除，i18n 键集仍一致）；原「原样下发」的约定说明并入 `items.tcmPocketHint`，并在其中补明「两者为 Markdown 源码，逐字保存，App 端按 Markdown 渲染」，使作者一眼可知这是 Markdown 编辑器且数据原样保存。
+`AdminMarkdownEditor` 自带独立占位符（`shared.markdownSourcePlaceholder`）与底部提示（`shared.markdownHint`），不再消费 `items.tcmNotePlaceholder` / `items.tcmVideoPlaceholder`。为避免遗留无用键，本次**删除**这两个占位键（zh-CN / en 同步移除，i18n 键集仍一致）；原「原样下发」的约定说明并入 `items.tcmPocketHint`，并在其中补明「两者为 Markdown 源码，逐字保存，接口原样返回」，使作者一眼可知这是 Markdown 编辑器且数据原样保存。
+
+### D7：占位/提示按消费方分化（2026-10-17 修订）
+
+`AdminMarkdownEditor` 的默认占位符（`shared.markdownSourcePlaceholder`「用 Markdown 编写章节正文」）与底部提示（`shared.markdownHint`「按你写的 Markdown 原文保存，阅读页渲染时再转成 HTML。」）都按「章节正文」这一个消费方写。该组件现有两个消费方：正文（`AdminRichEditor` 的 Markdown 模式——阅读页确实渲染）与注文/附注（Web 阅读页不显示这两个字段，只由接口逐字下发）。在注文/附注下方显示正文语境的文案与事实不符，且与同卡片的 `items.tcmPocketHint`（「逐字保存，接口原样返回」）互相矛盾。
+
+故给 `AdminMarkdownEditor` 增加 `placeholder?` / `hint?` 两个可选 props（默认值即上述两个正文语境键，正文消费方零改动）；注文/附注两处传入新增键 `shared.markdownSourcePlaceholderGeneric`（「用 Markdown 编写」）与 `shared.markdownHintApp`（「按你写的 Markdown 原文保存，接口原样返回。」），使每个编辑器下方的文案与字段真实的数据去向一致。
 
 ## 后果（Consequences）
 
-- 后台作者可用 Markdown 录入注文/附注，并即时在预览中看到渲染结果；可一键插入 TCM 互参标记 `$f/$a/$u/$x`。
-- 内容仍为逐字字符串原样存发，App 已按 Markdown 渲染——端到端生效，后端接口约定、OpenAPI、迁移均不变。
+- 后台作者可用 Markdown 录入注文/附注，并在原文回显中即时看到存入的内容；可一键插入 TCM 互参标记 `$f/$a/$u/$x`。
+- 内容仍为逐字字符串原样存发，接口原样返回——端到端生效，后端接口约定、OpenAPI、迁移均不变。
 - 非 TCM 条目（ADR-0029 D1 的写-on-interaction 约定）口袋保持零污染：未触碰的字段不触发 onChange，不会写入任何键。
 - 无服务端改动、无数据迁移、无 OpenAPI 文档改动。
 - 测试：既有 `tests/unit/components/admin-tcm-note-fields.test.ts` 的「原样存取 / 清空写空串」断言继续有效；本次已改写该测试——用 `findMarkdownEditors` 取代原 `AdminTextarea` 查找，验证「新建页渲染两个 `AdminMarkdownEditor` 且初始值为空串」「编辑页回填 `_microfeed.note`/`videoMemo`」「onChange 字符串入参原样写入口袋」，固化本次升级（`AdminMarkdownEditor` 内部的互参标记工具栏由 `annotationMarkers.test.ts` 单独覆盖）。

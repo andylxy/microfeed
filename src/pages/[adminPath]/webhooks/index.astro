@@ -31,7 +31,6 @@ const deploymentEnvironment = env.DEPLOYMENT_ENVIRONMENT ?? "production";
   {onboardingResult}
   pageTitle={translate("pageTitle.webhooks", adminLanguage)}
   webhookActivePage="overview"
-  webhookNavigation
 >
   <div class="mx-auto max-w-6xl">
     <WebhookOverviewApp client:only="react" {deploymentEnvironment} {instanceName} {localDevelopment} {overview} />

@@ -5,7 +5,6 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 
 import i18n from "@/client/i18n";
-import AdminWebhookSidebar from "@/components/admin/webhooks/AdminWebhookSidebar";
 import WebhookDeliveriesApp from "@/components/admin/webhooks/WebhookDeliveriesApp";
 import WebhookEndpointsApp from "@/components/admin/webhooks/WebhookEndpointsApp";
 import WebhookEventExplorerApp, {
@@ -13,14 +12,10 @@ import WebhookEventExplorerApp, {
   eventGroupKeys,
 } from "@/components/admin/webhooks/WebhookEventExplorerApp";
 import WebhookOverviewApp from "@/components/admin/webhooks/WebhookOverviewApp";
-import {ADMIN_WEBHOOK_PAGES} from "@/shared/AdminWebhookNavigation";
+import {ADMIN_WEBHOOK_PAGES, adminWebhookPageUrl} from "@/shared/AdminWebhookNavigation";
+import {isMenuIconName} from "@/shared/MenuIconNames";
 import {WEBHOOK_EVENT_DEFINITIONS} from "@/shared/WebhookExamples";
 import {WEBHOOK_QUICKSTARTS} from "@/shared/WebhookQuickstarts";
-
-const deployment = {
-  deployedAt: "2026-08-14T12:00:00.000Z",
-  protected: true,
-};
 
 const endpoint = {
   consecutiveTerminalFailures: 10,
@@ -34,31 +29,30 @@ const endpoint = {
 };
 
 describe("Webhook Admin", () => {
-  it("renders the standalone overview, endpoint, and delivery navigation", () => {
-    expect(ADMIN_WEBHOOK_PAGES.map(({name}) => name)).toEqual([
-      "Overview",
-      "Endpoints",
-      "Event explorer",
-      "Deliveries",
+  it("keeps the four-page webhook navigation as the single source for the menu", () => {
+    expect(ADMIN_WEBHOOK_PAGES.map(({id}) => id)).toEqual([
+      "overview",
+      "endpoints",
+      "event_explorer",
+      "deliveries",
     ]);
-    const output = renderToStaticMarkup(React.createElement(AdminWebhookSidebar, {
-      data: {
-        activePage: "endpoints",
-        backUrl: "/admin/",
-        deployment,
-        pageUrls: {
-          deliveries: "/admin/webhooks/deliveries/",
-          endpoints: "/admin/webhooks/endpoints/",
-          event_explorer: "/admin/webhooks/events/",
-          overview: "/admin/webhooks/",
-        },
-      },
-    }));
-    expect(output).toContain("Overview");
-    expect(output).toContain("Endpoints");
-    expect(output).toContain("Event explorer");
-    expect(output).toContain("Deliveries");
-    expect(output).toContain('aria-current="page"');
+    expect(ADMIN_WEBHOOK_PAGES.map(({path}) => path)).toEqual([
+      "webhooks",
+      "webhooks/endpoints",
+      "webhooks/events",
+      "webhooks/deliveries",
+    ]);
+    // 主菜单把这几页注入为「集成 → Webhooks」的第三级：文案走 i18n 键，
+    // 图标名必须在共享清单里登记，否则渲染会静默回退 ListIcon。
+    for (const page of ADMIN_WEBHOOK_PAGES) {
+      expect(page.nameKey.startsWith("webhook.")).toBe(true);
+      expect(isMenuIconName(page.icon)).toBe(true);
+    }
+    // 三级子项的 URL 必须带上实际 admin 路径：漏传会静默回退默认 "admin"，
+    // 自定义 MICROFEED_ADMIN_PATH 的部署里点子项即 404。
+    expect(adminWebhookPageUrl(ADMIN_WEBHOOK_PAGES[1], "console")).toBe(
+      "/console/webhooks/endpoints/",
+    );
   });
 
   it("renders exact payload discovery and safe Event Explorer actions", () => {

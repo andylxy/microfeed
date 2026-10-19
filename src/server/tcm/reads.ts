@@ -705,6 +705,12 @@ export async function getDerivedYaoAliases(
     const add = (bieming: string, name: string) => {
       if (bieming !== "") merged.set(bieming, name);
     };
+    // 已知接受项（D1SCAN-002，2026-10-18 本地 9506 行实测）：`ORDER BY id` 与
+    // items_yao_order 的列序 (tcm_kind, status, no, id) 不匹配，规划器先用该索引
+    // 定位 172 行、再溢出 TEMP B-TREE 排序，中位数 0.468 ms。补一条
+    // items(tcm_kind, status, id) 可免排序，独立进程 A/B 为 0.547 ms
+    //（+0.079 ms，属噪声级退化），且 rows read 不变（两条路都是 172 行，
+    // 不省 D1 额度），故维持现状、不建索引。items 行数增长 10 倍后按同一探针复估。
     const yaoRows = await db
       .prepare(
         "SELECT data FROM items WHERE tcm_kind = 'yao' AND status = 1 ORDER BY id",

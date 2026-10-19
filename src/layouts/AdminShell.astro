@@ -4,11 +4,7 @@ import "@fontsource-variable/geist";
 import {ClientRouter} from "astro:transitions";
 
 import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminGroupSidebar from "@/components/admin/AdminGroupSidebar";
-import AdminApiSidebar from "@/components/admin/api/AdminApiSidebar";
 import AdminAccountSidebar from "@/components/admin/account/AdminAccountSidebar";
-import AdminSettingsSidebar from "@/components/admin/settings/AdminSettingsSidebar";
-import AdminWebhookSidebar from "@/components/admin/webhooks/AdminWebhookSidebar";
 import AdminThemeScript from "@/components/admin/AdminThemeScript.astro";
 import AdminLanguageScript from "@/components/admin/AdminLanguageScript.astro";
 import AdminTopBar from "@/components/admin/AdminTopBar.astro";
@@ -17,13 +13,9 @@ import {adminChannelSummary} from "@/components/admin/admin-shell-types";
 import type {
   AdminBreadcrumb,
   AdminAccountSidebarData,
-  AdminApiSidebarData,
   AdminDeploymentSummary,
-  AdminGroupSidebarData,
   AdminIdentitySummary,
-  AdminSettingsSidebarData,
   AdminSidebarData,
-  AdminWebhookSidebarData,
 } from "@/components/admin/admin-shell-types";
 import {cloudflareAccessIdentity} from "@/server/auth/admin-protection";
 import {adminUrl, normalizeAdminPath} from "@/shared/AdminPath";
@@ -33,18 +25,10 @@ import {
 } from "@/shared/AdminLanguage";
 import type {AdminMenuCode} from "@/shared/AdminNavigation";
 import {readAdminMenu} from "@/server/admin/menu";
-import type {AdminSettingsSection} from "@/shared/AdminSettingsNavigation";
 import type {AdminAccountSection} from "@/shared/AdminAccountNavigation";
-import {
-  ADMIN_API_PAGES,
-  adminApiPageUrl,
-  type AdminApiPageId,
-} from "@/shared/AdminApiNavigation";
-import {
-  ADMIN_WEBHOOK_PAGES,
-  adminWebhookPageUrl,
-  type AdminWebhookPageId,
-} from "@/shared/AdminWebhookNavigation";
+import type {AdminApiPageId} from "@/shared/AdminApiNavigation";
+import type {AdminWebhookPageId} from "@/shared/AdminWebhookNavigation";
+import {ADMIN_MENU_CODES} from "@/shared/Constants";
 import {
   PUBLIC_URLS,
   resolvePublicBucketUrl,
@@ -61,16 +45,12 @@ interface Props {
   accountNavigation?: boolean;
   activeNavItem: AdminMenuCode | null;
   apiActivePage?: AdminApiPageId;
-  apiNavigation?: boolean;
   breadcrumb?: AdminBreadcrumb;
   documentTitle?: string;
   feedContent: FeedContent;
   onboardingResult: OnboardingResult;
   pageTitle: string;
-  settingsActiveSection?: AdminSettingsSection["id"];
-  settingsNavigation?: boolean;
   webhookActivePage?: AdminWebhookPageId;
-  webhookNavigation?: boolean;
 }
 
 const {
@@ -78,16 +58,12 @@ const {
   accountNavigation = false,
   activeNavItem,
   apiActivePage = "overview",
-  apiNavigation = false,
   breadcrumb,
   documentTitle,
   feedContent,
   onboardingResult,
   pageTitle,
-  settingsActiveSection,
-  settingsNavigation = false,
   webhookActivePage = "overview",
-  webhookNavigation = false,
 } = Astro.props;
 const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
 const adminLanguage: AdminLanguage = adminLanguageFromRequest(Astro.request);
@@ -134,7 +110,18 @@ const menuItems = await readAdminMenu(
   activeNavItem,
   onboardingResult.requiredOk,
 );
+// 当前页处于 API / Webhooks 的哪个子页上：子项是主菜单注入出来的第三级，
+// 在 `ext_menu` 数据表里没有对应行，位置只能由页面告知侧栏。
+const activeSubItem = activeNavItem === ADMIN_MENU_CODES.API
+  ? {code: ADMIN_MENU_CODES.API, id: apiActivePage}
+  : activeNavItem === ADMIN_MENU_CODES.WEBHOOKS
+    ? {code: ADMIN_MENU_CODES.WEBHOOKS, id: webhookActivePage}
+    : undefined;
 const sidebar: AdminSidebarData = {
+  // 树形侧栏的展开态按账号记忆：内置登录用 authUser id，
+  // Access 模式用 email；都没有（未保护的看板）时退回全局键。
+  accountKey: Astro.locals.authUser?.id ?? accessIdentity.email,
+  activeSubItem,
   channel: adminChannelSummary(channel.title, channelImageUrl),
   deployment,
   items: menuItems,
@@ -148,58 +135,12 @@ const sidebar: AdminSidebarData = {
     website: PUBLIC_URLS.webFeed(Astro.url.origin),
   },
 };
-// Inside a menu group the sidebar becomes that group's own navigation, the same
-// shape as the settings/webhook sub-sidebars.
-const activeGroup = menuItems.find((item) =>
-  item.children?.some((child) => child.id === activeNavItem));
-const groupSidebar: AdminGroupSidebarData | undefined = activeGroup
-  ? {
-      backUrl: adminUrl("", adminPath),
-      deployment,
-      groupId: activeGroup.id,
-      items: activeGroup.children ?? [],
-    }
-  : undefined;
-const settingsSidebar: AdminSettingsSidebarData | undefined = settingsNavigation
-  ? {
-      activeSection: settingsActiveSection,
-      backUrl: adminUrl("", adminPath),
-      deployment,
-      sectionsUrl: adminUrl("settings", adminPath),
-    }
-  : undefined;
 const accountSidebar: AdminAccountSidebarData | undefined = accountNavigation
   ? {
       activeSection: accountActiveSection,
       backUrl: adminUrl("", adminPath),
       deployment,
       sectionsUrl: adminUrl("account", adminPath),
-    }
-  : undefined;
-const apiSidebar: AdminApiSidebarData | undefined = apiNavigation
-  ? {
-      activePage: apiActivePage,
-      backUrl: adminUrl("", adminPath),
-      deployment,
-      pageUrls: Object.fromEntries(
-        ADMIN_API_PAGES.map((page) => [
-          page.id,
-          adminApiPageUrl(page, adminPath),
-        ]),
-      ) as AdminApiSidebarData["pageUrls"],
-    }
-  : undefined;
-const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
-  ? {
-      activePage: webhookActivePage,
-      backUrl: adminUrl("", adminPath),
-      deployment,
-      pageUrls: Object.fromEntries(
-        ADMIN_WEBHOOK_PAGES.map((page) => [
-          page.id,
-          adminWebhookPageUrl(page, adminPath),
-        ]),
-      ) as AdminWebhookSidebarData["pageUrls"],
     }
   : undefined;
 ---
@@ -232,23 +173,15 @@ const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
   <body class="lg:h-full lg:overflow-hidden">
     <div class="min-h-svh bg-admin-canvas lg:flex lg:h-svh lg:min-h-0 lg:gap-3 lg:overflow-hidden">
       <aside
-        class:list={[
-          "sticky top-0 hidden h-svh shrink-0 overflow-hidden bg-sidebar lg:block",
-          settingsNavigation || apiNavigation || accountNavigation || webhookNavigation || groupSidebar ? "w-[19rem]" : "w-[17rem]",
-        ]}
+        class="sticky top-0 hidden h-svh w-[17rem] shrink-0 overflow-hidden bg-sidebar lg:block"
       >
         {
           accountSidebar ? (
             <AdminAccountSidebar client:only="react" data={accountSidebar} />
-          ) : apiSidebar ? (
-            <AdminApiSidebar client:only="react" data={apiSidebar} />
-          ) : webhookSidebar ? (
-            <AdminWebhookSidebar client:only="react" data={webhookSidebar} />
-          ) : settingsSidebar ? (
-            <AdminSettingsSidebar client:only="react" data={settingsSidebar} />
-          ) : groupSidebar ? (
-            <AdminGroupSidebar client:only="react" data={groupSidebar} />
           ) : (
+            // 主侧栏不能加 transition:persist：持久化的岛屿不随导航更新 props，
+            // 高亮与顶层手风琴会对不上当前页；展开态由 menu-open-state 的
+            // store 自己跨页保持，不需要 persist。
             <AdminSidebar client:only="react" data={sidebar} />
           )
         }
@@ -257,14 +190,10 @@ const webhookSidebar: AdminWebhookSidebarData | undefined = webhookNavigation
         <AdminTopBar
           {accountSidebar}
           {adminPath}
-          {apiSidebar}
           {breadcrumb}
-          {groupSidebar}
           {identity}
           {pageTitle}
-          {settingsSidebar}
           {sidebar}
-          {webhookSidebar}
         >
           <div slot="toolbar"><slot name="toolbar" /></div>
         </AdminTopBar>

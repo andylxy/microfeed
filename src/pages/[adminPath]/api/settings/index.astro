@@ -26,7 +26,6 @@ const initialSettings = await readApiAccessSettings(env.FEED_DB);
 <AdminShell
   activeNavItem={ADMIN_MENU_CODES.API}
   apiActivePage="settings"
-  apiNavigation
   documentTitle={translate("pageDocumentTitle.apiSettings", adminLanguage)}
   {feedContent}
   {onboardingResult}

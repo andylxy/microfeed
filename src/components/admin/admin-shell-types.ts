@@ -1,8 +1,5 @@
 import type {AdminMenuItem} from "@/shared/AdminNavigation";
-import type {AdminSettingsSection} from "@/shared/AdminSettingsNavigation";
-import type {AdminApiPageId} from "@/shared/AdminApiNavigation";
 import type {AdminAccountSection} from "@/shared/AdminAccountNavigation";
-import type {AdminWebhookPageId} from "@/shared/AdminWebhookNavigation";
 
 export interface AdminBreadcrumb {
   childName?: string;
@@ -36,6 +33,23 @@ export interface AdminDeploymentSummary {
 }
 
 export interface AdminSidebarData {
+  /**
+   * Scopes the menu tree's expand state in `localStorage` to one account
+   * (plan §2.2): the auth user id, falling back to the Cloudflare Access
+   * email. Absent only on an unprotected dashboard, where the shared key is
+   * all there is.
+   */
+  accountKey?: string;
+  /**
+   * 当前页处于某个菜单行的第三级子项上（如 API → 认证）。主侧栏据此给对应
+   * 子项标红——这些子项在 `ext_menu` 数据表里没有对应行，位置只能由页面告知。
+   */
+  activeSubItem?: {
+    /** 所属菜单行的 code，如 `api` / `webhooks`。 */
+    code: string;
+    /** 子项 id，如 `overview` / `endpoints`。 */
+    id: string;
+  };
   channel: AdminChannelSummary;
   deployment: AdminDeploymentSummary;
   items: AdminMenuItem[];
@@ -46,44 +60,11 @@ export interface AdminSidebarData {
   publicLinks: AdminPublicLinks;
 }
 
-/**
- * The sub-sidebar shown inside a menu group. `groupId` is the group's
- * `ext_menu.code` (e.g. `group_content`); its label resolves through
- * `menu.group.*`, and `items` are the group's already-filtered children.
- */
-export interface AdminGroupSidebarData {
-  backUrl: string;
-  deployment: AdminDeploymentSummary;
-  groupId: string;
-  items: AdminMenuItem[];
-}
-
-export interface AdminSettingsSidebarData {
-  activeSection?: AdminSettingsSection["id"];
-  backUrl: string;
-  deployment: AdminDeploymentSummary;
-  sectionsUrl: string;
-}
-
 export interface AdminAccountSidebarData {
   activeSection?: AdminAccountSection["id"];
   backUrl: string;
   deployment: AdminDeploymentSummary;
   sectionsUrl: string;
-}
-
-export interface AdminApiSidebarData {
-  activePage: AdminApiPageId;
-  backUrl: string;
-  deployment: AdminDeploymentSummary;
-  pageUrls: Record<AdminApiPageId, string>;
-}
-
-export interface AdminWebhookSidebarData {
-  activePage: AdminWebhookPageId;
-  backUrl: string;
-  deployment: AdminDeploymentSummary;
-  pageUrls: Record<AdminWebhookPageId, string>;
 }
 
 /**

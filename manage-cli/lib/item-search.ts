@@ -3,13 +3,23 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 import {
+  ADMIN_TYPEAHEAD_TABLE,
+  CREATE_ADMIN_TYPEAHEAD_INDEX_SQL,
   CREATE_ITEM_SEARCH_INDEX_SQL,
+  DROP_ADMIN_TYPEAHEAD_INDEX_SQL,
   DROP_ITEM_SEARCH_INDEX_SQL,
+  SITE_SEARCH_VIRTUAL_TABLE_PREFIXES,
 } from "@/shared/ItemSearchSql";
 import {ITEM_CONTENT_TEXT_REVISION} from "@/shared/ItemSearch";
 import {htmlToPlainText} from "@/shared/StringUtils";
 import type {MicrofeedConfig} from "../types";
 import type {CloudflareClient} from "./cloudflare";
+
+/** 一并由本文件维护的派生索引表：两份站点搜索虚拟表 + 后台 typeahead 索引。 */
+const SEARCH_INDEX_TABLES = [
+  ...SITE_SEARCH_VIRTUAL_TABLE_PREFIXES,
+  ADMIN_TYPEAHEAD_TABLE,
+];
 
 const NORMALIZATION_BATCH_SIZE = 50;
 const MAX_NORMALIZATION_BATCHES = 10_000;
@@ -96,23 +106,34 @@ export async function rebuildItemSearchIndexes(
   await executeTemporarySql(
     cloudflare,
     config,
-    `${DROP_ITEM_SEARCH_INDEX_SQL}\n${CREATE_ITEM_SEARCH_INDEX_SQL}`,
+    `${DROP_ITEM_SEARCH_INDEX_SQL}\n${CREATE_ITEM_SEARCH_INDEX_SQL}\n` +
+      `${DROP_ADMIN_TYPEAHEAD_INDEX_SQL}\n${CREATE_ADMIN_TYPEAHEAD_INDEX_SQL}`,
     options,
   );
 }
 
+async function searchTablesExist(
+  cloudflare: CloudflareClient,
+  config: MicrofeedConfig,
+  tableNames: readonly string[],
+  options: ItemSearchOptions,
+): Promise<boolean> {
+  const rows = await cloudflare.queryD1(
+    config,
+    "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN " +
+      `(${tableNames.map((name) => `'${name}'`).join(", ")}) ORDER BY name`,
+    options,
+  );
+  return rows.length === tableNames.length;
+}
+
+/** 部署路径的完整判定：站点搜索虚拟表 + 后台 typeahead 索引三张全部存在才算就绪。 */
 export async function itemSearchIndexesExist(
   cloudflare: CloudflareClient,
   config: MicrofeedConfig,
   options: ItemSearchOptions = {},
 ): Promise<boolean> {
-  const rows = await cloudflare.queryD1(
-    config,
-    "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN " +
-      "('site_search_exact', 'site_search_title_trigram') ORDER BY name",
-    options,
-  );
-  return rows.length === 2;
+  return searchTablesExist(cloudflare, config, SEARCH_INDEX_TABLES, options);
 }
 
 export async function ensureItemSearchIndexes(
@@ -133,7 +154,7 @@ export async function dropItemSearchIndexes(
   await executeTemporarySql(
     cloudflare,
     config,
-    DROP_ITEM_SEARCH_INDEX_SQL,
+    `${DROP_ITEM_SEARCH_INDEX_SQL}\n${DROP_ADMIN_TYPEAHEAD_INDEX_SQL}`,
     options,
   );
 }
@@ -234,7 +255,17 @@ export async function withItemSearchIndexesSuspended<T>(
   operation: () => Promise<T>,
   options: ItemSearchOptions = {},
 ): Promise<T> {
-  if (!await itemSearchIndexesExist(cloudflare, config, options)) {
+  // 挂起判定只看站点搜索的 FTS 虚拟表：它们才是整库覆盖时写 amplification 的来源。
+  // ext_admin_typeahead 由部署时的 CREATE_ADMIN_TYPEAHEAD_INDEX_SQL 单独创建，不在任何
+  // 迁移里，纯迁移建出来的库（快照 released-head 升级路径）根本没有它，若把它计入判定
+  // 会让挂起被整体跳过，导出就会带着 FTS 触发器海量重写。drop/rebuild 都用 IF EXISTS /
+  // IF NOT EXISTS，typeahead 缺失时一并走一遍也安全。
+  if (!await searchTablesExist(
+    cloudflare,
+    config,
+    SITE_SEARCH_VIRTUAL_TABLE_PREFIXES,
+    options,
+  )) {
     return operation();
   }
   try {

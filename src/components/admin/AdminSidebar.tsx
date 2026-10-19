@@ -1,3 +1,4 @@
+import {useEffect, useMemo, useSyncExternalStore, useState} from "react";
 import {Globe2Icon, PlusIcon} from "lucide-react";
 
 import {
@@ -10,9 +11,28 @@ import {
 import {buttonVariants} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
+import {
+  bindMenuAccount,
+  syncMenuTopLevel,
+} from "@/client/menu-open-state";
+import {
+  getSettingsSection,
+  subscribeSettingsSection,
+} from "@/client/settings-section-state";
+import {
+  ADMIN_SETTINGS_SECTIONS,
+  settingsSectionFromHash,
+} from "@/shared/AdminSettingsNavigation";
+import type {AdminMenuItem} from "@/shared/AdminNavigation";
+import {ADMIN_API_PAGES, adminApiPageUrl} from "@/shared/AdminApiNavigation";
+import {
+  ADMIN_WEBHOOK_PAGES,
+  adminWebhookPageUrl,
+} from "@/shared/AdminWebhookNavigation";
 import {ADMIN_MENU_CODES} from "@/shared/Constants";
+import {browserAdminPath} from "@/shared/AdminPath";
 import AdminAboutDialog from "./AdminAboutDialog";
-import AdminMenuItemLink from "./AdminMenuItemLink";
+import AdminMenuItemLink, {hasActiveDescendant} from "./AdminMenuItemLink";
 import AdminPublicAccess from "./shared/AdminPublicAccess";
 import type {AdminSidebarData} from "./admin-shell-types";
 import {UNTITLED_CHANNEL_TITLE} from "./admin-shell-types";
@@ -22,8 +42,145 @@ interface Props {
   onNavigate?: () => void;
 }
 
+interface InjectedSection {
+  icon: string;
+  id: string;
+  nameKey: string;
+  url: string;
+}
+
+/**
+ * 三级子项的注册表：这些子页/分区在 `ext_menu` 数据表里没有对应行，数据树
+ * 因此没有第三层，由这里按菜单节点注入，侧栏于是读作 集成 → API → 概览/认证/…。
+ *
+ * 每个域的清单都是各自模块里的唯一数据源（设置是同页锚点，API 与 Webhooks
+ * 是真实子页），这里只负责取出来、拼 URL、标活动项——新增一个域就在下面加一行。
+ */
+const SUB_SECTION_BUILDERS: Record<
+  string,
+  (item: AdminMenuItem) => InjectedSection[]
+> = {
+  [ADMIN_MENU_CODES.SETTINGS]: (item) => ADMIN_SETTINGS_SECTIONS.map((section) => ({
+    icon: section.icon,
+    id: section.id,
+    nameKey: section.nameKey,
+    url: `${item.url}#${section.id}`,
+  })),
+  [ADMIN_MENU_CODES.API]: () => ADMIN_API_PAGES.map((page) => ({
+    icon: page.icon,
+    id: page.id,
+    nameKey: page.nameKey,
+    url: adminApiPageUrl(page, browserAdminPath()),
+  })),
+  [ADMIN_MENU_CODES.WEBHOOKS]: () => ADMIN_WEBHOOK_PAGES.map((page) => ({
+    icon: page.icon,
+    id: page.id,
+    nameKey: page.nameKey,
+    url: adminWebhookPageUrl(page, browserAdminPath()),
+  })),
+};
+
+/**
+ * 某个节点当前生效的子项：设置看正文实时所在分区（`replaceState` 不触发
+ * hashchange，滚动跟随只能走 store），API / Webhooks 看页面传来的
+ * `activeSubItem`。节点保持自己的 `menu.item.*` 文案键——`menuEntryLabelKey`
+ * 是按 `group_` 前缀判分组的，不看有没有子节点。
+ */
+function activeSectionId(
+  item: AdminMenuItem,
+  hash: string,
+  liveSection: string,
+  activeSubItem?: AdminSidebarData["activeSubItem"],
+): string {
+  if (item.id === ADMIN_MENU_CODES.SETTINGS) {
+    // 不在设置页时不高亮任何子项；在设置页时以实时所在分区为准，首帧
+    // （store 还没写入）退回 URL hash，再退回第一块，节点因此自动展开。
+    if (!item.active) return "";
+    return (
+      liveSection ||
+      settingsSectionFromHash(hash) ||
+      ADMIN_SETTINGS_SECTIONS[0]?.id ||
+      ""
+    );
+  }
+  return activeSubItem?.code === item.id ? activeSubItem.id : "";
+}
+
+function withPageSections(
+  items: AdminMenuItem[],
+  hash: string,
+  liveSection: string,
+  activeSubItem?: AdminSidebarData["activeSubItem"],
+): AdminMenuItem[] {
+  return items.map((item) => {
+    const children = item.children
+      ? withPageSections(item.children, hash, liveSection, activeSubItem)
+      : undefined;
+    const build = SUB_SECTION_BUILDERS[item.id];
+    if (!build) return children === undefined ? item : {...item, children};
+    const activeId = activeSectionId(item, hash, liveSection, activeSubItem);
+    const sections: AdminMenuItem[] = build(item).map((section) => ({
+      active: activeId === section.id,
+      disabled: false,
+      icon: section.icon,
+      id: `${item.id}:${section.id}`,
+      labelKey: section.nameKey,
+      url: section.url,
+    }));
+    return {...item, children: [...(children ?? []), ...sections]};
+  });
+}
+
+/** 当前 hash（去掉 #），跟随 hashchange 与 Astro 页面切换更新。 */
+function useLocationHash(): string {
+  const [hash, setHash] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.hash.slice(1),
+  );
+  useEffect(() => {
+    const sync = () => setHash(window.location.hash.slice(1));
+    sync();
+    window.addEventListener("hashchange", sync);
+    document.addEventListener("astro:page-load", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      document.removeEventListener("astro:page-load", sync);
+    };
+  }, []);
+  return hash;
+}
+
 export default function AdminSidebar({data, onNavigate}: Props) {
   const {t} = useTranslation();
+  const hash = useLocationHash();
+  // 首帧就要读到正确展开态：绑定放在渲染前同步做——此刻还没有订阅者，store
+  // 的 notify 是静默的；放进 effect 会先闪一帧全收起再展开。
+  bindMenuAccount(data.accountKey);
+  // 设置页正文滚动时，实时所在分区经 store 同步过来，注入的第三级子项据此
+  // 高亮——侧栏与正文是两个岛，URL hash 在 replaceState 下收不到通知。
+  // 服务端快照同取 store：本组件只经 client:only 上岛，真服务端渲染走不到；
+  // 服务端没有设置页挂着，store 恒为空串，与取固定空串的效果相同。
+  const liveSection = useSyncExternalStore(
+    subscribeSettingsSection,
+    getSettingsSection,
+    getSettingsSection,
+  );
+  const items = useMemo(
+    () => withPageSections(data.items, hash, liveSection, data.activeSubItem),
+    [data.items, hash, liveSection, data.activeSubItem],
+  );
+  const topLevelCodes = useMemo(
+    () => data.items.map((item) => item.id),
+    [data.items],
+  );
+  const activeTop = items.find(
+    (item) => item.active || hasActiveDescendant(item),
+  )?.id ?? null;
+  // 顶层同时只留一个展开。换页（当前页所在的顶层变化）时改由新页面所在的
+  // 顶层展开：用户在这之前手动点开的分组随页面一起翻篇，否则从别处跳进来
+  // 会看不到自己在哪。
+  useEffect(() => {
+    syncMenuTopLevel(activeTop, topLevelCodes);
+  }, [activeTop, topLevelCodes]);
   const channelTitle = data.channel.title === UNTITLED_CHANNEL_TITLE
     ? t("channel.untitled")
     : data.channel.title;
@@ -108,8 +265,14 @@ export default function AdminSidebar({data, onNavigate}: Props) {
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label={t("nav.adminNavigation")}>
         <ul className="grid gap-1">
-          {data.items.map((item) => (
-            <AdminMenuItemLink item={item} key={item.id} onNavigate={onNavigate} />
+          {items.map((item) => (
+            <AdminMenuItemLink
+              depth={0}
+              item={item}
+              key={item.id}
+              onNavigate={onNavigate}
+              topLevelCodes={topLevelCodes}
+            />
           ))}
         </ul>
         {onlyHome && (

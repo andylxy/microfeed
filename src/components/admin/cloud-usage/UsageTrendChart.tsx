@@ -10,6 +10,37 @@ export interface TrendSeries {
   values: number[];
 }
 
+/** 趋势图配色。三条线的含义靠图例文字区分，颜色只做辅助。 */
+export const TREND_PRIMARY_COLOR = "#2563eb";
+export const TREND_SECONDARY_COLOR = "#f59e0b";
+export const TREND_ERROR_COLOR = "#dc2626";
+
+/**
+ * 把一个分区的趋势点折成两条序列（主量 + 次量），两条线的颜色由调用方给。
+ *
+ * 分区没有数据时返回空数组：一条 0 线会被读成「这一周期真的什么都没发生」，
+ * 与「没取到数」是两件事，所以此时整张图不画。
+ */
+export function trendSeries<Point>(
+  trend: readonly Point[] | undefined,
+  primary: {labelKey: string; pick: (point: Point) => number; color: string},
+  secondary: {labelKey: string; pick: (point: Point) => number; color: string},
+): TrendSeries[] {
+  if (!trend) return [];
+  return [
+    {
+      labelKey: primary.labelKey,
+      color: primary.color,
+      values: trend.map(primary.pick),
+    },
+    {
+      labelKey: secondary.labelKey,
+      color: secondary.color,
+      values: trend.map(secondary.pick),
+    },
+  ];
+}
+
 interface Props {
   /** 横轴日期（UTC 日期 `YYYY-MM-DD`），与每个 series 的 values 等长 */
   dates: string[];
@@ -40,9 +71,10 @@ function dayEnd(date: string): string {
  * 交给 tooltip；密集刻度在窄卡片里只会互相压住。刻度放在 SVG 外面用 HTML 排，
  * 因为图形按容器宽度拉伸（`preserveAspectRatio="none"`），SVG 内的文字会被拉变形。
  *
- * 刻度文案取自 `formatAdminDateTime` 的日期部分：完整时刻是 19 个字符，三个并排
- * 放不进窄卡片；日期部分仍是这个 helper 按本地时区算出的计费日起始日，
- * 不受语言与系统设置影响（AGENTS.md「管理后台国际化」禁止 `Intl` / `toLocaleString`）。
+ * 刻度文案直接用 `formatAdminDateTime` 的完整格式（`2026-10-18 08:00:00`）：后台
+ * 所有时间显示统一走这一个 helper，不再保留「仅日期」变体（AGENTS.md
+ * 「管理后台国际化」），因此这里也不另切一段日期出来。不受语言与系统设置影响
+ * （同一节禁止 `Intl` / `toLocaleString`）。
  * 完整区间（起始 ~ 结束，本地时区）放在每个数据点的 tooltip 里。
  *
  * 每个数据点的原生 `<title>` 给出「计费日区间 + 序列名 + 数值」，悬停即可读具体值。
@@ -62,9 +94,11 @@ export default function UsageTrendChart({dates, series}: Props) {
     ? [0]
     : [0, Math.floor((dates.length - 1) / 2), dates.length - 1];
 
+  // 与后台所有时间一致：走 formatAdminDateTime 的固定数字格式
+  // （AGENTS.md：不再保留「仅日期」变体，刻度也用全格式）。
   const tickLabel = (index: number) => {
     const date = dates[index];
-    return date ? formatAdminDateTime(dayStart(date)).slice(0, 10) : "";
+    return date ? formatAdminDateTime(dayStart(date)) : "";
   };
 
   return (

@@ -25,7 +25,6 @@ if (denied) {
   {feedContent}
   {onboardingResult}
   pageTitle={translate("pageTitle.settings", adminLanguage)}
-  settingsNavigation
 >
   <SettingsApp client:only="react" {feedContent} {onboardingResult}>
     <AdminPageFallback slot="fallback" kind="settings" />

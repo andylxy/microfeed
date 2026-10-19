@@ -8,6 +8,7 @@ import {
   adminLanguageFromRequest,
 } from "@/shared/AdminLanguage";
 import {ITEM_STATUSES_DICT, STATUSES} from "@/shared/Constants";
+import {ADMIN_TYPEAHEAD_TABLE} from "@/shared/ItemSearchSql";
 import {isLocalDevelopmentHostname} from "@/shared/StringUtils";
 import {
   WEBHOOK_EVENT_DEFINITIONS,
@@ -76,6 +77,61 @@ function statusLabel(value: unknown): string {
   return ITEM_STATUSES_DICT[Number(value)]?.name ?? "unknown";
 }
 
+/** 两条取数路径共用的行映射，避免同一形状在文件里写两遍。 */
+function itemSubject(row: Record<string, unknown>): WebhookExplorerSubject {
+  return {
+    description: statusLabel(row.status),
+    id: String(row.id),
+    label: String(row.title || "Untitled item"),
+  };
+}
+
+/**
+ * 查询串转 FTS5 短语：`黄芪` → `"黄 芪"`，逐字切开后按相邻序列匹配，语义等价子串。
+ * 顺序是先逐字切开、再把 `"` 逐字双写；反过来会让双写出来的两个引号被切开，
+ * 转义失效后 MATCH 表达式语法错误。
+ */
+function typeaheadPhrase(query: string): string {
+  return `"${[...query].map((ch) => (ch === '"' ? '""' : ch)).join(" ")}"`;
+}
+
+/**
+ * 派生索引是否可用：表存在、且已回填。索引由 prepareItemSearch 维护，
+ * 尚未部署到位的实例上两条都不成立。判定放在查询之前，查询本身保持
+ * fast-fail——不捕获错误，也不在出错后兜底。
+ * 判定自身的代价（本地 9506 行 items 实测中位数）：sqlite_master 点查 0.014ms
+ * + 索引首行 0.003ms，共读 2 行；随后索引查询本体 0.050ms。
+ */
+async function adminTypeaheadReady(database: D1Database): Promise<boolean> {
+  const present = await database.prepare(
+    "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?",
+  ).bind(ADMIN_TYPEAHEAD_TABLE).first<{ok: number}>();
+  if (present === null) return false;
+  // 表名走模板插值：派生表不在本地门禁库里，直写表名会让 check-d1-scan 的
+  // EXPLAIN 报 no such table；插值后由 canPlan 判为动态名字并计入 skipped。
+  const seeded = await database.prepare(
+    `SELECT 1 AS ok FROM ${ADMIN_TYPEAHEAD_TABLE} LIMIT 1`,
+  ).first<{ok: number}>();
+  return seeded !== null;
+}
+
+/** 经 ext_admin_typeahead 索引取候选条目，顺序与 items 直查一致。 */
+async function itemSubjectsByIndex(
+  database: D1Database,
+  query: string,
+): Promise<WebhookExplorerSubject[]> {
+  const result = await database.prepare(`
+    SELECT i.id, i.status, COALESCE(json_extract(i.data, '$.title'), '') AS title
+    FROM ${ADMIN_TYPEAHEAD_TABLE} f
+    JOIN items i ON i.id = f.content_id
+    WHERE f.haystack MATCH ? AND i.status != ?
+    ORDER BY i.updated_at DESC, i.id DESC
+    LIMIT 50
+  `).bind(typeaheadPhrase(query), STATUSES.DELETED)
+    .all<Record<string, unknown>>();
+  return result.results.map(itemSubject);
+}
+
 export async function listWebhookExplorerSubjects(
   runtimeEnv: Env,
   request: Request,
@@ -95,11 +151,19 @@ export async function listWebhookExplorerSubjects(
     return [{id: "navigation", label: "Current Page navigation"}];
   }
   if (definition.sourceKind === "item") {
-    // 已知接受项（D1SCAN-003，2026-10-15 本地 9506 行实测）：ORDER BY 走
-    // items_updated_at 索引。空搜索词时全部命中、LIMIT 50 早停（0.18ms）；
-    // 无命中搜索词要扫全索引并逐行取数据求值（36.99ms），稀有命中词介于
-    // 两者之间（1.02ms）。后台事件源 typeahead 低频使用，暂接受；生产 items
-    // 行数显著增长时按同一探针复估。
+    // 两条取数路径的实测代价（2026-10-18，本地 9506 行 items，8 次丢弃首次取中位数）：
+    //   items 直查（D1SCAN-003 已知接受项，走 items_updated_at 索引全扫）：
+    //     空搜索词 0.126ms / 读 50 行（LIMIT 早停）；常见词 0.813ms / 约 1600 行；
+    //     稀有词 41.896ms、无命中搜索词 33.715ms —— 这两种均需扫完整条索引，读 9506 行，
+    //     按 5,000,000 rows read/天 计只够 525 次/天。
+    //   走 ext_admin_typeahead 索引（rows read = FTS 匹配行数 + 回表点查行数）：
+    //     `黄芪` 44 行 / 0.119ms、`黄` 约 582 行 / 2.460ms、无命中搜索词 0 行 / 0.065ms，
+    //     最坏读数从 9506 降到约 582（降 93.9%），结果与直查的顺序、集合一致。
+    //   索引体积 1,249,280 字节；items 单行 UPDATE 写放大 3.018 → 4.162ms。
+    // 索引属派生数据、由 prepareItemSearch 维护；未建或未回填时走直查。
+    if (query !== "" && await adminTypeaheadReady(runtimeEnv.FEED_DB)) {
+      return await itemSubjectsByIndex(runtimeEnv.FEED_DB, query);
+    }
     const result = await runtimeEnv.FEED_DB.prepare(`
       SELECT id, status, COALESCE(json_extract(data, '$.title'), '') AS title
       FROM items
@@ -109,11 +173,7 @@ export async function listWebhookExplorerSubjects(
       LIMIT 50
     `).bind(STATUSES.DELETED, query, `%${query}%`, `%${query}%`)
       .all<Record<string, unknown>>();
-    return result.results.map((row) => ({
-      description: statusLabel(row.status),
-      id: String(row.id),
-      label: String(row.title || "Untitled item"),
-    }));
+    return result.results.map(itemSubject);
   }
   if (definition.sourceKind === "page") {
     const pages = await listPages(

@@ -5,6 +5,7 @@ import {Input} from "@/components/ui/input";
 import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
 import Requests from "@/client/requests";
+import {errorMessage} from "@/client/request-error";
 import {showToast} from "@/client/ToastUtils";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import SettingsBase from "../SettingsBase";
@@ -22,12 +23,6 @@ interface StatusResponse {
   ok?: boolean;
   data?: TokenStatus;
   error?: string;
-}
-
-/** 从 axios 错误里取出服务端已经本地化好的文案，取不到时用兜底键。 */
-function errorMessage(error: unknown, fallback: string): string {
-  const response = (error as {response?: {data?: {error?: string}}})?.response;
-  return response?.data?.error || fallback;
 }
 
 /**
@@ -126,9 +121,19 @@ export default function CloudflareTokenSettingsApp() {
     title={t("settings.cloudflareToken")}
   >
     <div className="grid gap-4">
-      <p aria-live="polite" className="text-sm text-muted-foreground">
+      <div
+        aria-live="polite"
+        className={[
+          "rounded-lg border px-3 py-2 text-sm",
+          loadFailed
+            ? "border-destructive/40 bg-destructive/10 text-destructive"
+            : status?.configured
+              ? "border-brand-light/40 bg-brand-light/10 font-medium text-foreground"
+              : "border-border bg-muted/40 text-muted-foreground",
+        ].join(" ")}
+      >
         {statusLine}
-      </p>
+      </div>
       <div className="grid gap-2">
         <label className="text-sm font-medium" htmlFor="cloudflare-token-input">
           {t("settings.cloudflareTokenInputLabel")}
@@ -141,6 +146,9 @@ export default function CloudflareTokenSettingsApp() {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
+        <p className="text-xs leading-5 text-muted-foreground">
+          {t("settings.cloudflareTokenWriteOnlyHint")}
+        </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button disabled={busy || draft.trim() === ""} onClick={save} type="button">

@@ -24,6 +24,8 @@ interface MenuRow {
   code: string;
   i18n_key: string;
   icon: string | null;
+  name_en: string | null;
+  name_zh: string | null;
   parent_code: string | null;
   path: string;
   permission_code: string | null;
@@ -31,6 +33,7 @@ interface MenuRow {
 }
 
 const VISIBLE_ROWS = "SELECT code, parent_code, path, i18n_key, icon, " +
+  "name_zh, name_en, " +
   "permission_code, sort FROM ext_menu WHERE is_visible = 1 ORDER BY sort, code";
 
 interface MenuNode extends AdminMenuItem {
@@ -79,12 +82,16 @@ export async function readAdminMenu(
 
   const nodes = new Map<string, MenuNode>();
   for (const row of allowed) {
+    const nameZh = row.name_zh?.trim() ?? "";
+    const nameEn = row.name_en?.trim() ?? "";
     nodes.set(row.code, {
       active: row.code === activeCode,
       children: [],
       disabled: row.code !== ADMIN_MENU_CODES.ADMIN_HOME && !onboardingOk,
       icon: row.icon,
       id: row.code,
+      // 两列都空时不下发 label，渲染端回退 i18n 文案。
+      ...(nameZh || nameEn ? {label: {en: nameEn, zh: nameZh}} : {}),
       url: adminUrl(row.path, adminPath),
     });
   }

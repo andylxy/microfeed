@@ -150,7 +150,7 @@ function existingLocalOwnerRunner(): CommandRunner {
         }],
       }]));
     }
-    if (args[0] === "dev:astro") {
+    if (args[0] === "dev") {
       return commandResult();
     }
     throw new Error(`Unexpected command: ${command}`);
@@ -461,14 +461,17 @@ describe("first-class local instances", () => {
     );
     expect(text).toContain("Instance type: Local only");
     const devCall = (runner as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([, args]) => args[0] === "dev:astro",
+      ([executable, args]) =>
+        args[0] === "dev" &&
+        path.basename(String(executable)).startsWith("astro."),
     );
+    expect(devCall?.[1]).toEqual(["dev", "--host", "0.0.0.0"]);
     expect(devCall?.[2]).toMatchObject({
       env: expect.objectContaining({
         ASTRO_DEV_BACKGROUND: "1",
         MICROFEED_WRANGLER_CONFIG: expect.any(String),
       }),
-      interactive: true,
+      longRunning: true,
     });
     expect(path.isAbsolute(
       devCall?.[2]?.env?.MICROFEED_WRANGLER_CONFIG ?? "",
@@ -882,7 +885,7 @@ describe("first-class local instances", () => {
       if (command.startsWith("d1 execute FEED_DB --local --command ")) {
         return commandResult(JSON.stringify([{results: []}]));
       }
-      if (args[0] === "dev:astro") {
+      if (args[0] === "dev") {
         const current = await config.readConfig(false, "webhook-local");
         generatedDuringDev.push(await readFile(
           config.wranglerConfigPath(current!),

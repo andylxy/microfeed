@@ -1,5 +1,7 @@
 import React from 'react';
+import {SearchIcon} from "lucide-react";
 import AdminPageApp from '@/components/admin/shared/AdminPageApp';
+import {Input} from "@/components/ui/input";
 import TrackingSettingsApp from "./TrackingSettingsApp";
 import AccessSettingsApp from "./AccessSettingsApp";
 import SubscribeSettingsApp from "./SubscribeSettingsApp";
@@ -26,9 +28,22 @@ import {
   preventCloseWhenChanged,
 } from "@/client/BrowserUtils";
 import {scrollToAdminSettingsHash} from "@/client/AdminSettingsScroll";
+import {
+  installSettingsSectionNav,
+  jumpToSettingsSection,
+} from "@/client/settings-section-nav";
+import {
+  ADMIN_SETTINGS_SECTIONS,
+  filterAdminSettingsSections,
+  type AdminSettingsSection,
+} from "@/shared/AdminSettingsNavigation";
 import type {FeedContent, OnboardingResult} from "@/types";
 
 const SUBMIT_STATUS__START = 1;
+
+/** 搜索按用户可见的名称匹配，与旧侧栏搜索框同一口径。 */
+const settingsSectionLabel = (section: AdminSettingsSection): string =>
+  i18n.t(section.nameKey);
 
 interface Props {
   feedContent: FeedContent;
@@ -37,17 +52,20 @@ interface Props {
 
 export default class SettingsApp extends React.Component<Props, any> {
   private cleanupNavigationGuard?: () => void;
+  private cleanupSectionNav?: () => void;
   private initialHashScrollFrame?: number;
 
   constructor(props: Props) {
     super(props);
 
     this.onSubmit = this.onSubmit.bind(this);
+    this.onSearchKeyDown = this.onSearchKeyDown.bind(this);
     this.setChanged = this.setChanged.bind(this);
     this.updateSettingsState = this.updateSettingsState.bind(this);
 
     this.state = {
       feed: props.feedContent,
+      sectionQuery: "",
       submitStatus: null,
       changedSections: [],
     }
@@ -60,6 +78,9 @@ export default class SettingsApp extends React.Component<Props, any> {
     this.initialHashScrollFrame = window.requestAnimationFrame(() => {
       scrollToAdminSettingsHash();
     });
+    // 分区导航（滚动高亮跟随 + 点击平滑滚动 + replaceState）由本页装载，
+    // 侧栏与移动端抽屉里的分区链接都走这套捕获式处理。
+    this.cleanupSectionNav = installSettingsSectionNav();
   }
 
   componentWillUnmount() {
@@ -67,6 +88,7 @@ export default class SettingsApp extends React.Component<Props, any> {
       window.cancelAnimationFrame(this.initialHashScrollFrame);
     }
     this.cleanupNavigationGuard?.();
+    this.cleanupSectionNav?.();
   }
 
   setChanged(sectionKey: string) {
@@ -90,6 +112,15 @@ export default class SettingsApp extends React.Component<Props, any> {
         },
       },
     }));
+  }
+
+  /** 有查询时回车跳到第一个名称命中的分区：搜索的第一动作就是定位。 */
+  private onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    const query = this.state.sectionQuery.trim();
+    if (query === "") return;
+    const first = filterAdminSettingsSections(query, settingsSectionLabel)[0];
+    if (first) jumpToSettingsSection(first.id);
   }
 
   async onSubmit(
@@ -145,16 +176,49 @@ export default class SettingsApp extends React.Component<Props, any> {
       ONBOARDING_TYPES.MEDIA_STORAGE
     ];
     const mediaStorageReady = mediaStorage?.ready !== false;
+    // 过滤只切显示：不命中的卡片 display:none，表单状态原样留在 DOM 里，
+    // 清空搜索即全部回来。分区 id 保留，滚动观察据此跳过隐藏中的分区。
+    const query = this.state.sectionQuery.trim();
+    const matched = query
+      ? filterAdminSettingsSections(query, settingsSectionLabel)
+      : ADMIN_SETTINGS_SECTIONS;
+    const matchedIds = new Set<string>(matched.map(({id}) => id));
+    const sectionClass = (id: string): string =>
+      matchedIds.has(id) ? "scroll-mt-6" : "hidden";
     return (<AdminPageApp>
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5">
-        <section className="scroll-mt-6" id="custom-code">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <SearchIcon aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label={i18n.t("settings.searchSections")}
+              className="h-11 bg-background pl-10"
+              onChange={(event) => this.setState({sectionQuery: event.target.value})}
+              onKeyDown={this.onSearchKeyDown}
+              placeholder={i18n.t("settings.searchSectionsPlaceholder")}
+              type="search"
+              value={this.state.sectionQuery}
+            />
+          </div>
+          {query !== "" && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {matched.length} / {ADMIN_SETTINGS_SECTIONS.length}
+            </span>
+          )}
+        </div>
+        {query !== "" && matched.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {i18n.t("settings.noSectionsMatch")}
+          </p>
+        )}
+        <section className={sectionClass("custom-code")} id="custom-code">
           <CustomCodeSettingsApp
             submitting={submitting}
             submitForType={submitForType}
             feed={feed}
           />
         </section>
-        <section className="scroll-mt-6" id="tracking-urls">
+        <section className={sectionClass("tracking-urls")} id="tracking-urls">
           <TrackingSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -163,7 +227,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.ANALYTICS)}
           />
         </section>
-        <section className="scroll-mt-6" id="access-control">
+        <section className={sectionClass("access-control")} id="access-control">
           <AccessSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -172,7 +236,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.ACCESS)}
           />
         </section>
-        <section className="scroll-mt-6" id="content-review">
+        <section className={sectionClass("content-review")} id="content-review">
           <ContentReviewSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -181,10 +245,10 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.CONTENT_REVIEW)}
           />
         </section>
-        <section className="scroll-mt-6" id="cloudflare-token">
+        <section className={sectionClass("cloudflare-token")} id="cloudflare-token">
           <CloudflareTokenSettingsApp />
         </section>
-        <section className="scroll-mt-6" id="subscribe-methods">
+        <section className={sectionClass("subscribe-methods")} id="subscribe-methods">
           <SubscribeSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -193,7 +257,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.SUBSCRIBE_METHODS)}
           />
         </section>
-        <section className="scroll-mt-6" id="media-file-storage">
+        <section className={sectionClass("media-file-storage")} id="media-file-storage">
           <MediaFileStorageSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -202,7 +266,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(MEDIA_FILE_STORAGE_SUBMIT_KEY)}
           />
         </section>
-        <section className="scroll-mt-6" id="items-settings">
+        <section className={sectionClass("items-settings")} id="items-settings">
           <ItemsSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -211,7 +275,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(ITEMS_PER_PAGE_SUBMIT_KEY)}
           />
         </section>
-        <section className="scroll-mt-6" id="item-editor-sections">
+        <section className={sectionClass("item-editor-sections")} id="item-editor-sections">
           <ItemEditorSectionsSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -220,7 +284,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             setChanged={() => this.setChanged(SETTINGS_CATEGORIES.ITEM_EDITOR_SECTIONS)}
           />
         </section>
-        <section className="scroll-mt-6" id="favicon">
+        <section className={sectionClass("favicon")} id="favicon">
           <FaviconSettingsApp
             submitting={submitting}
             submitForType={submitForType}
@@ -231,7 +295,7 @@ export default class SettingsApp extends React.Component<Props, any> {
             onSettingsChanged={this.updateSettingsState}
           />
         </section>
-        <section className="scroll-mt-6" id="site">
+        <section className={sectionClass("site")} id="site">
           <SiteSettingsApp
             submitting={submitting}
             submitForType={submitForType}

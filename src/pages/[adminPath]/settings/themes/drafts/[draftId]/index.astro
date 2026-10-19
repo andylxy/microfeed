@@ -82,8 +82,6 @@ if (draft) {
   pageTitle={draft
     ? translate("pageMessage.editThemeDraftTitle", adminLanguage, {name: draft.name})
     : translate("pageTitle.themeDraftNotFound", adminLanguage)}
-  settingsActiveSection="custom-code"
-  settingsNavigation
   breadcrumb={{
     name: translate("pageTitle.themes", adminLanguage),
     url: adminUrl("settings/themes", Astro.params.adminPath),

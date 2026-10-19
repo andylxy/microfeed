@@ -489,8 +489,8 @@ export default class EditItemApp extends React.Component<Props, any> {
     };
   }
 
-  /** 返回链接的查询串（不带 `?`）。页面内的互参链接带上它，点进另一条条目后的
-   *  返回链接才指得回同一个看板（ADR-0036）。 */
+  /** 返回链接的查询串（不带 `?`）。页面内的互参链接带上它，点进另一条条目后
+   *  的返回链接才指得回同一个看板（ADR-0036）。 */
   private returnQuery(): string {
     const url = this.props.returnUrl;
     if (!url) return '';
@@ -745,12 +745,16 @@ export default class EditItemApp extends React.Component<Props, any> {
             <div className="mt-8 pt-8 border-t">
               <div className="mb-2 font-semibold">{t('items.tcmNoteLabel')}</div>
               <AdminMarkdownEditor
+                hint={t('shared.markdownHintApp')}
+                placeholder={t('shared.markdownSourcePlaceholderGeneric')}
                 value={typeof microfeed.note === "string" ? microfeed.note : ""}
                 onChange={(value: string) => this.onUpdateItemMicrofeedMeta('note', value)}
               />
               <div className="mt-4">
                 <div className="mb-2 font-semibold">{t('items.tcmVideoLabel')}</div>
                 <AdminMarkdownEditor
+                  hint={t('shared.markdownHintApp')}
+                  placeholder={t('shared.markdownSourcePlaceholderGeneric')}
                   value={typeof microfeed.videoMemo === "string" ? microfeed.videoMemo : ""}
                   onChange={(value: string) => this.onUpdateItemMicrofeedMeta('videoMemo', value)}
                 />

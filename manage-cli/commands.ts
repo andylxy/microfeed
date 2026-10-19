@@ -75,8 +75,8 @@ import {
 import {
   openUrl,
   repositoryRoot,
+  runAstroDev,
   runCommand,
-  runYarnScript,
 } from "./lib/process";
 import {verifyBundledThemeReleases} from "./lib/bundled-theme-release";
 import {
@@ -5041,7 +5041,7 @@ export async function devCommand(
       persistTo: localPersistencePath(config),
     });
     await withFrameworkWranglerConfig(config, async (configPath) => {
-      await runYarnScript(runner, "dev:astro", {
+      await runAstroDev(runner, ["dev", "--host", "0.0.0.0"], {
         env: {
           ...process.env,
           // Astro automatically backgrounds dev servers when it detects an AI
@@ -5052,7 +5052,6 @@ export async function devCommand(
           MICROFEED_LOCAL_STATE: localPersistencePath(config),
           MICROFEED_WRANGLER_CONFIG: configPath,
         },
-        interactive: true,
       });
     });
   } finally {

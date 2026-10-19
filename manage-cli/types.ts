@@ -61,6 +61,15 @@ export interface RunOptions {
   env?: Partial<NodeJS.ProcessEnv>;
   input?: string;
   interactive?: boolean;
+  /**
+   * Long-lived children (the Astro dev server) stream their output live and
+   * must never see their stdin reach EOF: Vite's dev server terminates when
+   * its stdin ends, and every layer between the terminal and the child
+   * (`yarn run`, wrapped launchers, redirected output) can close stdin early.
+   * The child therefore gets a stdin pipe that stays open for its whole
+   * lifetime instead of an inherited handle that may already be dead.
+   */
+  longRunning?: boolean;
 }
 
 export type CommandRunner = (

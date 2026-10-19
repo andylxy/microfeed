@@ -49,9 +49,10 @@ INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES
 -- ⚠️ 菜单行必须同时挂 parent_code 组 **和** ext_menu_permissions 映射，
 -- 二者缺一不可，否则菜单可见性与页面守卫错位（0083 教训）。
 --
--- 图标 `database` —— lucide-react 合法图标名，且已登记到
--- `src/components/admin/AdminMenuItemLink.tsx` 的 MENU_ICONS 映射（ADR-0007）；
--- 未登记会静默回退 ListIcon。
+-- 图标 `database` —— lucide-react 合法图标名，已登记到
+-- `src/components/admin/AdminMenuItemLink.tsx` 的 MENU_ICONS 映射；
+-- 未登记的图标名会静默回退 ListIcon，是最难发现的一类缺陷。
+-- 图标名的合法取值由菜单保存侧的校验清单与这张渲染表共同约束，两边须一致。
 --
 -- path 用页面目录名 cloud-usage（连字符），与菜单 code cloud_usage（下划线）不同。
 INSERT OR IGNORE INTO ext_menu
