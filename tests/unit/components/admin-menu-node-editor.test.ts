@@ -75,6 +75,7 @@ function renderCreator(draft: MenuGroupDraft, rows: MenuRow[] = SAMPLE): string 
     React.createElement(MenuGroupCreator, {
       busy: false,
       draft,
+      language: "en",
       onCancel: () => {},
       onDraftChange: () => {},
       onSubmit: () => {},
@@ -150,11 +151,13 @@ describe("MenuNodeEditor", () => {
       rows,
     );
     // 父级下拉是唯一带 max-w-40 的 select；React 把 defaultValue 渲染成 option 的 selected。
+    // option 文本是生效名（单测语言固定 en，走 i18n 回退）：group_content → Content；
+    // value 属性仍是 code，所以被排除的行连 value 属性都不该出现。
     const selectStart = html.indexOf("max-w-40");
     const selectBlock = html.slice(selectStart, selectStart + 800);
-    expect(selectBlock).toContain(">group_content<");
-    expect(selectBlock).not.toContain(">mm_custom<");
-    expect(selectBlock).not.toContain(">mm_child<");
+    expect(selectBlock).toContain(">Content<");
+    expect(selectBlock).not.toContain('value="mm_custom"');
+    expect(selectBlock).not.toContain('value="mm_child"');
   });
 });
 
@@ -180,8 +183,9 @@ describe("MenuGroupCreator", () => {
 
   it("lists every existing row as a parent candidate", () => {
     const html = renderCreator({...draft, parentCode: "group_content"});
-    expect(html).toContain(">group_content<");
-    expect(html).toContain(">books<");
-    expect(html).toContain(">volumes<");
+    // option 文本是生效名（单测语言固定 en，走 i18n 回退）；value 属性仍是 code。
+    expect(html).toContain(">Content<");
+    expect(html).toContain(">Books<");
+    expect(html).toContain(">Volume board<");
   });
 });

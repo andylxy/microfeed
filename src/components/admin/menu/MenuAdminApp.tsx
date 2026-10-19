@@ -482,6 +482,7 @@ export default function MenuAdminApp() {
           <MenuGroupCreator
             busy={busy}
             draft={draft}
+            language={language}
             onCancel={() => {
               setCreating(false);
               setFormError(null);

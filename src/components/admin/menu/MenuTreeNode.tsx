@@ -74,6 +74,23 @@ export function childrenOf(rows: MenuRow[], parentCode: string): MenuRow[] {
 }
 
 /**
+ * 一行的「生效名」：库里的自定义名优先（当前语言列，空列取另一列），
+ * 都没有时回退到 i18n 兜底标签。树行、面板头部、父节点下拉共用这一个口径，
+ * 三处显示不漂移。`t` 由调用方从 `useTranslation` 传入，本文件不直接依赖
+ * react-i18next 的初始化时序。
+ */
+export function menuRowEffectiveLabel(
+  row: MenuRow,
+  language: AdminLanguage,
+  t: (key: string) => string,
+): string {
+  return (
+    adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
+    t(menuRowLabelKey(row.code))
+  );
+}
+
+/**
  * 拖拽放置位置的三段判定：目标节点垂直高度的顶/底 1/3 为同层 before/after，中部 1/3 为 inside。
  * `allowInside` 为 false（目标非分组）时，中部回退为 before/after（按中线）。
  */
@@ -229,9 +246,7 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   const canUp = index > 0;
   const canDown = index < siblings.length - 1;
 
-  const label =
-    adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
-    t(menuRowLabelKey(row.code));
+  const label = menuRowEffectiveLabel(row, language, t);
 
   return (
     <div data-menu-node={row.code}>

@@ -4,10 +4,13 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
-import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
 import {menuDescendantCodes, type MenuUpdatePatch} from "@/shared/MenuAdminOps";
-import {childrenOf, type MenuRow} from "@/components/admin/menu/MenuTreeNode";
+import {
+  childrenOf,
+  menuRowEffectiveLabel,
+  type MenuRow,
+} from "@/components/admin/menu/MenuTreeNode";
 
 /**
  * 名称输入：受控 + 失焦提交。局部 state 承接输入，值变化时回填；
@@ -86,9 +89,7 @@ export function MenuNodeEditor({
   const canUp = index > 0;
   const canDown = index < siblings.length - 1;
 
-  const label =
-    adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
-    t(menuRowLabelKey(row.code));
+  const label = menuRowEffectiveLabel(row, language, t);
   const hasCustomName = Boolean(row.nameZh || row.nameEn);
   // 父级候选排除自身与自身后代（与树行内旧版同口径）。
   const descendants = menuDescendantCodes(rows, row.code);
@@ -216,7 +217,7 @@ export function MenuNodeEditor({
               )
               .map((candidate) => (
                 <option key={candidate.code} value={candidate.code}>
-                  {candidate.code}
+                  {menuRowEffectiveLabel(candidate, language, t)}
                 </option>
               ))}
           </select>
@@ -283,6 +284,7 @@ export interface MenuGroupDraft {
 export function MenuGroupCreator({
   busy,
   draft,
+  language,
   onCancel,
   onDraftChange,
   onSubmit,
@@ -290,6 +292,7 @@ export function MenuGroupCreator({
 }: {
   busy: boolean;
   draft: MenuGroupDraft;
+  language: AdminLanguage;
   onCancel: () => void;
   onDraftChange: (patch: Partial<MenuGroupDraft>) => void;
   onSubmit: () => void;
@@ -352,7 +355,7 @@ export function MenuGroupCreator({
             <option value="">{t("menuAdmin.parentNone")}</option>
             {rows.map((row) => (
               <option key={row.code} value={row.code}>
-                {row.code}
+                {menuRowEffectiveLabel(row, language, t)}
               </option>
             ))}
           </select>
