@@ -7,12 +7,14 @@ import {useTranslation} from "@/client/i18n";
 import {menuRowLabelKey} from "@/shared/AdminNavigation";
 import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
-import {menuDescendantCodes, type MenuUpdatePatch} from "@/shared/MenuAdminOps";
+import type {MenuUpdatePatch} from "@/shared/MenuAdminOps";
 import {
   childrenOf,
+  menuIconNoneDisabled,
+  menuParentCandidates,
   menuRowEffectiveLabel,
   type MenuRow,
-} from "@/components/admin/menu/MenuTreeNode";
+} from "@/shared/MenuTreeView";
 
 /**
  * 名称输入：受控 + 失焦提交。局部 state 承接输入，值变化时回填；
@@ -64,24 +66,9 @@ export interface MenuNodeEditorProps {
 }
 
 /**
- * 父级候选：排除自身与自身后代——把行挂到自己下面会成环，挂到后代下面会让
- * 归属关系错乱。新建分组没有「自身」，`MenuGroupCreator` 直接收全部行。
- */
-export function menuParentCandidates(rows: MenuRow[], code: string): MenuRow[] {
-  const excluded = menuDescendantCodes(rows, code);
-  excluded.add(code);
-  return rows.filter((candidate) => !excluded.has(candidate.code));
-}
-
-/** 页面行的图标不允许清空：`path` 非空即页面行，「无图标」入口对它禁用。 */
-export function menuIconNoneDisabled(row: MenuRow): boolean {
-  return row.path !== "";
-}
-
-/**
  * 右栏节点详情面板（v4）：树行里搬过来的全部编辑能力都在这里。
  *
- * 外壳与头部对齐 rbac 右栏（`RbacApp/index.tsx` L406–497）：`section` 由管理页提供，
+ * 外壳与头部跟 rbac 右栏一致（`RbacApp/index.tsx` L406–497）：`section` 由管理页提供，
  * 这里从 `header`（名称 + mono code + 操作按钮组）开始；锁定提示条复用 rbac 的
  * `roleCodeLocked` 形态（L483–487），说明段复用 rbac description 的位置（L495–497）。
  *

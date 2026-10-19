@@ -6,11 +6,13 @@ import "@/client/i18n";
 import {
   MenuGroupCreator,
   MenuNodeEditor,
-  menuIconNoneDisabled,
-  menuParentCandidates,
   type MenuGroupDraft,
 } from "@/components/admin/menu/MenuNodeEditor";
-import type {MenuRow} from "@/components/admin/menu/MenuTreeNode";
+import {
+  menuIconNoneDisabled,
+  menuParentCandidates,
+  type MenuRow,
+} from "@/shared/MenuTreeView";
 
 // 组件单测跑在 node（无 jsdom），经 renderToStaticMarkup 静态渲染；
 // vitest 的 setup 把语言固定为英文，i18n 回退取 en.ts 的值。

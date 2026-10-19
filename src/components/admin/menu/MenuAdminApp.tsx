@@ -22,18 +22,20 @@ import {
   type MenuGroupDraft,
 } from "@/components/admin/menu/MenuNodeEditor";
 import {
-  childrenOf,
   dropPositionFromY,
-  menuInjectedRows,
-  menuTopAncestorCode,
   MENU_ROOT_NODE,
   MenuBranchToggle,
   MenuTreeCtx,
   MenuTreeNode,
   reorderMenuRows,
   type DropPosition,
-  type MenuRow,
 } from "@/components/admin/menu/MenuTreeNode";
+import {
+  childrenOf,
+  menuInjectedRows,
+  menuTopAncestorCode,
+  type MenuRow,
+} from "@/shared/MenuTreeView";
 
 /** `GET /ajax/menu` 的响应体：行集 + 失败时的错误文案。 */
 
@@ -57,7 +59,7 @@ const PATCH_TO_ROW_KEY: Record<keyof MenuUpdatePatch, keyof MenuAdminRowWithMeta
  * 树只负责呈现与选择（点一行选中它）；改名 / 图标 / 父级 / 显隐 / 移动 / 删除 /
  * 加子分组全部在右侧详情面板里做，失焦即保存——每个控件只发一个聚焦的 op，
  * 服务端返回最新全量行。`path` 与 `permission_code` 只读展示（可达性不在此处改）。
- * 布局与外壳对齐 rbac「权限管理」（`RbacApp/index.tsx` L322–497）。
+ * 布局与外壳跟 rbac「权限管理」一致（`RbacApp/index.tsx` L322–497）。
  */
 export default function MenuAdminApp() {
   const {t, i18n} = useTranslation();
@@ -80,7 +82,7 @@ export default function MenuAdminApp() {
   });
   // 树折叠态：缺席即展开（默认全展开）；搜索态由命中祖先强制展开覆盖。
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  // 顶层手风琴（对齐左侧导航）：同一时刻只展开一个顶层分组。
+  // 顶层手风琴（跟左侧导航一致）：同一时刻只展开一个顶层分组。
   // undefined = 还没初始化（行集到达后展开首个顶层）；null = 用户收起了当前顶层。
   const [openTopCode, setOpenTopCode] = useState<string | null | undefined>(
     undefined,
@@ -406,21 +408,25 @@ export default function MenuAdminApp() {
     };
   }, [draggedCode, finishDragging]);
 
-  // 当前选中行：选中行被删或不存在时自动回退到首个根行（rbac 默认选首个角色同款口径）。
+  /**
+   * 当前选中行：选中行被删或不存在时自动回退到首个「能展开的顶层」下的第一行。
+   *
+   * 顶层里 `admin_home`（首页）sort 最小，但它是不带子行的叶子——回退到它的话，
+   * 下面那条「选中行所在顶层自动展开」会去展开这个空叶子，用户进来看见的就是
+   * 一排收起的分组。所以这里跳过空叶子，挑第一个真有子行的顶层，选中与展开
+   * 因此用同一个口径。
+   */
   const selectedRow = rows.find((row) => row.code === selectedCode) ?? null;
   useEffect(() => {
     if (creating || selectedRow) return;
-    const first = childrenOf(rows, "")[0];
+    const topWithChildren = roots.find(
+      (root) => childrenOf(rows, root.code).length > 0,
+    );
+    const first = topWithChildren
+      ? childrenOf(rows, topWithChildren.code)[0]
+      : roots[0];
     if (first) setSelectedCode(first.code);
-  }, [creating, rows, selectedRow]);
-
-  // 行集首次到达时展开首个顶层（对齐左侧导航：进来就有一个分组是开着的）。
-  // 只在 undefined（未初始化）时做——用户手动收起后是 null，不该被重新展开。
-  useEffect(() => {
-    if (openTopCode !== undefined) return;
-    const first = childrenOf(rows, "")[0];
-    if (first) setOpenTopCode(first.code);
-  }, [openTopCode, rows]);
+  }, [creating, roots, rows, selectedRow]);
 
   // 选中行所在的顶层必须展开：新建分组后选中的新行可能位于别的顶层下。
   // 只认选中行真正变化的那一刻，否则用户手动收起顶层会被这里立刻展开回去。
@@ -490,7 +496,7 @@ export default function MenuAdminApp() {
               toggleOpen,
             }}
           >
-            {/* 合成根：对齐 rbac 的 `ROOT_NODE` 行（L500–510），不是菜单行，
+            {/* 合成根：跟 rbac 的 `ROOT_NODE` 行一样（L500–510），不是菜单行，
                 因此不加 `data-menu-node`，也不参与拖拽。 */}
             <div>
               <div className="flex items-center gap-1">

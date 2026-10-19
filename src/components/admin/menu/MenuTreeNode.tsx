@@ -10,23 +10,17 @@ import {
 
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
-import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
-import {ADMIN_API_PAGES} from "@/shared/AdminApiNavigation";
-import {ADMIN_SETTINGS_SECTIONS} from "@/shared/AdminSettingsNavigation";
-import {ADMIN_WEBHOOK_PAGES} from "@/shared/AdminWebhookNavigation";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
-import {ADMIN_MENU_CODES} from "@/shared/Constants";
+import {compareMenuRows, menuDescendantCodes} from "@/shared/MenuAdminOps";
 import {
-  compareMenuRows,
-  menuDescendantCodes,
-  type MenuAdminRowWithMeta,
-} from "@/shared/MenuAdminOps";
-
-/** 与 `GET /ajax/menu` 的响应行一致。 */
-export type MenuRow = MenuAdminRowWithMeta;
+  childrenOf,
+  isInjectedRow,
+  menuRowEffectiveLabel,
+  type MenuRow,
+} from "@/shared/MenuTreeView";
 
 /**
- * 树的合成根（对齐 rbac「权限管理」的 `ROOT_NODE = "permission_root"`）。
+ * 树的合成根（跟 rbac「权限管理」的 `ROOT_NODE = "permission_root"` 一样）。
  * 它不是菜单行、也不是权限码，只给整棵树一个统一的展开入口。
  */
 export const MENU_ROOT_NODE = "menu_root";
@@ -65,106 +59,6 @@ export interface MenuTreeCtxValue {
 }
 
 export const MenuTreeCtx = createContext<MenuTreeCtxValue | null>(null);
-
-/**
- * 取某父级下的直接子节点，按服务端 `(sort, code)` 口径排序。
- * 渲染与键盘移动按钮禁用态共用这一个口径，避免两处顺序不一致。
- */
-export function childrenOf(rows: MenuRow[], parentCode: string): MenuRow[] {
-  const target = parentCode || null;
-  return rows
-    .filter((row) => (row.parentCode ?? null) === target)
-    .sort(compareMenuRows);
-}
-
-/**
- * 一行的「生效名」：库里的自定义名优先（当前语言列，空列取另一列），
- * 都没有时回退到 i18n 兜底标签。树行、面板头部、父节点下拉共用这一个口径，
- * 三处显示不漂移。`t` 由调用方从 `useTranslation` 传入，本文件不直接依赖
- * react-i18next 的初始化时序。
- */
-export function menuRowEffectiveLabel(
-  row: MenuRow,
-  language: AdminLanguage,
-  t: (key: string) => string,
-): string {
-  return (
-    adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
-    t(menuRowLabelKey(row.code))
-  );
-}
-
-/**
- * 一行的顶层祖先：沿 `parentCode` 链一路向上，走到没有父级的那一行。
- * 顶层手风琴用它决定「选中这一行时该展开哪个顶层」。行不在 `rows` 里（比如
- * 刚被删掉）时返回 null。
- */
-export function menuTopAncestorCode(rows: MenuRow[], code: string): string | null {
-  const byCode = new Map(rows.map((row) => [row.code, row]));
-  let current = byCode.get(code) ?? null;
-  while (current?.parentCode) {
-    const parent = byCode.get(current.parentCode) ?? null;
-    if (!parent) break;
-    current = parent;
-  }
-  return current?.code ?? null;
-}
-
-/** 注入行的 sort 基数：数据行的 sort 是几百量级，注入行排在同级末尾。 */
-const INJECTED_ROW_SORT_BASE = 1000;
-
-/**
- * 注入行的 code 形如 `settings:custom-code`，与 `AdminSidebar` 注入子项的 id 同形。
- * 菜单行的 code 只允许小写字母、数字与下划线，冒号因此只出现在注入行上——
- * 判据就是它，行模型不必再加字段。
- */
-export function isInjectedRow(row: MenuRow): boolean {
-  return row.code.includes(":");
-}
-
-/**
- * 侧栏的第三级子项是 `AdminSidebar.SUB_SECTION_BUILDERS` 在渲染时注入的，
- * `ext_menu` 里没有对应行，管理页树因此比侧栏少一层。这里把同一份清单合成
- * 同形的只读行，只为让两处对得上——清单不在这里复制第二份。
- *
- * 这些行只进树的渲染行集，不进任何保存操作（见 `MenuAdminApp` 的
- * `displayRows`）：它们没有 `path` 也没有 `permission_code`，改名 / 改图标 /
- * 排序 / 显隐一概不能做。
- */
-export function menuInjectedRows(
-  zhText: (key: string) => string,
-  enText: (key: string) => string,
-): MenuRow[] {
-  const build = (
-    parentCode: string,
-    items: readonly {icon: string; id: string; nameKey: string}[],
-  ): MenuRow[] =>
-    items.map((item, index) => {
-      const code = `${parentCode}:${item.id}`;
-      return {
-        code,
-        createdAtMs: 0,
-        deletable: false,
-        i18nKey: item.nameKey,
-        icon: item.icon,
-        id: code,
-        // 两列都填清单文案，`menuRowEffectiveLabel` 于是按界面语言取其中一列，
-        // 与侧栏走 `labelKey` 的口径一致。
-        nameEn: enText(item.nameKey),
-        nameZh: zhText(item.nameKey),
-        parentCode,
-        path: "",
-        permissionCode: null,
-        sort: INJECTED_ROW_SORT_BASE + index,
-        visible: true,
-      };
-    });
-  return [
-    ...build(ADMIN_MENU_CODES.SETTINGS, ADMIN_SETTINGS_SECTIONS),
-    ...build(ADMIN_MENU_CODES.API, ADMIN_API_PAGES),
-    ...build(ADMIN_MENU_CODES.WEBHOOKS, ADMIN_WEBHOOK_PAGES),
-  ];
-}
 
 /**
  * 拖拽放置位置的三段判定：目标节点垂直高度的顶/底 1/3 为同层 before/after，中部 1/3 为 inside。
@@ -277,7 +171,7 @@ export function MenuBranchToggle({
  * 隐藏标记 + 递归子节点。任意深度；缩进来自子节点的 `border-l pl-4` 嵌套容器。
  *
  * 行内不放任何编辑控件——点一行只是选中它，编辑在右侧详情面板里做
- * （对齐 rbac「权限管理」：树负责呈现与选择，编辑集中在面板）。
+ * （跟 rbac「权限管理」一致：树负责呈现与选择，编辑集中在面板）。
  *
  * 节点最外层包 `data-menu-node`：拖拽时用 `elementFromPoint` 反查目标节点。
  */
