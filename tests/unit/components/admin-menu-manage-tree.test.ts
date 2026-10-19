@@ -8,6 +8,7 @@ import {
   dropPositionFromY,
   isInjectedRow,
   menuInjectedRows,
+  menuTopAncestorCode,
   MENU_ROOT_NODE,
   MenuBranchToggle,
   MenuTreeNode,
@@ -209,6 +210,23 @@ describe("MenuBranchToggle", () => {
 
   it("labels the arrow with the branch name", () => {
     expect(render(true)).toContain('aria-label="Toggle Books"');
+  });
+});
+
+describe("menuTopAncestorCode", () => {
+  it("returns the row itself when it is already top level", () => {
+    expect(menuTopAncestorCode(SAMPLE, "group_content")).toBe("group_content");
+  });
+
+  it("walks the parent chain up to the top-level ancestor", () => {
+    // child_of_custom → custom_dir → group_content
+    expect(menuTopAncestorCode(SAMPLE, "child_of_custom")).toBe("group_content");
+    expect(menuTopAncestorCode(SAMPLE, "books")).toBe("group_content");
+  });
+
+  it("returns null for a code that is not in the row set", () => {
+    // 注入行只进渲染行集，不在数据行里，手风琴拿不到它的顶层。
+    expect(menuTopAncestorCode(SAMPLE, "settings:custom-code")).toBeNull();
   });
 });
 

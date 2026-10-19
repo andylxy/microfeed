@@ -94,6 +94,22 @@ export function menuRowEffectiveLabel(
   );
 }
 
+/**
+ * 一行的顶层祖先：沿 `parentCode` 链一路向上，走到没有父级的那一行。
+ * 顶层手风琴用它决定「选中这一行时该展开哪个顶层」。行不在 `rows` 里（比如
+ * 刚被删掉）时返回 null。
+ */
+export function menuTopAncestorCode(rows: MenuRow[], code: string): string | null {
+  const byCode = new Map(rows.map((row) => [row.code, row]));
+  let current = byCode.get(code) ?? null;
+  while (current?.parentCode) {
+    const parent = byCode.get(current.parentCode) ?? null;
+    if (!parent) break;
+    current = parent;
+  }
+  return current?.code ?? null;
+}
+
 /** 注入行的 sort 基数：数据行的 sort 是几百量级，注入行排在同级末尾。 */
 const INJECTED_ROW_SORT_BASE = 1000;
 

@@ -25,6 +25,7 @@ import {
   childrenOf,
   dropPositionFromY,
   menuInjectedRows,
+  menuTopAncestorCode,
   MENU_ROOT_NODE,
   MenuBranchToggle,
   MenuTreeCtx,
@@ -79,6 +80,11 @@ export default function MenuAdminApp() {
   });
   // 树折叠态：缺席即展开（默认全展开）；搜索态由命中祖先强制展开覆盖。
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // 顶层手风琴（对齐左侧导航）：同一时刻只展开一个顶层分组。
+  // undefined = 还没初始化（行集到达后展开首个顶层）；null = 用户收起了当前顶层。
+  const [openTopCode, setOpenTopCode] = useState<string | null | undefined>(
+    undefined,
+  );
   // 树选中态：点一行选中它，编辑在右侧详情面板里做（v4）。null = 尚未选中。
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   // 搜索框（按 code 或生效名称过滤；命中祖先强制展开、命中高亮）。
@@ -231,14 +237,29 @@ export default function MenuAdminApp() {
     }
   }, [t]);
 
-  const toggleOpen = useCallback((code: string) => {
-    setCollapsed((prev) => ({...prev, [code]: prev[code] !== true}));
-  }, []);
+  const roots = useMemo(() => childrenOf(rows, ""), [rows]);
 
+  // 顶层走手风琴：点已展开的那个就收起，点另一个则切换过去（其余顶层自动收起）；
+  // 更深层各管各的折叠。
+  const toggleOpen = useCallback(
+    (code: string) => {
+      if (roots.some((root) => root.code === code)) {
+        setOpenTopCode((prev) => (prev === code ? null : code));
+        return;
+      }
+      setCollapsed((prev) => ({...prev, [code]: prev[code] !== true}));
+    },
+    [roots],
+  );
+
+  // 顶层手风琴下没有「所有顶层都展开」这个状态：这两个按钮只管当前展开顶层
+  // 内部的子层，顶层归 openTopCode 管、不受它们影响。
   const expandAll = useCallback(() => setCollapsed({}), []);
   const collapseAll = useCallback(() => {
-    const next: Record<string, boolean> = {[MENU_ROOT_NODE]: true};
-    for (const row of rows) next[row.code] = true;
+    const next: Record<string, boolean> = {};
+    for (const row of rows) {
+      if (row.parentCode) next[row.code] = true;
+    }
     setCollapsed(next);
   }, [rows]);
 
@@ -292,7 +313,16 @@ export default function MenuAdminApp() {
     return {ancestors, codes};
   }, [displayRows, search, language, t]);
 
-  const roots = useMemo(() => childrenOf(rows, ""), [rows]);
+  /**
+   * 交给树的折叠态：非顶层节点各记各的（`collapsed`），顶层一律由手风琴状态
+   * 覆盖——只留 `openTopCode` 一个展开，其余顶层折叠。合成根不在顶层之列，
+   * 始终展开（它只是整棵树的一个统一入口）。
+   */
+  const treeCollapsed = useMemo(() => {
+    const next: Record<string, boolean> = {...collapsed};
+    for (const root of roots) next[root.code] = root.code !== openTopCode;
+    return next;
+  }, [collapsed, openTopCode, roots]);
 
   // 合成根的折叠态与真实行共用同一份 `collapsed` 字典（缺席即展开）；
   // 搜索态下强制展开，否则命中节点会被藏在折叠的根后面。
@@ -384,6 +414,26 @@ export default function MenuAdminApp() {
     if (first) setSelectedCode(first.code);
   }, [creating, rows, selectedRow]);
 
+  // 行集首次到达时展开首个顶层（对齐左侧导航：进来就有一个分组是开着的）。
+  // 只在 undefined（未初始化）时做——用户手动收起后是 null，不该被重新展开。
+  useEffect(() => {
+    if (openTopCode !== undefined) return;
+    const first = childrenOf(rows, "")[0];
+    if (first) setOpenTopCode(first.code);
+  }, [openTopCode, rows]);
+
+  // 选中行所在的顶层必须展开：新建分组后选中的新行可能位于别的顶层下。
+  // 只认选中行真正变化的那一刻，否则用户手动收起顶层会被这里立刻展开回去。
+  const openedForSelectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedRow || openedForSelectionRef.current === selectedRow.code) {
+      return;
+    }
+    openedForSelectionRef.current = selectedRow.code;
+    const top = menuTopAncestorCode(rows, selectedRow.code);
+    if (top) setOpenTopCode(top);
+  }, [rows, selectedRow]);
+
   if (loading && rows.length === 0) {
     return <AdminCollectionLoading label={t("menuAdmin.title")} />;
   }
@@ -417,7 +467,7 @@ export default function MenuAdminApp() {
         ) : (
           <MenuTreeCtx.Provider
             value={{
-              collapsed,
+              collapsed: treeCollapsed,
               drag: {
                 draggingCode: draggedCode,
                 dropTarget,
