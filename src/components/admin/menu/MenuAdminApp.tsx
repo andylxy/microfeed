@@ -9,12 +9,18 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
-import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
 import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
   type MenuAdminOp,
+  type MenuAdminRowWithMeta,
+  type MenuUpdatePatch,
 } from "@/shared/MenuAdminOps";
+import {
+  MenuGroupCreator,
+  MenuNodeEditor,
+  type MenuGroupDraft,
+} from "@/components/admin/menu/MenuNodeEditor";
 import {
   childrenOf,
   dropPositionFromY,
@@ -34,12 +40,22 @@ interface MenuRowsResponse {
   rows?: MenuRow[];
 }
 
+/** patch 的键 → 行字段名（`isVisible` 在行上叫 `visible`）。 */
+const PATCH_TO_ROW_KEY: Record<keyof MenuUpdatePatch, keyof MenuAdminRowWithMeta> = {
+  icon: "icon",
+  isVisible: "visible",
+  nameEn: "nameEn",
+  nameZh: "nameZh",
+  parentCode: "parentCode",
+};
+
 /**
- * 菜单管理页（票 03 骨架 + 票 04 编辑 + 票 05 图标名文案 + 树形改造）。
+ * 菜单管理页（v4 双面板：左侧树 + 右侧节点详情）。
  *
- * 行内编辑、失焦保存：每个控件只发一个聚焦的 op，服务端返回最新全量行。
- * 「怎么摆 / 叫什么」可改；`path` 与 `permission_code` 只读展示（可达性不在此处改）。
- * 渲染从扁平行表格换成了递归可折叠树（`MenuTreeNode`），增删改移能力原样保留。
+ * 树只负责呈现与选择（点一行选中它）；改名 / 图标 / 父级 / 显隐 / 移动 / 删除 /
+ * 加子分组全部在右侧详情面板里做，失焦即保存——每个控件只发一个聚焦的 op，
+ * 服务端返回最新全量行。`path` 与 `permission_code` 只读展示（可达性不在此处改）。
+ * 布局与外壳对齐 rbac「权限管理」（`RbacApp/index.tsx` L322–497）。
  */
 export default function MenuAdminApp() {
   const {t, i18n} = useTranslation();
@@ -51,9 +67,9 @@ export default function MenuAdminApp() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  // 新建分组弹层（同 AliasesApp 的内联表单模式）。
+  // 新建分组弹层（同 AliasesApp 的内联表单模式）；v4 起表单放在右栏。
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<MenuGroupDraft>({
     code: "",
     icon: "list",
     nameEn: "",
@@ -136,11 +152,40 @@ export default function MenuAdminApp() {
     [rows, t],
   );
 
+  // 详情面板的字段提交：失焦即保存。值没有变化时不发请求（避免无意义写与行集重放）。
+  // patch 的键与行字段不同名（`isVisible` ↔ `visible`），逐键映射后再比对。
+  const updateField = useCallback(
+    (row: MenuRow, patch: MenuUpdatePatch) => {
+      const changed = (Object.entries(patch) as [keyof MenuUpdatePatch, unknown][]).some(
+        ([key, value]) => (row[PATCH_TO_ROW_KEY[key]] as unknown) !== value,
+      );
+      if (!changed) return;
+      void postOps([{code: row.code, op: "update", patch}]);
+    },
+    [postOps],
+  );
+
+  const restoreDefault = useCallback(
+    (row: MenuRow) => {
+      void postOps([{code: row.code, op: "update", patch: {nameEn: null, nameZh: null}}]);
+    },
+    [postOps],
+  );
+
+  const removeRow = useCallback(
+    (row: MenuRow) => {
+      if (!window.confirm(t("menuAdmin.deleteConfirm", {code: row.code}))) return;
+      void postOps([{code: row.code, op: "delete"}]);
+    },
+    [postOps, t],
+  );
+
   const submitCreateGroup = useCallback(async () => {
     if (!confirmPageParent(draft.parentCode || null)) return;
+    const code = draft.code.trim();
     const ok = await postOps([
       {
-        code: draft.code.trim(),
+        code,
         icon: draft.icon,
         nameEn: draft.nameEn,
         nameZh: draft.nameZh,
@@ -151,12 +196,15 @@ export default function MenuAdminApp() {
     if (ok) {
       setCreating(false);
       setDraft({code: "", icon: "list", nameEn: "", nameZh: "", parentCode: ""});
+      // 新建成功直接选中新行，右栏接着展示它的详情。
+      setSelectedCode(code);
     }
   }, [confirmPageParent, draft, postOps]);
 
-  // 打开新建分组弹层：顶层新建会清空父级，节点上的「加子分组」会预填父级。
+  // 打开新建分组表单：每次打开都清空草稿（rbac 的新建角色按钮同款），
+  // 顶层新建父级为空，面板里的「加子分组」预填该行 code。
   const openCreateGroup = useCallback((parentCode: string) => {
-    setDraft((prev) => ({...prev, parentCode}));
+    setDraft({code: "", icon: "list", nameEn: "", nameZh: "", parentCode});
     setCreating(true);
   }, []);
 
@@ -309,6 +357,14 @@ export default function MenuAdminApp() {
     };
   }, [draggedCode, finishDragging]);
 
+  // 当前选中行：选中行被删或不存在时自动回退到首个根行（rbac 默认选首个角色同款口径）。
+  const selectedRow = rows.find((row) => row.code === selectedCode) ?? null;
+  useEffect(() => {
+    if (creating || selectedRow) return;
+    const first = childrenOf(rows, "")[0];
+    if (first) setSelectedCode(first.code);
+  }, [creating, rows, selectedRow]);
+
   if (loading && rows.length === 0) {
     return <AdminCollectionLoading label={t("menuAdmin.title")} />;
   }
@@ -318,162 +374,140 @@ export default function MenuAdminApp() {
   }
 
   return (
-    <section className="rounded-[14px] border bg-card p-5 shadow-xs">
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{t("menuAdmin.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("menuAdmin.intro")}</p>
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-80">
+        <div className="p-1">
+          <Input
+            className="w-full"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("menuAdmin.searchPlaceholder")}
+            value={search}
+          />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={busy} onClick={exportSql} size="sm" type="button" variant="outline">
+        <div className="flex items-center gap-2 px-1 pb-2">
+          <Button disabled={busy} onClick={expandAll} size="sm" type="button" variant="outline">
+            {t("menuAdmin.expandAll")}
+          </Button>
+          <Button disabled={busy} onClick={collapseAll} size="sm" type="button" variant="outline">
+            {t("menuAdmin.collapseAll")}
+          </Button>
+        </div>
+
+        {search.trim() && searchMatch.codes.size === 0 ? (
+          <p className="px-2 py-6 text-sm text-muted-foreground">{t("menuAdmin.noResults")}</p>
+        ) : (
+          <MenuTreeCtx.Provider
+            value={{
+              collapsed,
+              drag: {
+                draggingCode: draggedCode,
+                dropTarget,
+                onHandlePointerDown: beginDragging,
+              },
+              language,
+              move,
+              onSelect: (code) => {
+                setSelectedCode(code);
+                // 创建表单开着时点树行 = 放弃创建，直接看这一行。
+                setCreating(false);
+              },
+              rows,
+              search: {
+                isForcedOpen: (code) => searchMatch.ancestors.has(code),
+                isHighlighted: (code) => searchMatch.codes.has(code),
+                query: search,
+              },
+              selectedCode,
+              toggleOpen,
+            }}
+          >
+            {/* 合成根：对齐 rbac 的 `ROOT_NODE` 行（L500–510），不是菜单行，
+                因此不加 `data-menu-node`，也不参与拖拽。 */}
+            <div>
+              <div className="flex items-center gap-1">
+                <MenuBranchToggle
+                  expanded={rootOpen}
+                  label={t("menuAdmin.treeRoot")}
+                  onToggle={() => toggleOpen(MENU_ROOT_NODE)}
+                />
+                <span className="text-sm font-semibold text-foreground">
+                  {t("menuAdmin.treeRoot")}
+                </span>
+              </div>
+
+              {rootOpen && (
+                <div className="mt-2 flex flex-col gap-3 border-l pl-4">
+                  {roots.map((root) => (
+                    <MenuTreeNode key={root.code} row={root} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </MenuTreeCtx.Provider>
+        )}
+
+        <div className="mt-2 flex items-center gap-2 border-t p-1 pt-2">
+          <Button
+            className="flex-1"
+            disabled={busy}
+            onClick={exportSql}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             <DownloadIcon aria-hidden="true" />
             {t("menuAdmin.exportSql")}
           </Button>
-          <Button disabled={busy} onClick={() => openCreateGroup("")} size="sm" type="button">
+          <Button
+            className="flex-1"
+            disabled={busy}
+            onClick={() => openCreateGroup("")}
+            size="sm"
+            type="button"
+          >
             <PlusIcon aria-hidden="true" />
             {t("menuAdmin.createGroup")}
           </Button>
         </div>
-      </header>
+      </nav>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          className="max-w-xs"
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("menuAdmin.searchPlaceholder")}
-          value={search}
-        />
-        <Button disabled={busy} onClick={expandAll} size="sm" type="button" variant="outline">
-          {t("menuAdmin.expandAll")}
-        </Button>
-        <Button disabled={busy} onClick={collapseAll} size="sm" type="button" variant="outline">
-          {t("menuAdmin.collapseAll")}
-        </Button>
-      </div>
+      <section className="min-w-0 flex-1 rounded-[14px] border bg-card p-5 shadow-xs">
+        {formError && (
+          <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            {formError}
+          </p>
+        )}
 
-      {formError && (
-        <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          {formError}
-        </p>
-      )}
-
-      {creating && (
-        <div className="mb-4 flex flex-col gap-2 rounded-[10px] border bg-background p-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              autoFocus
-              className="w-44"
-              onChange={(event) => setDraft((prev) => ({...prev, code: event.target.value}))}
-              placeholder={t("menuAdmin.codePlaceholder")}
-              value={draft.code}
-            />
-            <Input
-              className="w-36"
-              onChange={(event) => setDraft((prev) => ({...prev, nameZh: event.target.value}))}
-              placeholder={t("menuAdmin.nameZhPlaceholder")}
-              value={draft.nameZh}
-            />
-            <Input
-              className="w-36"
-              onChange={(event) => setDraft((prev) => ({...prev, nameEn: event.target.value}))}
-              placeholder={t("menuAdmin.nameEnPlaceholder")}
-              value={draft.nameEn}
-            />
-            <select
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-              onChange={(event) => setDraft((prev) => ({...prev, icon: event.target.value}))}
-              value={draft.icon}
-            >
-              {MENU_ICON_NAMES.map((name) => (
-                <option key={name} value={name}>
-                  {t(`menu.icon.${name}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-              onChange={(event) => setDraft((prev) => ({...prev, parentCode: event.target.value}))}
-              value={draft.parentCode}
-            >
-              <option value="">{t("menuAdmin.parentNone")}</option>
-              {rows.map((row) => (
-                <option key={row.code} value={row.code}>
-                  {row.code}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <Button disabled={busy} onClick={() => void submitCreateGroup()} size="xs" type="button">
-              {t("menuAdmin.save")}
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setCreating(false);
-                setFormError(null);
-              }}
-              size="xs"
-              type="button"
-              variant="ghost"
-            >
-              {t("menuAdmin.cancel")}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">{t("menuAdmin.createGroupHint")}</p>
-        </div>
-      )}
-
-      {search.trim() && searchMatch.codes.size === 0 ? (
-        <p className="py-6 text-sm text-muted-foreground">{t("menuAdmin.noResults")}</p>
-      ) : (
-        <MenuTreeCtx.Provider
-          value={{
-            collapsed,
-            drag: {
-              draggingCode: draggedCode,
-              dropTarget,
-              onHandlePointerDown: beginDragging,
-            },
-            language,
-            move,
-            onSelect: (code) => setSelectedCode(code),
-            rows,
-            search: {
-              isForcedOpen: (code) => searchMatch.ancestors.has(code),
-              isHighlighted: (code) => searchMatch.codes.has(code),
-              query: search,
-            },
-            selectedCode,
-            toggleOpen,
-          }}
-        >
-          {/* 合成根：对齐 rbac 的 `ROOT_NODE` 行（L500–510），不是菜单行，
-              因此不加 `data-menu-node`，也不参与拖拽。 */}
-          <div>
-            <div className="flex items-center gap-1">
-              <MenuBranchToggle
-                expanded={rootOpen}
-                label={t("menuAdmin.treeRoot")}
-                onToggle={() => toggleOpen(MENU_ROOT_NODE)}
-              />
-              <span className="text-sm font-semibold text-foreground">
-                {t("menuAdmin.treeRoot")}
-              </span>
-            </div>
-
-            {rootOpen && (
-              <div className="mt-2 flex flex-col gap-3 border-l pl-4">
-                {roots.map((root) => (
-                  <MenuTreeNode key={root.code} row={root} />
-                ))}
-              </div>
-            )}
-          </div>
-        </MenuTreeCtx.Provider>
-      )}
-
-      <p className="mt-4 text-xs text-muted-foreground">{t("menuAdmin.lockedHint")}</p>
-    </section>
+        {creating ? (
+          <MenuGroupCreator
+            busy={busy}
+            draft={draft}
+            onCancel={() => {
+              setCreating(false);
+              setFormError(null);
+              setDraft({code: "", icon: "list", nameEn: "", nameZh: "", parentCode: ""});
+            }}
+            onDraftChange={(patch) => setDraft((prev) => ({...prev, ...patch}))}
+            onSubmit={() => void submitCreateGroup()}
+            rows={rows}
+          />
+        ) : selectedRow ? (
+          <MenuNodeEditor
+            busy={busy}
+            confirmPageParent={confirmPageParent}
+            language={language}
+            onAddChildGroup={openCreateGroup}
+            onDelete={removeRow}
+            onField={updateField}
+            onMove={move}
+            onRestoreDefault={restoreDefault}
+            row={selectedRow}
+            rows={rows}
+          />
+        ) : (
+          <p className="py-6 text-sm text-muted-foreground">{t("menuAdmin.emptyBoard")}</p>
+        )}
+      </section>
+    </div>
   );
 }

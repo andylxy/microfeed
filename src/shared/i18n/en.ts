@@ -220,7 +220,7 @@ export const en = {
     title: "Menu management",
     intro:
       "Rename, reorder, hide, re-parent and group the admin navigation. Page paths and permission codes stay locked.",
-    entry: "Entry",
+    emptyBoard: "There are no menu rows yet.",
     effectiveName: "Effective name",
     nameZh: "Chinese name",
     nameEn: "English name",
@@ -234,10 +234,6 @@ export const en = {
       "Menu row {{code}} is a page. Rows with children only expand and no longer link anywhere, so its own sidebar entry would disappear. Move it under this page anyway?",
     visible: "Visibility",
     hiddenBadge: "Hidden",
-    show: "Show",
-    hide: "Hide",
-    order: "Order",
-    actions: "Actions",
     restoreDefault: "Restore default",
     delete: "Delete",
     deleteConfirm:

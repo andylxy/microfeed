@@ -86,7 +86,7 @@ function renderCreator(draft: MenuGroupDraft, rows: MenuRow[] = SAMPLE): string 
 describe("MenuNodeEditor", () => {
   it("renders the header with the effective name and the mono code", () => {
     const html = renderEditor(row());
-    // 生效名走 i18n 回退（menu.item.books = Books），code 在 mono 段落里。
+    // 生效名走 i18n 回退（menu.item.books = Books），code 在 mono 行内。
     expect(html).toContain("<h2");
     expect(html).toContain("Books");
     expect(html).toContain('mt-1 font-mono text-xs text-muted-foreground">books<');
