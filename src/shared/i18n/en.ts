@@ -256,6 +256,15 @@ export const en = {
     cancel: "Cancel",
     lockedHint:
       "Paths and permission codes are maintained by migrations, so every menu entry keeps agreeing with its page guard.",
+    searchPlaceholder: "Search by code or name",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
+    addChildGroup: "Add sub-group",
+    dragHandle: "Drag to reorder",
+    dragToReorder: "Drag a row onto another to reorder or nest it.",
+    moveUp: "Move up one row",
+    moveDown: "Move down one row",
+    noResults: "No menu rows match your search.",
   },
   forbidden: {
     title: "You don't have access to this page",
