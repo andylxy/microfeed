@@ -80,7 +80,8 @@ export type MenuAdminOp =
         nameZh?: string | null;
         parentCode?: string | null;
       };
-    };
+    }
+  | {code: string; op: "reorder"; ids: string[]; parentCode?: string | null};
 
 /** 单条 `update` 操作的字段补丁：管理页的行内编辑与保存校验共用同一份形状。 */
 export type MenuUpdatePatch = Extract<MenuAdminOp, {op: "update"}>["patch"];
@@ -375,6 +376,57 @@ function planDelete(
 }
 
 /**
+ * 树形拖拽的「移动」：在同层按 `ids` 顺序重排，并可选地把被拖节点重挂到新父级。
+ *
+ * `ids` 是目标层兄弟的有序 code（含被拖项的新位置）；`parentCode` 是该层父级
+ * （根层为 `null`）。被拖项离开的源层留下 sort 空档，由 `compareMenuRows` 容忍，
+ * 不重排源层（与 `planMove` 一致）。
+ */
+function planReorder(
+  rows: Map<string, MenuAdminRow>,
+  code: string,
+  ids: string[],
+  parentCode: string | null,
+): MenuPlanResult | MenuSqlStatement[] {
+  const row = rows.get(code);
+  if (!row) return {error: error("errors.menu.notFound", 404, {code})};
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.includes(code)) {
+    return {error: error("errors.menu.invalidInput", 400)};
+  }
+  const nextParent =
+    parentCode === null || parentCode === "" ? null : parentCode;
+  if (nextParent !== null) {
+    if (nextParent === code) {
+      return {error: error("errors.menu.cycle", 400, {code})};
+    }
+    if (!rows.has(nextParent)) {
+      return {error: error("errors.menu.notFound", 404, {code: nextParent})};
+    }
+    if (menuDescendantCodes(rows.values(), code).has(nextParent)) {
+      return {error: error("errors.menu.cycle", 400, {code})};
+    }
+  }
+  const statements: MenuSqlStatement[] = [];
+  // 仅对 ids 列出的同层兄弟按新顺序写 sort；其余兄弟的 sort 留空档。
+  ids.forEach((id, index) => {
+    const sibling = rows.get(id);
+    if (!sibling) return;
+    const targetSort = index + 1;
+    if (sibling.sort !== targetSort) {
+      statements.push({params: [targetSort, sibling.id], sql: UPDATE_SORT});
+      rows.set(id, {...sibling, sort: targetSort});
+    }
+  });
+  const nextRow: MenuAdminRow = {...row, sort: ids.indexOf(code) + 1};
+  if (row.parentCode !== nextParent) {
+    statements.push({params: [nextParent, row.id], sql: UPDATE_STATEMENTS.parentCode});
+    nextRow.parentCode = nextParent;
+  }
+  rows.set(code, nextRow);
+  return statements;
+}
+
+/**
  * 把一串操作规划成绑定参数语句。逐条在行快照上模拟执行（后续操作看得到
  * 前面操作的结果），任何一条校验失败即整批拒绝——不产生半套语句。
  */
@@ -405,6 +457,9 @@ export function planMenuOps(
         break;
       case "delete":
         planned = planDelete(working, op.code);
+        break;
+      case "reorder":
+        planned = planReorder(working, op.code, op.ids, op.parentCode ?? null);
         break;
       default:
         return {error: error("errors.menu.invalidInput", 400)};

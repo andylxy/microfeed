@@ -245,6 +245,74 @@ describe("planMenuOps delete", () => {
   });
 });
 
+describe("planMenuOps reorder", () => {
+  it("re-sorts the target layer's siblings by the ids order", () => {
+    // group_content 的兄弟：books(201) / volumes(202) / custom_dir(203)。
+    // 拖 books 到 volumes 之后 → [volumes, books, custom_dir]。
+    const plan = planMenuOps(baseRows(), [
+      {code: "books", op: "reorder", ids: ["volumes", "books", "custom_dir"]},
+    ]);
+    expect(plan.error).toBeUndefined();
+    const sorts = (plan.statements ?? [])
+      .filter((s) => s.sql.includes("SET sort"))
+      .map((s) => s.params);
+    // volumes→1, books→2, custom_dir→3，三条都变了。
+    expect(sorts).toEqual([
+      [1, "m_volumes"],
+      [2, "m_books"],
+      [3, "mm_custom_dir"],
+    ]);
+  });
+
+  it("re-parents the dragged row when parentCode changes", () => {
+    // child_of_custom 从 custom_dir 下重挂到 group_content 下。
+    const plan = planMenuOps(baseRows(), [
+      {
+        code: "child_of_custom",
+        op: "reorder",
+        ids: ["books", "volumes", "custom_dir", "child_of_custom"],
+        parentCode: "group_content",
+      },
+    ]);
+    expect(plan.error).toBeUndefined();
+    const parent = (plan.statements ?? []).find((s) => s.sql.includes("parent_code"));
+    expect(parent?.params).toEqual(["group_content", "mm_child_of_custom"]);
+  });
+
+  it("refuses to re-parent under itself or a descendant (cycle)", () => {
+    // group_content 挂到自己的后代 custom_dir 下 = 成环。
+    expectError(
+      planMenuOps(baseRows(), [
+        {
+          code: "group_content",
+          op: "reorder",
+          ids: ["group_content", "books", "volumes", "custom_dir"],
+          parentCode: "custom_dir",
+        },
+      ]),
+      "errors.menu.cycle",
+      400,
+    );
+  });
+
+  it("rejects a missing row or ids that omit the dragged code", () => {
+    expectError(
+      planMenuOps(baseRows(), [
+        {code: "ghost", op: "reorder", ids: ["group_content"]},
+      ]),
+      "errors.menu.notFound",
+      404,
+    );
+    expectError(
+      planMenuOps(baseRows(), [
+        {code: "books", op: "reorder", ids: ["volumes", "custom_dir"]},
+      ]),
+      "errors.menu.invalidInput",
+      400,
+    );
+  });
+});
+
 describe("planMenuOps batching", () => {
   it("rejects the whole batch when any op fails validation", () => {
     const plan = planMenuOps(baseRows(), [

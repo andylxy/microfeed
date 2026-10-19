@@ -41,6 +41,10 @@ async function rowsFrom(response: Response): Promise<ResponseRow[]> {
   return data.rows;
 }
 
+function groupOp(code: string, parentCode: string | null = null): MenuAdminOp {
+  return {code, icon: "layers", nameEn: code, nameZh: code, op: "create-group", parentCode};
+}
+
 afterEach(async () => {
   await env.FEED_DB
     .prepare(`DELETE FROM ext_menu WHERE id LIKE '${MENU_ROW_CUSTOM_ID_PREFIX}%'`)
@@ -192,6 +196,67 @@ describe("POST /ajax/menu/save", () => {
       .bind("books")
       .first();
     expect(seed).not.toBeNull();
+  });
+
+  it("rewrites the sibling run in the order of ids", async () => {
+    await save([groupOp("zz_ro_a"), groupOp("zz_ro_b"), groupOp("zz_ro_c")]);
+    const before = await rowsFrom(
+      await listMenuAdminEndpoint({locals: locals(MANAGE), request: request("GET")} as never),
+    );
+    expect(before.filter((row) => row.code.startsWith("zz_ro_")).length).toBe(3);
+
+    const {response, rows} = await save([
+      {code: "zz_ro_c", ids: ["zz_ro_c", "zz_ro_a", "zz_ro_b"], op: "reorder"},
+    ]);
+    expect(response.status).toBe(200);
+    expect(rows.find((row) => row.code === "zz_ro_c")?.sort).toBe(1);
+    expect(rows.find((row) => row.code === "zz_ro_a")?.sort).toBe(2);
+    expect(rows.find((row) => row.code === "zz_ro_b")?.sort).toBe(3);
+  });
+
+  it("reparents the dragged row into the target group", async () => {
+    await save([
+      groupOp("zz_rp_old"),
+      groupOp("zz_rp_new"),
+      groupOp("zz_rp_seed", "zz_rp_new"),
+      groupOp("zz_rp_kid", "zz_rp_old"),
+    ]);
+    const {response, rows} = await save([
+      {code: "zz_rp_kid", ids: ["zz_rp_seed", "zz_rp_kid"], op: "reorder", parentCode: "zz_rp_new"},
+    ]);
+    expect(response.status).toBe(200);
+    const kid = rows.find((row) => row.code === "zz_rp_kid");
+    expect(kid?.parentCode).toBe("zz_rp_new");
+    expect(kid?.sort).toBe(2);
+    expect(rows.filter((row) => row.parentCode === "zz_rp_old").length).toBe(0);
+    expect(rows.filter((row) => row.parentCode === "zz_rp_new").length).toBe(2);
+  });
+
+  it("refuses to reparent a group under its own child, keeping the rows intact", async () => {
+    await save([groupOp("zz_cy_root"), groupOp("zz_cy_kid", "zz_cy_root")]);
+    const {response} = await save([
+      {code: "zz_cy_root", ids: ["zz_cy_kid"], op: "reorder", parentCode: "zz_cy_kid"},
+    ]);
+    expect(response.status).toBe(400);
+
+    const rows = await rowsFrom(
+      await listMenuAdminEndpoint({locals: locals(MANAGE), request: request("GET")} as never),
+    );
+    expect(rows.find((row) => row.code === "zz_cy_root")?.parentCode).toBeNull();
+    expect(rows.find((row) => row.code === "zz_cy_kid")?.parentCode).toBe("zz_cy_root");
+  });
+
+  it("rejects an unknown code and an ids list without the dragged row", async () => {
+    const {response} = await save([
+      {code: "zz_missing", ids: ["zz_missing"], op: "reorder"},
+    ]);
+    expect(response.status).toBe(404);
+
+    await save([groupOp("zz_bad_ids")]);
+    const bad = await save([
+      {code: "zz_bad_ids", ids: ["zz_someone_else"], op: "reorder"},
+    ]);
+    expect(bad.response.status).toBe(400);
   });
 });
 
