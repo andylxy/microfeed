@@ -227,6 +227,7 @@
 
 - 开放的操作：重命名（`name_zh` / `name_en`，留空即回退 i18n）、改图标（从 `MENU_ICON_NAMES` 选）、上移/下移（改 `sort`）、显/隐（改 `is_visible`）、改父节点（禁止挂到自身子孙下）、新建纯分组（空 `path`、空 `permission_code`）、删除管理页自建行。
 - 不开放的操作：`path` 与 `permission_code`。这两列是「菜单可见 ⇔ 页面可达」的前提，运行时改动会破坏该不变量，可达性继续由迁移 + 门禁测试保证；新建指向新页面的叶子也不开放（`ADMIN_MENU_CODES` 是编译期常量，后台新建的 code 进不去枚举、高亮会失配）。
+- 树里的注入子项：`SETTINGS` / `API` / `WEBHOOKS` 三个节点的第三级在 `ext_menu` 里没有行，管理页用 `menuInjectedRows`（`MenuTreeNode.tsx`）把 `SUB_SECTION_BUILDERS` 的同一份清单合成只读行，树因此与侧栏层级一致。这些行只进树的渲染行集（`MenuAdminApp` 的 `displayRows`），右侧面板、拖拽、删除、保存拿的都是数据行 `rows`，所以写不进任何 op；它们没有 `path` 与 `permission_code`，改名 / 改图标 / 排序 / 显隐一概不能做，行尾带「注入」标记。
 - 行 id 前缀：迁移种子行以 `m_` 开头（只可隐藏、不可删）；管理页自建行以 `mm_` 开头（`MENU_ROW_CUSTOM_ID_PREFIX`，可删除）。删除种子行被 `errors.menu.seedProtected` 拒绝。
 - 「导出 SQL」按钮（`buildMenuExportSql`）把当前运行时改动导成 data 迁移文本交用户提交：种子行按 id 发 `UPDATE` 只写可变字段（不改 `path` / `permission_code` / `i18n_key` / `created_at_ms`），自建行按 id 发 `INSERT`。
 - 保存校验的额外守门：`errors.menu.iconRequired`（页面行清空图标会在侧栏静默回退成 list 图标、两端显示对不上，故拒绝）、`reparentToPageConfirm`（把页面行挂到非空父级前确认，因为有子节点的行在侧栏只展开不跳转、自身入口会消失）、`MENU_ADMIN_MAX_OPS`（单次保存操作数上限，防误发整表重放）。

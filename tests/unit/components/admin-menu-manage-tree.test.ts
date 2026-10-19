@@ -6,6 +6,8 @@ import "@/client/i18n";
 import {
   childrenOf,
   dropPositionFromY,
+  isInjectedRow,
+  menuInjectedRows,
   MENU_ROOT_NODE,
   MenuBranchToggle,
   MenuTreeNode,
@@ -207,6 +209,58 @@ describe("MenuBranchToggle", () => {
 
   it("labels the arrow with the branch name", () => {
     expect(render(true)).toContain('aria-label="Toggle Books"');
+  });
+});
+
+describe("侧栏注入的三级子项（只读行）", () => {
+  // 两列分别取清单文案，界面语言决定最终显示哪一列（单测固定 en）。
+  const injected = menuInjectedRows((key) => key, (key) => `EN:${key}`);
+
+  it("把三份清单合成挂在对应二级行下的行", () => {
+    const under = (parentCode: string) =>
+      injected.filter((entry) => entry.parentCode === parentCode).map((entry) => entry.code);
+    expect(under("settings")).toHaveLength(11);
+    expect(under("settings")[0]).toBe("settings:custom-code");
+    expect(under("api")).toHaveLength(4);
+    expect(under("webhooks")).toHaveLength(4);
+  });
+
+  it("名称两列都填清单文案，且没有路径与权限码", () => {
+    const first = injected.find((entry) => entry.code === "settings:custom-code");
+    expect(first?.nameZh).toBe("settings.websiteAppearance");
+    expect(first?.nameEn).toBe("EN:settings.websiteAppearance");
+    expect(first?.path).toBe("");
+    expect(first?.permissionCode).toBeNull();
+  });
+
+  it("判据是 code 里的冒号：数据行永不命中", () => {
+    expect(isInjectedRow(injected[0]!)).toBe(true);
+    for (const entry of SAMPLE) expect(isInjectedRow(entry)).toBe(false);
+  });
+
+  it("渲染成不可拖、不可点、不带拖拽目标的只读行", () => {
+    const rows = [
+      row({
+        code: "settings",
+        i18nKey: "menu.item.settings",
+        parentCode: null,
+        path: "settings",
+        sort: 200,
+      }),
+      ...injected.filter((entry) => entry.parentCode === "settings"),
+    ];
+    const html = renderTree(rows);
+    // 注入行显示出来（mono code 带父级前缀），但不挂 data-menu-node。
+    expect(html).toContain("settings:custom-code");
+    expect(html).toContain('data-menu-node="settings"');
+    expect(html).not.toContain('data-menu-node="settings:custom-code"');
+    // 拖拽手柄只给数据行（settings 一个，11 个注入行都没有）。
+    expect((html.match(/Drag to reorder/gu) ?? []).length).toBe(1);
+    // 标签块 disabled：注入行点不中，进不了右侧详情面板。
+    expect((html.match(/disabled=""/gu) ?? []).length).toBe(11);
+    // 行尾 Injected 标记（title 里那句说明也以 Injected 开头，故按标签文本计数）。
+    expect((html.match(/>Injected</gu) ?? []).length).toBe(11);
+    expect(html).toContain("EN:settings.websiteAppearance");
   });
 });
 

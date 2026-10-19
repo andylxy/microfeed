@@ -235,6 +235,9 @@ export const en = {
       "Menu row {{code}} is a page. Rows with children only expand and no longer link anywhere, so its own sidebar entry would disappear. Move it under this page anyway?",
     visible: "Visibility",
     hiddenBadge: "Hidden",
+    injectedBadge: "Injected",
+    injectedHint:
+      "Injected by code (a settings section or sub-page), not a menu row — view only here.",
     restoreDefault: "Restore default",
     delete: "Delete",
     deleteConfirm:

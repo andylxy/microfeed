@@ -11,7 +11,11 @@ import {
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
 import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
+import {ADMIN_API_PAGES} from "@/shared/AdminApiNavigation";
+import {ADMIN_SETTINGS_SECTIONS} from "@/shared/AdminSettingsNavigation";
+import {ADMIN_WEBHOOK_PAGES} from "@/shared/AdminWebhookNavigation";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
+import {ADMIN_MENU_CODES} from "@/shared/Constants";
 import {
   compareMenuRows,
   menuDescendantCodes,
@@ -88,6 +92,62 @@ export function menuRowEffectiveLabel(
     adminMenuItemLabel({en: row.nameEn ?? "", zh: row.nameZh ?? ""}, language) ??
     t(menuRowLabelKey(row.code))
   );
+}
+
+/** 注入行的 sort 基数：数据行的 sort 是几百量级，注入行排在同级末尾。 */
+const INJECTED_ROW_SORT_BASE = 1000;
+
+/**
+ * 注入行的 code 形如 `settings:custom-code`，与 `AdminSidebar` 注入子项的 id 同形。
+ * 菜单行的 code 只允许小写字母、数字与下划线，冒号因此只出现在注入行上——
+ * 判据就是它，行模型不必再加字段。
+ */
+export function isInjectedRow(row: MenuRow): boolean {
+  return row.code.includes(":");
+}
+
+/**
+ * 侧栏的第三级子项是 `AdminSidebar.SUB_SECTION_BUILDERS` 在渲染时注入的，
+ * `ext_menu` 里没有对应行，管理页树因此比侧栏少一层。这里把同一份清单合成
+ * 同形的只读行，只为让两处对得上——清单不在这里复制第二份。
+ *
+ * 这些行只进树的渲染行集，不进任何保存操作（见 `MenuAdminApp` 的
+ * `displayRows`）：它们没有 `path` 也没有 `permission_code`，改名 / 改图标 /
+ * 排序 / 显隐一概不能做。
+ */
+export function menuInjectedRows(
+  zhText: (key: string) => string,
+  enText: (key: string) => string,
+): MenuRow[] {
+  const build = (
+    parentCode: string,
+    items: readonly {icon: string; id: string; nameKey: string}[],
+  ): MenuRow[] =>
+    items.map((item, index) => {
+      const code = `${parentCode}:${item.id}`;
+      return {
+        code,
+        createdAtMs: 0,
+        deletable: false,
+        i18nKey: item.nameKey,
+        icon: item.icon,
+        id: code,
+        // 两列都填清单文案，`menuRowEffectiveLabel` 于是按界面语言取其中一列，
+        // 与侧栏走 `labelKey` 的口径一致。
+        nameEn: enText(item.nameKey),
+        nameZh: zhText(item.nameKey),
+        parentCode,
+        path: "",
+        permissionCode: null,
+        sort: INJECTED_ROW_SORT_BASE + index,
+        visible: true,
+      };
+    });
+  return [
+    ...build(ADMIN_MENU_CODES.SETTINGS, ADMIN_SETTINGS_SECTIONS),
+    ...build(ADMIN_MENU_CODES.API, ADMIN_API_PAGES),
+    ...build(ADMIN_MENU_CODES.WEBHOOKS, ADMIN_WEBHOOK_PAGES),
+  ];
 }
 
 /**
@@ -247,9 +307,11 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   const canDown = index < siblings.length - 1;
 
   const label = menuRowEffectiveLabel(row, language, t);
+  // 注入行只作展示：不给拖拽手柄、不当拖拽目标、点不中（进不了右侧面板）。
+  const injected = isInjectedRow(row);
 
   return (
-    <div data-menu-node={row.code}>
+    <div data-menu-node={injected ? undefined : row.code}>
       <div
         className={cn(
           "relative flex items-center gap-1",
@@ -269,24 +331,26 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
               onToggle={() => toggleOpen(row.code)}
             />
           )}
-          <button
-            aria-label={t("menuAdmin.dragHandle")}
-            className="shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
-            type="button"
-            onKeyDown={(event) => {
-              // 键盘移动与「↑ / ↓」按钮同一条 `move` op；越出同层边界时服务端会拒绝。
-              if (event.key === "ArrowUp" && canUp) {
-                event.preventDefault();
-                move(row, "up");
-              } else if (event.key === "ArrowDown" && canDown) {
-                event.preventDefault();
-                move(row, "down");
-              }
-            }}
-            onPointerDown={(event) => drag?.onHandlePointerDown(event, row.code)}
-          >
-            <GripVerticalIcon aria-hidden="true" className="h-4 w-4" />
-          </button>
+          {!injected && (
+            <button
+              aria-label={t("menuAdmin.dragHandle")}
+              className="shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+              type="button"
+              onKeyDown={(event) => {
+                // 键盘移动与「↑ / ↓」按钮同一条 `move` op；越出同层边界时服务端会拒绝。
+                if (event.key === "ArrowUp" && canUp) {
+                  event.preventDefault();
+                  move(row, "up");
+                } else if (event.key === "ArrowDown" && canDown) {
+                  event.preventDefault();
+                  move(row, "down");
+                }
+              }}
+              onPointerDown={(event) => drag?.onHandlePointerDown(event, row.code)}
+            >
+              <GripVerticalIcon aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <button
@@ -297,6 +361,7 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
               ? "bg-muted font-medium text-foreground"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
+          disabled={injected}
           onClick={() => onSelect(row.code)}
           type="button"
         >
@@ -319,6 +384,14 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
           {!row.visible && (
             <span className="shrink-0 text-xs text-muted-foreground">
               {t("menuAdmin.hiddenBadge")}
+            </span>
+          )}
+          {injected && (
+            <span
+              className="shrink-0 text-xs text-muted-foreground"
+              title={t("menuAdmin.injectedHint")}
+            >
+              {t("menuAdmin.injectedBadge")}
             </span>
           )}
         </button>

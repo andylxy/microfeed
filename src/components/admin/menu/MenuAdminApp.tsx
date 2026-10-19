@@ -24,6 +24,7 @@ import {
 import {
   childrenOf,
   dropPositionFromY,
+  menuInjectedRows,
   MENU_ROOT_NODE,
   MenuBranchToggle,
   MenuTreeCtx,
@@ -249,14 +250,32 @@ export default function MenuAdminApp() {
     [postOps],
   );
 
+  /**
+   * 侧栏的第三级子项不在 `ext_menu` 里，合成同形的只读行只为让树与侧栏对得上
+   * （清单与 `AdminSidebar.SUB_SECTION_BUILDERS` 共用同一份）。
+   *
+   * 两个行集严格分工：`displayRows` 只喂树，右侧面板、拖拽、删除、保存拿的
+   * 都是数据行 `rows`——注入行因此不可能被写进任何 op。
+   */
+  const injectedRows = useMemo(
+    () => menuInjectedRows(i18n.getFixedT("zh-CN"), i18n.getFixedT("en")),
+    [i18n, i18n.language],
+  );
+  const displayRows = useMemo(
+    () => [...rows, ...injectedRows],
+    [injectedRows, rows],
+  );
+
   // 搜索的命中集合与祖先链：命中节点的所有祖先强制展开，节点本身高亮。
   const searchMatch = useMemo(() => {
     const query = search.trim().toLowerCase();
     const codes = new Set<string>();
     const ancestors = new Set<string>();
     if (query) {
-      const parentByCode = new Map(rows.map((entry) => [entry.code, entry.parentCode]));
-      for (const entry of rows) {
+      const parentByCode = new Map(
+        displayRows.map((entry) => [entry.code, entry.parentCode]),
+      );
+      for (const entry of displayRows) {
         const label =
           adminMenuItemLabel({en: entry.nameEn ?? "", zh: entry.nameZh ?? ""}, language) ??
           t(menuRowLabelKey(entry.code));
@@ -271,7 +290,7 @@ export default function MenuAdminApp() {
       }
     }
     return {ancestors, codes};
-  }, [rows, search, language, t]);
+  }, [displayRows, search, language, t]);
 
   const roots = useMemo(() => childrenOf(rows, ""), [rows]);
 
@@ -411,7 +430,7 @@ export default function MenuAdminApp() {
                 // 创建表单开着时点树行 = 放弃创建，直接看这一行。
                 setCreating(false);
               },
-              rows,
+              rows: displayRows,
               search: {
                 isForcedOpen: (code) => searchMatch.ancestors.has(code),
                 isHighlighted: (code) => searchMatch.codes.has(code),

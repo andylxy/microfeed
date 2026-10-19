@@ -231,6 +231,8 @@ export const zhCN: TranslationKey = {
     reparentToPageConfirm: "菜单行 {{code}} 是一个页面。有子节点的行只显示展开箭头、不再跳转，把它挂到页面下会让该页面自己的侧栏入口消失。确定要挂到它下面吗？",
     visible: "显隐",
     hiddenBadge: "已隐藏",
+    injectedBadge: "注入",
+    injectedHint: "这一级由代码注入（设置分区或子页），不在菜单数据表里，本页只能查看。",
     restoreDefault: "恢复默认",
     delete: "删除",
     deleteConfirm: "确定删除菜单行 {{code}}？只有本页新建的行可以删除。",
