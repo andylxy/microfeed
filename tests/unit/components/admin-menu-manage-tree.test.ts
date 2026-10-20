@@ -9,7 +9,6 @@ import {
   MenuTreeNode,
   MenuTreeCtx,
   MENU_ROOT_NODE,
-  reorderMenuRows,
   type MenuTreeCtxValue,
 } from "@/components/admin/menu/MenuTreeNode";
 import {
@@ -17,6 +16,7 @@ import {
   isInjectedRow,
   menuInjectedRows,
   menuTopAncestorCode,
+  reorderMenuRows,
   type MenuRow,
 } from "@/shared/MenuTreeView";
 
@@ -111,7 +111,7 @@ describe("MenuTreeNode recursive render", () => {
 
   it("renders the name-over-code label block with two weight levels", () => {
     const html = renderTree(SAMPLE);
-    // 标签块：显示名在上、mono code 在下（对齐 rbac 的叶子结构）。
+    // 标签块：显示名在上、mono code 在下（跟 rbac 的叶子结构一致）。
     expect(html).toContain("font-mono text-xs text-muted-foreground");
     // 有子节点的分组行走 `text-sm font-semibold text-foreground` 字重。
     expect(html).toContain("font-semibold text-foreground");

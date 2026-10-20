@@ -9,7 +9,6 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
-import {adminMenuItemLabel, menuRowLabelKey} from "@/shared/AdminNavigation";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
   type MenuAdminOp,
@@ -27,13 +26,14 @@ import {
   MenuBranchToggle,
   MenuTreeCtx,
   MenuTreeNode,
-  reorderMenuRows,
-  type DropPosition,
 } from "@/components/admin/menu/MenuTreeNode";
 import {
   childrenOf,
   menuInjectedRows,
+  menuRowEffectiveLabel,
   menuTopAncestorCode,
+  reorderMenuRows,
+  type DropPosition,
   type MenuRow,
 } from "@/shared/MenuTreeView";
 
@@ -254,16 +254,48 @@ export default function MenuAdminApp() {
     [roots],
   );
 
-  // 顶层手风琴下没有「所有顶层都展开」这个状态：这两个按钮只管当前展开顶层
-  // 内部的子层，顶层归 openTopCode 管、不受它们影响。
-  const expandAll = useCallback(() => setCollapsed({}), []);
+  /**
+   * 顶层手风琴下没有「所有顶层都展开」这个状态：这两个按钮只管当前展开顶层
+   * 内部的子层，顶层归 openTopCode 管、不受它们影响（规范原句：「全展开 / 全收起
+   * 只作用于当前展开顶层内部的子层」）。
+   *
+   * 没有顶层被展开（openTopCode 为 null，用户收起了当前顶层）时：全收起原样无操作；
+   * 全展开则先展开首个有子行的顶层，再展开它内部的子层——与手风琴「同一时刻只展开一个
+   * 顶层」并不冲突。
+   */
+  const expandAll = useCallback(() => {
+    const top =
+      openTopCode ??
+      roots.find((root) => childrenOf(rows, root.code).length > 0)?.code ??
+      roots[0]?.code ??
+      null;
+    if (!top) return;
+    setOpenTopCode(top);
+    const within = rows
+      .filter((row) => row.parentCode && menuTopAncestorCode(rows, row.code) === top)
+      .map((row) => row.code);
+    setCollapsed((prev) => {
+      const next = {...prev};
+      for (const code of within) delete next[code];
+      return next;
+    });
+  }, [openTopCode, roots, rows]);
+
   const collapseAll = useCallback(() => {
-    const next: Record<string, boolean> = {};
-    for (const row of rows) {
-      if (row.parentCode) next[row.code] = true;
-    }
-    setCollapsed(next);
-  }, [rows]);
+    if (!openTopCode) return;
+    const within = rows
+      .filter(
+        (row) =>
+          row.parentCode && menuTopAncestorCode(rows, row.code) === openTopCode,
+      )
+      .map((row) => row.code);
+    if (within.length === 0) return;
+    setCollapsed((prev) => {
+      const next = {...prev};
+      for (const code of within) next[code] = true;
+      return next;
+    });
+  }, [openTopCode, rows]);
 
   // 同层上/下移：键盘移动走既有 `move` op，这里只发单个聚焦的 op。
   const move = useCallback(
@@ -299,9 +331,7 @@ export default function MenuAdminApp() {
         displayRows.map((entry) => [entry.code, entry.parentCode]),
       );
       for (const entry of displayRows) {
-        const label =
-          adminMenuItemLabel({en: entry.nameEn ?? "", zh: entry.nameZh ?? ""}, language) ??
-          t(menuRowLabelKey(entry.code));
+        const label = menuRowEffectiveLabel(entry, language, t);
         if (entry.code.toLowerCase().includes(query) || label.toLowerCase().includes(query)) {
           codes.add(entry.code);
           let parent = entry.parentCode;
@@ -439,6 +469,19 @@ export default function MenuAdminApp() {
     const top = menuTopAncestorCode(rows, selectedRow.code);
     if (top) setOpenTopCode(top);
   }, [rows, selectedRow]);
+
+  /**
+   * 行集首次到达时展开首个顶层（规范原句）。`undefined` 是「尚未初始化」哨兵；
+   * 一旦被置为某个顶层 code 或 null（用户收起），就不再重设，尊重用户的折叠选择。
+   * 这一步独立于「选中行联动」，避免首屏折叠态靠选中态回退间接决定。
+   */
+  useEffect(() => {
+    if (openTopCode !== undefined) return;
+    const topWithChildren = roots.find(
+      (root) => childrenOf(rows, root.code).length > 0,
+    );
+    setOpenTopCode(topWithChildren ? topWithChildren.code : (roots[0]?.code ?? null));
+  }, [roots, rows, openTopCode]);
 
   if (loading && rows.length === 0) {
     return <AdminCollectionLoading label={t("menuAdmin.title")} />;

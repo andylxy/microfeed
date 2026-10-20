@@ -138,7 +138,7 @@ describe("MenuNodeEditor", () => {
     expect(renderEditor(row({nameZh: "自定义名"}))).toContain("Restore default");
   });
 
-  it("renders the visibility checkbox following the row state", () => {
+  it("renders the visibility toggle (Switch) following the row state", () => {
     expect(renderEditor(row())).toContain('type="checkbox"');
     expect(renderEditor(row({visible: false}))).not.toMatch(/<input[^>]*checked/u);
   });

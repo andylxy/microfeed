@@ -11,11 +11,12 @@ import {
 import {cn} from "@/lib/utils";
 import {useTranslation} from "@/client/i18n";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
-import {compareMenuRows, menuDescendantCodes} from "@/shared/MenuAdminOps";
 import {
   childrenOf,
   isInjectedRow,
   menuRowEffectiveLabel,
+  menuSiblingPosition,
+  type DropPosition,
   type MenuRow,
 } from "@/shared/MenuTreeView";
 
@@ -24,9 +25,6 @@ import {
  * 它不是菜单行、也不是权限码，只给整棵树一个统一的展开入口。
  */
 export const MENU_ROOT_NODE = "menu_root";
-
-/** 拖拽放置位置的三段：同层前 / 同层后 / 作为子节点挂到目标下。 */
-export type DropPosition = "before" | "after" | "inside";
 
 /** 拖拽上下文（M5 接入；未接入时节点只展示手柄、不可拖）。 */
 export interface MenuDragCtx {
@@ -76,63 +74,6 @@ export function dropPositionFromY(
     return "inside";
   }
   return y < (rect.top + rect.bottom) / 2 ? "before" : "after";
-}
-
-/**
- * 把 `draggedCode` 按放置位置移动到目标层：before/after 同层重排（可改父级），
- * inside 挂到目标分组下。返回新的行集（被拖项更新 parentCode 与 sort，同层兄弟重排 sort）
- * 用于本地预览；与服务端 `planReorder` 口径一致（ids = 目标层有序 code，parentCode = 目标层父级）。
- * 会出现环（拖到自身后代）时原样返回，交由服务端兜底拦截。
- */
-export function reorderMenuRows(
-  rows: MenuRow[],
-  draggedCode: string,
-  targetCode: string,
-  position: DropPosition,
-): MenuRow[] {
-  if (draggedCode === targetCode) return rows;
-  const target = rows.find((entry) => entry.code === targetCode);
-  if (!target) return rows;
-  const dragged = rows.find((entry) => entry.code === draggedCode);
-  if (!dragged) return rows;
-
-  const newParent = position === "inside" ? targetCode : (target.parentCode ?? null);
-  // 环：新父级是被拖项的后代 → 不改，避免本地预览就破结构。
-  if (newParent && menuDescendantCodes(rows, draggedCode).has(newParent)) return rows;
-
-  const siblingParent = position === "inside" ? targetCode : (target.parentCode ?? null);
-  const siblings = rows
-    .filter(
-      (entry) =>
-        (entry.parentCode ?? null) === (siblingParent || null) && entry.code !== draggedCode,
-    )
-    .sort(compareMenuRows);
-  const insertIndex =
-    position === "inside"
-      ? siblings.length
-      : siblings.findIndex((entry) => entry.code === targetCode);
-  if (insertIndex < 0) return rows;
-  siblings.splice(insertIndex, 0, dragged);
-
-  const reordered = rows.map((entry) => {
-    if (entry.code === draggedCode) {
-      return {...entry, parentCode: newParent, sort: insertIndex + 1};
-    }
-    const siblingIndex = siblings.findIndex((sibling) => sibling.code === entry.code);
-    if (siblingIndex >= 0) return {...entry, sort: siblingIndex + 1};
-    return entry;
-  });
-  // 结构（code 序 + 各节点 parentCode/sort）没变则原样返回，便于调用方跳过无谓刷新。
-  const unchanged = reordered.every((entry, index) => {
-    const prev = rows[index];
-    return (
-      prev &&
-      prev.code === entry.code &&
-      prev.parentCode === entry.parentCode &&
-      prev.sort === entry.sort
-    );
-  });
-  return unchanged ? rows : reordered;
 }
 
 /**
@@ -211,10 +152,7 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
   if (!visible) return null;
 
   // 同层兄弟序列里自己的位置，决定上/下移按钮禁用态（与服务端 move 同口径）。
-  const siblings = childrenOf(rows, row.parentCode ?? "");
-  const index = siblings.findIndex((entry) => entry.code === row.code);
-  const canUp = index > 0;
-  const canDown = index < siblings.length - 1;
+  const {canDown, canUp} = menuSiblingPosition(rows, row.code);
 
   const label = menuRowEffectiveLabel(row, language, t);
   // 注入行只作展示：不给拖拽手柄、不当拖拽目标、点不中（进不了右侧面板）。

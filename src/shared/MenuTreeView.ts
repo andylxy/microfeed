@@ -21,9 +21,13 @@ import {
   menuDescendantCodes,
   type MenuAdminRowWithMeta,
 } from "./MenuAdminOps";
+import {MENU_ICON_NAMES} from "./MenuIconNames";
 
 /** 与 `GET /ajax/menu` 的响应行一致。 */
 export type MenuRow = MenuAdminRowWithMeta;
+
+/** 拖拽放置位置的三段：同层前 / 同层后 / 作为子节点挂到目标下。 */
+export type DropPosition = "before" | "after" | "inside";
 
 /**
  * 取某父级下的直接子节点，按服务端 `(sort, code)` 口径排序。
@@ -138,4 +142,110 @@ export function menuParentCandidates(rows: MenuRow[], code: string): MenuRow[] {
 /** 页面行的图标不允许清空：`path` 非空即页面行，「无图标」入口对它禁用。 */
 export function menuIconNoneDisabled(row: MenuRow): boolean {
   return row.path !== "";
+}
+
+/**
+ * 一行在同层兄弟里的位置：上移/下移按钮的禁用态与拖拽手柄的键盘移动共用
+ * 这个口径，两个方向各自能不能动只算一次。
+ */
+export function menuSiblingPosition(
+  rows: MenuRow[],
+  code: string,
+): {canDown: boolean; canUp: boolean} {
+  const parentCode = rows.find((row) => row.code === code)?.parentCode ?? "";
+  const siblings = childrenOf(rows, parentCode);
+  const index = siblings.findIndex((entry) => entry.code === code);
+  return {canDown: index < siblings.length - 1, canUp: index > 0};
+}
+
+/** 图标下拉的选项清单（不带「无图标」入口），两处下拉共用一份。 */
+export function menuIconOptions(
+  t: (key: string) => string,
+): {label: string; value: string}[] {
+  return MENU_ICON_NAMES.map((name) => ({
+    label: t(`menu.icon.${name}`),
+    value: name,
+  }));
+}
+
+/** 父节点下拉的选项清单：候选行映射成「生效名 + code」。 */
+export function menuParentOptions(
+  candidates: MenuRow[],
+  language: AdminLanguage,
+  t: (key: string) => string,
+): {label: string; value: string}[] {
+  return candidates.map((candidate) => ({
+    label: menuRowEffectiveLabel(candidate, language, t),
+    value: candidate.code,
+  }));
+}
+
+/**
+ * 父节点下拉的完整选项：在 `menuParentOptions` 前补一个「无父级」空选项。
+ * 编辑面板与新建分组表单两处都长这样，合成一份避免两边各写一遍后漂开。
+ */
+export function menuParentSelectOptions(
+  candidates: MenuRow[],
+  language: AdminLanguage,
+  t: (key: string) => string,
+  noneLabel: string,
+): {label: string; value: string}[] {
+  return [{label: noneLabel, value: ""}, ...menuParentOptions(candidates, language, t)];
+}
+
+/**
+ * 把 `draggedCode` 按放置位置移动到目标层：before/after 同层重排（可改父级），
+ * inside 挂到目标分组下。返回新的行集（被拖项更新 parentCode 与 sort，同层兄弟重排 sort）
+ * 用于本地预览；与服务端 `planReorder` 口径一致（ids = 目标层有序 code，parentCode = 目标层父级）。
+ * 会出现环（拖到自身后代）时原样返回，交由服务端兜底拦截。
+ */
+export function reorderMenuRows(
+  rows: MenuRow[],
+  draggedCode: string,
+  targetCode: string,
+  position: DropPosition,
+): MenuRow[] {
+  if (draggedCode === targetCode) return rows;
+  const target = rows.find((entry) => entry.code === targetCode);
+  if (!target) return rows;
+  const dragged = rows.find((entry) => entry.code === draggedCode);
+  if (!dragged) return rows;
+
+  const newParent = position === "inside" ? targetCode : (target.parentCode ?? null);
+  // 环：新父级是被拖项的后代 → 不改，避免本地预览就破结构。
+  if (newParent && menuDescendantCodes(rows, draggedCode).has(newParent)) return rows;
+
+  const siblingParent = position === "inside" ? targetCode : (target.parentCode ?? null);
+  const siblings = rows
+    .filter(
+      (entry) =>
+        (entry.parentCode ?? null) === (siblingParent || null) && entry.code !== draggedCode,
+    )
+    .sort(compareMenuRows);
+  const insertIndex =
+    position === "inside"
+      ? siblings.length
+      : siblings.findIndex((entry) => entry.code === targetCode);
+  if (insertIndex < 0) return rows;
+  siblings.splice(insertIndex, 0, dragged);
+
+  const reordered = rows.map((entry) => {
+    if (entry.code === draggedCode) {
+      return {...entry, parentCode: newParent, sort: insertIndex + 1};
+    }
+    const siblingIndex = siblings.findIndex((sibling) => sibling.code === entry.code);
+    if (siblingIndex >= 0) return {...entry, sort: siblingIndex + 1};
+    return entry;
+  });
+  // 结构（code 序 + 各节点 parentCode/sort）没变则原样返回，便于调用方跳过无谓刷新。
+  const unchanged = reordered.every((entry, index) => {
+    const prev = rows[index];
+    return (
+      prev &&
+      prev.code === entry.code &&
+      prev.parentCode === entry.parentCode &&
+      prev.sort === entry.sort
+    );
+  });
+  return unchanged ? rows : reordered;
 }

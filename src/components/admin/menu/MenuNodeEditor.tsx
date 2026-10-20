@@ -3,16 +3,18 @@ import {useEffect, useState} from "react";
 import AdminSelect, {type AdminSelectOption} from "@/components/admin/shared/AdminSelect";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import {Switch} from "@/components/ui/switch";
 import {useTranslation} from "@/client/i18n";
 import {menuRowLabelKey} from "@/shared/AdminNavigation";
-import {MENU_ICON_NAMES} from "@/shared/MenuIconNames";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
 import type {MenuUpdatePatch} from "@/shared/MenuAdminOps";
 import {
-  childrenOf,
   menuIconNoneDisabled,
+  menuIconOptions,
   menuParentCandidates,
+  menuParentSelectOptions,
   menuRowEffectiveLabel,
+  menuSiblingPosition,
   type MenuRow,
 } from "@/shared/MenuTreeView";
 
@@ -89,10 +91,7 @@ export function MenuNodeEditor({
   const {t, i18n} = useTranslation();
 
   // 同层兄弟序列里自己的位置，决定上/下移按钮禁用态（与服务端 move 同口径）。
-  const siblings = childrenOf(rows, row.parentCode ?? "");
-  const index = siblings.findIndex((entry) => entry.code === row.code);
-  const canUp = index > 0;
-  const canDown = index < siblings.length - 1;
+  const {canDown, canUp} = menuSiblingPosition(rows, row.code);
 
   const label = menuRowEffectiveLabel(row, language, t);
   const hasCustomName = Boolean(row.nameZh || row.nameEn);
@@ -102,27 +101,23 @@ export function MenuNodeEditor({
   const defaultNameZh = i18n.getFixedT("zh-CN")(menuRowLabelKey(row.code));
   const defaultNameEn = i18n.getFixedT("en")(menuRowLabelKey(row.code));
 
+  // 分组可以没有图标；页面行已带图标时不给「无图标」入口，没带时给但禁用
+  // （页面行的图标不允许清空，与旧版下拉同口径）。
   const iconOptions: AdminSelectOption[] = [
-    // 分组可以没有图标；页面行已带图标时不给「无图标」入口，没带时给但禁用
-    // （页面行的图标不允许清空，与旧版下拉同口径）。
     ...(row.path === "" || row.icon === null
       ? [{label: t("menuAdmin.iconNone"), value: ""}]
       : []),
-    ...MENU_ICON_NAMES.map((name) => ({
-      label: t(`menu.icon.${name}`),
-      value: name,
-    })),
+    ...menuIconOptions(t),
   ];
   const iconValue =
     iconOptions.find((option) => option.value === (row.icon ?? "")) ?? null;
 
-  const parentOptions: AdminSelectOption[] = [
-    {label: t("menuAdmin.parentNone"), value: ""},
-    ...menuParentCandidates(rows, row.code).map((candidate) => ({
-      label: menuRowEffectiveLabel(candidate, language, t),
-      value: candidate.code,
-    })),
-  ];
+  const parentOptions: AdminSelectOption[] = menuParentSelectOptions(
+    menuParentCandidates(rows, row.code),
+    language,
+    t,
+    t("menuAdmin.parentNone"),
+  );
   const parentValue =
     parentOptions.find((option) => option.value === (row.parentCode ?? "")) ??
     null;
@@ -234,16 +229,15 @@ export function MenuNodeEditor({
             value={parentValue}
           />
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
+        <div className="flex items-center gap-2 text-sm">
+          <Switch
+            aria-label={t("menuAdmin.visible")}
             checked={row.visible}
-            className="size-4"
             disabled={busy}
-            onChange={() => onField(row, {isVisible: !row.visible})}
-            type="checkbox"
+            onCheckedChange={(checked) => onField(row, {isVisible: checked})}
           />
           <span className="text-muted-foreground">{t("menuAdmin.visible")}</span>
-        </label>
+        </div>
       </div>
 
       <div className="mt-4 rounded-md border bg-background p-3">
@@ -312,19 +306,13 @@ export function MenuGroupCreator({
 }) {
   const {t} = useTranslation();
   // 新建分组没有「无图标」入口：草稿默认带 `list` 图标，与旧版下拉同口径。
-  const creatorIconOptions: AdminSelectOption[] = MENU_ICON_NAMES.map(
-    (name) => ({
-      label: t(`menu.icon.${name}`),
-      value: name,
-    }),
+  const creatorIconOptions: AdminSelectOption[] = menuIconOptions(t);
+  const creatorParentOptions: AdminSelectOption[] = menuParentSelectOptions(
+    rows,
+    language,
+    t,
+    t("menuAdmin.parentNone"),
   );
-  const creatorParentOptions: AdminSelectOption[] = [
-    {label: t("menuAdmin.parentNone"), value: ""},
-    ...rows.map((row) => ({
-      label: menuRowEffectiveLabel(row, language, t),
-      value: row.code,
-    })),
-  ];
   return (
     <>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
