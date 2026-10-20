@@ -141,7 +141,10 @@ function readMenuRows(): MenuRow[] {
   const tuple = /\(\s*'[^']+'\s*,\s*'(?<code>[^']+)'\s*,\s*(?<parent>NULL|'[^']*')\s*,\s*'(?<path>[^']*)'\s*,\s*'[^']+'\s*,\s*(?:NULL|'[^']*')\s*,\s*(?<perm>NULL|'(?<permCode>[^']+)')/gu;
 
   for (const name of migrationNames()) {
-    const sql = readMigration(name);
+    // 行注释先剥掉再匹配：迁移里的 `-- rollback:` 块写的正是反向语句
+    // （`DELETE FROM ext_menu WHERE code = '…'`），照原文跑会让回滚说明把
+    // 刚插入的行删掉。与 `scripts/check-d1-scan.ts` 的抽取口径相同。
+    const sql = readMigration(name).replaceAll(/--[^\n]*/gu, " ");
     for (const statement of sql.matchAll(insert)) {
       for (const match of statement[0].matchAll(tuple)) {
         const code = match.groups?.code ?? "";

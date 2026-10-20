@@ -91,10 +91,11 @@ beforeEach(async () => {
 
 describe("GET /api/app/mingci-permission", () => {
   it("returns 200 {allowed:false} for an account with no mingci code", async () => {
-    // 仅持 `app:mobile:access`（通过 middleware 的门票），无名词解释码。
-    // 这是有效答案，客户端据此不加载名词列表且**不**重试。
+    // migration 0131 起外门即 `app:mingci:view`：真实链路里持别的码在 middleware
+    // 就被 403 挡下。这里直调 handler，锁的是内部复核这层防御——权限集合里没有
+    // 该码时仍回答有效答案，客户端据此不加载名词列表且**不**重试。
     await seedUser("u_none");
-    await grantCodes("u_none", ["app:mobile:access"]);
+    await grantCodes("u_none", ["app:nav:read"]);
     const response = await callWithBearer(await bearerFor("u_none"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({allowed: false});

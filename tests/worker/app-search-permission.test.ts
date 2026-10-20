@@ -7,7 +7,7 @@ import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {permissionId} from "@/server/rbac/seed";
 
 /**
- * 端点 `GET /api/app/search-permission` 的运行时契约（DESIGN §5.2）。
+ * 端点 `GET /api/app/search-permission` 的运行时行为（DESIGN §5.2）。
  *
  * 锁住客户端真正依赖的事：
  * - 角色不命中 = 200 双 false（有效答案，客户端据此禁用且不重试）；
@@ -91,10 +91,11 @@ beforeEach(async () => {
 
 describe("GET /api/app/search-permission", () => {
   it("returns 200 {false,false} for an account with no search codes", async () => {
-    // 仅持 `app:mobile:access`（通过 middleware 的门票），无任何搜索码。
-    // 这是有效答案，客户端据此禁用搜索且**不**重试。
+    // 外门是两个搜索码的任一双码门：持无关的码（如 app:nav:read）在真实链路里
+    // 会被 middleware 403 挡下；这里直调 handler，锁的是内部判定这层防御——
+    // 一个搜索码都没有时回答有效答案，客户端据此禁用搜索且**不**重试。
     await seedUser("u_none");
-    await grantCodes("u_none", ["app:mobile:access"]);
+    await grantCodes("u_none", ["app:nav:read"]);
     const response = await callWithBearer(await bearerFor("u_none"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({global: false, book: false});

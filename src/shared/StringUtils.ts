@@ -4,6 +4,7 @@ import {
 } from "./AdminPath";
 import {API_BASE_PATH} from "./ApiVersion";
 import {OAUTH_AUTHORIZATION_SERVER_METADATA_PATH} from "./OAuth";
+import type {PermissionAudience} from "./Rbac";
 
 export function randomHex(size: any = 32) {
   const bytes = new Uint8Array(Math.ceil(size / 2));
@@ -451,6 +452,7 @@ export const ADMIN_URLS = {
   ajaxRbacRoleName: () => adminUrl("ajax/rbac/role-name", browserAdminPath()),
   ajaxRbacRoleCode: () => adminUrl("ajax/rbac/role-code", browserAdminPath()),
   ajaxRbacRoleDelete: () => adminUrl("ajax/rbac/role-delete", browserAdminPath()),
+  ajaxRbacRoleLogin: () => adminUrl("ajax/rbac/role-login", browserAdminPath()),
   ajaxRbacUserCreate: () => adminUrl("ajax/rbac/user-create", browserAdminPath()),
   ajaxRbacUserDelete: () => adminUrl("ajax/rbac/user-delete", browserAdminPath()),
   ajaxRbacUserBan: () => adminUrl("ajax/rbac/user-ban", browserAdminPath()),
@@ -464,6 +466,19 @@ export const ADMIN_URLS = {
     adminUrl("ajax/rbac/user-password-reset", browserAdminPath()),
   ajaxRbacUserProfile: () =>
     adminUrl("ajax/rbac/user-profile", browserAdminPath()),
+  /**
+   * 权限树管理页：单端全量行、批量保存、导出 SQL（票据 04）。
+   * 端随请求走——读挂 `?audience=`，存放在请求体里（ADR-0039 D3）。
+   *
+   * 查询串必须拼在 `adminUrl()` 之外：该函数按整串末尾补斜杠，
+   * 写进参数会被补成 `?audience=desktop/`，服务端判不出端。
+   */
+  ajaxRbacPermissionTree: (audience: PermissionAudience) =>
+    `${adminUrl("ajax/rbac/permission-tree", browserAdminPath())}?audience=${audience}`,
+  ajaxRbacPermissionTreeSave: () =>
+    adminUrl("ajax/rbac/permission-tree/save", browserAdminPath()),
+  ajaxRbacPermissionTreeExport: (audience: PermissionAudience) =>
+    `${adminUrl("ajax/rbac/permission-tree/export", browserAdminPath())}?audience=${audience}`,
   ajaxCredentialLogin: () =>
     adminUrl("ajax/auth/credential-login", browserAdminPath()),
   ajaxAnnotationMarkersList: () =>

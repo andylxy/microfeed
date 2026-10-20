@@ -58,6 +58,11 @@ export async function resolveUserPermissions(
 export interface RbacResolved {
   permissions: Set<string>;
   /**
+   * 账号所持角色是否允许登录后台（`ext_roles.allow_admin_login` 的并集）。
+   * 只作用于后台入口：App 内容接口按登录凭证鉴权，不读这一列。
+   */
+  adminLoginAllowed: boolean;
+  /**
    * Whether the account is flagged for a forced password change
    * (`ext_user_security.must_change_password`).
    *
@@ -164,6 +169,35 @@ export async function registerUserDevice(
 }
 
 /**
+ * 账号能否进入后台：由所持角色的「登录后台」开关决定（`ext_roles` 的
+ * `allow_admin_login`）。
+ *
+ * 多角色取并集——任一角色允许即允许，与 {@link resolveUserPermissions} 的并集
+ * 口径一致。**没有任何角色**的账号不设限：这一列是角色挂上的否决位，不是一份
+ * 准入名单，账号在分配角色之前不该被它挡住。
+ *
+ * 只服务后台路径。App 内容接口按登录凭证鉴权，与这一列无关——关掉登录后台
+ * 不该让一个 App 账号的连接凭证失效。
+ */
+export async function userMayEnterAdmin(
+  db: D1Database,
+  userId: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS roles,
+              COALESCE(MAX(r.allow_admin_login), 1) AS allowed
+       FROM ext_user_roles ur
+       LEFT JOIN ext_roles r ON r.id = ur.role_id
+       WHERE ur.user_id = ?`,
+    )
+    .bind(userId)
+    .first<{allowed: number | null; roles: number}>();
+  if (!row || Number(row.roles) === 0) return true;
+  return Number(row.allowed) === 1;
+}
+
+/**
  * Resolve the full RBAC context for an authenticated session and, when the
  * caller supplies an `X-Device-Id` header, upsert the device row.
  *
@@ -175,7 +209,10 @@ export async function resolveRbacContext(
   userId: string,
   request: Request,
 ): Promise<RbacResolved> {
-  const permissions = await resolveUserPermissions(db, userId);
+  const [permissions, adminLoginAllowed] = await Promise.all([
+    resolveUserPermissions(db, userId),
+    userMayEnterAdmin(db, userId),
+  ]);
 
   const banned = await accountIsBlocked(db, userId);
 
@@ -194,5 +231,5 @@ export async function resolveRbacContext(
   const deviceRevoked = await isDeviceRevoked(db, userId, request);
   await registerUserDevice(db, userId, request);
 
-  return {permissions, mustChangePassword, deviceRevoked, banned};
+  return {permissions, adminLoginAllowed, mustChangePassword, deviceRevoked, banned};
 }

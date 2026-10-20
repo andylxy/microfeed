@@ -73,6 +73,7 @@ declare global {
       publicBucketUrl?: string;
       // RBAC (microfeed adaptation): resolved by src/middleware.ts.
       rbacPermissions?: Set<string>;
+      rbacAdminLoginAllowed?: boolean;
       rbacMustChangePassword?: boolean;
       rbacDeviceRevoked?: boolean;
       rbacBanned?: boolean;

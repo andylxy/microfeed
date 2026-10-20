@@ -51,7 +51,7 @@ import {
   decideLoginCredentialApiRequest,
   providedLoginCredential,
 } from "@/server/api/credential-bearer";
-import {resolveRbacContext, RBAC_WILDCARD} from "@/server/rbac/resolve";
+import {resolveRbacContext, RBAC_WILDCARD, userMayEnterAdmin} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {checkReplay} from "@/server/rbac/replay";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
@@ -160,7 +160,8 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
   // 与 `search-permission` 的现状一致（App 侧跟随重定向）。
   //
   // 换来的：限流 429、`accountIsBlocked` / `isDeviceRevoked` 401（`X-Device-Revoked`）、
-  // `app:mobile:access` 门、以及 `ext_api_access_log` 一行。此前只靠路由内那一道检查，
+  // 内容端点的 RBAC 门（`api-permissions.ts` 逐端点分发，migration 0131）、
+  // 以及 `ext_api_access_log` 一行。此前只靠路由内那一道检查，
   // 被吊销的设备与禁用的账号仍能从这两个端点拿到 200。
   //
   // 二者仍**不受版本门**约束：版本门只管 `/api/AppBookRequest/*`（ADR-0020），
@@ -217,10 +218,9 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     if (!isIntegrationApiPath(pathname)) {
       return next();
     }
-    // Content endpoints: anti-replay first (the app sends `X-Timestamp` /
-    // `X-Nonce`, de-duplicated in `ext_replay_nonces`), then the version gate,
-    // then the API auth block below requires the `app:mobile:access` RBAC code
-    // via the caller's login credential (`mflc_…`).
+    // 内容端点：先防重放（App 带 `X-Timestamp` / `X-Nonce`，在
+    // `ext_replay_nonces` 里去重），再过版本门，最后由下面的 API 鉴权段按调用方
+    // 登录凭证（`mflc_…`）校验该端点要求的 RBAC 码（`api-permissions.ts` 分发）。
     const replay = await checkReplay(env.FEED_DB, context.request);
     if (replay) return replay;
     // Version gate, stage 1 (ADR-0020): before authentication only the global
@@ -457,7 +457,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       if (pathname === loginPath) {
-        if (authSession) {
+        // 角色的「登录后台」开关：被拒的会话仍然能打开登录页，否则他们连换个
+        // 账号都做不到，只能自己清 cookie。这一判只为不被弹回后台、在登录页与
+        // 后台之间来回跳。
+        const mayEnterAdmin = authSession
+          ? await userMayEnterAdmin(env.FEED_DB, authSession.user.id)
+          : true;
+        if (authSession && mayEnterAdmin) {
           return withAuthSessionCookies(
             Response.redirect(
               new URL(adminBasePath(adminPath), context.url),
@@ -507,9 +513,28 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
           context.request,
         );
         context.locals.rbacPermissions = rbac.permissions;
+        context.locals.rbacAdminLoginAllowed = rbac.adminLoginAllowed;
         context.locals.rbacMustChangePassword = rbac.mustChangePassword;
         context.locals.rbacDeviceRevoked = rbac.deviceRevoked;
         context.locals.rbacBanned = rbac.banned;
+
+        // 角色不允许登录后台：401 会把浏览器送进登录循环，这里直接给一条
+        // 可读的 403。登录页在上一段已经放行，所以换账号的出口始终存在。
+        if (!rbac.adminLoginAllowed) {
+          return withAuthSessionCookies(
+            new Response(
+              translate(
+                "errors.adminLoginDenied",
+                adminLanguageFromRequest(context.request),
+              ),
+              {
+                headers: {"content-type": "text/plain; charset=utf-8"},
+                status: 403,
+              },
+            ),
+            authSessionHeaders,
+          );
+        }
       }
       protection = adminProtectionStatus(context.request, true);
     } else if (pathname === loginPath) {

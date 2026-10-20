@@ -117,8 +117,11 @@ describe("GET /api/AppBookRequest/GetAllMingCi (server-side defense)", () => {
   });
 
   it("returns an empty envelope + no-store when the account lacks the code", async () => {
+    // migration 0131 起外门即 `app:mingci:view`：真实链路里持别的码在 middleware
+    // 就被 403 挡下。这里直调 handler，锁的是内部复核这层防御——权限集合里
+    // 没有该码时仍回答空信封 + no-store，不泄数据。
     await seedUser("u_none");
-    await grantCodes("u_none", ["app:mobile:access"]);
+    await grantCodes("u_none", ["app:nav:read"]);
     const res = await callGetAllMingCi(await bearerFor("u_none"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {code: number; data: unknown[]};

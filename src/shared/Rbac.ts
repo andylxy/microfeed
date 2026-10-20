@@ -6,6 +6,9 @@
  * `tests/unit/source-architecture.test.ts`).
  */
 
+import {adminMenuItemLabel} from "./AdminNavigation";
+import type {AdminLanguage} from "./AdminLanguage";
+
 /**
  * Role a newly created account receives when the operator ticks none. Kept in
  * shared code because both the create endpoint (server) and the create form
@@ -28,7 +31,29 @@ export const BETTER_AUTH_ADMIN_ROLE = "admin";
 /** The `auth_user.role` value of an account that may not call the admin plugin. */
 export const BETTER_AUTH_USER_ROLE = "user";
 
+/**
+ * 权限对象的终端归属（ADR-0039 D1）：
+ *   - `desktop` —— 后台页面权限（内容 / 审核 / 站点 / 集成 / 账户 / 运营）；
+ *   - `app` —— App 能力权限码（`app:nav:read` / `app:version:read` / …）。
+ *
+ * 两个控制台按这一维互斥分区：PC 端管理只看 `desktop`，App 端管理只看 `app`。
+ * 判定点不少（授权视图组装、授权保存、权限树三端点、新节点继承），判定入口
+ * 收在这里（`isPermissionAudience` 校验入参，`audienceOf` 由叶子推码的归属），
+ * 调用方传的是这个类型，不再各处自写判定。
+ */
+export type PermissionAudience = "desktop" | "app";
+
+/** 入参是否为合法终端归属；非法值一律 fail-closed 由调用方返回 400。 */
+export function isPermissionAudience(value: unknown): value is PermissionAudience {
+  return value === "desktop" || value === "app";
+}
+
 export interface RbacBoardRole {
+  /**
+   * 该角色是否允许登录后台（`ext_roles.allow_admin_login`）。账号同时持有多个
+   * 角色时取并集：任一角色允许即可进入；关闭只影响后台入口，不动授权行。
+   */
+  allowAdminLogin: boolean;
   code: string;
   name: string;
   permissions: string[];
@@ -36,9 +61,14 @@ export interface RbacBoardRole {
 
 export interface RbacBoard {
   /**
-   * The permission tree the role editor renders: menu groups -> menu pages ->
-   * the codes each page governs. Built server-side from `ext_menu`,
-   * `ext_menu_permissions` and the catalogue.
+   * 这一板属于哪一端（ADR-0039）：PC 端管理读 `desktop`，App 端管理读 `app`。
+   * 前端保存授权时原样回传，服务端据此校验提交的码是否都属于本端。
+   */
+  audience: PermissionAudience;
+  /**
+   * 角色编辑器渲染的那棵树：分组行 → 页面行 → 每页管的那些码。服务端从
+   * 自持的 `ext_permission_nodes` 行拼出来（ADR-0038）：分组是 `parent_code`
+   * 为空的行，页面是它下面的页面行，码是每个页面下的叶子行。
    */
   groups: RbacPermissionGroup[];
   permissions: {code: string; name: string}[];
@@ -67,148 +97,66 @@ export interface RbacUserBoard {
   users: RbacUser[];
 }
 
-/** One menu page in the role editor's tree. */
+/** 角色编辑器树里的一行页面。 */
 export interface RbacPermissionPage {
   /**
-   * The menu code (e.g. `books`), a synthetic App 能力页 code (e.g.
-   * `app_version_read`), or `unmapped` for the catch-all page.
+   * 页面节点的码：把 `page_` 前缀去掉的部分（如 `books`），或 App 能力页的码
+   * （如 `app_version_read`）。每个码都挂在一个明确的页面下；原先那个合成
+   * 兜底页如今只是一条普通的种子行（`page_unmapped`）。
    */
   code: string;
-  /** The permission codes this page governs, sorted. */
+  /** 本页管辖的权限码，已排序。 */
   codes: string[];
+  /** 节点行的双语名（种子行入库时写入，自建行由管理页维护）。 */
+  nameEn?: string | null;
+  nameZh?: string | null;
+  /** 双语名全空时的 i18n 兜底键（自建分组为 `rbac.node.<code>`）。 */
+  i18nKey?: string | null;
 }
 
-/** One menu group in the role editor's tree. */
+/** 角色编辑器树里的一行分组。 */
 export interface RbacPermissionGroup {
-  /** The menu group code (e.g. `group_content`), or `group_other`. */
+  /** 分组节点的码（如 `group_content`）。 */
   code: string;
+  /** 节点行的双语名，见 {@link RbacPermissionPage}。 */
+  nameEn?: string | null;
+  nameZh?: string | null;
+  /** 节点行的 i18n 兜底键，见 {@link RbacPermissionPage}。 */
+  i18nKey?: string | null;
   pages: RbacPermissionPage[];
 }
 
-/** Everything the tree is derived from. */
-export interface RbacPermissionTreeInput {
-  /** Menu groups in display order, each with its page codes. */
-  menu: {code: string; pages: string[]}[];
-  /** Page code -> permission codes (the `ext_menu_permissions` rows). */
-  mapping: Record<string, string[]>;
-  /** The permission catalogue. */
-  permissions: {code: string; name: string}[];
-}
-
-/** Catch-all group / page for codes no menu page maps to. */
-export const RBAC_OTHER_GROUP = "group_other";
-export const RBAC_OTHER_PAGE = "unmapped";
-/** Synthetic page for the App 名词解释查看权限 (`app:mingci:*`); lives inside {@link RBAC_OTHER_GROUP}. */
-export const RBAC_MINGCI_PAGE = "mingci";
-/** Synthetic page for the App 版本升级读取权限 (`app:version:*`); lives inside {@link RBAC_OPERATIONS_GROUP}. */
-export const RBAC_VERSION_PAGE = "app_version_read";
-/** Synthetic page for the App 运营公告读取权限 (`app:announcement:*`); lives inside {@link RBAC_OPERATIONS_GROUP}. */
-export const RBAC_ANNOUNCEMENT_PAGE = "app_announcement_read";
-/** 运营管理菜单组 code（migrations/0089 建立）。 */
-export const RBAC_OPERATIONS_GROUP = "group_operations";
-
 /**
- * Prefix routing table for unmapped App 能力权限：按 code 前缀把 unmapped 桶
- * 分流到独立的合成 page 上，避免 `unmapped` 混装不相关的能力。加新 App 权限时
- * 在此表追加一行即可，无需改 `buildPermissionTree`。
- *
- * `group` 指定合成页并入的菜单组：`group_operations`（运营管理）下的 App 读码
- * 独立成页（与后台 `system:*:manage` 页面解耦、可独立勾选）；省略则落入
- * {@link RBAC_OTHER_GROUP} 兜底（如 mingci）。目标组不在菜单里时回落到兜底。
- * `labelKey` 是该合成页在角色编辑器里的 i18n 标签键（见 {@link syntheticPageLabelKey}）。
+ * 授权树组/页与权限树节点行共用的标签解析形状：code + 双语名 + i18n 兜底键。
+ * 两棵树的标签解析走同一份逻辑，显示口径不漂移。
  */
-const OTHER_PAGE_PREFIXES: readonly {
+export interface RbacTreeLabelEntry {
   code: string;
-  prefix: string;
-  group?: string;
-  labelKey: string;
-}[] = [
-  {code: RBAC_MINGCI_PAGE, prefix: "app:mingci:", labelKey: "rbac.mingci"},
-  {
-    code: RBAC_VERSION_PAGE,
-    prefix: "app:version:",
-    group: RBAC_OPERATIONS_GROUP,
-    labelKey: "rbac.app_version",
-  },
-  {
-    code: RBAC_ANNOUNCEMENT_PAGE,
-    prefix: "app:announcement:",
-    group: RBAC_OPERATIONS_GROUP,
-    labelKey: "rbac.app_announcement",
-  },
-];
-
-/**
- * i18n label key for a synthetic App 能力页 code, or `null` when the code is
- * not a synthetic page. Lets the role editor map a synthetic page to its label
- * without a per-page switch — adding a new App 能力页 only touches
- * {@link OTHER_PAGE_PREFIXES} + the i18n files.
- */
-export function syntheticPageLabelKey(code: string): string | null {
-  return OTHER_PAGE_PREFIXES.find((entry) => entry.code === code)?.labelKey ?? null;
+  i18nKey?: string | null;
+  nameEn?: string | null;
+  nameZh?: string | null;
 }
 
 /**
- * Build the role editor's permission tree: menu groups -> menu pages -> the
- * permission codes each page governs.
- *
- * Group and page nodes are batch-selection units only; the codes are the real
- * grants. Codes no menu page maps to land in the {@link RBAC_OTHER_GROUP}
- * catch-all, so nothing assignable can become invisible. {@link OTHER_PAGE_PREFIXES}
- * routes specific App 能力权限 前缀到独立合成 page：`app:mingci:*` 留兜底组，
- * `app:version:*` / `app:announcement:*` 并入 {@link RBAC_OPERATIONS_GROUP}（运营管理），
- * 与后台 `system:*:manage` 页面解耦、可独立勾选；剩余留在 {@link RBAC_OTHER_PAGE}。
- * The wildcard is dropped: it means "everything", so making it tickable here
- * would turn an ordinary role into a super administrator.
+ * 授权树标签：当前语言的双语名优先（空列取另一列），双名全空时走 i18n
+ * 兜底键，键也不存在时显示 code 本身。`t` 由调用方传入（与
+ * `menuRowEffectiveLabel` 同款，避免依赖 i18n 初始化时序）。
  */
-export function buildPermissionTree(
-  input: RbacPermissionTreeInput,
-): RbacPermissionGroup[] {
-  const assignable = new Set(
-    input.permissions
-      .map((permission) => permission.code)
-      .filter((code) => code !== "*"),
+export function rbacTreeLabel(
+  entry: RbacTreeLabelEntry,
+  language: AdminLanguage,
+  t: (key: string, options?: {defaultValue: string}) => string,
+): string {
+  const named = adminMenuItemLabel(
+    {en: entry.nameEn ?? "", zh: entry.nameZh ?? ""},
+    language,
   );
-
-  const mapped = new Set<string>();
-  const groups: RbacPermissionGroup[] = [];
-  for (const group of input.menu) {
-    const pages: RbacPermissionPage[] = [];
-    for (const page of group.pages) {
-      const codes = [...new Set(input.mapping[page] ?? [])]
-        .filter((code) => assignable.has(code))
-        .sort();
-      if (codes.length === 0) continue;
-      for (const code of codes) mapped.add(code);
-      pages.push({code: page, codes});
-    }
-    if (pages.length > 0) groups.push({code: group.code, pages});
+  if (named) return named;
+  if (entry.i18nKey) {
+    const fallback = t(entry.i18nKey, {defaultValue: entry.code}).trim();
+    if (fallback) return fallback;
   }
-
-  const unmapped = [...assignable].filter((code) => !mapped.has(code)).sort();
-  if (unmapped.length > 0) {
-    const otherPages: RbacPermissionPage[] = [];
-    const routed = new Set<string>();
-    for (const {code: pageCode, prefix, group} of OTHER_PAGE_PREFIXES) {
-      const codes = unmapped.filter((c) => c.startsWith(prefix)).sort();
-      if (codes.length === 0) continue;
-      for (const c of codes) routed.add(c);
-      const page: RbacPermissionPage = {code: pageCode, codes};
-      // 指定了目标菜单组且不是兜底组时，把合成页并入该组（如 app:version:* →
-      // 运营管理）；目标组不在菜单里则回落 group_other 兜底。
-      const target =
-        group && group !== RBAC_OTHER_GROUP
-          ? groups.find((g) => g.code === group)
-          : undefined;
-      if (target) target.pages.push(page);
-      else otherPages.push(page);
-    }
-    const remaining = unmapped.filter((c) => !routed.has(c));
-    if (remaining.length > 0) otherPages.push({code: RBAC_OTHER_PAGE, codes: remaining});
-    if (otherPages.length > 0) groups.push({code: RBAC_OTHER_GROUP, pages: otherPages});
-  }
-
-  return groups;
+  return entry.code;
 }
 
 /**

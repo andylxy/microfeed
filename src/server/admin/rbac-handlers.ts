@@ -23,6 +23,7 @@ import {
   revokeLoginCredential,
 } from "@/server/auth/login-credentials";
 import {
+  requireAudienceGuard,
   requireAuthenticatedRbac,
   requireRbac,
   type RbacLocals,
@@ -53,21 +54,47 @@ import {
 import {
   BETTER_AUTH_ADMIN_ROLE,
   BETTER_AUTH_USER_ROLE,
-  buildPermissionTree,
   DEFAULT_USER_ROLE,
+  isPermissionAudience,
+  type PermissionAudience,
   type RbacBoard,
   type RbacUserBoard,
 } from "@/shared/Rbac";
+import {
+  audienceOf,
+  buildGrantGroupsFromNodes,
+  PERMISSION_NODE_COLUMNS,
+  toPermissionNodeRow,
+  type PermissionNodeRow,
+  type PermissionNodeTableRow,
+} from "@/shared/PermissionTreeOps";
 import type {AdminDeviceRow} from "@/shared/AppDeviceVersion";
 
 export type {RbacBoard, RbacBoardRole, RbacUser, RbacUserBoard} from "@/shared/Rbac";
 
-/** Roles, their grants, and the permission tree the UI assigns from. */
-export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
-  const [roles, catalog, grants, menuRows, mappingRows] = await Promise.all([
+/**
+ * 单端授权板（ADR-0039 D2）：节点、角色 grants 与权限名目录都按终端归属裁剪，
+ * 两端互不可见。
+ *
+ * - 节点：`WHERE audience = ?` 走 `(audience, kind)` 索引，PC 端约 78 行、
+ *   App 端约 12 行。
+ * - grants：`ext_role_permissions` 只有 `role_id` / `permission_id`，没有端列，
+ *   所以经节点表的 `kind='code'` 叶子 join 出本端的 `permission_id` 集合再裁剪；
+ *   不裁剪的话 App 页的角色行会带出桌面码。`*` 通配不属于任何一端，显式放行——
+ *   它是 super_admin 拥有全部权限的记法，在任一端都成立，但两端都不给它勾选位。
+ * - 目录：只留本端叶子上登记过的码，本端没有挂靠点的码不给勾选机会。
+ */
+export async function readRbacBoard(
+  db: D1Database,
+  audience: PermissionAudience,
+): Promise<RbacBoard> {
+  const [roles, catalog, grants, nodes] = await Promise.all([
     db
-      .prepare("SELECT id, code, name FROM ext_roles ORDER BY code")
-      .all<{id: string; code: string; name: string}>(),
+      .prepare(
+        `SELECT id, code, name, allow_admin_login AS allowAdminLogin
+         FROM ext_roles ORDER BY code`,
+      )
+      .all<{allowAdminLogin: number | null; code: string; id: string; name: string}>(),
     db
       .prepare("SELECT code, name FROM ext_permissions ORDER BY code")
       .all<{code: string; name: string}>(),
@@ -75,17 +102,20 @@ export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
       .prepare(
         `SELECT rp.role_id AS roleId, p.code AS code
          FROM ext_role_permissions rp
-         JOIN ext_permissions p ON p.id = rp.permission_id`,
+         JOIN ext_permissions p ON p.id = rp.permission_id
+         LEFT JOIN ext_permission_nodes n
+           ON n.permission_code = p.code AND n.kind = 'code'
+         WHERE p.code = ? OR n.audience = ?`,
       )
+      .bind(RBAC_WILDCARD, audience)
       .all<{roleId: string; code: string}>(),
     db
       .prepare(
-        "SELECT code, parent_code, sort FROM ext_menu WHERE is_visible = 1 ORDER BY sort, code",
+        `SELECT ${PERMISSION_NODE_COLUMNS}
+         FROM ext_permission_nodes WHERE audience = ? ORDER BY sort, code`,
       )
-      .all<{code: string; parent_code: string | null; sort: number}>(),
-    db
-      .prepare("SELECT menu_code, permission_code FROM ext_menu_permissions")
-      .all<{menu_code: string; permission_code: string}>(),
+      .bind(audience)
+      .all<PermissionNodeTableRow>(),
   ]);
 
   const byRole = new Map<string, string[]>();
@@ -95,33 +125,28 @@ export async function readRbacBoard(db: D1Database): Promise<RbacBoard> {
     byRole.set(grant.roleId, list);
   }
 
-  // The tree is organised by the menu: a group is any row another row points at
-  // through `parent_code`, and its pages are those children, in `sort` order.
-  const pagesByGroup = new Map<string, string[]>();
-  for (const row of menuRows.results ?? []) {
-    if (!row.parent_code) continue;
-    const pages = pagesByGroup.get(row.parent_code) ?? [];
-    pages.push(row.code);
-    pagesByGroup.set(row.parent_code, pages);
-  }
-  const menu = (menuRows.results ?? [])
-    .filter((row) => pagesByGroup.has(row.code))
-    .map((row) => ({code: row.code, pages: pagesByGroup.get(row.code) ?? []}));
+  const nodeRows: PermissionNodeRow[] = (nodes.results ?? []).map(toPermissionNodeRow);
+  const scopedCodes = new Set(
+    nodeRows
+      .filter((row) => row.kind === "code" && row.permissionCode !== null)
+      .map((row) => row.permissionCode as string),
+  );
+  const permissions = (catalog.results ?? [])
+    .map((row) => ({code: row.code, name: row.name}))
+    .filter((entry) => scopedCodes.has(entry.code));
 
-  const mapping: Record<string, string[]> = {};
-  for (const row of mappingRows.results ?? []) {
-    (mapping[row.menu_code] ??= []).push(row.permission_code);
-  }
-
-  const permissions = (catalog.results ?? []).map((row) => ({
-    code: row.code,
-    name: row.name,
-  }));
-
+  // 树现在只来自一张自持表（ADR-0038）：授权视图按节点行的 `(sort, code)`
+  // 读序拼出来，原先喂它的菜单联表已从这条读路径上退掉。
   return {
-    groups: buildPermissionTree({mapping, menu, permissions}),
+    audience,
+    groups: buildGrantGroupsFromNodes(
+      nodeRows,
+      new Map(permissions.map((entry) => [entry.code, entry.name])),
+      audience,
+    ),
     permissions,
     roles: (roles.results ?? []).map((row) => ({
+      allowAdminLogin: Number(row.allowAdminLogin) === 1,
       code: row.code,
       name: row.name,
       permissions: (byRole.get(row.id) ?? []).sort(),
@@ -137,24 +162,31 @@ export type ReplaceRoleResult =
         | "unknownRole"
         | "unknownPermission"
         | "wildcardRole"
-        | "wildcardPermission";
+        | "wildcardPermission"
+        | "audienceMismatch";
     };
 
 /**
- * Replace a role's grants wholesale.
+ * 按**单端**整体替换某角色的授权（ADR-0039 D4）。
  *
- * Two refusals, both about the wildcard:
- * - `super_admin` may not be edited at all: its access comes from `*`, so an
- *   assignment that stripped it would lock every administrator out.
- * - `*` may not be granted to any other role: that would turn the grant into a
- *   second super administrator and make `system:role:manage` an escalation
- *   path. The dashboard hides the row, but the server has to refuse too — a
- *   crafted request would otherwise bypass the UI.
+ * 两处拒绝，都围绕通配码：
+ * - `super_admin` 一律不可编辑：它的权限来自 `*`，一旦被清掉，所有管理员
+ *   都进不了后台。
+ * - `*` 不可授予其他角色：那等于造出第二个超级管理员，`system:role:manage`
+ *   就此成为提权路径。看板里这一行是隐藏的，服务端仍须拒绝——否则伪造请求
+ *   可以绕过界面。
+ *
+ * `audience` 限定写入范围：提交的每个码都必须属于该端（否则 fail-closed），
+ * 且只替换该端的授权行。`ext_role_permissions` 没有 audience 列，作用域用
+ * 节点表 `kind='code'` 叶子上的子查询表达。若改成 `DELETE ... WHERE role_id = ?`
+ * 整体删除，另一端的授权会被一起清掉——editor 持有两条 App 码，下一次有人
+ * 保存 PC 端时就会这样丢掉。
  */
 export async function replaceRolePermissions(
   db: D1Database,
   roleCode: string,
   codes: string[],
+  audience: PermissionAudience,
   audit?: PendingAudit,
 ): Promise<ReplaceRoleResult> {
   if (roleCode === "super_admin") {
@@ -182,8 +214,34 @@ export async function replaceRolePermissions(
     }
   }
 
+  // 归属校验：提交的码必须全部属于本次保存的那一端。判定走共享的
+  // `audienceOf()`——某码归哪端只有「它那条 kind='code' 叶子」一个来源，
+  // 这里不另写一份推导。缺叶子的码得 `null`，按不一致处理（不做默认端的猜测）。
+  const leaves = await db
+    .prepare(
+      `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
+       WHERE kind = 'code'`,
+    )
+    .all<PermissionNodeTableRow>();
+  const leafRows = (leaves.results ?? []).map(toPermissionNodeRow);
+  for (const code of codes) {
+    if (audienceOf(code, leafRows) !== audience) {
+      return {ok: false, reason: "audienceMismatch"};
+    }
+  }
+
   await db.batch([
-    db.prepare("DELETE FROM ext_role_permissions WHERE role_id = ?").bind(role.id),
+    db
+      .prepare(
+        `DELETE FROM ext_role_permissions
+         WHERE role_id = ?
+           AND permission_id IN (
+             SELECT p.id FROM ext_permissions p
+             JOIN ext_permission_nodes n ON n.permission_code = p.code
+             WHERE n.kind = 'code' AND n.audience = ?
+           )`,
+      )
+      .bind(role.id, audience),
     ...codes.map((code) =>
       db
         .prepare(
@@ -478,11 +536,11 @@ export type RoleMutationResult =
       | "unknownRole"
       | "reservedRole"
       | "roleInUse"
-      | "invalidRole";
+      | "invalidRole"
+      | "loginLocked";
   };
 
 const RESERVED_ROLES = new Set(["super_admin"]);
-
 /**
  * Role codes the code itself depends on *by name*: `super_admin` carries the `*`
  * wildcard, and `readonly` is `DEFAULT_USER_ROLE` — the role a newly created
@@ -551,6 +609,43 @@ export async function renameRbacRole(
 }
 
 /**
+ * 改角色的「登录后台」开关（`ext_roles.allow_admin_login`）。
+ *
+ * `super_admin` 固定为允许：它是唯一持有 `*` 的角色，关掉就等于把整个后台锁在
+ * 门外，而且没有第二个入口能改回来。
+ *
+ * 关掉只挡后台入口，不动授权行：重新允许后，角色原有的授权原样还在。持有该
+ * 角色的账号下一次请求就会被拒（中间件与端点守卫各读一次），不需要等重新登录。
+ */
+export async function setRbacRoleAdminLogin(
+  db: D1Database,
+  code: string,
+  allow: boolean,
+  audit?: PendingAudit,
+): Promise<RoleMutationResult> {
+  if (code === "super_admin" && !allow) {
+    return {ok: false, reason: "loginLocked"};
+  }
+  const role = await db
+    .prepare("SELECT id FROM ext_roles WHERE code = ?")
+    .bind(code)
+    .first<{id: string}>();
+  if (!role) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  await db.batch([
+    db.prepare(
+      `UPDATE ext_roles
+       SET allow_admin_login = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE code = ?`,
+    ).bind(allow ? 1 : 0, code),
+    // 同一批：开关与「谁改的」一起提交。
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
+  return {ok: true};
+}
+
+/**
  * Change a role's code.
  *
  * `ext_roles.id` is `r_<code>` and both `ext_user_roles.role_id` and
@@ -598,8 +693,10 @@ export async function renameRbacRoleCode(
   const newId = roleId(newCode);
   await db.batch([
     db.prepare(
-      `INSERT INTO ext_roles (id, code, name, created_at, updated_at)
-       SELECT ?, ?, name, created_at, CURRENT_TIMESTAMP FROM ext_roles WHERE id = ?`,
+      `INSERT INTO ext_roles
+         (id, code, name, allow_admin_login, created_at, updated_at)
+       SELECT ?, ?, name, allow_admin_login, created_at, CURRENT_TIMESTAMP
+       FROM ext_roles WHERE id = ?`,
     ).bind(newId, newCode, oldId),
     db.prepare(
       `INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id)
@@ -695,7 +792,7 @@ export const createAdminRbacRole: APIRoute = async ({locals, request}) => {
       result.reason === "unknownRole" ? 404 : 400,
     );
   }
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
 };
 
 export const updateAdminRbacRoleName: APIRoute = async ({locals, request}) => {
@@ -726,7 +823,44 @@ export const updateAdminRbacRoleName: APIRoute = async ({locals, request}) => {
       result.reason === "unknownRole" ? 404 : 400,
     );
   }
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
+};
+
+/**
+ * 「登录后台」开关的端点。与其他角色改动同一道门（`system:role:manage`），
+ * 返回 PC 板子——角色清单两端同源，前端拿它整表刷新。
+ */
+export const updateAdminRbacRoleLogin: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {allow?: unknown; code?: unknown}
+    | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  // 只认布尔：字符串 "false" 是真值，放过它会把「不允许」静默存成允许。
+  const allow = body?.allow;
+  if (!code || typeof allow !== "boolean") {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await setRbacRoleAdminLogin(env.FEED_DB, code, allow, {
+    action: "role.login",
+    actor: locals.authUser,
+    detail: allow ? "allow" : "deny",
+    target: code,
+  });
+  if (!result.ok) {
+    return localizedError(
+      request,
+      `errors.rbac.${result.reason}`,
+      result.reason === "unknownRole" ? 404 : 400,
+    );
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
 };
 
 /**
@@ -762,7 +896,7 @@ export const updateAdminRbacRoleCode: APIRoute = async ({locals, request}) => {
         : 400;
     return localizedError(request, `errors.rbac.${result.reason}`, status);
   }
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
 };
 
 export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
@@ -790,7 +924,7 @@ export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
       result.reason === "unknownRole" ? 404 : 409,
     );
   }
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
 };
 
 /**
@@ -1409,39 +1543,70 @@ export const updateAdminRbacUser: APIRoute = async ({locals, request}) => {
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
-export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
-  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
-    request,
-    env.FEED_DB,
-  );
-  if (guard) return guard;
+/** 授权保存请求体的字节上限：内容是一个角色码加单端全部码，远小于此值。 */
+const MAX_ASSIGNMENT_BODY_BYTES = 64 * 1024;
 
-  const body = await request.json().catch(() => null) as
-    | {permissions?: unknown; role?: unknown}
-    | null;
-  if (!body || typeof body.role !== "string" || !Array.isArray(body.permissions)) {
+/**
+ * 按单端保存某角色的授权（ADR-0039 D3/D4）。
+ *
+ * 请求体带着它来自哪一端（`audience`），守卫码由这个值选定：PC 端要
+ * `system:role:manage`，App 端要 `system:app-capability:manage`。守卫码只能
+ * 等请求体解析完才知道，所以先跑不需要端归属的那半步——防重放 + 账号门——
+ * 未登录、被封、待改密的调用方在读取请求体之前就被挡回去；声明长度再兜一层，
+ * 免得为巨大载荷分配内存。授权请求体是一个角色码加单端全部码，远低于上限。
+ */
+export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
+  const gate = await requireAuthenticatedRbac(locals, request, env.FEED_DB);
+  if (gate) return gate;
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_ASSIGNMENT_BODY_BYTES) {
     return localizedError(request, "errors.rbac.invalidAssignment", 400);
   }
+  const body = await request.json().catch(() => null) as
+    | {audience?: unknown; permissions?: unknown; role?: unknown}
+    | null;
+  if (
+    !body ||
+    typeof body.role !== "string" ||
+    !Array.isArray(body.permissions) ||
+    !isPermissionAudience(body.audience)
+  ) {
+    return localizedError(request, "errors.rbac.invalidAssignment", 400);
+  }
+  const audience = body.audience;
+  // 防重放已在前面跑过，这里只补权限半步。
+  const guard = await requireAudienceGuard(locals, audience, request, env.FEED_DB, {
+    skipReplay: true,
+  });
+  if (guard) return guard;
+
   const codes = body.permissions.filter(
     (code): code is string => typeof code === "string",
   );
 
-  // Read the current grants first: an audit row is only useful if it says what
-  // the value changed *from*, not just what it changed to.
+  // 先读当前授权：审计行只有记下「改之前是什么」才有用。范围限在本端，
+  // 否则「改之前」会把另一端的码混进来。
   const previous = await env.FEED_DB.prepare(
     "SELECT p.code AS code FROM ext_role_permissions rp " +
       "JOIN ext_roles r ON r.id = rp.role_id " +
       "JOIN ext_permissions p ON p.id = rp.permission_id " +
-      "WHERE r.code = ? ORDER BY p.code",
-  ).bind(body.role).all<{code: string}>();
+      "JOIN ext_permission_nodes n ON n.permission_code = p.code AND n.kind = 'code' " +
+      "WHERE r.code = ? AND n.audience = ? ORDER BY p.code",
+  ).bind(body.role, audience).all<{code: string}>();
 
-  const result = await replaceRolePermissions(env.FEED_DB, body.role, codes, {
-    action: "role.permissions",
-    actor: locals.authUser,
-    before: (previous.results ?? []).map((row) => row.code).join(","),
-    detail: codes.join(","),
-    target: body.role,
-  });
+  const result = await replaceRolePermissions(
+    env.FEED_DB,
+    body.role,
+    codes,
+    audience,
+    {
+      action: "role.permissions",
+      actor: locals.authUser,
+      before: (previous.results ?? []).map((row) => row.code).join(","),
+      detail: codes.join(","),
+      target: body.role,
+    },
+  );
   if (!result.ok) {
     return localizedError(
       request,
@@ -1449,7 +1614,7 @@ export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
       result.reason === "unknownRole" ? 404 : 400,
     );
   }
-  return jsonResponse(await readRbacBoard(env.FEED_DB));
+  return jsonResponse(await readRbacBoard(env.FEED_DB, audience));
 };
 
 /** List the devices an account has authenticated from (device board). */

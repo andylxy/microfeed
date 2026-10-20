@@ -219,3 +219,20 @@ test('Worker media routes do not add a trailing slash to R2 object keys', () => 
     "https://cdn.example.com/production/media/audio.mp3",
   );
 });
+
+test("RBAC permission-tree URLs keep the query outside the trailing slash", () => {
+  // 回归：adminUrl 按整串末尾补斜杠，查询串写进参数会被补成
+  // `?audience=desktop/`，服务端判不出端，直接 400「该权限树请求不合法」。
+  for (const audience of ["desktop", "app"] as const) {
+    const listUrl = ADMIN_URLS.ajaxRbacPermissionTree(audience);
+    expect(listUrl).toBe(`/admin/ajax/rbac/permission-tree/?audience=${audience}`);
+    expect(new URL(listUrl, "http://localhost").searchParams.get("audience"))
+      .toBe(audience);
+
+    const exportUrl = ADMIN_URLS.ajaxRbacPermissionTreeExport(audience);
+    expect(exportUrl)
+      .toBe(`/admin/ajax/rbac/permission-tree/export/?audience=${audience}`);
+    expect(new URL(exportUrl, "http://localhost").searchParams.get("audience"))
+      .toBe(audience);
+  }
+});

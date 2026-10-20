@@ -248,7 +248,23 @@ export const PERMISSION_CODES = {
   CONTENT_SITE_FILE_MANAGE: 'content:site_file:manage',
   MEDIA_FILE_MANAGE: 'media:file:manage',
   SYSTEM_API_MANAGE: 'system:api:manage',
-  APP_MOBILE_ACCESS: 'app:mobile:access',
+  // App 内容端点按内容域细分的门码（migration 0131，原 `app:mobile:access`
+  // 一门管 8 条内容端点，粒度过粗：只想发某一块的数据做不到）。一个码对应
+  // 一个用途，分发见 `src/server/api/api-permissions.ts` 的 DOMAIN_RULES：
+  //   导航读取  GetNav
+  //   提示样式  GetTipsStyleConfig
+  //   章节目录  GetBookChapter
+  //   章节内容  GetChapterContent
+  //   中药方剂  GetBookIdFang
+  //   中药数据  GetAllZhongYao / GetAliaZhongYao
+  // 与 APP_SEARCH_* / APP_MINGCI_VIEW 同族：App 能力权限，不进 ext_menu，
+  // 作为 `ext_permission_nodes` 的 `kind='code'` 节点承接，不默认授予角色。
+  APP_NAV_READ: 'app:nav:read',
+  APP_STYLE_READ: 'app:style:read',
+  APP_CHAPTER_READ: 'app:chapter:read',
+  APP_CONTENT_READ: 'app:content:read',
+  APP_FANG_READ: 'app:fang:read',
+  APP_ZHONGYAO_READ: 'app:zhongyao:read',
   CONTENT_ANNOTATION_MARKERS_READ: 'content:annotation-markers:read',
   CONTENT_ANNOTATION_MARKERS_MANAGE: 'content:annotation-markers:manage',
   CONTENT_FANG_READ: 'content:fang:read',
@@ -277,16 +293,19 @@ export const PERMISSION_CODES = {
   SYSTEM_ANNOUNCEMENT_READ: 'system:announcement:read',
   SYSTEM_ANNOUNCEMENT_MANAGE: 'system:announcement:manage',
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
-  // 不是后台页面权限，因此不进 ext_menu / ext_menu_permissions，由 group_other /
-  // unmapped 兜底组承接。运营在既有「角色管理」页把码挂到角色叶子即可开放搜索。
+  // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
+  // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底
+  // 逻辑已退役，迁移 0127 把当时的承接页固化为普通行，此后可自由移动）。
+  // 运营在「权限树」页把码挂到角色叶子即可开放搜索。
   APP_SEARCH_GLOBAL: 'app:search:global',
   APP_SEARCH_BOOK: 'app:search:book',
   // 名词解释查看（MingCi View Permission，G3 全局单开关 → 一个码）。App 能力权限，
-  // 不进菜单/后台页面，由 group_other/unmapped 兜底组承接（镜像 APP_SEARCH_* 的处置）。
+  // 不进菜单/后台页面，作为 `ext_permission_nodes` 的 `kind='code'` 节点承接
+  // （镜像 APP_SEARCH_* 的处置，ADR-0038 自持权限树）。
   APP_MINGCI_VIEW: 'app:mingci:view',
   // App 版本升级 / 运营公告（2026-10-16 起要求登录凭证，此前匿名）。与 APP_SEARCH_* /
-  // APP_MINGCI_VIEW 同族：App 能力权限，不进 ext_menu / ext_menu_permissions，由
-  // group_other / unmapped 兜底组承接（无后台菜单行）。**差别在授权**：
+  // APP_MINGCI_VIEW 同族：App 能力权限，不进 ext_menu，作为 `ext_permission_nodes`
+  // 的 `kind='code'` 节点承接（无后台菜单行）。**差别在授权**：
   // search / mingci 由运营按需手工挂到角色，这两个**默认授予 editor 角色**（见 seed.ts）
   // —— App 每次启动都要查升级、拉公告，缺了它们刚装好的 App 就是残废的，
   // 而它用的内置凭证（SecurityConfig.getApiKey()）正是这个角色。
@@ -301,6 +320,11 @@ export const PERMISSION_CODES = {
   // 只授 super_admin（不写 ext_role_permissions），挂在
   // menu_management 菜单行上——页面守卫与菜单可见性绑同一个码。
   SYSTEM_MENU_MANAGE: 'system:menu:manage',
+  // 权限管理页（/admin/rbac，migration 0130）。App 能力控制不另设入口：
+  // 权限管理单页内按终端归属分区（ADR-0039），PC 端与 App 端共用这一页，
+  // 页面守卫沿用 SYSTEM_ROLE_MANAGE，这一个码只用于 App 端数据分区的服务端判定。
+  // 只授 super_admin（走 `*` 通配），editor / readonly 不授予。
+  SYSTEM_APP_CAPABILITY_MANAGE: 'system:app-capability:manage',
   WILDCARD: '*',
 } as const;
 

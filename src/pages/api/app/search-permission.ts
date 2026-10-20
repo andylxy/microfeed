@@ -9,8 +9,8 @@
  *
  * 语义要点（fail-closed，INV-1 / INV-2）：
  * - 端点挂在 legacy `/api/` 基，由 middleware 完整鉴权链看守（限流 / 封禁 /
- *   设备吊销 / `app:mobile:access`）；只有已通过 `app:mobile:access` 的登录凭证
- *   才能抵达本处理器。
+ *   设备吊销 / 搜索能力双码门）；持 `app:search:global` 或 `app:search:book`
+ *   任意一个码的登录凭证就能抵达本处理器（migration 0131）。
  * - 角色不命中 = 200 双 false（这是**有效答案**，客户端据此禁用搜索且不重试）。
  * - 凭证无效 / 缺失 = 401（middleware 已挡，此处保底；触发客户端失败 + 退避重试）。
  * - DB 异常 = 500，**绝不**伪装成双 false（否则「服务端炸了」和「没权限」分不清，

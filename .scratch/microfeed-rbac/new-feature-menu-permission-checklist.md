@@ -22,11 +22,17 @@
    **全新安装的 `bootstrapAdmin` 直接 500**（生产未炸只因 owner 早已存在）。
    拿不准就在 node 里跑 `permissionId('你的code')` 打印确认。
 2. **`ext_menu`** —— 菜单行**必须挂 `parent_code`** 到 0050 的分组（如 `group_content`），
-   并设置 `sort`。**顶层行（parent_code NULL）不会出现在权限树里**——权限树的组是
-   「被其他行指向的行」（`readRbacBoard` + `buildPermissionTree`）。
-   菜单行 `permission_code` 与页面守卫必须是**同一个码**（admin-page-guards 测试强制）。
-3. **`ext_menu_permissions`** —— 把本页守卫用到的码**全部**映射到菜单 code（0063 模式）。
-   没有映射的码只会掉进权限树「其他」桶，用户找不到也没法给角色勾选。
+   并设置 `sort`。菜单行的 `permission_code` 决定该入口对谁可见（**菜单可见性码**，
+   admin-page-guards 测试强制与页面守卫同码）。
+   ⚠️ 权限树（角色编辑器里的授权视图）**不再由 `ext_menu` 派生**——它来自
+   `ext_permission_nodes`（ADR-0038 自持，`readRbacBoard` + `buildGrantGroupsFromNodes`）：
+   组 = `kind='group'` 且 `parent_code IS NULL` 的行，页 = `kind='page'` 挂在组下，
+   码 = `kind='code'` 挂在页下。新增权限只需在表内加一行 code 节点，无需改菜单。
+3. **`ext_permission_nodes`** —— 权限树的载体（ADR-0038 自持表，替代旧的 `ext_menu_permissions`
+   映射模式）。新增后台功能时，其权限码要作为 `kind='code'` 行挂在对应 `kind='page'` 节点下
+   （page 挂在 `kind='group'` 组下）。**没有「其他」兜底桶**——码必须显式挂到某个页节点，
+   否则角色编辑器看不到、没法勾选；后台「权限树」页可改名/排序/改父级/隐藏/新建分组，
+   或导出 SQL 回写迁移。可见性门禁仍走 `ext_menu.permission_code`（页面守卫同码）。
 4. **`ext_role_permissions`** —— 明确哪些既有角色默认授予（如 editor/readonly 授 `:read`），
    用 `INSERT OR IGNORE … SELECT … WHERE EXISTS` 守护式插入；**id 同样必须用推导 id**。
    同时在 `seed.ts` 的 `RBAC_ROLES` 对应角色数组里镜像同码（rbac.test.ts 有精确计数断言）。
@@ -46,7 +52,7 @@
    ⚠️ 必须全量跑：它包含 bootstrap→登录全链路用例，能抓住「权限 id 手写错 → bootstrap 500」这类
    只跑新功能测试发现不了的问题（0068 当天就漏过了）。
 3. 新功能的定向 worker 测试 + `yarn typecheck` + `yarn i18n:check`。
-4. 部署后**直查远程 D1** 验证：迁移已记录、行已落（迁移静默应用 ≠ schema 已落）。
+4. 部署后**直查远程 D1** 验证：迁移已记录、行已写入（迁移静默应用 ≠ schema 已就位）。
 
 ## 5. 上线后给角色授权
 

@@ -139,18 +139,35 @@ describe("mobile app namespace (/api/AppBookRequest/…)", () => {
     });
   });
 
-  it("requires the single app:mobile:access code for content endpoints", () => {
-    for (const name of CONTENT) {
-      expect(
-        requiredApiPermission(`/api/AppBookRequest/${name}/`, "GET"),
-      ).toBe("app:mobile:access");
-    }
+  it("maps each content endpoint to its own content-domain code", () => {
+    const gateOf = (name: string) =>
+      requiredApiPermission(`/api/AppBookRequest/${name}/`, "GET");
+    // migration 0131 起逐端点分发：一个码对应一个内容域，同码只出现在
+    // 中药的两个列表端点上。
+    expect(gateOf("GetNav")).toBe("app:nav:read");
+    expect(gateOf("GetTipsStyleConfig")).toBe("app:style:read");
+    expect(gateOf("GetBookChapter")).toBe("app:chapter:read");
+    expect(gateOf("GetChapterContent")).toBe("app:content:read");
+    expect(gateOf("GetBookIdFang")).toBe("app:fang:read");
+    expect(gateOf("GetAllZhongYao")).toBe("app:zhongyao:read");
+    expect(gateOf("GetAliaZhongYao")).toBe("app:zhongyao:read");
+    // 名词数据端点与 mingci-permission 同码：数据与它的查看权同权。
+    expect(gateOf("GetAllMingCi")).toBe("app:mingci:view");
     // Pre-auth / config endpoints are not integration paths → no code required
     // (the middleware exempts them from auth rather than mapping a code).
     expect(requiredApiPermission("/api/AppBookRequest/login/", "POST")).toBeNull();
     expect(
       requiredApiPermission("/api/AppBookRequest/GetProjectInfo/", "GET"),
     ).toBeNull();
+  });
+
+  it("leaves no content endpoint unmapped (fail-closed stays total)", () => {
+    for (const name of CONTENT) {
+      expect(
+        requiredApiPermission(`/api/AppBookRequest/${name}/`, "GET"),
+        `${name} maps to no code`,
+      ).not.toBeNull();
+    }
   });
 });
 
@@ -170,20 +187,24 @@ describe("app search-permission endpoint (/api/app/search-permission/)", () => {
   it("survives the canonical trailing-slash redirect the middleware applies", () => {
     // 回归：客户端请求无斜杠形态时，中间件 308 到带斜杠形态。若后端只认无斜杠，
     // 重定向后的请求在 apiPathDetails 里无一分支命中 → not-found(404)，
-    // app:mobile:access 门形同虚设。这里锁死「重定向后仍是 integration + 仍需权限码」。
+    // 搜索双码门形同虚设。这里锁住「重定向后仍是 integration + 仍需权限码」。
     const requested = "/api/app/search-permission";
     const dispatched = canonicalPathname(requested);
     expect(dispatched).toBe("/api/app/search-permission/");
     expect(isIntegrationApiPath(dispatched)).toBe(true);
-    expect(requiredApiPermission(dispatched, "GET")).toBe("app:mobile:access");
+    expect(requiredApiPermission(dispatched, "GET")).toEqual([
+      "app:search:global",
+      "app:search:book",
+    ]);
   });
 
-  it("requires the app:mobile:access code at the path level", () => {
+  it("requires either search code at the path level", () => {
     // The per-code search decision (global/book) is made by the handler; the
-    // middleware only enforces that the caller may use the mobile app at all.
-    expect(requiredApiPermission("/api/app/search-permission/", "GET")).toBe(
-      "app:mobile:access",
-    );
+    // middleware only enforces that the caller holds one of the two codes.
+    expect(requiredApiPermission("/api/app/search-permission/", "GET")).toEqual([
+      "app:search:global",
+      "app:search:book",
+    ]);
   });
 
   it("carries no deprecation headers (the /api/v1 successor does not exist)", () => {
@@ -210,13 +231,13 @@ describe("app mingci-permission endpoint (/api/app/mingci-permission/)", () => {
     const dispatched = canonicalPathname(requested);
     expect(dispatched).toBe("/api/app/mingci-permission/");
     expect(isIntegrationApiPath(dispatched)).toBe(true);
-    expect(requiredApiPermission(dispatched, "GET")).toBe("app:mobile:access");
+    expect(requiredApiPermission(dispatched, "GET")).toBe("app:mingci:view");
   });
 
-  it("requires the app:mobile:access code at the path level", () => {
-    // 路径级门只管「能不能用 App」；名词解释本身的可见性由 handler 决定。
+  it("requires the app:mingci:view code at the path level", () => {
+    // 外门与端点内部复核同码：端点回答的就是这一个码的持有情况。
     expect(requiredApiPermission("/api/app/mingci-permission/", "GET")).toBe(
-      "app:mobile:access",
+      "app:mingci:view",
     );
   });
 
@@ -226,7 +247,7 @@ describe("app mingci-permission endpoint (/api/app/mingci-permission/)", () => {
 });
 
 describe("app version endpoint (/api/app/version/)", () => {
-  // 与上面两条 app 端点一一对应，但门是「权限码本身」而非 `app:mobile:access`：
+  // 与上面两条 app 端点一一对应，但门是「权限码本身」而非内容域码：
   // `app:version:read` 默认授予 editor 角色（migrations/0119 播种、0120 授予，
   // 属「运营管理」叶子结点下的默认授权）。handler 再用同一码复核一次。
   it("is an integration path under the legacy base", () => {

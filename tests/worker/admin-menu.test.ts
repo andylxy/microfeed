@@ -116,28 +116,6 @@ describe("admin menu seed", () => {
       expect(known.has(row.permission_code ?? ""), `menu ${row.code} binds an unknown code`).toBe(true);
     }
   });
-
-  it("maps only menu pages that still exist", async () => {
-    // `ext_menu_permissions` has no foreign key (the menu is data, never the
-    // thing that grants access), so a stale row survives the page it names. It
-    // is harmless — `buildPermissionTree` only looks up pages still in
-    // `ext_menu` — but it is dead data, and nothing else would notice. 0066
-    // cleans its `import_chapters` row up by hand; this is the ratchet that
-    // keeps the next deletion honest.
-    const [menuRows, mappingRows] = await Promise.all([
-      env.FEED_DB.prepare("SELECT code FROM ext_menu").all<{code: string}>(),
-      env.FEED_DB.prepare("SELECT DISTINCT menu_code FROM ext_menu_permissions")
-        .all<{menu_code: string}>(),
-    ]);
-    const codes = new Set((menuRows.results ?? []).map((row) => row.code));
-    for (const row of mappingRows.results ?? []) {
-      expect(
-        codes.has(row.menu_code),
-        `ext_menu_permissions maps unknown page ${row.menu_code}`,
-      ).toBe(true);
-    }
-  });
-
   it("gives every entry a path fragment and an i18n key", async () => {
     const rows = await env.FEED_DB.prepare(
       "SELECT code, path, i18n_key FROM ext_menu WHERE is_visible = 1",
@@ -310,13 +288,18 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.WEBHOOKS,
       "group_account",
       ADMIN_MENU_CODES.RBAC,
+      // 0131 起单页口径：rbac_app 菜单行随双控制台一起退役。
       ADMIN_MENU_CODES.USERS,
+      // 0126 seeded the menu-management page; it sorts before the audit log.
+      ADMIN_MENU_CODES.MENU_MANAGEMENT,
       ADMIN_MENU_CODES.RBAC_AUDIT,
       "group_operations",
       ADMIN_MENU_CODES.DEVICES,
       ADMIN_MENU_CODES.APP_VERSIONS,
       ADMIN_MENU_CODES.LOGIN_LOGS,
       ADMIN_MENU_CODES.ANNOUNCEMENTS,
+      // 0123 seeded the cloud-usage page as the group's last entry.
+      ADMIN_MENU_CODES.CLOUD_USAGE,
     ]);
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});

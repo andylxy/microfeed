@@ -124,18 +124,23 @@ export async function decideLoginCredentialApiRequest(
   // The credential authenticates the user; `requiredApiPermission` decides what
   // the user may do. After A1 every integration path maps to a code, so a `null`
   // here means the path is outside the mapped set — deny it (fail-closed) rather
-  // than silently allowing it.
-  const permissionCode = requiredApiPermission(pathname, request.method);
+  // than silently allowing it. 数组形态是任一双码门（migration 0131）：持其中
+  // 任意一个码即放行；审计行记下实际放行的那一个码，全不中时记首个（受检码）。
+  const required = requiredApiPermission(pathname, request.method);
+  const requiredCodes = required === null
+    ? []
+    : typeof required === "string" ? [required] : required;
   const permissions = await resolveUserPermissions(database, verified.userId);
+  const grantedCode = requiredCodes.find(
+    (code) => permissionsInclude(permissions, code),
+  );
   const attribution: ApiAttribution = {
     apiKeyId: null,
     credentialId: verified.credentialId,
-    permissionCode,
+    permissionCode: grantedCode ?? requiredCodes[0] ?? null,
     userId: verified.userId,
   };
-  const granted =
-    permissionCode !== null && permissionsInclude(permissions, permissionCode);
-  if (!granted) {
+  if (!grantedCode) {
     return {kind: "forbidden", attribution};
   }
   // "Last used" means a call this credential actually got through, so it is

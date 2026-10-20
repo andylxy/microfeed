@@ -3,39 +3,46 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import RbacApp from "@/components/admin/rbac/RbacApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import type {AdminMenuCode} from "@/shared/AdminNavigation";
+import type {InterfaceCatalogRow} from "@/shared/AppInterface";
 import type {RbacBoard} from "@/shared/Rbac";
 import type {FeedContent, OnboardingResult} from "@/types";
 
 /**
- * The shell the RBAC board page uses: the admin chrome around `RbacApp`.
+ * RBAC 页的外壳：给 `RbacApp` 套上后台镶边。
  *
- * Roles and their grants are one indivisible screen, so there is exactly one
- * page for them (`/rbac/`). It used to have a twin at `/rbac/permissions/`
- * guarded by a second code (`system:permission:manage`); the two were byte-for-
- * byte the same board, and migration 0065 merged the codes and dropped the
- * twin. This component keeps the chrome in one place in case a second board
- * page ever earns its keep again.
+ * 单页形态（ADR-0039 单控制台修订）：一棵树里挂合成分类层（PC / App），
+ * 所以页面同时传入两端板子与两份只读接口清单。账号完全没有任何 App 端码时
+ * `appBoard` 为 `null`，`RbacApp` 据此隐藏 App 分类。
  *
- * The page keeps its own `requirePagePermission` call — the guard code is what
- * ties a page to its menu row, and `tests/unit/admin-page-guards.test.ts` reads
- * it from the page file — and it narrows `Astro.locals` before handing the
- * context in, which is why the context arrives here as required props.
+ * 页守卫留在本页自己调用——守卫码就是页与菜单行的连线，`tests/unit/
+ * admin-page-guards.test.ts` 直接从页文件里读它——并且先把 `Astro.locals`
+ * 收窄再往下传，所以这里的 context 到组件时已是必填 props。
  */
 interface Props {
   activeNavItem: AdminMenuCode | null;
-  board: RbacBoard;
+  /** App 端只读接口清单。 */
+  appInterfaces: InterfaceCatalogRow[];
+  /** App 端板子；`null` = 当前账号无任何 App 码，前端隐藏 App 分类。 */
+  appBoard: RbacBoard | null;
+  /** PC 端板子（角色清单与 PC 树的来源）。 */
+  desktopBoard: RbacBoard;
   documentTitle: string;
   feedContent: FeedContent;
   onboardingResult: OnboardingResult;
+  /** PC 端只读接口清单。 */
+  pcInterfaces: InterfaceCatalogRow[];
   pageTitle: string;
 }
 
 const {
   activeNavItem,
-  board,
+  appInterfaces,
+  appBoard,
+  desktopBoard,
   documentTitle,
   feedContent,
   onboardingResult,
+  pcInterfaces,
   pageTitle,
 } = Astro.props;
 ---
@@ -46,7 +53,13 @@ const {
   {feedContent}
   {onboardingResult}
   {pageTitle}
->  <RbacApp client:only="react" initialBoard={board}>
+>  <RbacApp
+    client:only="react"
+    appBoard={appBoard}
+    appInterfaces={appInterfaces}
+    desktopBoard={desktopBoard}
+    pcInterfaces={pcInterfaces}
+  >
     <AdminPageFallback slot="fallback" kind="list" />
   </RbacApp>
 </AdminShell>

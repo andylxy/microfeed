@@ -31,7 +31,10 @@ const SERVER_ADMIN = join("src", "server", "admin");
 function readCatalogCodes(): Set<string> {
   const codes = new Set<string>();
   for (const file of migrationNames()) {
-    const sql = readMigration(file);
+    // 行注释先剥掉再匹配：迁移的 rollback 块里写的正是反向语句
+    // （`DELETE FROM ext_permissions …` / 反向 INSERT 元组），照原文跑会让
+    // 回滚说明删掉刚种下的码。与 admin-page-guards 的重放口径相同。
+    const sql = readMigration(file).replaceAll(/--[^\n]*/gu, " ");
     // A later migration may retire codes an earlier one seeded, e.g.
     // `DELETE FROM ext_permissions WHERE code IN (…)` or `… code LIKE 'api:%'`
     // (ADR-0009 dropped the `api:*` family). Migrations run in filename order,
@@ -141,10 +144,15 @@ describe("admin endpoint guards", () => {
     // (`feed/json.ts`, `items/index.ts`, …).
     //
     // A file that declares methods counts as guarded when either it guards
-    // itself (`requireRbac` / `withRbacGuard` / `withWebhookGuard`) or it is a
-    // thin re-export of a module that does — `ajax/rbac/*` re-exports
-    // `rbac-handlers`, which guards each handler. A bare re-export of an
-    // *unguarded* module is exactly the shape A2 removed, and still fails here.
+    // itself (`requireRbac` / `requireAudienceGuard` / `withRbacGuard` /
+    // `withWebhookGuard`) or it is a thin re-export of a module that does —
+    // `ajax/rbac/*` re-exports `rbac-handlers`, which guards each handler. A
+    // bare re-export of an *unguarded* module is exactly the shape A2 removed,
+    // and still fails here.
+    //
+    // `requireAudienceGuard` is the two-console form (ADR-0039 D3): it picks
+    // `system:role:manage` or `system:app-capability:manage` from the audience
+    // the request names, so it is a guard, not a way around one.
     //
     // Two exemption classes, each with its reason; nothing else may skip a guard:
     //   - session-only endpoints (the account manages its own state; the
@@ -161,7 +169,7 @@ describe("admin endpoint guards", () => {
     ];
     const declaredMethods = /export\s+const\s+(GET|POST|PUT|DELETE|PATCH)\b/gu;
     const reExportedMethods = /export\s*\{\s*[^}]*\s+as\s+(GET|POST|PUT|DELETE|PATCH)\b/gu;
-    const hasGuard = /requireRbac\(|withRbacGuard\(|withWebhookGuard\(/u;
+    const hasGuard = /requireRbac\(|requireAudienceGuard\(|withRbacGuard\(|withWebhookGuard\(/u;
 
     /** Does a module this file re-exports from guard its handlers? */
     const reExportTargetGuarded = (source: string): boolean => {

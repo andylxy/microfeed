@@ -51,12 +51,19 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:site_file:manage", name: "站点文件管理"},
   {code: "media:file:manage", name: "媒体文件管理"},
   {code: "system:api:manage", name: "API 管理"},
-  // The mobile app's API access gate, surfaced as a leaf in the role editor's
-  // permission tree under 集成 → API (the `api` page, migration 0078). Granting
-  // it to a role is what lets that role's account call the `/api/AppBookRequest/*`
-  // mobile endpoints — the user → role → permissions path. Deliberately NOT an
-  // `api:*` code: ADR-0009 retired that prefix family (migration 0055).
-  {code: "app:mobile:access", name: "移动端权限"},
+  // App 内容端点按内容域细分的门码（migration 0131，原 `app:mobile:access`
+  // 一门管 8 条内容端点，粒度过粗）。一个码对应一个用途，分发见
+  // `src/server/api/api-permissions.ts` 的 DOMAIN_RULES。与 `app:search:*` /
+  // `app:mingci:view` 同族：App 能力权限，不进 ext_menu，在 `ext_permission_nodes`
+  // 里以 `kind='code'` 节点承接；不默认授予角色（沿用原 `app:mobile:access`
+  // 的授权口径，由运营按需手工挂到角色）。刻意不采用 `api:*` 前缀：
+  // ADR-0009 已让那一族前缀退役（migration 0055）。
+  {code: "app:nav:read", name: "App 导航读取"},
+  {code: "app:style:read", name: "App 提示样式读取"},
+  {code: "app:chapter:read", name: "App 章节目录读取"},
+  {code: "app:content:read", name: "App 章节内容读取"},
+  {code: "app:fang:read", name: "App 中药方剂读取"},
+  {code: "app:zhongyao:read", name: "App 中药读取"},
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
   // content - fangs (方剂 / prescriptions), view-only on the dedicated board
@@ -83,17 +90,23 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:announcement:read", name: "公告查看"},
   {code: "system:announcement:manage", name: "公告管理"},
-  // App 搜索权限（Search Permission，migration 0088）。App 能力权限，不进菜单，
-  // 由 group_other/unmapped 兜底组承接；运营在「角色管理」页挂到角色叶子即开放搜索。
+  // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
+  // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
+  // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底
+  // 逻辑已退役，迁移 0127 把当时的承接页固化为普通行，此后可自由移动）。
+  // 运营在「权限树」页把码挂到角色叶子即可开放搜索。
   {code: "app:search:global", name: "搜索-首页"},
   {code: "app:search:book", name: "搜索-书内"},
   // 名词解释查看（MingCi View Permission，migration 0096）。G3 全局单开关 → 一个码。
-  // App 能力权限，不进菜单，由 group_other/unmapped 兜底组承接；运营在「角色管理」
-  // 页挂到角色叶子即开放阅读页 `$g{名词解释}` 的底层名词数据（无权限时列表不加载）。
+  // App 能力权限，不进菜单，在 `ext_permission_nodes` 里以 `kind='code'` 节点承接
+  // （ADR-0038 自持权限树。旧代码的 `group_other` 兜底逻辑已退役，迁移 0127 把当时
+  // 的承接页固化为普通行）；运营在「权限树」页挂到角色叶子即开放阅读页
+  // `$g{名词解释}` 的底层名词数据（无权限时列表不加载）。
   {code: "app:mingci:view", name: "名词解释查看"},
   // 版本升级 / 运营公告（2026-10-16，migration 0119）。与 app:search:* / app:mingci:view
-  // 同族：App 能力权限，不建菜单行、不进 ext_menu / ext_menu_permissions，
-  // 由 group_other/unmapped 兜底组承接。
+  // 同族：App 能力权限，不建菜单行、不进 ext_menu，在 `ext_permission_nodes`
+  // 里以 `kind='code'` 节点承接（ADR-0038 自持权限树。旧代码的 `group_other`
+  // 兜底逻辑已退役，迁移 0127 把当时的承接页固化为普通行）。
   {code: "app:version:read", name: "版本升级检查"},
   {code: "app:announcement:read", name: "运营公告"},
   // Cloudflare 使用情况看板（migration 0123）。只读运维看板，一个码覆盖 D1 / R2 /
@@ -103,6 +116,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // 菜单管理页（migration 0126）。单码读写共用，只授 super_admin（拍板 B1），
   // 不进 EDITOR_PERMISSIONS。Mirror of PERMISSION_CODES in src/shared/Constants.ts.
   {code: "system:menu:manage", name: "菜单管理"},
+  // 权限管理页（migration 0130，ADR-0039）。App 能力控制不另设入口：权限管理
+  // 单页内按终端归属分区，PC 端与 App 端共用这一页。只授 super_admin（走 `*`），
+  // 不进 EDITOR_PERMISSIONS。Mirror of PERMISSION_CODES in src/shared/Constants.ts.
+  {code: "system:app-capability:manage", name: "App 能力管理"},
   // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
@@ -114,7 +131,7 @@ export interface RbacRoleDef {
 }
 
 // editor 的权限集。readonly 现在与 editor 相同（用户 2026-10-16 要求同步），故两者
-// 共用这份列表——若以后需要分化，把 readonly 拆成独立列表即可。各码理由见下方注释。
+// 共用这份列表——若以后需要分化，把 readonly 分出独立列表即可。各码理由见下方注释。
 const EDITOR_PERMISSIONS: readonly string[] = [
   "content:book:read",
   "content:book:update",
@@ -176,7 +193,7 @@ export const RBAC_ROLES: RbacRoleDef[] = [
   {
     // 默认角色（`DEFAULT_USER_ROLE`，新账号默认拿到）。2026-10-16 起与 editor 相同
     // （用户要求同步）：不再只读，而是完整编辑权限（含内容写、manage、App 能力码）。
-    // 与 editor 共用 {@link EDITOR_PERMISSIONS}——若以后需要分化，拆成独立列表。
+    // 与 editor 共用 {@link EDITOR_PERMISSIONS}——若以后需要分化，分出独立列表。
     // 注：角色 code 仍是 `readonly`（历史遗留，r_readonly 被多处引用），但 name 已
     // 改为「默认编辑」以反映实际权限。
     code: "readonly",

@@ -218,8 +218,11 @@ describe("source architecture", () => {
       "<CustomCodeEditorApp",
     );
     const routeSource = await readFile(route, "utf8");
-    expect(routeSource).toContain("settingsNavigation");
-    expect(routeSource).toContain('settingsActiveSection="custom-code"');
+    // 侧栏高亮与分区定位现在都走 `AdminShell` 的入参：`activeNavItem` 指菜单项，
+    // `breadcrumb` 给出「设置 -> 自定义代码」的层级（取代逐页手传的
+    // `settingsNavigation` / `settingsActiveSection`）。
+    expect(routeSource).toContain("activeNavItem={ADMIN_MENU_CODES.SETTINGS}");
+    expect(routeSource).toContain("pageTitle.codeEditor");
   });
 
   it("gives every FeedDb that can write a public cache purger", async () => {
@@ -341,7 +344,8 @@ describe("source architecture", () => {
     ]);
 
     expect(apiRoute).toContain("<ApiSettingsApp");
-    expect(apiRoute).toContain("apiNavigation");
+    // 同上：菜单高亮改由 `activeNavItem` + `apiActivePage` 承担。
+    expect(apiRoute).toContain('apiActivePage="settings"');
     expect(apiSettings).toContain("onChange={(enabled) => save");
     expect(apiSettings).toContain('t("api.publishApiDocs")');
     expect(settingsPage).not.toContain("ApiSettingsApp");

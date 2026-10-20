@@ -1,22 +1,24 @@
 /**
  * RBAC enforcement helpers for microfeed admin endpoints.
  *
- * Decision order follows ADR-001 D-010 literally, so the account-level gates
- * cannot be bypassed by holding a full-access grant:
+ * Decision order follows ADR-001 D-010 for the account-level gates, with one
+ * local addition (step 4, the role's admin-sign-in switch), so none of them can
+ * be bypassed by holding a full-access grant:
  *   1. no authenticated user                   -> 401
  *   2. auth_user.banned = 1                    -> 401
  *   3. device revoked                          -> 401
- *   4. must_change_password & not exempt       -> 428
- *   5. wildcard permission set (`*`)           -> ALLOW
- *   6. code in permission set                  -> ALLOW
- *   7. otherwise                               -> 403
+ *   4. 角色不允许登录后台                       -> 403
+ *   5. must_change_password & not exempt       -> 428
+ *   6. wildcard permission set (`*`)           -> ALLOW
+ *   7. code in permission set                  -> ALLOW
+ *   8. otherwise                               -> 403
  *
- * ⚠️ Step 4 is **dormant** today: nothing writes `must_change_password = 1`
+ * ⚠️ Step 5 is **dormant** today: nothing writes `must_change_password = 1`
  * (migration 0042 cleared every row, and this deployment does not force a change
  * on first sign-in). The branch is kept so the gate is already in place if that
  * policy returns — see `RbacResolved.mustChangePassword` in `resolve.ts`.
  *
- * Steps 2-4 come before 5-6 on purpose: a super_admin whose device was revoked
+ * Steps 2-5 come before 6-7 on purpose: a super_admin whose device was revoked
  * must be kicked out, and one who must change their password must be stopped,
  * exactly like any other account.
  *
@@ -41,7 +43,8 @@ import {
 } from "@/server/app/version/resolve";
 import {deviceIdFromRequest, permissionsInclude} from "./resolve";
 import {checkReplay} from "./replay";
-import {type PermissionCode} from "@/shared/Constants";
+import {PERMISSION_CODES, type PermissionCode} from "@/shared/Constants";
+import type {PermissionAudience} from "@/shared/Rbac";
 
 export interface RbacLocals {
   /**
@@ -51,6 +54,12 @@ export interface RbacLocals {
    */
   authUser?: {id?: string} | null;
   rbacPermissions?: Set<string> | null;
+  /**
+   * 账号所持角色是否允许登录后台（见 `resolve.ts` 的 `userMayEnterAdmin`）。
+   * 缺席视为允许：只有明确为 `false` 时才拦，手工构造 locals 的调用方与这条门
+   * 无关的路径都不受影响。
+   */
+  rbacAdminLoginAllowed?: boolean;
   rbacMustChangePassword?: boolean;
   rbacDeviceRevoked?: boolean;
   rbacBanned?: boolean;
@@ -64,7 +73,7 @@ export interface RbacLocals {
  * 判定规则（spec §6.4）：
  *  - **地板 `<= 0` → 版本门关闭**（返回 `null`）。没配地板就等于没有版本策略：
  *    `min_version_code = 0` 的语义是「不强制升级」（见 migrations/0080 注释），
- *    此时不发 `app-version` 头的请求应落到鉴权层，**不能**被 426（票据 20）。
+ *    此时不发 `app-version` 头的请求应交由鉴权层，**不能**被 426（票据 20）。
  *  - 头存在且为整数、`>= 地板` → 放行（`null`）；
  *  - 头存在但 `< 地板` → 426；
  *  - **地板 > 0 时，头缺失或非整数 → 426**（旧客户端，或被人剥掉头——强制升级
@@ -129,6 +138,13 @@ export function requireAccountAccess(
       headers: {"X-Device-Revoked": "1"},
       status: 401,
     });
+  }
+
+  // 角色级的「登录后台」开关（`ext_roles.allow_admin_login`）。403 而非 401：
+  // 会话是有效的，只是这个角色不许进后台——401 会把浏览器送回登录页，而登录页
+  // 看到会话又会跳回来，形成循环。
+  if (locals.rbacAdminLoginAllowed === false) {
+    return new Response("Forbidden", {status: 403});
   }
 
   if (locals.rbacMustChangePassword && !options.exemptFromMustChange) {
@@ -250,6 +266,32 @@ export async function requireRbac(
   if (permission) return permission;
 
   return null;
+}
+
+/**
+ * 终端归属 → 该端控制台的守卫码（ADR-0039 D3）。
+ *
+ * 两个控制台共用同一个端点地址（权限树 list/save/export、角色授权），
+ * 所以守卫码由请求带来的 `audience` 选定。
+ */
+export function audienceGuardCode(audience: PermissionAudience): PermissionCode {
+  return audience === "app"
+    ? PERMISSION_CODES.SYSTEM_APP_CAPABILITY_MANAGE
+    : PERMISSION_CODES.SYSTEM_ROLE_MANAGE;
+}
+
+/**
+ * 按端分派的端点守卫：desktop 要 `system:role:manage`，app 要
+ * `system:app-capability:manage`。只持 App 码的角色进不了 PC 端，反之亦然。
+ */
+export async function requireAudienceGuard(
+  locals: RbacLocals,
+  audience: PermissionAudience,
+  request: Request,
+  db: D1Database,
+  options: {exemptFromMustChange?: boolean; skipReplay?: boolean} = {},
+): Promise<Response | null> {
+  return requireRbac(locals, audienceGuardCode(audience), request, db, options);
 }
 
 /**

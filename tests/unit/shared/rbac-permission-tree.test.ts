@@ -1,189 +1,120 @@
 import {describe, expect, it} from "vitest";
 
-import {
-  buildPermissionTree,
-  permissionBranchState,
-  RBAC_ANNOUNCEMENT_PAGE,
-  RBAC_MINGCI_PAGE,
-  RBAC_OPERATIONS_GROUP,
-  RBAC_OTHER_GROUP,
-  RBAC_OTHER_PAGE,
-  RBAC_VERSION_PAGE,
-  togglePermissionBranch,
-  type RbacPermissionTreeInput,
-} from "@/shared/Rbac";
+import {buildGrantGroupsFromNodes, type PermissionNodeRow} from "@/shared/PermissionTreeOps";
+import {permissionBranchState, togglePermissionBranch} from "@/shared/Rbac";
 
-const PERMISSIONS = [
-  {code: "*", name: "Everything"},
-  {code: "content:book:read", name: "Read books"},
-  {code: "content:book:create", name: "Create books"},
-  {code: "content:category:read", name: "Read categories"},
-  {code: "system:user:manage", name: "Manage users"},
-  {code: "content:chapter:read", name: "Read articles"},
-];
-
-const MENU = [
-  {code: "group_content", pages: ["books", "categories"]},
-  {code: "group_account", pages: ["users"]},
-];
-
-const MAPPING = {
-  books: ["content:book:read", "content:book:create"],
-  categories: ["content:category:read"],
-  users: ["system:user:manage"],
-};
-
-function build(overrides: Partial<RbacPermissionTreeInput> = {}) {
-  return buildPermissionTree({
-    mapping: MAPPING,
-    menu: MENU,
-    permissions: PERMISSIONS,
+function node(
+  overrides: Partial<PermissionNodeRow> & {code: string},
+): PermissionNodeRow {
+  return {
+    audience: "desktop",
+    createdAtMs: 0,
+    icon: null,
+    id: overrides.code,
+    i18nKey: null,
+    kind: "code",
+    nameEn: null,
+    nameZh: null,
+    parentCode: null,
+    permissionCode: null,
+    sort: 1,
+    source: "seed",
+    visible: true,
     ...overrides,
-  });
+  };
 }
 
-describe("buildPermissionTree", () => {
-  it("nests menu group -> page -> codes and keeps the menu order", () => {
-    const groups = build();
-    expect(groups.map((group) => group.code)).toEqual([
-      "group_content",
-      "group_account",
-      RBAC_OTHER_GROUP,
-    ]);
-    expect(groups[0]?.pages.map((page) => page.code))
-      .toEqual(["books", "categories"]);
+/** The permission catalogue (ext_permissions); only codes present here are grants. */
+const CATALOG = new Map<string, string>([
+  ["content:book:read", "Read books"],
+  ["content:book:create", "Create books"],
+  ["content:chapter:read", "Read articles"],
+  ["system:user:manage", "Manage users"],
+]);
+
+/** A minimal self-hosted tree (ADR-0038): group -> page -> code nodes. */
+function tree(): PermissionNodeRow[] {
+  return [
+    node({
+      code: "group_content", kind: "group", parentCode: null, sort: 1,
+      nameZh: "内容", nameEn: "Content",
+    }),
+    node({
+      code: "page_books", kind: "page", parentCode: "group_content", sort: 101,
+      nameZh: "书籍", nameEn: "Books",
+    }),
+    node({
+      code: "c_read", kind: "code", parentCode: "page_books",
+      permissionCode: "content:book:read", sort: 1,
+    }),
+    node({
+      code: "c_create", kind: "code", parentCode: "page_books",
+      permissionCode: "content:book:create", sort: 2,
+    }),
+  ];
+}
+
+describe("buildGrantGroupsFromNodes (self-hosted tree, ADR-0038)", () => {
+  it("nests group -> page -> codes and strips the page_ prefix", () => {
+    const groups = buildGrantGroupsFromNodes(tree(), CATALOG, "desktop");
+    expect(groups.map((group) => group.code)).toEqual(["group_content"]);
+    // The page node code is `page_books`; the grant view shows `books`.
+    expect(groups[0]?.pages.map((page) => page.code)).toEqual(["books"]);
+    // Code nodes keep their underlying permission code; order follows node sort.
     expect(groups[0]?.pages[0]?.codes)
-      .toEqual(["content:book:create", "content:book:read"]);
+      .toEqual(["content:book:read", "content:book:create"]);
   });
 
-  it("drops the wildcard and keeps every other code visible exactly once", () => {
-    const codes = build()
-      .flatMap((group) => group.pages)
-      .flatMap((page) => page.codes);
-    expect(codes).not.toContain("*");
-    const assignable = PERMISSIONS
-      .map((permission) => permission.code)
-      .filter((code) => code !== "*");
-    expect([...codes].sort()).toEqual([...assignable].sort());
+  it("carries node nameZh/nameEn/i18nKey onto groups and pages", () => {
+    const groups = buildGrantGroupsFromNodes(tree(), CATALOG, "desktop");
+    expect(groups[0]?.nameZh).toBe("内容");
+    expect(groups[0]?.nameEn).toBe("Content");
+    expect(groups[0]?.pages[0]?.nameZh).toBe("书籍");
+    expect(groups[0]?.pages[0]?.nameEn).toBe("Books");
   });
 
-  it("collects codes no page maps to into the catch-all group", () => {
-    const other = build().find((group) => group.code === RBAC_OTHER_GROUP);
-    expect(other?.pages).toEqual([
-      {code: RBAC_OTHER_PAGE, codes: ["content:chapter:read"]},
-    ]);
+  it("drops code nodes whose permission code is not in the catalogue", () => {
+    const rows = [
+      ...tree(),
+      node({
+        code: "c_ghost", kind: "code", parentCode: "page_books",
+        permissionCode: "ghost:code:read", sort: 3,
+      }),
+    ];
+    const groups = buildGrantGroupsFromNodes(rows, CATALOG, "desktop");
+    expect(groups[0]?.pages[0]?.codes).not.toContain("ghost:code:read");
+  });
+
+  it("drops the wildcard and never surfaces it as a grant", () => {
+    const rows = [
+      ...tree(),
+      node({
+        code: "c_star", kind: "code", parentCode: "page_books",
+        permissionCode: "*", sort: 3,
+      }),
+    ];
+    const groups = buildGrantGroupsFromNodes(rows, CATALOG, "desktop");
+    expect(groups[0]?.pages[0]?.codes).not.toContain("*");
   });
 
   it("omits pages and groups that govern no code", () => {
-    const groups = build({mapping: {...MAPPING, users: []}});
-    expect(groups.map((group) => group.code)).not.toContain("group_account");
-  });
-
-  it("ignores mapping entries that are not in the catalogue", () => {
-    const groups = build({
-      mapping: {...MAPPING, books: ["content:book:read", "ghost"]},
-    });
-    expect(groups[0]?.pages[0]?.codes).toEqual(["content:book:read"]);
-  });
-});
-
-describe("buildPermissionTree App 能力权限分流（合成 page）", () => {
-  // 三个 App 能力权限：mingci 一条、search 两条。全部 unmapped（无 menu page 承接）。
-  const APP_PERMISSIONS = [
-    {code: "*", name: "Everything"},
-    {code: "app:mingci:view", name: "名词解释查看"},
-    {code: "app:search:global", name: "全局搜索查看"},
-    {code: "app:search:book", name: "书内搜索查看"},
-  ];
-
-  it("routes app:mingci:* to the mingci page, keeps app:search:* in unmapped", () => {
-    const groups = build({permissions: APP_PERMISSIONS, mapping: {}});
-    expect(groups).toEqual([
-      {
-        code: RBAC_OTHER_GROUP,
-        pages: [
-          {code: RBAC_MINGCI_PAGE, codes: ["app:mingci:view"]},
-          {
-            code: RBAC_OTHER_PAGE,
-            codes: ["app:search:book", "app:search:global"],
-          },
-        ],
-      },
-    ]);
-  });
-
-  it("omits the mingci page when no app:mingci:* code is in the catalogue", () => {
-    const permissions = APP_PERMISSIONS.filter(
-      (permission) => !permission.code.startsWith("app:mingci:"),
-    );
-    const groups = build({permissions, mapping: {}});
-    expect(groups).toEqual([
-      {
-        code: RBAC_OTHER_GROUP,
-        pages: [
-          {
-            code: RBAC_OTHER_PAGE,
-            codes: ["app:search:book", "app:search:global"],
-          },
-        ],
-      },
-    ]);
-  });
-
-  it("omits the whole catch-all group when the catalogue is empty of unmapped codes", () => {
-    // mingci 唯一一条 + 已被 menu page 映射到 books
-    const groups = build({
-      mapping: {books: ["app:mingci:view"]},
-      permissions: [{code: "app:mingci:view", name: "名词解释查看"}],
-    });
-    expect(groups).toEqual([
-      {code: "group_content", pages: [{code: "books", codes: ["app:mingci:view"]}]},
-    ]);
-  });
-
-  it("routes app:version:* / app:announcement:* to synthetic pages under 运营管理", () => {
-    // 运营管理组带一个既有页面（system:* 管理码），两个 App 读码 unmapped
-    const groups = build({
-      menu: [{code: RBAC_OPERATIONS_GROUP, pages: ["app_versions"]}],
-      mapping: {
-        app_versions: ["system:app-version:read", "system:app-version:manage"],
-      },
-      permissions: [
-        {code: "*", name: "Everything"},
-        {code: "system:app-version:read", name: "版本查看"},
-        {code: "system:app-version:manage", name: "版本管理"},
-        {code: "app:version:read", name: "版本(App)"},
-        {code: "app:announcement:read", name: "公告(App)"},
-      ],
-    });
-    const ops = groups.find((group) => group.code === RBAC_OPERATIONS_GROUP);
-    expect(ops?.pages).toEqual([
-      {
-        code: "app_versions",
-        codes: ["system:app-version:manage", "system:app-version:read"],
-      },
-      {code: RBAC_VERSION_PAGE, codes: ["app:version:read"]},
-      {code: RBAC_ANNOUNCEMENT_PAGE, codes: ["app:announcement:read"]},
-    ]);
-    // 两个 App 码不再落 group_other 兜底（与后台管理页解耦）
-    expect(groups.find((group) => group.code === RBAC_OTHER_GROUP)).toBeUndefined();
-  });
-
-  it("falls back to group_other when the target group is absent from the menu", () => {
-    // 运营管理组不在 menu 里 → app:version:* 合成页回落兜底组
-    const groups = build({
-      permissions: [
-        {code: "*", name: "Everything"},
-        {code: "app:version:read", name: "版本(App)"},
-      ],
-      mapping: {},
-    });
-    expect(groups).toEqual([
-      {
-        code: RBAC_OTHER_GROUP,
-        pages: [{code: RBAC_VERSION_PAGE, codes: ["app:version:read"]}],
-      },
-    ]);
+    const rows: PermissionNodeRow[] = [
+      ...tree(),
+      node({
+        code: "group_account", kind: "group", parentCode: null, sort: 2,
+        nameZh: "账户", nameEn: "Account",
+      }),
+      node({code: "page_users", kind: "page", parentCode: "group_account", sort: 201}),
+      node({
+        code: "c_unmapped", kind: "code", parentCode: "page_users",
+        permissionCode: "no-such-code", sort: 1,
+      }),
+    ];
+    const groups = buildGrantGroupsFromNodes(rows, CATALOG, "desktop");
+    // group_account's only page has no catalogue-backed code, so the whole
+    // branch collapses out; the seeded group_content branch stays.
+    expect(groups.map((group) => group.code)).toEqual(["group_content"]);
+    expect(groups.find((group) => group.code === "group_account")).toBeUndefined();
   });
 });
 
@@ -199,13 +130,11 @@ describe("togglePermissionBranch", () => {
   });
 
   it("grants only real permission codes — never a group or page code", () => {
-    const groups = build();
-    const groupCodes = groups[0]?.pages.flatMap((page) => page.codes) ?? [];
-    const next = togglePermissionBranch([], groupCodes, true);
-
     // The branch nodes themselves are batch-selection units, so a save payload
     // must never carry them; only the leaf codes underneath are grants.
-    expect(next).toEqual([...groupCodes].sort());
+    const branchCodes = ["content:book:read", "content:book:create"];
+    const next = togglePermissionBranch([], branchCodes, true);
+    expect(next).toEqual([...branchCodes].sort());
     expect(next).not.toContain("group_content");
     expect(next).not.toContain("books");
     expect(next).not.toContain("*");

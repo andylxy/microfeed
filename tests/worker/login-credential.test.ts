@@ -23,6 +23,7 @@ import {
 } from "@/server/auth/login-credentials";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
 import {LOGIN_THROTTLE_MAX_ATTEMPTS} from "@/server/auth/login-throttle";
+import {permissionId} from "@/server/rbac/seed";
 import {MAX_LOGIN_CREDENTIALS_PER_USER} from "@/shared/LoginCredential";
 
 const ORIGIN = "https://feed.example.com";
@@ -54,6 +55,31 @@ async function grantRole(userId: string, roleId: string): Promise<void> {
   await env.FEED_DB.prepare(
     "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
   ).bind(userId, roleId).run();
+}
+
+// 给账号挂一个合成角色并授予一组权限码；码行不存在时补建（INSERT OR IGNORE），
+// 使本测试不依赖 seed 是否已写入这些码。
+async function grantCodes(userId: string, codes: string[]): Promise<void> {
+  const roleId = `r_test_${userId}`;
+  await env.FEED_DB.prepare(
+    "INSERT OR IGNORE INTO ext_roles (id, code, name) VALUES (?, ?, ?)",
+  ).bind(roleId, roleId, roleId).run();
+  await grantRole(userId, roleId);
+  for (const code of codes) {
+    // 复用 seed 的 id 公式，不在本文件重写第三份 `p_${code.replace(...)}`。
+    const permId = permissionId(code);
+    await env.FEED_DB.prepare(
+      "INSERT OR IGNORE INTO ext_permissions (id, code, name) VALUES (?, ?, ?)",
+    ).bind(permId, code, code).run();
+    const row = await env.FEED_DB
+      .prepare("SELECT id FROM ext_permissions WHERE code = ?")
+      .bind(code)
+      .first<{id: string}>();
+    if (!row) throw new Error(`permission row missing for ${code}`);
+    await env.FEED_DB.prepare(
+      "INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id) VALUES (?, ?)",
+    ).bind(roleId, row.id).run();
+  }
 }
 
 beforeEach(async () => {
@@ -479,13 +505,13 @@ describe("sessionless API bearer", () => {
     expect(missing.kind).toBe("notFound");
   });
 
-  it("gates the mobile app content endpoints on app:mobile:access", async () => {
-    // The mobile app namespace (spec §6) is registered as integration paths and
-    // requires the single `app:mobile:access` code. An account with no grants is
-    // forbidden (proving the path is classified + mapped, not merely notFound);
-    // a wildcard holder is allowed. The app's pre-auth endpoints are deliberately
-    // not integration paths — `notFound` here, which the middleware turns into
-    // anonymous access.
+  it("gates each mobile app content endpoint on its own content-domain code", async () => {
+    // The mobile app namespace (spec §6) is registered as integration paths;
+    // migration 0131 起 `DOMAIN_RULES` 逐端点分发门码，无兜底（fail-closed）。
+    // An account with no grants is forbidden (proving the path is classified +
+    // mapped, not merely notFound); a wildcard holder is allowed. The app's
+    // pre-auth endpoints are deliberately not integration paths — `notFound`
+    // here, which the middleware turns into anonymous access.
     await seedUser("u_mobile_none");
     const plain = await createLoginCredential(env.FEED_DB, {
       name: "api",
@@ -499,6 +525,30 @@ describe("sessionless API bearer", () => {
       "/api/AppBookRequest/GetNav/",
     );
     expect(denied.kind).toBe("forbidden");
+
+    // 单码持有者恰好过对应端点的门；跨域请求仍被拒（GetNav 的码不开 GetBookIdFang）。
+    await seedUser("u_nav_only");
+    await grantCodes("u_nav_only", ["app:nav:read"]);
+    const navOnly = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_nav_only",
+    });
+    const navAllowed = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetNav/`, {
+        headers: {authorization: `Bearer ${navOnly.secret}`},
+      }),
+      "/api/AppBookRequest/GetNav/",
+    );
+    expect(navAllowed.kind).toBe("allow");
+    const crossDenied = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetBookIdFang/`, {
+        headers: {authorization: `Bearer ${navOnly.secret}`},
+      }),
+      "/api/AppBookRequest/GetBookIdFang/",
+    );
+    expect(crossDenied.kind).toBe("forbidden");
 
     await seedUser("u_mobile_ok");
     await grantRole("u_mobile_ok", "r_super_admin");
@@ -526,12 +576,12 @@ describe("sessionless API bearer", () => {
     expect(loginPath.kind).toBe("notFound");
   });
 
-  it("gates the search-permission endpoint on app:mobile:access", async () => {
-    // The search-permission endpoint (DESIGN §5.2) is an integration path that
-    // requires `app:mobile:access` at the path level; the per-code global/book
-    // decision happens in the handler. No bearer → unauthorized; a credential
-    // whose account holds no mobile access → forbidden; a wildcard account
-    // (super_admin) clears the path gate → allow.
+  it("gates the search-permission endpoint on either search code", async () => {
+    // The search-permission endpoint (DESIGN §5.2) is an integration path whose
+    // path gate is the any-of pair `app:search:global` / `app:search:book`;
+    // the per-code global/book decision happens in the handler. No bearer →
+    // unauthorized; a credential whose account holds no search code → forbidden;
+    // a wildcard account (super_admin) clears the path gate → allow.
     await seedUser("u_search_none");
     const plain = await createLoginCredential(env.FEED_DB, {
       name: "api",
@@ -569,8 +619,40 @@ describe("sessionless API bearer", () => {
     expect(noBearer.kind).toBe("unauthorized");
   });
 
+  it("gates the mingci endpoints on app:mingci:view", async () => {
+    // GetAllMingCi 与 mingci-permission 同码：数据与它的查看权同权（0131）。
+    await seedUser("u_mingci_none");
+    const plain = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_mingci_none",
+    });
+    const denied = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetAllMingCi/`, {
+        headers: {authorization: `Bearer ${plain.secret}`},
+      }),
+      "/api/AppBookRequest/GetAllMingCi/",
+    );
+    expect(denied.kind).toBe("forbidden");
+
+    await seedUser("u_mingci_ok");
+    await grantCodes("u_mingci_ok", ["app:mingci:view"]);
+    const holder = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_mingci_ok",
+    });
+    const allowed = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/AppBookRequest/GetAllMingCi/`, {
+        headers: {authorization: `Bearer ${holder.secret}`},
+      }),
+      "/api/AppBookRequest/GetAllMingCi/",
+    );
+    expect(allowed.kind).toBe("allow");
+  });
+
   it("throttles the search-permission endpoint per client address (429)", async () => {
-    // 票据 0002 验收的三态齐全：无 Bearer → 401 / 缺 app:mobile:access → 403 /
+    // 票据 0002 验收的三态齐全：无 Bearer → 401 / 缺搜索双码 → 403 /
     // 被限流 → 429。限流按 client address 计入，只有**无法解析**的 token 才算
     // 一次爆破失败（见 credential-bearer.ts），所以这里连打错误 token。
     let kind = "";

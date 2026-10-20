@@ -2,32 +2,52 @@
 import {env} from "cloudflare:workers";
 
 import RbacBoardPage from "@/components/admin/rbac/RbacBoardPage.astro";
+import {listAppInterfaces} from "@/server/admin/app-interfaces";
+import {listPcInterfaces} from "@/server/admin/pc-interfaces";
 import {readRbacBoard} from "@/server/admin/rbac-handlers";
+import {permissionsInclude} from "@/server/rbac/resolve";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {translate} from "@/shared/i18n";
 import {requirePagePermission} from "@/server/rbac/page-guard";
 
+/**
+ * 权限管理单页：一棵树合并 PC 端与 App 端两个分类（ADR-0039 单页口径）。
+ *
+ * 树的合成分类层不入库；App 分类是否出现由账号持有的码在服务端判定——
+ * 持有任一 `app:` 码或 `system:app-capability:manage` 才读 App 板子并传入，
+ * 否则传 `null` 让前端隐藏整个分类，不泄露 App 端的角色授权视图。
+ */
 const adminLanguage = adminLanguageFromRequest(Astro.request);
 const {feedContent, onboardingResult} = Astro.locals;
 if (!feedContent || !onboardingResult) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
 }
 
-// The board endpoint is guarded, but the page itself must be too (T-10): without
-// this an account could open the board URL directly and read every role's grants.
+// 板子端点自己有守卫，页面也必须守（T-10）：否则直接打开本页地址就能读到
+// 每个角色的授权。
 const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE, adminLanguage);
 if (denied) {
   return denied;
 }
-const board = await readRbacBoard(env.FEED_DB);
+
+const heldCodes = Astro.locals.rbacPermissions;
+const appVisible =
+  permissionsInclude(heldCodes, PERMISSION_CODES.SYSTEM_APP_CAPABILITY_MANAGE) ||
+  Boolean(heldCodes && [...heldCodes].some((code) => code.startsWith("app:")));
+
+const desktopBoard = await readRbacBoard(env.FEED_DB, "desktop");
+const appBoard = appVisible ? await readRbacBoard(env.FEED_DB, "app") : null;
 ---
 
 <RbacBoardPage
   activeNavItem={ADMIN_MENU_CODES.RBAC}
-  board={board}
+  appBoard={appBoard}
+  appInterfaces={listAppInterfaces()}
+  desktopBoard={desktopBoard}
   documentTitle={translate("pageDocumentTitle.rbac", adminLanguage)}
   {feedContent}
   {onboardingResult}
   pageTitle={translate("pageTitle.rbac", adminLanguage)}
+  pcInterfaces={listPcInterfaces(env.MICROFEED_ADMIN_PATH)}
 />

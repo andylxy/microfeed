@@ -87,6 +87,10 @@ export const SNAPSHOT_TABLES = {
     // role editor's permission tree would drop every code into the "other
     // permissions" bucket.
     "ext_menu_permissions",
+    // 自持权限树（migration 0128）。分组行、页面行与树上自建的行都是运营手工
+    // 维护的数据——在树编辑器里改过的名字、父级、显隐——快照不带它们，恢复后
+    // 树会退回种子形态。
+    "ext_permission_nodes",
     // RBAC audit trail (migration 0054). The only record of who changed which
     // role or grant; a restore that dropped it would erase that history.
     "ext_rbac_audit",
@@ -672,7 +676,7 @@ function quotedIdentifier(remaining: string): string | null {
 
 // 迁移内按语句顺序的索引操作。同一份迁移里既 DROP 又重建同名索引（0102 加宽
 // items_updated_at、0022 重建 webhook_events_created）时，只有保留语句顺序才能算出
-// 最终仍在——先建后删与先删后建结果相反，拆成两份列表会丢掉这个先后。
+// 最终仍在——先建后删与先删后建结果相反，分成两份列表会丢掉这个先后。
 export function migrationIndexOperations(
   sql: string,
 ): SnapshotIndexOperation[] {

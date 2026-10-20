@@ -13,7 +13,7 @@ import {
   requirePermission,
   requireRbac,
 } from "@/server/rbac/guard";
-import {resolveUserPermissions} from "@/server/rbac/resolve";
+import {resolveUserPermissions, userMayEnterAdmin} from "@/server/rbac/resolve";
 import {checkReplay} from "@/server/rbac/replay";
 import {RBAC_PERMISSIONS} from "@/server/rbac/seed";
 import {
@@ -32,10 +32,12 @@ import {
   renameRbacRoleCode,
   replaceRolePermissions,
   replaceUserRoles,
+  setRbacRoleAdminLogin,
   restoreUserDevice,
   revokeUserDevice,
   updateAdminRbacRole,
   updateAdminRbacRoleCode,
+  updateAdminRbacRoleLogin,
   updateAdminRbacRoleName,
   updateAdminRbacUser,
   updateAdminRbacUserBan,
@@ -458,7 +460,7 @@ describe("clearMustChangePassword", () => {
 
 describe("RBAC administration", () => {
   it("reads the seeded roles with their grants and the catalogue", async () => {
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     const editor = board.roles.find((role) => role.code === "editor");
     // 13 since 0058 granted `media:file:manage` to the site-file managers (A1);
     // 14 since 0069 added `content:annotation-markers:read`; 15 since 0073 added
@@ -467,7 +469,10 @@ describe("RBAC administration", () => {
     // `content:term:read`; 21 since 0079 added `content:yao:manage` +
     // `content:term:manage`; 23 since 0119/0120 added `app:version:read` +
     // `app:announcement:read` (default-granted to editor under 运营管理 leaf).
-    expect(editor?.permissions).toHaveLength(23);
+    // 21 on the PC console: the two App capability codes editor also holds
+    // (`app:version:read`, `app:announcement:read`) belong to the App console
+    // and are cropped from this board (ADR-0039 D2).
+    expect(editor?.permissions).toHaveLength(21);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(
@@ -504,10 +509,10 @@ describe("RBAC administration", () => {
     const result = await replaceRolePermissions(env.FEED_DB, "editor", [
       "content:book:read",
       "content:category:read",
-    ]);
+    ], "desktop");
     expect(result.ok).toBe(true);
 
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     const editor = board.roles.find((role) => role.code === "editor");
     expect(editor?.permissions).toEqual([
       "content:book:read",
@@ -523,15 +528,15 @@ describe("RBAC administration", () => {
       "content:category:update",
       "content:volume:read",
       "content:volume:update",
-    ]);
+    ], "desktop");
   });
 
   it("refuses to touch the wildcard role", async () => {
     // Stripping super_admin would lock every administrator out.
-    const result = await replaceRolePermissions(env.FEED_DB, "super_admin", []);
+    const result = await replaceRolePermissions(env.FEED_DB, "super_admin", [], "desktop");
     expect(result).toEqual({ok: false, reason: "wildcardRole"});
 
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     const superAdmin = board.roles.find((role) => role.code === "super_admin");
     expect(superAdmin?.permissions).toEqual(["*"]);
   });
@@ -539,23 +544,23 @@ describe("RBAC administration", () => {
   it("refuses to grant the wildcard to an ordinary role", async () => {
     // Holding `system:role:manage` must not be an escalation path to full
     // access, so the server rejects `*` even though the dashboard hides it.
-    expect(await replaceRolePermissions(env.FEED_DB, "editor", ["*"]))
+    expect(await replaceRolePermissions(env.FEED_DB, "editor", ["*"], "desktop"))
       .toEqual({ok: false, reason: "wildcardPermission"});
 
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     expect(board.roles.find((role) => role.code === "editor")?.permissions)
       .not.toContain("*");
   });
 
   it("rejects an unknown role and an unknown permission code", async () => {
-    expect(await replaceRolePermissions(env.FEED_DB, "nope", []))
+    expect(await replaceRolePermissions(env.FEED_DB, "nope", [], "desktop"))
       .toEqual({ok: false, reason: "unknownRole"});
-    expect(await replaceRolePermissions(env.FEED_DB, "editor", ["not:a:code"]))
+    expect(await replaceRolePermissions(env.FEED_DB, "editor", ["not:a:code"], "desktop"))
       .toEqual({ok: false, reason: "unknownPermission"});
   });
 
   it("gates the assignment write on system:role:manage", async () => {
-    const body = JSON.stringify({permissions: [], role: "editor"});
+    const body = JSON.stringify({audience: "desktop", permissions: [], role: "editor"});
 
     const withoutGrant = await updateAdminRbacRole({
       locals: {
@@ -590,7 +595,177 @@ describe("RBAC administration", () => {
       "content:category:update",
       "content:volume:read",
       "content:volume:update",
+    ], "desktop");
+  });
+});
+
+/**
+ * 两端控制台（ADR-0039）：一端的保存只动自己那一半 grants，跨端提交被拒，
+ * 守卫码按端分派。这些用例直接读 `ext_role_permissions`，不经板子——板子本身
+ * 已经按端裁过，用它断言会把「没被清掉」和「被裁掉」混在一起。
+ */
+describe("RBAC 两端控制台分区", () => {
+  /** editor 的行级 grants（含两端），用于观察另一端是否被波及。 */
+  async function grantsOf(roleCode: string): Promise<string[]> {
+    const rows = await env.FEED_DB.prepare(
+      "SELECT p.code AS code FROM ext_role_permissions rp " +
+        "JOIN ext_roles r ON r.id = rp.role_id " +
+        "JOIN ext_permissions p ON p.id = rp.permission_id " +
+        "WHERE r.code = ? ORDER BY p.code",
+    ).bind(roleCode).all<{code: string}>();
+    return (rows.results ?? []).map((row) => row.code);
+  }
+
+  /** 把 PC 端那半恢复到「种子 + 前序用例动过的 7 条」形态，不碰 App 端。 */
+  async function restoreDesktopGrants(): Promise<void> {
+    await replaceRolePermissions(env.FEED_DB, "editor", [
+      "content:book:create",
+      "content:book:read",
+      "content:book:update",
+      "content:category:read",
+      "content:category:update",
+      "content:volume:read",
+      "content:volume:update",
+    ], "desktop");
+  }
+
+  it("PC 端保存不清掉 App 端授权", async () => {
+    // editor 的种子里有两条 app 码（0119/0120）。PC 端整份替换若是无作用域
+    // 的 `DELETE ... WHERE role_id = ?`，这两条会被顺手清掉。
+    const before = await grantsOf("editor");
+    expect(before).toContain("app:version:read");
+
+    await replaceRolePermissions(env.FEED_DB, "editor", ["content:book:read"], "desktop");
+
+    const after = await grantsOf("editor");
+    expect(after.filter((code) => code.startsWith("app:")))
+      .toEqual(before.filter((code) => code.startsWith("app:")));
+    expect(after.filter((code) => !code.startsWith("app:")))
+      .toEqual(["content:book:read"]);
+    await restoreDesktopGrants();
+  });
+
+  it("App 端保存不清掉 PC 端授权", async () => {
+    const before = await grantsOf("editor");
+    await replaceRolePermissions(env.FEED_DB, "editor", ["app:nav:read"], "app");
+
+    const after = await grantsOf("editor");
+    // App 端那半被整份换成一条；PC 端那半一行不多、一行不少。
+    expect(after.filter((code) => code.startsWith("app:")))
+      .toEqual(["app:nav:read"]);
+    expect(after.filter((code) => !code.startsWith("app:")))
+      .toEqual(before.filter((code) => !code.startsWith("app:")));
+
+    // 还原 App 端那半：两条 app 码，同 0119/0120 的种子形态。
+    await replaceRolePermissions(
+      env.FEED_DB,
+      "editor",
+      ["app:announcement:read", "app:version:read"],
+      "app",
+    );
+  });
+
+  it("跨端提交被拒且零写库", async () => {
+    const direct = await replaceRolePermissions(
+      env.FEED_DB,
+      "editor",
+      ["app:nav:read"],
+      "desktop",
+    );
+    expect(direct).toEqual({ok: false, reason: "audienceMismatch"});
+
+    // 端点同样拒：400，且 editor 的 grants 一行未动。
+    const before = await grantsOf("editor");
+    const response = await updateAdminRbacRole({
+      locals: {
+        authUser: {id: "u9"},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: new Request(`${ORIGIN}/admin/ajax/rbac/role-permissions`, {
+        body: JSON.stringify({
+          audience: "desktop",
+          permissions: ["app:nav:read"],
+          role: "editor",
+        }),
+        method: "POST",
+      }),
+    } as never);
+    expect(response.status).toBe(400);
+    expect(await grantsOf("editor")).toEqual(before);
+  });
+
+  it("板子与目录都不含对端的码", async () => {
+    const desktop = await readRbacBoard(env.FEED_DB, "desktop");
+    const app = await readRbacBoard(env.FEED_DB, "app");
+
+    const desktopCodes = desktop.permissions.map((entry) => entry.code);
+    const appCodes = app.permissions.map((entry) => entry.code).sort();
+    expect(desktopCodes).toContain("system:role:manage");
+    expect(desktopCodes.some((code) => code.startsWith("app:"))).toBe(false);
+    // App 端恰好十一个码：六个内容域 + 两个搜索 + 名词 + 版本 + 公告（0131）。
+    expect(appCodes).toEqual([
+      "app:announcement:read",
+      "app:chapter:read",
+      "app:content:read",
+      "app:fang:read",
+      "app:mingci:view",
+      "app:nav:read",
+      "app:search:book",
+      "app:search:global",
+      "app:style:read",
+      "app:version:read",
+      "app:zhongyao:read",
     ]);
+    expect(appCodes).not.toContain("system:role:manage");
+
+    // 角色行也按端裁：editor 在 App 板上只剩 app 码（种子里是版本 + 公告两条）。
+    const editorOnApp = app.roles.find((role) => role.code === "editor")?.permissions ?? [];
+    expect(editorOnApp).toContain("app:version:read");
+    expect(editorOnApp.every((code) => code.startsWith("app:"))).toBe(true);
+    // 两端的树各是一棵，互不共享分组。
+    const appGroupCodes = app.groups.map((group) => group.code);
+    expect(appGroupCodes).toEqual(["group_app"]);
+    expect(desktop.groups.map((group) => group.code)).not.toContain("group_app");
+  });
+
+  it("只持 App 能力码可存 App 端授权，但打不开 PC 端或角色 CRUD", async () => {
+    const appLocals = {
+      authUser: {id: "u9"},
+      rbacPermissions: new Set(["system:app-capability:manage"]),
+    };
+    const save = (audience: "app" | "desktop") =>
+      updateAdminRbacRole({
+        locals: appLocals,
+        request: new Request(`${ORIGIN}/admin/ajax/rbac/role-permissions`, {
+          body: JSON.stringify({
+            audience,
+            permissions: ["app:nav:read"],
+            role: "editor",
+          }),
+          method: "POST",
+        }),
+      } as never);
+
+    expect((await save("app")).status).toBe(200);
+    // 同一个角色、同一份码，搬到 PC 端就被自己缺的那个码挡住。
+    expect((await save("desktop")).status).toBe(403);
+
+    // 角色是全局的：App 端没有建角色这条路径。
+    const created = await createAdminRbacRole({
+      locals: appLocals,
+      request: new Request(`${ORIGIN}/admin/ajax/rbac/roles`, {
+        body: JSON.stringify({code: "zz_app_role", name: "App 角色"}),
+        method: "POST",
+      }),
+    } as never);
+    expect(created.status).toBe(403);
+
+    await replaceRolePermissions(
+      env.FEED_DB,
+      "editor",
+      ["app:announcement:read", "app:version:read"],
+      "app",
+    );
   });
 });
 
@@ -764,7 +939,7 @@ describe("chapter deletion permission", () => {
 describe("RBAC role CRUD (pure functions)", () => {
   it("creates a role and shows it on the board", async () => {
     expect(await createRbacRole(env.FEED_DB, "reviewer", "Reviewer")).toEqual({ok: true});
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     expect(board.roles.find((role) => role.code === "reviewer")?.name).toBe("Reviewer");
     // Keep the catalogue clean for later tests.
     await deleteRbacRole(env.FEED_DB, "reviewer");
@@ -789,7 +964,7 @@ describe("RBAC role CRUD (pure functions)", () => {
   it("renames a role", async () => {
     await createRbacRole(env.FEED_DB, "rename_me", "Before");
     expect(await renameRbacRole(env.FEED_DB, "rename_me", "After")).toEqual({ok: true});
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     expect(board.roles.find((role) => role.code === "rename_me")?.name).toBe("After");
     await deleteRbacRole(env.FEED_DB, "rename_me");
   });
@@ -808,17 +983,80 @@ describe("RBAC role CRUD (pure functions)", () => {
   });
 });
 
+describe("角色的「登录后台」开关", () => {
+  it("新角色默认允许，板子上带出这个字段", async () => {
+    await createRbacRole(env.FEED_DB, "login_default", "Login default");
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
+    expect(board.roles.find((role) => role.code === "login_default")?.allowAdminLogin)
+      .toBe(true);
+    await deleteRbacRole(env.FEED_DB, "login_default");
+  });
+
+  it("关掉后只持该角色的账号进不了后台，多角色取并集", async () => {
+    await createRbacRole(env.FEED_DB, "app_only", "App only");
+    expect(await setRbacRoleAdminLogin(env.FEED_DB, "app_only", false))
+      .toEqual({ok: true});
+    await seedUser("u-app-only", "user");
+    await assignRole("u-app-only", "r_app_only");
+    expect(await userMayEnterAdmin(env.FEED_DB, "u-app-only")).toBe(false);
+
+    // 再挂一个允许的角色（editor 默认允许）→ 并集放行。
+    await assignRole("u-app-only", "r_editor");
+    expect(await userMayEnterAdmin(env.FEED_DB, "u-app-only")).toBe(true);
+
+    await env.FEED_DB.prepare(
+      "DELETE FROM ext_user_roles WHERE role_id = 'r_app_only'",
+    ).run();
+    await deleteRbacRole(env.FEED_DB, "app_only");
+  });
+
+  it("没有角色的账号不设限", async () => {
+    await seedUser("u-no-role", "user");
+    expect(await userMayEnterAdmin(env.FEED_DB, "u-no-role")).toBe(true);
+  });
+
+  it("super_admin 不能被关掉，未知角色报 unknownRole", async () => {
+    expect(await setRbacRoleAdminLogin(env.FEED_DB, "super_admin", false))
+      .toEqual({ok: false, reason: "loginLocked"});
+    expect(await setRbacRoleAdminLogin(env.FEED_DB, "nope", true))
+      .toEqual({ok: false, reason: "unknownRole"});
+  });
+
+  it("改代码把这个开关一起带过去", async () => {
+    await createRbacRole(env.FEED_DB, "login_a", "Login A");
+    await setRbacRoleAdminLogin(env.FEED_DB, "login_a", false);
+    expect(await renameRbacRoleCode(env.FEED_DB, "login_a", "login_b"))
+      .toEqual({ok: true});
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
+    expect(board.roles.find((role) => role.code === "login_b")?.allowAdminLogin)
+      .toBe(false);
+    await deleteRbacRole(env.FEED_DB, "login_b");
+  });
+
+  it("守卫按角色拒绝：通配授权也进不来", () => {
+    const denied = requirePermission(
+      {
+        authUser: {id: "u1"},
+        rbacAdminLoginAllowed: false,
+        rbacPermissions: new Set(["*"]),
+      },
+      "content:book:create",
+    );
+    expect(denied?.status).toBe(403);
+  });
+});
+
 describe("RBAC role code rename (Feature A)", () => {
   it("rebuilds the role under the new code, keeping grants and assignments", async () => {
     await createRbacRole(env.FEED_DB, "code_a", "Before");
-    await replaceRolePermissions(env.FEED_DB, "code_a", ["content:book:read"]);
+    await replaceRolePermissions(env.FEED_DB, "code_a", ["content:book:read"], "desktop");
     await seedUser("u-code-a", "user");
     await assignRole("u-code-a", "r_code_a");
 
     expect(await renameRbacRoleCode(env.FEED_DB, "code_a", "code_b"))
       .toEqual({ok: true});
 
-    const board = await readRbacBoard(env.FEED_DB);
+    const board = await readRbacBoard(env.FEED_DB, "desktop");
     expect(board.roles.find((role) => role.code === "code_a")).toBeUndefined();
     const moved = board.roles.find((role) => role.code === "code_b");
     expect(moved?.name).toBe("Before");
@@ -1001,6 +1239,65 @@ describe("RBAC role CRUD endpoints", () => {
       }),
     } as never);
     expect(reserved.status).toBe(409);
+  });
+
+  it("toggles the admin sign-in switch through the endpoint", async () => {
+    await createRbacRole(env.FEED_DB, "login_ep", "Login ep");
+    const loginRequest = (body: unknown) =>
+      new Request("https://feed.example.com/admin/ajax/rbac/role-login", {
+        body: JSON.stringify(body),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+
+    // 同一道门：没有会话 401，有会话但缺码 403。
+    const anonymous = await updateAdminRbacRoleLogin({
+      locals: {},
+      request: loginRequest({allow: false, code: "login_ep"}),
+    } as never);
+    expect(anonymous.status).toBe(401);
+    const forbidden = await updateAdminRbacRoleLogin({
+      locals: {authUser: {id: "u9"}, rbacPermissions: new Set(["content:book:read"])},
+      request: loginRequest({allow: false, code: "login_ep"}),
+    } as never);
+    expect(forbidden.status).toBe(403);
+
+    const ok = await updateAdminRbacRoleLogin({
+      locals: {
+        authUser: {id: "u9"},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: loginRequest({allow: false, code: "login_ep"}),
+    } as never);
+    expect(ok.status).toBe(200);
+    const board = await ok.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "login_ep")?.allowAdminLogin)
+      .toBe(false);
+
+    // 字符串 "false" 是真值：放过它会把「不允许」静默存成允许。
+    const notBoolean = await updateAdminRbacRoleLogin({
+      locals: {
+        authUser: {id: "u9"},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: loginRequest({allow: "false", code: "login_ep"}),
+    } as never);
+    expect(notBoolean.status).toBe(400);
+
+    // super_admin 固定为允许：关不掉，板子上仍是允许。
+    const locked = await updateAdminRbacRoleLogin({
+      locals: {
+        authUser: {id: "u9"},
+        rbacPermissions: new Set(["system:role:manage"]),
+      },
+      request: loginRequest({allow: false, code: "super_admin"}),
+    } as never);
+    expect(locked.status).toBe(400);
+    const afterLock = await readRbacBoard(env.FEED_DB, "desktop");
+    expect(afterLock.roles.find((role) => role.code === "super_admin")?.allowAdminLogin)
+      .toBe(true);
+
+    await deleteRbacRole(env.FEED_DB, "login_ep");
   });
 });
 
@@ -1331,6 +1628,7 @@ describe("RBAC audit trail", () => {
       },
       request: new Request("https://feed.example.com/admin/ajax/rbac/role-permissions", {
         body: JSON.stringify({
+          audience: "desktop",
           permissions: ["content:book:read"],
           role: "audit_probe",
         }),

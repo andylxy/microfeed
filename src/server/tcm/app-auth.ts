@@ -4,7 +4,7 @@
 // - 口令校验复用 better-auth（账号可为邮箱或用户名，与后台登录同一规则）。
 // - 登录成功签发**绑定该用户的 `mflc_` 登录凭证**（不是设备级 API Key）：
 //   App 带该 Token 作为 Bearer，服务端走 `decideLoginCredentialApiRequest`
-//   → 用户 → 角色 → 权限（`app:mobile:access`）——即「用户的 key」模型。
+//   → 用户 → 角色 → 权限（内容域门码，见 api-permissions.ts）——即「用户的 key」模型。
 // - 同一账号重复登录**复用同一把** `app-login:<account>` 凭证，避免触顶
 //   `MAX_LOGIN_CREDENTIALS_PER_USER`（否则第 6 次登录会失败）。
 // - 防重放/会话沿用现状，零 schema 变更。
