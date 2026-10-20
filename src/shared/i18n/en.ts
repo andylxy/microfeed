@@ -2038,6 +2038,7 @@ export const en = {
     saving: "Saving…",
     saved: "Permissions updated",
     saveFailed: "Could not save permissions",
+    retry: "Retry",
     roleBarLabel: "Roles",
     roleGrantCountUnit: "codes",
     roleBarHint: "Selected \"{{name}}\". Tick a permission code on the tree to grant it, untick to revoke — changes apply immediately.",

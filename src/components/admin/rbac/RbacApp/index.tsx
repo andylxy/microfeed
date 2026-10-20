@@ -40,6 +40,10 @@ import {
 import RoleManagerDialog, {
   type RoleDraft,
 } from "@/components/admin/rbac/RoleManagerDialog";
+import {
+  RbacSaveStatus,
+  type RbacSaveState,
+} from "@/components/admin/rbac/RbacSaveStatus";
 import {cn} from "@/lib/utils";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import type {InterfaceCatalogRow} from "@/shared/AppInterface";
@@ -165,6 +169,13 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // 失焦即存的可见反馈：存中/已存/失败。失败时记下最后一次操作供「重试」重发。
+  const [saveState, setSaveState] = useState<RbacSaveState>("idle");
+  const lastOpsRef = useRef<{
+    audience: PermissionAudience;
+    ops: PermissionTreeOp[];
+  } | null>(null);
 
   // 手风琴：分类层一个值，其余每层记「端 + 父 → 唯一展开的子」。因此任何时刻
   // 整棵树只有一条展开链——展开一个分支就自动折叠它的同层兄弟。
@@ -472,6 +483,8 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
     async (audience: PermissionAudience, ops: PermissionTreeOp[]): Promise<boolean> => {
       setBusy(true);
       setFormError(null);
+      setSaveState("saving");
+      lastOpsRef.current = {audience, ops};
       try {
         const response = await fetch(ADMIN_URLS.ajaxRbacPermissionTreeSave(), {
           body: JSON.stringify({audience, ops}),
@@ -484,8 +497,10 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
           ...prev,
           [audience]: Array.isArray(data.rows) ? data.rows : [],
         }));
+        setSaveState("saved");
         return true;
       } catch (saveError) {
+        setSaveState("error");
         setFormError(
           saveError instanceof Error ? saveError.message : t("rbac.permissionTree.saveFailed"),
         );
@@ -496,6 +511,19 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
     },
     [t],
   );
+
+  // 「已保存」只停留几秒：错过也不碍事，它本来就只是确认信号；开始新一轮
+  // 保存或出错时立即被覆盖。失败态常驻，等用户重试或下一次编辑。
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const timer = window.setTimeout(() => setSaveState("idle"), 2500);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
+
+  const retryLastOps = useCallback(() => {
+    const last = lastOpsRef.current;
+    if (last) void postOps(last.audience, last.ops);
+  }, [postOps]);
 
   useEffect(() => {
     postOpsRef.current = postOps;
@@ -1083,6 +1111,11 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
           内容比视口更高时右栏自己滚，不会把下半截顶出屏幕外够不着。
         */}
         <section className="min-w-0 flex-1 rounded-[14px] border bg-card p-5 shadow-xs lg:sticky lg:top-4 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
+          <RbacSaveStatus
+            detail={formError}
+            onRetry={retryLastOps}
+            state={saveState}
+          />
           {creating ? (
             <PermissionGroupCreator
               busy={busy}

@@ -2025,6 +2025,7 @@ export const zhCN: TranslationKey = {
     saving: "保存中…",
     saved: "权限已更新",
     saveFailed: "权限保存失败",
+    retry: "重试",
     roleBarLabel: "角色",
     roleGrantCountUnit: "个权限码",
     roleBarHint: "已选「{{name}}」。在树上勾选权限码即授权，取消勾选即撤销，保存即时生效。",
