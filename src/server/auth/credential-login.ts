@@ -24,7 +24,8 @@ import {
   recordLoginFailure,
 } from "@/server/auth/login-throttle";
 import {jsonResponse, publicLocalizedError} from "@/server/http";
-import {accountIsBlocked} from "@/server/rbac/resolve";
+import {accountIsBlocked, userMayEnterAdmin} from "@/server/rbac/resolve";
+import {adminLoginDeniedResponse} from "@/server/auth/admin-signin";
 import {adminUrl} from "@/shared/AdminPath";
 
 export function isAdminCredentialLoginPath(
@@ -89,6 +90,14 @@ export async function handleCredentialLogin(
   if (!verified || blocked) {
     if (throttleKey) await recordLoginFailure(env.FEED_DB, throttleKey);
     return publicLocalizedError(request, "errors.loginCredential.invalid", 401);
+  }
+
+  // 角色可能挡住后台入口（`ext_roles.allow_admin_login`）。这一判放在建会话
+  // 之前：给一个进不了后台的账号发会话 cookie，只会让它每次都被 403 弹回来。
+  // 不记失败次数——凭证本身是对的，记了会把正确的凭证也一起限流。
+  // 拒绝响应与另一条登录通道（admin-signin.ts 的后处理门）共用一份。
+  if (!await userMayEnterAdmin(env.FEED_DB, verified.userId)) {
+    return adminLoginDeniedResponse(request);
   }
 
   let cookies: string[];

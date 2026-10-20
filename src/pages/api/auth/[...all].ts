@@ -12,6 +12,7 @@ import {
 } from "@/server/auth/account-security";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {enforceAuthEndpointThrottle} from "@/server/auth/auth-endpoint-throttle";
+import {enforceAdminSignIn} from "@/server/auth/admin-signin";
 import {
   revokeOAuthConnectionTokens,
   touchOAuthConnection,
@@ -286,6 +287,11 @@ export const ALL: APIRoute = async ({request: originalRequest}) => {
   if (throttled) return throttled;
 
   let response = await auth.handler(request);
+  // 角色的「允许登录后台」开关（ext_roles.allow_admin_login）。账号密码登录的
+  // 通道不走 credential-login，这道门补在这里：密码对了也不给被关掉的角色发
+  // 会话 cookie，登录页因此能显示「该角色不允许登录后台」而不是登进去再被
+  // 403 弹回。判定细节见 server/auth/admin-signin.ts。
+  response = await enforceAdminSignIn(request, response, env.FEED_DB);
   if (connectionRevocation && response.ok) {
     await revokeOAuthConnectionTokens(
       env.FEED_DB,

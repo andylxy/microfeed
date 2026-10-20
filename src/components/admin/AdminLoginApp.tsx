@@ -124,7 +124,12 @@ export default function AdminLoginApp() {
           username: account.trim(),
         });
       if (result.error) {
-        setError(t("login.incorrectCredentials"));
+        // 403 = 密码是对的，但这个角色被关掉了「允许登录后台」
+        // （服务端 /api/auth/[...all] 的门）。这时候说「凭据不正确」会把用户
+        // 引向改密码，所以分开给文案。
+        setError(result.error.status === 403
+          ? t("login.adminLoginDenied")
+          : t("login.incorrectCredentials"));
         return;
       }
       const response = result.data as {url?: unknown} | null;

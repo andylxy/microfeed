@@ -4,6 +4,11 @@ import {oauthProviderAuthServerMetadata} from "@better-auth/oauth-provider";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
+import {
+  createRbacRole,
+  setRbacRoleAdminLogin,
+} from "@/server/admin/rbac-handlers";
+import {enforceAdminSignIn} from "@/server/auth/admin-signin";
 import {createPasskeyStepUpCookie} from "@/server/auth/account-security";
 import {decideApiRequest} from "@/server/api/access";
 import {updateApiAccessSettings} from "@/server/api/api-keys";
@@ -776,5 +781,171 @@ describe("auth endpoint throttle (A6)", () => {
       lastStatus = response.status;
     }
     expect(lastStatus).toBe(429);
+  });
+});
+
+describe("账号密码登录的「角色允许登录后台」门", () => {
+  const deniedId = "login-denied-user";
+  const deniedEmail = "denied@example.com";
+  const password = "correct horse battery staple";
+  const roleCode = "app_only_login";
+  const roleId = `r_${roleCode}`;
+
+  async function seedDeniedUser(): Promise<void> {
+    const now = new Date().toISOString();
+    const hash = await hashPassword(password);
+    await env.FEED_DB.prepare('DELETE FROM "auth_user" WHERE id = ?')
+      .bind(deniedId).run();
+    await env.FEED_DB.prepare(
+      'INSERT INTO "auth_user" ' +
+      '("id", "name", "email", "emailVerified", "createdAt", "updatedAt", "role") ' +
+      "VALUES (?, ?, ?, 1, ?, ?, ?)",
+    ).bind(deniedId, "Denied", deniedEmail, now, now, "user").run();
+    await env.FEED_DB.prepare(
+      'INSERT INTO "auth_account" ' +
+      '("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt") ' +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).bind(`${deniedId}-account`, deniedId, "credential", deniedId, hash, now, now)
+      .run();
+  }
+
+  async function signInDeniedUser(): Promise<Response> {
+    return authRoute(authRequest("/api/auth/sign-in/email", {
+      body: JSON.stringify({email: deniedEmail, password}),
+      headers: {"content-type": "application/json"},
+      method: "POST",
+    }));
+  }
+
+  beforeEach(async () => {
+    await createRbacRole(env.FEED_DB, roleCode, "App only login");
+    await setRbacRoleAdminLogin(env.FEED_DB, roleCode, false);
+    await seedDeniedUser();
+    await env.FEED_DB.prepare(
+      "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
+    ).bind(deniedId, roleId).run();
+  });
+
+  it("密码正确但角色被关掉登录后台：403 且不下发会话 cookie", async () => {
+    const response = await signInDeniedUser();
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    const body = await response.json() as {error?: string};
+    expect(body.error).toBeTruthy();
+  });
+
+  it("多角色取并集：再挂一个允许登录的角色即可进入", async () => {
+    await env.FEED_DB.prepare(
+      "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, 'r_editor')",
+    ).bind(deniedId).run();
+    const response = await signInDeniedUser();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBeTruthy();
+  });
+
+  it("开关重新打开后同一账号可以登录", async () => {
+    await setRbacRoleAdminLogin(env.FEED_DB, roleCode, true);
+    const response = await signInDeniedUser();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBeTruthy();
+  });
+});
+
+describe("enforceAdminSignIn 单元（响应后处理门）", () => {
+  const userId = "signin-gate-user";
+  const roleCode = "gate_role";
+  const roleId = `r_${roleCode}`;
+
+  /** 造一条 better-auth 登录成功响应：2xx + body 顶层 user + 一个 session cookie。 */
+  function loginResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      headers: {"content-type": "application/json", "set-cookie": "probe=1"},
+      status,
+    });
+  }
+
+  function request(pathname: string): Request {
+    return authRequest(pathname, {
+      headers: {"accept-language": "zh-CN"},
+    });
+  }
+
+  beforeEach(async () => {
+    await createRbacRole(env.FEED_DB, roleCode, "Gate role");
+    await setRbacRoleAdminLogin(env.FEED_DB, roleCode, false);
+    const now = new Date().toISOString();
+    await env.FEED_DB.prepare('DELETE FROM "auth_user" WHERE id = ?')
+      .bind(userId).run();
+    await env.FEED_DB.prepare(
+      'INSERT INTO "auth_user" ("id","name","email","emailVerified","createdAt","updatedAt","role") VALUES (?,?,?,1,?,?,?)',
+    ).bind(userId, "Gate", "gate@example.com", now, now, "user").run();
+    await env.FEED_DB.prepare(
+      "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
+    ).bind(userId, roleId).run();
+  });
+
+  it("passkey verify-authentication 成功响应同样被拦（形状与 sign-in 一致）", async () => {
+    const response = loginResponse({session: {id: "s1"}, user: {id: userId}});
+    const denied = await enforceAdminSignIn(
+      request("/api/auth/passkey/verify-authentication"),
+      response,
+      env.FEED_DB,
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("sign-in/email 路径：角色被关 → 403 且 cookie 被剥掉", async () => {
+    const response = loginResponse({user: {id: userId}});
+    const denied = await enforceAdminSignIn(
+      request("/api/auth/sign-in/email"),
+      response,
+      env.FEED_DB,
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("set-cookie")).toBeNull();
+    expect(denied).not.toBe(response);
+  });
+
+  it("非登录端点原样放行（get-session 不在路径集里）", async () => {
+    const response = loginResponse({session: {id: "s"}});
+    const passed = await enforceAdminSignIn(
+      request("/api/auth/get-session"),
+      response,
+      env.FEED_DB,
+    );
+    expect(passed).toBe(response);
+  });
+
+  it("非 2xx 登录失败原样放行（等 better-auth 的原始错误）", async () => {
+    const response = loginResponse({message: "Invalid password"}, 401);
+    const passed = await enforceAdminSignIn(
+      request("/api/auth/sign-in/email"),
+      response,
+      env.FEED_DB,
+    );
+    expect(passed).toBe(response);
+  });
+
+  it("成功体取不到 user.id 时放行（形态约定不成立不猜测）", async () => {
+    const response = loginResponse({session: {id: "s"}});
+    const passed = await enforceAdminSignIn(
+      request("/api/auth/sign-in/email"),
+      response,
+      env.FEED_DB,
+    );
+    expect(passed).toBe(response);
+  });
+
+  it("角色允许时原样放行，cookie 保留", async () => {
+    await setRbacRoleAdminLogin(env.FEED_DB, roleCode, true);
+    const response = loginResponse({user: {id: userId}});
+    const passed = await enforceAdminSignIn(
+      request("/api/auth/sign-in/email"),
+      response,
+      env.FEED_DB,
+    );
+    expect(passed).toBe(response);
+    expect(passed.headers.get("set-cookie")).toBe("probe=1");
   });
 });
