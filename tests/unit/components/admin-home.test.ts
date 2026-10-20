@@ -34,7 +34,15 @@ function onboardingResult(complete: boolean): OnboardingResult {
   };
 }
 
-function renderHome(complete: boolean): string {
+// 摘要块（loading 态）在输出里的标记：AdminCollectionLoading 的只读文案与
+// 其无障碍属性。全仓首页 harness 仅此一处，两个态都复用同一组标记。
+const USAGE_STRIP_LOADING = "Loading usage…";
+const USAGE_STRIP_BUSY = 'aria-busy="true"';
+// UsageTrendChart 的趋势图 SVG 标记：首页链路不得引入任何图表容器。
+const TREND_CHART_MARKER = 'preserveAspectRatio="none"';
+const SETUP_CHECKLIST_TITLE = ">Setup checklist</div>";
+
+function renderHome(complete: boolean, canReadCloudUsage: boolean): string {
   vi.stubGlobal("window", {
     location: {
       hostname: "feed.example.com",
@@ -45,6 +53,7 @@ function renderHome(complete: boolean): string {
 
   return renderToStaticMarkup(
     React.createElement(AdminHomeApp, {
+      canReadCloudUsage,
       feedContent: {},
       onboardingResult: onboardingResult(complete),
     }),
@@ -55,18 +64,48 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("admin home section order", () => {
   it("shows the setup checklist first while tasks remain", () => {
-    const output = renderHome(false);
+    const output = renderHome(false, false);
 
-    expect(output.indexOf(">Setup checklist</div>")).toBeLessThan(
+    expect(output.indexOf(SETUP_CHECKLIST_TITLE)).toBeLessThan(
       output.indexOf(">Public access</h2>"),
     );
   });
 
   it("moves the completed setup checklist below Public access", () => {
-    const output = renderHome(true);
+    const output = renderHome(true, false);
 
     expect(output.indexOf(">Public access</h2>")).toBeLessThan(
-      output.indexOf(">Setup checklist</div>"),
+      output.indexOf(SETUP_CHECKLIST_TITLE),
+    );
+  });
+
+  it("renders no usage strip block without the cloud-usage read permission", () => {
+    const output = renderHome(false, false);
+
+    expect(output).not.toContain(USAGE_STRIP_LOADING);
+    expect(output).not.toContain(USAGE_STRIP_BUSY);
+    expect(output).not.toContain(TREND_CHART_MARKER);
+  });
+
+  it("renders the usage strip loading block above the setup checklist", () => {
+    const output = renderHome(false, true);
+
+    expect(output).toContain(USAGE_STRIP_LOADING);
+    expect(output).toContain(USAGE_STRIP_BUSY);
+    // 本票只做 loading + ready：island 层不出图表容器。
+    expect(output).not.toContain(TREND_CHART_MARKER);
+    expect(output.indexOf(USAGE_STRIP_LOADING)).toBeLessThan(
+      output.indexOf(SETUP_CHECKLIST_TITLE),
+    );
+  });
+
+  it("keeps the usage strip above the setup checklist once it is complete", () => {
+    const output = renderHome(true, true);
+
+    expect(output).toContain(USAGE_STRIP_LOADING);
+    expect(output).not.toContain(TREND_CHART_MARKER);
+    expect(output.indexOf(USAGE_STRIP_LOADING)).toBeLessThan(
+      output.indexOf(SETUP_CHECKLIST_TITLE),
     );
   });
 

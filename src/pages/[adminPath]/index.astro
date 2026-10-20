@@ -4,11 +4,12 @@ import {env} from "cloudflare:workers";
 import AdminHomeApp from "@/components/admin/home/AdminHomeApp";
 import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import PublicLayout from "@/layouts/PublicLayout.astro";
-import {ADMIN_MENU_CODES} from "@/shared/Constants";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {normalizeAdminPath} from "@/shared/AdminPath";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {translate} from "@/shared/i18n";
 import {loadPublicPageRoute} from "@/server/pages/public";
+import {hasPermission} from "@/server/rbac/guard";
 
 const routeAdminPath = Astro.params.adminPath ?? "";
 const adminLanguage = adminLanguageFromRequest(Astro.request);
@@ -19,6 +20,12 @@ const AdminShell = adminRequest
   ? (await import("../../layouts/AdminShell.astro")).default
   : undefined;
 const {feedContent, onboardingResult} = Astro.locals;
+// 首页用量摘要块的开关：只问权限位，与侧栏菜单可见性同源、不叠账号门
+// （登录态由中间件保证）。拿不到 `system:cloud-usage:read` 的账号
+// （editor / readonly）在 SSR 阶段就拿 false，摘要组件不挂载、不发请求，
+// 也不会出现失败卡。
+const canReadCloudUsage = adminRequest
+  && hasPermission(Astro.locals, PERMISSION_CODES.SYSTEM_CLOUD_USAGE_READ);
 let publicPage;
 if (adminRequest && (!feedContent || !onboardingResult)) {
   throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
@@ -44,7 +51,12 @@ if (!adminRequest) {
     onboardingResult={onboardingResult!}
     pageTitle={translate("pageTitle.home", adminLanguage)}
   >
-    <AdminHomeApp client:only="react" feedContent={feedContent!} onboardingResult={onboardingResult!}>
+    <AdminHomeApp
+      canReadCloudUsage={canReadCloudUsage}
+      client:only="react"
+      feedContent={feedContent!}
+      onboardingResult={onboardingResult!}
+    >
       <AdminPageFallback slot="fallback" kind="home" />
     </AdminHomeApp>
   </AdminShell>

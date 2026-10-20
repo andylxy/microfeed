@@ -1,75 +1,29 @@
-import {useCallback, useEffect, useState, type ReactNode} from "react";
+import {type ReactNode} from "react";
 
 import {
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {formatAdminDateTime} from "@/client/admin-date-format";
 import {useTranslation} from "@/client/i18n";
-import Requests from "@/client/requests";
-import {errorMessage} from "@/client/request-error";
 import {
   CLOUD_USAGE_UNAVAILABLE,
-  type CloudUsageSnapshot,
   type UsagePeriod,
   type UsageSection,
 } from "@/shared/CloudUsage";
-import {ADMIN_URLS} from "@/shared/StringUtils";
 
-import UsageCard from "./UsageCard";
+import UsageFailedCard from "./UsageFailedCard";
+import UsagePeriodLines from "./UsagePeriodLines";
+import UsageSectionGrid from "./UsageSectionGrid";
+import UsageSetupCard from "./UsageSetupCard";
 import UsageTrendChart, {
   TREND_ERROR_COLOR,
   TREND_PRIMARY_COLOR,
   TREND_SECONDARY_COLOR,
   trendSeries,
 } from "./UsageTrendChart";
-
-/** 倒计时每分钟走一格；三张卡共用同一个时钟，避免各起一个定时器。 */
-const COUNTDOWN_TICK_MS = 60_000;
-
-type LoadState =
-  | {status: "loading"}
-  | {status: "failed"; message: string}
-  | {status: "ready"; snapshot: CloudUsageSnapshot};
-
-interface SnapshotResponse {
-  ok?: boolean;
-  data?: CloudUsageSnapshot;
-  error?: string;
-}
-
-function countdownParts(nextResetUtc: string, nowMs: number) {
-  const remainingMs = Math.max(0, Date.parse(nextResetUtc) - nowMs);
-  const totalMinutes = Math.floor(remainingMs / 60_000);
-  return {
-    days: Math.floor(totalMinutes / 1440),
-    hours: Math.floor((totalMinutes % 1440) / 60),
-    minutes: totalMinutes % 60,
-  };
-}
-
-/** 分区头部的两行：计费周期与下次重置（含倒计时），时刻一律北京时间。 */
-function PeriodLines({period, nowMs}: {period: UsagePeriod; nowMs: number}) {
-  const {t} = useTranslation();
-  return (
-    <div className="grid gap-0.5 text-xs text-muted-foreground">
-      <p>
-        {t("cloudUsage.period.label", {
-          from: formatAdminDateTime(period.startUtc),
-          to: formatAdminDateTime(period.endUtc),
-        })}
-      </p>
-      <p>
-        {t("cloudUsage.period.nextReset", {
-          time: formatAdminDateTime(period.nextResetUtc),
-        })}
-        {" "}
-        {t("cloudUsage.period.countdown", countdownParts(period.nextResetUtc, nowMs))}
-      </p>
-    </div>
-  );
-}
+import {cloudUsageSetupState} from "./cloudUsageSetupState";
+import {useCloudUsageSnapshot} from "./useCloudUsageSnapshot";
 
 interface SectionShellProps {
   titleKey: string;
@@ -94,7 +48,7 @@ function SectionShell({
     <section className="grid gap-3">
       <div className="grid gap-1">
         <h2 className="text-base font-semibold">{t(titleKey)}</h2>
-        {period && <PeriodLines nowMs={nowMs} period={period} />}
+        {period && <UsagePeriodLines nowMs={nowMs} period={period} />}
       </div>
       {!available && (
         <p
@@ -117,96 +71,35 @@ function SectionShell({
  * 打开时请求一次快照，四种界面：加载、整体失败（可重试）、引导态（未配置 /
  * 解不开 / 账号 ID 缺失）、正常三分区。分区级失败只在该分区顶部显示降级条。
  *
+ * 取数、周期两行、卡片网格、引导态卡片与失败卡分别是 cloud-usage 目录下的
+ * 共享件（hook / UsagePeriodLines / UsageSectionGrid / UsageSetupCard /
+ * UsageFailedCard），首页摘要复用同一套实现；引导态判定走共享纯函数
+ * `cloudUsageSetupState`，分区级降级条（`cloudUsage.degraded`）是本页专属。
+ *
  * 所有时刻走 `formatAdminDateTime`（AGENTS.md「管理后台国际化」禁止
  * `Intl.DateTimeFormat` / `toLocaleString`）；服务端下发的都是带 `Z` 的 UTC 串，
  * 本组件不做任何手工时区加减。
  */
 export default function CloudUsageApp() {
   const {t} = useTranslation();
-  const [state, setState] = useState<LoadState>({status: "loading"});
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  const load = useCallback(async () => {
-    setState({status: "loading"});
-    try {
-      const response = await Requests.axiosGet(ADMIN_URLS.ajaxCloudUsage());
-      const payload = response.data as SnapshotResponse;
-      if (!payload.ok || !payload.data) {
-        setState({
-          status: "failed",
-          message: payload.error || t("cloudUsage.failed"),
-        });
-        return;
-      }
-      setNowMs(Date.now());
-      setState({status: "ready", snapshot: payload.data});
-    } catch (error) {
-      setState({
-        status: "failed",
-        message: errorMessage(error, t("cloudUsage.failed")),
-      });
-    }
-  }, [t]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), COUNTDOWN_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
+  const {state, nowMs, refresh} = useCloudUsageSnapshot();
 
   if (state.status === "loading") {
     return <AdminCollectionLoading label={t("cloudUsage.loading")} />;
   }
 
   if (state.status === "failed") {
-    return (
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle className="text-base">{t("cloudUsage.failed")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <p className="text-sm" role="alert">{state.message}</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => void load()} type="button">{t("cloudUsage.retry")}</Button>
-            <a
-              className="text-sm text-brand-dark underline underline-offset-4 hover:no-underline"
-              href={`${ADMIN_URLS.settings()}#cloudflare-token`}
-            >
-              {t("cloudUsage.settingsLink")}
-            </a>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <UsageFailedCard message={state.message} onRetry={refresh} />;
   }
 
   const {snapshot} = state;
   if (!snapshot.configured) {
-    const reason = snapshot.unavailableKey ?? CLOUD_USAGE_UNAVAILABLE.notConfigured;
-    // 账号 ID 不在设置页管理，这一态给设置页链接只会把人引到改不了它的地方。
-    const fixableInSettings = reason !== CLOUD_USAGE_UNAVAILABLE.accountIdMissing;
+    const setup = cloudUsageSetupState(snapshot.unavailableKey);
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t(`cloudUsage.setup.${reason}Title`)}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <p className="text-sm">{t(`cloudUsage.setup.${reason}`)}</p>
-          {fixableInSettings && (
-            <a
-              className="text-sm text-brand-dark underline underline-offset-4 hover:no-underline"
-              href={`${ADMIN_URLS.settings()}#cloudflare-token`}
-            >
-              {t("cloudUsage.setup.action")}
-            </a>
-          )}
-        </CardContent>
-      </Card>
+      <UsageSetupCard
+        fixableInSettings={setup.fixableInSettings}
+        reason={setup.reason}
+      />
     );
   }
 
@@ -259,7 +152,7 @@ export default function CloudUsageApp() {
         <p className="text-xs text-muted-foreground">
           {t("cloudUsage.updatedAt", {time: formatAdminDateTime(snapshot.fetchedAt)})}
         </p>
-        <Button onClick={() => void load()} size="sm" type="button" variant="outline">
+        <Button onClick={refresh} size="sm" type="button" variant="outline">
           {t("cloudUsage.refresh")}
         </Button>
       </div>
@@ -273,11 +166,7 @@ export default function CloudUsageApp() {
       >
         {snapshot.d1.data && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {snapshot.d1.data.cards.map((entry) => (
-                <UsageCard card={entry} key={entry.key} onRetry={() => void load()} />
-              ))}
-            </div>
+            <UsageSectionGrid cards={snapshot.d1.data.cards} onRetry={refresh} />
             <UsageTrendChart dates={trendDates(snapshot.d1)} series={d1Trend} />
           </>
         )}
@@ -292,11 +181,7 @@ export default function CloudUsageApp() {
       >
         {snapshot.r2.data && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {snapshot.r2.data.cards.map((entry) => (
-                <UsageCard card={entry} key={entry.key} onRetry={() => void load()} />
-              ))}
-            </div>
+            <UsageSectionGrid cards={snapshot.r2.data.cards} onRetry={refresh} />
             <UsageTrendChart dates={trendDates(snapshot.r2)} series={r2Trend} />
             <p className="text-xs text-muted-foreground">
               {t("cloudUsage.note.r2Egress")}
@@ -314,11 +199,7 @@ export default function CloudUsageApp() {
       >
         {snapshot.workers.data && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {snapshot.workers.data.cards.map((entry) => (
-                <UsageCard card={entry} key={entry.key} onRetry={() => void load()} />
-              ))}
-            </div>
+            <UsageSectionGrid cards={snapshot.workers.data.cards} onRetry={refresh} />
             <UsageTrendChart dates={trendDates(snapshot.workers)} series={workersTrend} />
           </>
         )}
