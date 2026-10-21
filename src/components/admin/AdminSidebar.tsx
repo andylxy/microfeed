@@ -42,7 +42,7 @@ interface Props {
   onNavigate?: () => void;
 }
 
-interface InjectedSection {
+export interface InjectedSection {
   icon: string;
   id: string;
   nameKey: string;
@@ -50,29 +50,36 @@ interface InjectedSection {
 }
 
 /**
- * 三级子项的注册表：这些子页/分区在 `ext_menu` 数据表里没有对应行，数据树
- * 因此没有第三层，由这里按菜单节点注入，侧栏于是读作 集成 → API → 概览/认证/…。
+ * 三级子项的注册表：这些子页/分区在数据表里没有对应行，数据树因此没有第三层，
+ * 由这里按页面节点注入，侧栏于是读作 集成 → API → 概览/认证/…。
+ *
+ * 键是**页面节点码**（`ext_permission_nodes.code`）：阶段3 起侧栏由权限树驱动，
+ * 节点的身份在权限树里；菜单码仍作 `menu.item.*` 文案键与展开态的索引键。
+ * `withPageSections` 用 `item.nodeCode` 查表。
  *
  * 每个域的清单都是各自模块里的唯一数据源（设置是同页锚点，API 与 Webhooks
  * 是真实子页），这里只负责取出来、拼 URL、标活动项——新增一个域就在下面加一行。
+ *
+ * 导出给侧栏预览复用（ADR-0042 D5）：预览必须画出与真实侧栏相同的第三级子项，
+ * 两处各写一份清单必然漂移。
  */
-const SUB_SECTION_BUILDERS: Record<
+export const SUB_SECTION_BUILDERS: Record<
   string,
   (item: AdminMenuItem) => InjectedSection[]
 > = {
-  [ADMIN_MENU_CODES.SETTINGS]: (item) => ADMIN_SETTINGS_SECTIONS.map((section) => ({
+  page_settings: (item) => ADMIN_SETTINGS_SECTIONS.map((section) => ({
     icon: section.icon,
     id: section.id,
     nameKey: section.nameKey,
     url: `${item.url}#${section.id}`,
   })),
-  [ADMIN_MENU_CODES.API]: () => ADMIN_API_PAGES.map((page) => ({
+  page_api: () => ADMIN_API_PAGES.map((page) => ({
     icon: page.icon,
     id: page.id,
     nameKey: page.nameKey,
     url: adminApiPageUrl(page, browserAdminPath()),
   })),
-  [ADMIN_MENU_CODES.WEBHOOKS]: () => ADMIN_WEBHOOK_PAGES.map((page) => ({
+  page_webhooks: () => ADMIN_WEBHOOK_PAGES.map((page) => ({
     icon: page.icon,
     id: page.id,
     nameKey: page.nameKey,
@@ -85,6 +92,9 @@ const SUB_SECTION_BUILDERS: Record<
  * hashchange，滚动跟随只能走 store），API / Webhooks 看页面传来的
  * `activeSubItem`。节点保持自己的 `menu.item.*` 文案键——`menuEntryLabelKey`
  * 是按 `group_` 前缀判分组的，不看有没有子节点。
+ *
+ * 这里的比较仍用 `item.id`（菜单码）：`activeSubItem.code` 是页面按
+ * `ADMIN_MENU_CODES` 传过来的，两边同属菜单码；注册表那边才用节点码查表。
  */
 function activeSectionId(
   item: AdminMenuItem,
@@ -106,7 +116,7 @@ function activeSectionId(
   return activeSubItem?.code === item.id ? activeSubItem.id : "";
 }
 
-function withPageSections(
+export function withPageSections(
   items: AdminMenuItem[],
   hash: string,
   liveSection: string,
@@ -116,7 +126,8 @@ function withPageSections(
     const children = item.children
       ? withPageSections(item.children, hash, liveSection, activeSubItem)
       : undefined;
-    const build = SUB_SECTION_BUILDERS[item.id];
+    // 注册表按页面节点码建键；没有节点的行（首页）查不到，自然不注入。
+    const build = SUB_SECTION_BUILDERS[item.nodeCode ?? ""];
     if (!build) return children === undefined ? item : {...item, children};
     const activeId = activeSectionId(item, hash, liveSection, activeSubItem);
     const sections: AdminMenuItem[] = build(item).map((section) => ({

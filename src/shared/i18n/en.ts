@@ -220,8 +220,12 @@ export const en = {
   menuAdmin: {
     title: "Menu management",
     intro:
-      "Rename, reorder, hide, re-parent and group the admin navigation. The Chinese and English names are custom display names; leave either empty to use the built-in default. Page paths and permission codes stay locked.",
+      "Read-only view of every admin navigation row: display names, icon, path, entry permission code, parent and visibility. Navigation changes belong to the permission tree.",
     emptyBoard: "There are no menu rows yet.",
+    readOnlyTitle: "This page is read-only",
+    readOnlyNotice:
+      "Menu entries now live in the permission tree. Rename, hide, re-parent and reorder them from the Role management page.",
+    readOnlyLink: "Open Role management",
     effectiveName: "Effective name",
     nameZh: "Chinese name",
     nameEn: "English name",
@@ -2162,6 +2166,22 @@ export const en = {
       moveUp: "Move up",
       moveDown: "Move down",
       noResults: "No permission-tree rows match your search.",
+      path: "Path",
+      pathPlaceholder: "rbac",
+      entryCode: "Entry permission code",
+      entryCodeNone: "Not in sidebar",
+      entryCodeHint:
+        "When set, the page only shows for roles holding a permission code with the same value",
+    },
+    sidebarPreview: {
+      title: "Sidebar preview",
+      hint: "The entries this role can see in the admin sidebar.",
+      entriesOne: "{{count}} entry",
+      entriesOther: "{{count}} entries",
+      expand: "Show the preview",
+      collapse: "Hide the preview",
+      toggleGroup: "Expand or collapse {{name}}",
+      empty: "This role can only reach the dashboard.",
     },
     username: "Username",
     setUsername: "Set username",
@@ -2754,6 +2774,8 @@ export const en = {
       invalidInput: "That menu request is not valid.",
       notFound: "Menu row {{code}} does not exist.",
       invalidIcon: "Icon {{icon}} is not one of the available menu icons.",
+      readOnly:
+        "Menu writing is closed. The admin navigation now lives in the permission tree.",
       iconRequired:
         "Menu row {{code}} is a page, so it needs one of the available icons. Only group rows can be icon-less.",
       invalidCode:
@@ -2783,6 +2805,8 @@ export const en = {
         "PC-console rows and App-console rows stay apart: a row cannot be moved under a row of the other console.",
       codeNodeParent:
         "Permission rows only hang under page rows, and no row may hang under a permission row.",
+      entryCodeNeedsPath:
+        "A page with an entry permission code also needs a path, so the sidebar preview can open it.",
       parentLevel:
         "The tree has three levels: group rows at the top, page rows under a group, and permission rows under a page.",
       codeNodeUndeletable:

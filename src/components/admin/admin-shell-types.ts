@@ -41,8 +41,8 @@ export interface AdminSidebarData {
    */
   accountKey?: string;
   /**
-   * 当前页处于某个菜单行的第三级子项上（如 API → 认证）。主侧栏据此给对应
-   * 子项标红——这些子项在 `ext_menu` 数据表里没有对应行，位置只能由页面告知。
+   * 当前页处于某个入口的第三级子项上（如 API → 认证）。主侧栏据此给对应
+   * 子项标红——这些子项在权限树里没有对应节点，位置只能由页面告知。
    */
   activeSubItem?: {
     /** 所属菜单行的 code，如 `api` / `webhooks`。 */

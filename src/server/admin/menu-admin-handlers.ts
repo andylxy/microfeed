@@ -1,5 +1,5 @@
 /**
- * 菜单管理页端点（票 03 读取 + 票 04 保存 / 导出）。
+ * 菜单管理页端点（票 03 起全部只读：list / export 保留，save 的写入通道关闭）。
  *
  * 三个端点全部绑定 `system:menu:manage`——与 `menu_management` 菜单行同一个码，
  * admin-page-guards 的硬规则同样覆盖这组端点与页面的配对。
@@ -10,9 +10,6 @@
  * 个位数），不构成全表扫描风险。
  * 管理页需要「含不可见行、含无权限过滤」的完整结构，可见行过滤在
  * `src/server/admin/menu.ts` 的渲染路径做，两者语义不同、不共用查询。
- *
- * 写入纪律：全部语句经 `planMenuOps`（`src/shared/MenuAdminOps.ts`）生成、
- * 一律绑定参数，整批经 `db.batch` 原子提交；任何一条校验失败整批拒绝。
  */
 
 import {env} from "cloudflare:workers";
@@ -23,8 +20,6 @@ import {requireRbac} from "@/server/rbac/guard";
 import {
   buildMenuExportSql,
   MENU_ROW_CUSTOM_ID_PREFIX,
-  planMenuOps,
-  type MenuAdminOp,
   type MenuAdminRowWithMeta,
 } from "@/shared/MenuAdminOps";
 import {PERMISSION_CODES} from "@/shared/Constants";
@@ -86,8 +81,11 @@ export const listMenuAdminEndpoint: APIRoute = async ({locals, request}) => {
 };
 
 /**
- * `POST /ajax/menu/save {ops: MenuAdminOp[]}` — 批量保存一次编辑的操作。
- * 校验在共享层完成，通过后整批 `db.batch` 原子写入并回发最新全量行。
+ * `POST /ajax/menu/save` — 只读一版（ADR-0042 D6）：写入通道已关闭。
+ *
+ * 侧栏改读权限节点后，写进 `ext_menu` 不再影响任何渲染结果，请求却仍回报成功：
+ * 照旧提交、界面毫无变化，这类无声失败比明确报错更难定位。路由与鉴权保留
+ * （整条端点的退役属票 04），写入一律拒绝。
  */
 export const saveMenuAdminEndpoint: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(
@@ -97,24 +95,7 @@ export const saveMenuAdminEndpoint: APIRoute = async ({locals, request}) => {
     env.FEED_DB,
   );
   if (guard) return guard;
-
-  const body = (await request.json().catch(() => null)) as {ops?: unknown} | null;
-  const ops = Array.isArray(body?.ops) ? (body.ops as MenuAdminOp[]) : null;
-  if (!ops) {
-    return localizedError(request, "errors.menu.invalidInput", 400);
-  }
-
-  const rows = await listMenuAdminRows(env.FEED_DB);
-  const plan = planMenuOps(rows, ops);
-  if (plan.error) {
-    return localizedError(request, plan.error.key, plan.error.status, plan.error.params);
-  }
-  await env.FEED_DB.batch(
-    plan.statements.map((statement) =>
-      env.FEED_DB.prepare(statement.sql).bind(...statement.params),
-    ),
-  );
-  return jsonResponse({rows: await listMenuAdminRows(env.FEED_DB)}, {headers: NO_STORE});
+  return localizedError(request, "errors.menu.readOnly", 409);
 };
 
 /**

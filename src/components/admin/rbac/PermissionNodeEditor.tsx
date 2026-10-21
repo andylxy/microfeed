@@ -9,6 +9,7 @@ import type {AdminLanguage} from "@/shared/AdminLanguage";
 import {menuIconOptions} from "@/shared/MenuTreeView";
 import type {PermissionUpdatePatch} from "@/shared/PermissionTreeOps";
 import {
+  normalizeEntryPath,
   permissionParentCandidates,
   permissionSiblingPosition,
   type PermissionNodeRowWithMeta,
@@ -48,6 +49,72 @@ function PermissionNameInput({
       value={draft}
     />
   );
+}
+
+/**
+ * 路径输入：受控 + 失焦提交。与名称输入同款，提交前去掉首尾斜杠——`path` 相对
+ * `/admin/`，带斜杠会让侧栏导出的链接变形。
+ */
+function PermissionPathInput({
+  disabled,
+  onCommit,
+  placeholder,
+  value,
+}: {
+  disabled: boolean;
+  onCommit: (next: string | null) => void;
+  placeholder: string;
+  value: string | null;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+  return (
+    <Input
+      className="w-full min-w-24 font-mono text-sm"
+      disabled={disabled}
+      maxLength={128}
+      onBlur={() => {
+        const next = normalizeEntryPath(draft);
+        if (next !== (value ?? null)) onCommit(next);
+      }}
+      onChange={(event) => setDraft(event.target.value)}
+      placeholder={placeholder}
+      value={draft}
+    />
+  );
+}
+
+/**
+ * 入口门码下拉的候选码（按显示顺序，已去重）。
+ *
+ * 三条规则：本页自有码（`kind='code'` 子节点）优先；本页没有自有码时列本端已用作
+ * 门码的码——`rbac_audit` 这类共用别页门码的节点属于这一支，不列的话选一次
+ * 「只挂码，不进侧栏」就再也设不回来；当前值始终保留，哪怕没有别的页在用它。
+ */
+export function entryCodeChoices(
+  row: PermissionNodeRowWithMeta,
+  rows: readonly PermissionNodeRowWithMeta[],
+): string[] {
+  const own = rows
+    .filter(
+      (entry) =>
+        entry.kind === "code" && entry.parentCode === row.code && entry.permissionCode,
+    )
+    .map((entry) => entry.permissionCode as string);
+  const borrowed =
+    own.length > 0
+      ? []
+      : rows
+          .filter(
+            (entry) =>
+              entry.kind === "page" &&
+              entry.audience === row.audience &&
+              entry.entryCode,
+          )
+          .map((entry) => entry.entryCode as string);
+  return [...new Set([...own, ...borrowed, ...(row.entryCode ? [row.entryCode] : [])])];
 }
 
 export interface PermissionNodeEditorProps {
@@ -170,6 +237,15 @@ export function PermissionNodeEditor({
   const parentValue =
     parentOptions.find((option) => option.value === (row.parentCode ?? "")) ?? null;
 
+  // 页面行补「路径 path」与「入口门码 entry_code」（ADR-0041 D1/D2）。
+  const codeLabel = (code: string) => permissionNames.get(code) ?? code;
+  const entryCodeOptions: AdminSelectOption[] = [
+    {label: t("rbac.permissionTree.entryCodeNone"), value: ""},
+    ...entryCodeChoices(row, rows).map((code) => ({label: codeLabel(code), value: code})),
+  ];
+  const entryCodeValue =
+    entryCodeOptions.find((option) => option.value === (row.entryCode ?? "")) ?? null;
+
   return (
     <>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -286,6 +362,36 @@ export function PermissionNodeEditor({
               value={iconValue}
             />
           </label>
+          {row.kind === "page" && (
+            <>
+              <label className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center sm:gap-4">
+                <span className="text-muted-foreground">{t("rbac.permissionTree.path")}</span>
+                <PermissionPathInput
+                  disabled={busy}
+                  onCommit={(next) => onField(row, {path: next})}
+                  placeholder={t("rbac.permissionTree.pathPlaceholder")}
+                  value={row.path}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-start sm:gap-4">
+                <span className="text-muted-foreground">
+                  {t("rbac.permissionTree.entryCode")}
+                </span>
+                <div className="grid gap-1.5">
+                  <AdminSelect
+                    ariaLabel={t("rbac.permissionTree.entryCode")}
+                    disabled={busy}
+                    onChange={(option) => onField(row, {entryCode: option.value || null})}
+                    options={entryCodeOptions}
+                    value={entryCodeValue}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("rbac.permissionTree.entryCodeHint")}
+                  </p>
+                </div>
+              </label>
+            </>
+          )}
           <ParentAndVisibility
             busy={busy}
             confirmReparent={confirmReparent}

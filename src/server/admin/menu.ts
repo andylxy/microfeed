@@ -1,60 +1,47 @@
 /**
- * Admin menu loading — the menu is data (`ext_menu`, migration 0041), so the
- * dashboard asks "which rows may this account see?" instead of rendering a
- * hard-coded array.
+ * Admin menu loading — the sidebar is the permission tree
+ * (`ext_permission_nodes`, ADR-0041 / ADR-0042 D6), so the dashboard asks
+ * "which rows may this account see?" instead of rendering a hard-coded array.
  *
- * The pipeline mirrors the BasicApp reference this was modelled on:
- *   visible rows -> per-row permission test -> sort -> tree -> prune -> fallback
+ * The tree assembly lives in `buildSidebarItems`, shared with the role editor's
+ * sidebar preview, so the two cannot disagree about ordering, pruning, or how a
+ * group links to its first child. What stays here is the server-only part: the
+ * query and the gate.
  *
  * Two rules are load-bearing:
  *
- * 1. A row with no `permission_code` is a **public** menu (the dashboard home)
- *    and is visible to anyone signed in. Everything else needs its code.
- * 2. The permission test is {@link rbacAllows} — the same source the request
- *    guards use. A menu that disagreed with its page would show a link that
- *    403s, or hide a page the account may open.
+ * 1. A group row carries no entry code and is a public heading.
+ * 2. A page row needs a non-empty `entry_code`, tested with {@link rbacAllows} —
+ *    the same decision the request guards make. A menu that disagreed with its
+ *    page would show a link that 403s, or hide a page the account may open.
+ *
+ * 等价性证据（本地快照实测，0133 已应用）：按本查询拼出的行集 = 合成首页 +
+ * 26 个过门控页面 + 6 分组，与读 `ext_menu` 的输出在顺序、路径、门码上逐项一致。
+ * `admin_home` 没有节点行，仍由 `buildSidebarItems` 合成。
  */
 
 import {rbacAllows, type RbacLocals} from "@/server/rbac/guard";
-import {adminUrl} from "@/shared/AdminPath";
+import {buildSidebarItems} from "@/shared/AdminSidebarItems";
 import type {AdminMenuItem} from "@/shared/AdminNavigation";
 import {ADMIN_MENU_CODES} from "@/shared/Constants";
-
-interface MenuRow {
-  code: string;
-  i18n_key: string;
-  icon: string | null;
-  name_en: string | null;
-  name_zh: string | null;
-  parent_code: string | null;
-  path: string;
-  permission_code: string | null;
-  sort: number;
-}
-
-const VISIBLE_ROWS = "SELECT code, parent_code, path, i18n_key, icon, " +
-  "name_zh, name_en, " +
-  "permission_code, sort FROM ext_menu WHERE is_visible = 1 ORDER BY sort, code";
-
-interface MenuNode extends AdminMenuItem {
-  children: MenuNode[];
-}
+import {
+  PERMISSION_NODE_COLUMNS,
+  toPermissionNodeRow,
+  type PermissionNodeTableRow,
+} from "@/shared/PermissionTreeOps";
 
 /**
- * Drop parent nodes whose children were all filtered out — a heading that opens
- * nothing is worse than no heading. Bottom-up, so a parent emptied by pruning
- * its own child is removed too.
+ * 侧栏只要分组行与页面行：码行是勾选项，不进侧栏；App 端没有侧栏。
+ * 列清单取共享常量，免得与权限树接口的映射分家。
+ *
+ * 取数代价（本地快照实测，0133 已应用）：走复合索引
+ * `ix_ext_permission_nodes_audience(audience, kind)`，不扫全表；匹配 34 行
+ * （desktop 6 分组 + 28 页面，全表 95 行），读回 16 列约 4.3 KB（4288 字节），
+ * 一次请求行读 34 行。`ORDER BY sort, code` 借临时 B 树排序，只排这 34 行。
  */
-function pruneEmptyParents(nodes: MenuNode[], parentCodes: Set<string>): MenuNode[] {
-  const kept: MenuNode[] = [];
-  for (const node of nodes) {
-    node.children = pruneEmptyParents(node.children, parentCodes);
-    const isParent = parentCodes.has(node.id);
-    if (isParent && node.children.length === 0) continue;
-    kept.push(node);
-  }
-  return kept;
-}
+const NODE_ROWS = `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
+  WHERE audience = 'desktop' AND is_visible = 1 AND kind IN ('group', 'page')
+  ORDER BY sort, code`;
 
 /**
  * Build the menu for one request.
@@ -72,79 +59,27 @@ export async function readAdminMenu(
   activeCode: string | null,
   onboardingOk: boolean,
 ): Promise<AdminMenuItem[]> {
-  const result = await db.prepare(VISIBLE_ROWS).all<MenuRow>();
-  const rows = result.results ?? [];
-
-  const allowed = rows.filter((row) => rbacAllows(locals, row.permission_code));
-  if (allowed.length === 0) {
-    return [homeEntry(adminPath, activeCode)];
-  }
-
-  const nodes = new Map<string, MenuNode>();
-  for (const row of allowed) {
-    const nameZh = row.name_zh?.trim() ?? "";
-    const nameEn = row.name_en?.trim() ?? "";
-    nodes.set(row.code, {
-      active: row.code === activeCode,
-      children: [],
-      disabled: row.code !== ADMIN_MENU_CODES.ADMIN_HOME && !onboardingOk,
-      icon: row.icon,
-      id: row.code,
-      // 两列都空时不下发 label，渲染端回退 i18n 文案。
-      ...(nameZh || nameEn ? {label: {en: nameEn, zh: nameZh}} : {}),
-      url: adminUrl(row.path, adminPath),
-    });
-  }
-
-  // A group's code counts as a parent as long as *any* row points at it —
-  // including a row this account may not see. Deriving this from `allowed`
-  // instead would miss a group whose children were all filtered out, leaving an
-  // empty heading behind.
-  const parentCodes = new Set(
-    rows
-      .map((row) => row.parent_code)
-      .filter((code): code is string => typeof code === "string" && code.length > 0),
+  const result = await db.prepare(NODE_ROWS).all<PermissionNodeTableRow>();
+  const nodes = (result.results ?? []).map(toPermissionNodeRow);
+  const {items} = buildSidebarItems(
+    nodes,
+    (entryCode) => rbacAllows(locals, entryCode),
+    adminPath,
+    activeCode,
   );
-
-  const roots: MenuNode[] = [];
-  for (const row of allowed) {
-    const node = nodes.get(row.code);
-    if (!node) continue;
-    const parent = row.parent_code ? nodes.get(row.parent_code) : undefined;
-    if (parent) {
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-
-  const tree = pruneEmptyParents(roots, parentCodes);
-  if (tree.length === 0) {
-    return [homeEntry(adminPath, activeCode)];
-  }
-
-  // A group has no landing page of its own: it links to its first visible
-  // child. The main sidebar then renders it like any other entry, and the
-  // group sub-sidebar lists the children.
-  const linkGroups = (nodes: MenuNode[]): void => {
-    for (const node of nodes) {
-      const first = node.children[0];
-      if (!first) continue;
-      node.url = first.url;
-      linkGroups(node.children);
-    }
-  };
-  linkGroups(tree);
-
-  return tree;
+  return onboardingOk ? items : disableUntilReady(items);
 }
 
-function homeEntry(adminPath: string, activeCode: string | null): AdminMenuItem {
-  return {
-    active: activeCode === ADMIN_MENU_CODES.ADMIN_HOME,
-    disabled: false,
-    icon: "home",
-    id: ADMIN_MENU_CODES.ADMIN_HOME,
-    url: adminUrl("", adminPath),
-  };
+/** 站点未设置完时除首页外一律置灰：改造前就是这条行为，切换侧栏时不该顺手改掉。 */
+function disableUntilReady(items: AdminMenuItem[]): AdminMenuItem[] {
+  return items.map((item) => {
+    const next: AdminMenuItem = {
+      ...item,
+      disabled: item.id !== ADMIN_MENU_CODES.ADMIN_HOME,
+    };
+    if (item.children) {
+      next.children = disableUntilReady(item.children);
+    }
+    return next;
+  });
 }

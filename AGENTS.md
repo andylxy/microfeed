@@ -201,38 +201,36 @@
 
 ## 管理后台左侧菜单（导航树）
 
-左侧导航是一棵任意深度树，由 `ext_menu` 数据表驱动，前端在 `AdminSidebar` 里递归渲染 `AdminMenuItemLink`。分组节点可展开/收起；当前页所在的祖先链自动展开；展开态按账号记进 `localStorage`。
+左侧导航是一棵任意深度树，由 `ext_permission_nodes` 权限节点表驱动（ADR-0038 自持树、ADR-0041 菜单并入、ADR-0042 D6 切换），前端在 `AdminSidebar` 里递归渲染 `AdminMenuItemLink`。分组节点可展开/收起；当前页所在的祖先链自动展开；展开态按账号记进 `localStorage`。
 
 ### 数据来源与结构
 
-- `ext_menu` 是自引用表：`parent_code` 指向同表父行，迁移 0041 建有 `ix_ext_menu_parent` 索引。读取走 `src/server/admin/menu.ts` 的 `readAdminMenu`（递归的 `pruneEmptyParents` / `linkGroups`），能吐出任意深度树，前端无需改动即可支持三级与更深层级。
-- 每行携带 `path`（页面路径，空串表示该行是纯分组）、`permission_code`、`icon`、`sort`、`is_visible`，以及迁移 0125 加的 `name_zh` / `name_en`（均可空，作为可选项覆盖）。
-- 可见性由 `permission_code` 加 `rbacAllows` 决定；页面可达性由页面自身的 `requirePagePermission` 决定。两者一致由迁移人工比对与 `tests/worker/admin-page-guards.test.ts` 静态重放迁移保证。
+- 侧栏行集 = 桌面端（`audience = 'desktop'`）的 `kind = 'group'` 分组行与 `kind = 'page'` 页面行；码行（`kind = 'code'`）是角色编辑器里的勾选项，不进侧栏；App 端节点没有侧栏。表自引用：`parent_code` 指向同表父行，带 `ix_ext_permission_nodes_parent` / `_audience` / `_kind` / `_sort` 四个索引。
+- 页面行携带 `path`（相对 `/admin/` 的入口路径，分组行为 NULL）与 `entry_code`（入口门码），分组行两列均为 NULL；另有 `icon`、`sort`、`is_visible`、`i18n_key`、`source`、`created_at_ms` 与 `name_zh` / `name_en`（均可空，作为可选覆盖）。
+- 组装在 `src/shared/AdminSidebarItems.ts` 的 `buildSidebarItems`：按 `(sort, code)` 读序；`entry_code` 为空的页面行只挂码、不进侧栏；门码非空时按账号权限集合判定（持 `*` 通配视为全见）；子项全空的分组剪掉，父分组被滤掉时子分组升为顶层；分组本身不是页面，链接指向第一个子项。查询在 `src/server/admin/menu.ts` 的 `readAdminMenu`，门控走 `rbacAllows`。
+- 页面可达性由页面自身的 `requirePagePermission` 决定，判据是该页面节点绑定的同一个门码（一入口一门码，故为相等）。两侧一致由迁移人工比对、`tests/unit/admin-page-guards.test.ts` 静态重放迁移、`tests/worker/admin-menu.test.ts` 的「菜单行 ↔ 页面节点」对齐检查共同保证。
+- 同一份组装器给 `/admin/rbac/` 的「侧栏预览」复用：预览按所选角色的权限集合拼行集，运营调整门码即可看到侧栏的变化，两处不会漂移。
+- `ext_menu` 表仍在：全新安装先走它的种子，0133 再把配对行回填进节点表；`/admin/menu` 只读视图也仍读它。
 
 ### 三级子项的注入
 
-`SETTINGS`、`API`、`WEBHOOKS` 三个二级节点在 `ext_menu` 里没有第三层子行，它们的第三级由 `AdminSidebar.SUB_SECTION_BUILDERS` 在渲染时注入（这些子项不是数据树的一部分，是页面分区或真实子页）：
+`SETTINGS`、`API`、`WEBHOOKS` 三个页面节点（`page_settings` / `page_api` / `page_webhooks`）没有第三层子节点，它们的第三级由 `AdminSidebar` 的 `SUB_SECTION_BUILDERS` 在渲染时注入（这些子项不是数据树的一部分，是页面分区或真实子页）：
 
 - `SETTINGS` → `ADMIN_SETTINGS_SECTIONS`（11 个同页锚点，形如 `设置#custom-code`），活动项跟随正文滚动所在分区（`settings-section-state` store 同步）。
 - `API` → `ADMIN_API_PAGES`（真实子页）。
 - `WEBHOOKS` → `ADMIN_WEBHOOK_PAGES`（真实子页）。
 
-新增一个域（又一个需要三级的二级节点）就在 `SUB_SECTION_BUILDERS` 加一行，并把清单写进对应模块（`AdminSettingsNavigation` / `AdminApiNavigation` / `AdminWebhookNavigation`）。每个二级节点保留自己的 `menu.item.*` 文案键——`menuEntryLabelKey` 按 `group_` 前缀判分组、不看有没有子节点，所以带注入子项的页面节点不会变成分组键。
+新增一个域（又一个需要三级的二级节点）就在 `SUB_SECTION_BUILDERS` 加一行（键写页面节点码），并把清单写进对应模块（`AdminSettingsNavigation` / `AdminApiNavigation` / `AdminWebhookNavigation`）。每个页面节点保留自己的 `menu.item.*` 文案键——`menuEntryLabelKey` 按 `group_` 前缀判分组、不看有没有子节点，所以带注入子项的页面节点不会变成分组键。
 
 ### 名称解析
 
-渲染优先级（见 `src/shared/AdminNavigation.ts` 的 `adminMenuItemLabel`）：当前语言列优先，该列为空取另一列，两列皆空回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。管理页表格（`/admin/menu`）有一列「生效名称」显示这条优先级算出的当前实际文本，运营无需切换语言即可看到改完后的菜单显示内容。
+渲染优先级（见 `src/shared/AdminNavigation.ts` 的 `adminMenuItemLabel`）：`name_zh` / `name_en` 当前语言列优先，该列为空取另一列，两列皆空回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。管理页表格（`/admin/menu`）有一列「生效名称」显示这条优先级算出的当前实际文本，运营无需切换语言即可看到菜单显示内容。
 
 ### 菜单管理页 `/admin/menu`
 
-- 开放的操作：重命名（`name_zh` / `name_en`，留空即回退 i18n）、改图标（从 `MENU_ICON_NAMES` 选）、上移/下移（改 `sort`）、显/隐（改 `is_visible`）、改父节点（禁止挂到自身子孙下）、新建纯分组（空 `path`、空 `permission_code`）、删除管理页自建行。
-- 不开放的操作：`path` 与 `permission_code`。这两列是「菜单可见 ⇔ 页面可达」的前提，运行时改动会破坏该不变量，可达性继续由迁移 + 门禁测试保证；新建指向新页面的叶子也不开放（`ADMIN_MENU_CODES` 是编译期常量，后台新建的 code 进不去枚举、高亮会失配）。
-- 树里的注入子项：`SETTINGS` / `API` / `WEBHOOKS` 三个节点的第三级在 `ext_menu` 里没有行，管理页用 `menuInjectedRows`（`MenuTreeNode.tsx`）把 `SUB_SECTION_BUILDERS` 的同一份清单合成只读行，树因此与侧栏层级一致。这些行只进树的渲染行集（`MenuAdminApp` 的 `displayRows`），右侧面板、拖拽、删除、保存拿的都是数据行 `rows`，所以写不进任何 op；它们没有 `path` 与 `permission_code`，改名 / 改图标 / 排序 / 显隐一概不能做，行尾带「注入」标记。
-- 树的展开是顶层手风琴（对齐左侧导航）：同一时刻只展开一个顶层分组，点另一个则切换过去，点已展开的那个则收起；非顶层节点各自记折叠态。「全展开 / 全收起」只作用于当前展开顶层内部的子层。选中行所在顶层自动展开（新建分组后选中的新行可能位于别的顶层下）；行集首次到达时展开首个顶层。
-- 行 id 前缀：迁移种子行以 `m_` 开头（只可隐藏、不可删）；管理页自建行以 `mm_` 开头（`MENU_ROW_CUSTOM_ID_PREFIX`，可删除）。删除种子行被 `errors.menu.seedProtected` 拒绝。
-- 「导出 SQL」按钮（`buildMenuExportSql`）把当前运行时改动导成 data 迁移文本交用户提交：种子行按 id 发 `UPDATE` 只写可变字段（不改 `path` / `permission_code` / `i18n_key` / `created_at_ms`），自建行按 id 发 `INSERT`。
-- 保存校验的额外守门：`errors.menu.iconRequired`（页面行清空图标会在侧栏静默回退成 list 图标、两端显示对不上，故拒绝）、`reparentToPageConfirm`（把页面行挂到非空父级前确认，因为有子节点的行在侧栏只展开不跳转、自身入口会消失）、`MENU_ADMIN_MAX_OPS`（单次保存操作数上限，防误发整表重放）。
-- 图标名清单：`src/shared/MenuIconNames.ts` 的 `MENU_ICON_NAMES` 与 `AdminMenuItemLink.MENU_ICONS` 必须一一对应，由 `tests/unit/menu-admin-ops.test.ts` 守护；新增图标名要同时改这两处并与 i18n 的 `menu.icon.*` 键（en/zh 镜像）对齐。设置三级需要的 9 个图标名（`cloud` / `code` / `eye` / `globe` / `image` / `list-checks` / `rss` / `shield` / `storage`）已加进清单。
+只读一版（ADR-0042 D6）：菜单入口已并入权限树，改名 / 图标 / 排序 / 显隐 / 父级 / 新建分组全部关闭——前端所有操作经 `postOps` 切断，服务端 `POST /ajax/menu/save` 一律返回 `errors.menu.readOnly`（409）。页面保留给运营对照：左侧树与右侧详情面板的控件全部置灰，顶部横幅指向「角色管理」页。整页连同 `system:menu:manage` 码与 `page_menu_management` 节点的退役属下一批（ADR-0041 D5）。
+
+树里的注入子项：三个页面节点的第三级仍由 `menuInjectedRows`（`MenuTreeNode.tsx`）合成只读行，树与侧栏层级一致；这些行只进渲染行集，右侧面板、拖拽、删除、保存拿的都是数据行，写不进任何 op。行的展开是顶层手风琴（同左侧导航），「全展开 / 全收起」只作用于当前展开顶层内部的子层。行 id 前缀：迁移种子行以 `m_` 开头，管理页自建行以 `mm_` 开头（`MENU_ROW_CUSTOM_ID_PREFIX`）。图标名清单 `src/shared/MenuIconNames.ts` 与 `AdminMenuItemLink.MENU_ICONS` 一一对应，由 `tests/unit/menu-admin-ops.test.ts` 守护。
 
 ### 渲染防闪烁
 

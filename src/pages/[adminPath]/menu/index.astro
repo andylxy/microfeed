@@ -14,8 +14,8 @@ if (!feedContent || !onboardingResult) {
 }
 
 // Guarded with the same code its menu row binds (`system:menu:manage`).
-// Single code for read and write by design (migration 0126): opening the board
-// and saving edits are the one operation of curating the navigation.
+// 只读一版（ADR-0042 D6）：菜单入口已并入权限树，本页只保留对照视图，
+// 写入在 `MenuAdminApp` 里收口关闭。下一版整页下线，权限码一并退役。
 const denied = requirePagePermission(
   Astro.locals,
   PERMISSION_CODES.SYSTEM_MENU_MANAGE,

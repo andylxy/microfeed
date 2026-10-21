@@ -1,10 +1,16 @@
 /**
  * Page-level permission gate for the dashboard.
  *
- * Every menu page must guard itself with **the same permission code its menu row
- * binds** (`ext_menu.permission_code`). If the two drift, an account gets either
- * a link it cannot open (menu visible, page 403) or a page it can reach with no
- * way to navigate to it.
+ * Every menu page must guard itself with **the same permission code its sidebar
+ * entry binds** (`ext_permission_nodes.entry_code`). If the two drift, an account
+ * gets either a link it cannot open (menu visible, page 403) or a page it can
+ * reach with no way to navigate to it. An entry carries one code today, so the
+ * binding is an equality.
+ *
+ * The equality is enforced from both ends: `tests/unit/admin-page-guards.test.ts`
+ * replays the migrations to compare every page's guard code with the code its row
+ * seeds, and `tests/worker/admin-menu.test.ts` keeps those rows aligned with the
+ * `page_` nodes, so the guard code equals the node's `entry_code` as well.
  *
  * The menu being data does NOT make it access control: hiding an entry is
  * presentation, this is enforcement.

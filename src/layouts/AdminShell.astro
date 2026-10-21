@@ -111,7 +111,7 @@ const menuItems = await readAdminMenu(
   onboardingResult.requiredOk,
 );
 // 当前页处于 API / Webhooks 的哪个子页上：子项是主菜单注入出来的第三级，
-// 在 `ext_menu` 数据表里没有对应行，位置只能由页面告知侧栏。
+// 在权限树里没有对应节点，位置只能由页面告知侧栏。
 const activeSubItem = activeNavItem === ADMIN_MENU_CODES.API
   ? {code: ADMIN_MENU_CODES.API, id: apiActivePage}
   : activeNavItem === ADMIN_MENU_CODES.WEBHOOKS

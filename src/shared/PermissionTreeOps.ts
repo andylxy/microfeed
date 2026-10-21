@@ -43,7 +43,7 @@ const PERMISSION_NODE_NAME_MAX_LENGTH = 64;
  */
 export const PERMISSION_NODE_COLUMNS =
   "id, code, kind, parent_code, sort, audience, permission_code, name_zh, name_en, " +
-  "icon, i18n_key, is_visible, source, created_at_ms";
+  "icon, i18n_key, is_visible, source, created_at_ms, path, entry_code";
 
 /** `GET /ajax/rbac/permission-tree` 的一行：`ext_permission_nodes` 全列。 */
 export interface PermissionNodeRow {
@@ -51,6 +51,8 @@ export interface PermissionNodeRow {
   audience: PermissionAudience;
   code: string;
   createdAtMs: number;
+  /** 入口门码（ADR-0041 D2）：仅 page 行；空 = 只挂码、不进侧栏。 */
+  entryCode: string | null;
   icon: string | null;
   id: string;
   i18nKey: string | null;
@@ -58,6 +60,7 @@ export interface PermissionNodeRow {
   nameEn: string | null;
   nameZh: string | null;
   parentCode: string | null;
+  path: string | null;
   permissionCode: string | null;
   sort: number;
   source: "custom" | "seed";
@@ -79,6 +82,7 @@ export interface PermissionNodeTableRow {
   audience: PermissionAudience;
   code: string;
   created_at_ms: number;
+  entry_code: string | null;
   i18n_key: string | null;
   icon: string | null;
   id: string;
@@ -87,6 +91,7 @@ export interface PermissionNodeTableRow {
   name_en: string | null;
   name_zh: string | null;
   parent_code: string | null;
+  path: string | null;
   permission_code: string | null;
   sort: number;
   source: PermissionNodeRow["source"];
@@ -98,6 +103,7 @@ export function toPermissionNodeRow(row: PermissionNodeTableRow): PermissionNode
     audience: row.audience,
     code: row.code,
     createdAtMs: Number(row.created_at_ms),
+    entryCode: row.entry_code,
     icon: row.icon,
     id: row.id,
     i18nKey: row.i18n_key,
@@ -105,6 +111,7 @@ export function toPermissionNodeRow(row: PermissionNodeTableRow): PermissionNode
     nameEn: row.name_en,
     nameZh: row.name_zh,
     parentCode: row.parent_code,
+    path: row.path,
     permissionCode: row.permission_code,
     sort: Number(row.sort),
     source: row.source,
@@ -155,11 +162,13 @@ export type PermissionTreeOp =
       code: string;
       op: "update";
       patch: {
+        entryCode?: string | null;
         icon?: string | null;
         isVisible?: boolean;
         nameEn?: string | null;
         nameZh?: string | null;
         parentCode?: string | null;
+        path?: string | null;
       };
     }
   | {code: string; ids: string[]; op: "reorder"; parentCode?: string | null};
@@ -249,11 +258,13 @@ function pageViewCode(nodeCode: string): string {
 }
 
 const UPDATE_STATEMENTS = {
+  entryCode: "UPDATE ext_permission_nodes SET entry_code = ? WHERE id = ?",
   icon: "UPDATE ext_permission_nodes SET icon = ? WHERE id = ?",
   isVisible: "UPDATE ext_permission_nodes SET is_visible = ? WHERE id = ?",
   nameEn: "UPDATE ext_permission_nodes SET name_en = ? WHERE id = ?",
   nameZh: "UPDATE ext_permission_nodes SET name_zh = ? WHERE id = ?",
   parentCode: "UPDATE ext_permission_nodes SET parent_code = ? WHERE id = ?",
+  path: "UPDATE ext_permission_nodes SET path = ? WHERE id = ?",
 };
 
 const UPDATE_SORT = "UPDATE ext_permission_nodes SET sort = ? WHERE id = ?";
@@ -343,6 +354,16 @@ function planParentChange(
   return parentLevelError(row.kind, parent);
 }
 
+/**
+ * 入口路径的口径：去首尾空白与斜杠，空串归为 `null`。`ext_menu.path` 是相对
+ * `/admin/` 的 slug（`rbac`、`rbac/audit`），编辑器失焦提交与 `planUpdate` 共用
+ * 这一份，客户端与服务端不会各自剪出一个不同的值。
+ */
+export function normalizeEntryPath(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  return raw.trim().replace(/^\/+|\/+$/g, "") || null;
+}
+
 function planUpdate(
   rows: Map<string, PermissionNodeRow>,
   code: string,
@@ -351,16 +372,22 @@ function planUpdate(
   const row = rows.get(code);
   if (!row) return {error: error("errors.permission.notFound", 404, {code})};
 
-  // `code` 节点是权限码的展示位：名字取 `ext_permissions.name`，图标无意义，
-  // 只能换父级与显隐。传来名字/图标一律拒绝，不做静默忽略。
+  // code 行是权限码的展示位：名字取 `ext_permissions.name`，图标无意义，路径与
+  // 入口门码也不对码行开放——只能换父级与显隐。
   if (row.kind === "code") {
     if (
       patch.nameZh !== undefined ||
       patch.nameEn !== undefined ||
-      patch.icon !== undefined
+      patch.icon !== undefined ||
+      patch.path !== undefined ||
+      patch.entryCode !== undefined
     ) {
       return {error: error("errors.permission.invalidInput", 400, {code})};
     }
+  }
+  // path / entry_code 只对页面行开放；分组与码行传来一律拒绝。
+  if (row.kind !== "page" && (patch.path !== undefined || patch.entryCode !== undefined)) {
+    return {error: error("errors.permission.invalidInput", 400, {code})};
   }
 
   const statements: PermissionSqlStatement[] = [];
@@ -397,6 +424,36 @@ function planUpdate(
     if (parentError) return {error: parentError};
     statements.push({params: [parentCode, row.id], sql: UPDATE_STATEMENTS.parentCode});
     next.parentCode = parentCode;
+  }
+  if (patch.path !== undefined || patch.entryCode !== undefined) {
+    let nextPath = next.path;
+    if (patch.path !== undefined) {
+      const raw = typeof patch.path === "string" ? patch.path : null;
+      nextPath = normalizeEntryPath(raw);
+      statements.push({params: [nextPath, row.id], sql: UPDATE_STATEMENTS.path});
+      next.path = nextPath;
+    }
+    if (patch.entryCode !== undefined) {
+      const entry =
+        typeof patch.entryCode === "string" ? patch.entryCode.trim() || null : null;
+      if (entry !== null) {
+        // 入口门码必须是本端已有的权限码（kind='code' 的 permission_code）；
+        // `rbac_audit` 与 `page_rbac` 共用码也由此放行。
+        const known = [...rows.values()].some(
+          (other) =>
+            other.kind === "code" &&
+            other.audience === row.audience &&
+            other.permissionCode === entry,
+        );
+        if (!known) return {error: error("errors.permission.invalidInput", 400, {code})};
+        if (!nextPath) return {error: error("errors.permission.entryCodeNeedsPath", 400, {code})};
+      }
+      statements.push({params: [entry, row.id], sql: UPDATE_STATEMENTS.entryCode});
+      next.entryCode = entry;
+    } else if (!nextPath && next.entryCode) {
+      // 只清 path 而 entryCode 仍非空：违反 entry_code 非空 ⇒ path 非空。
+      return {error: error("errors.permission.entryCodeNeedsPath", 400, {code})};
+    }
   }
 
   if (statements.length === 0) {
@@ -499,6 +556,8 @@ function planCreateGroup(
     audience,
     code,
     createdAtMs: now,
+    // 分组行不带入口路径与门码（ADR-0042 D3：两列只属于页面行）。
+    entryCode: null,
     icon: op.icon,
     id: `${PERMISSION_ROW_CUSTOM_ID_PREFIX}${code}`,
     i18nKey: `rbac.node.${code}`,
@@ -506,6 +565,7 @@ function planCreateGroup(
     nameEn: nameEn || null,
     nameZh: nameZh || null,
     parentCode,
+    path: null,
     permissionCode: null,
     sort: maxSort + 1,
     source: "custom",
@@ -757,7 +817,7 @@ export function buildPermissionExportSql(
     "-- 使用前：把文件名与本行的 NNNN 改成下一个连续编号（check-migrations 门禁要求编号连续）。",
     "--",
     "-- 范围：种子行（id 以 pn_ 开头）只写可变字段 parent_code / name_zh / name_en /",
-    "-- icon / sort / is_visible，不改 kind / permission_code / source / created_at_ms；",
+    "-- icon / sort / is_visible / path / entry_code，不改 kind / permission_code / source / created_at_ms；",
     "-- 管理页自建行（id 以 pm_ 开头）用 INSERT OR REPLACE 补整行，permission_code 为 NULL",
     "--",
     "-- rollback: 重放上一份权限树快照迁移；没有快照时回到种子迁移 0127 的初始结构。",
@@ -782,10 +842,12 @@ export function buildPermissionExportSql(
         sqlLiteral(row.visible ? 1 : 0),
         sqlLiteral(row.source),
         sqlLiteral(row.createdAtMs),
+        sqlLiteral(row.path),
+        sqlLiteral(row.entryCode),
       ].join(", ");
       lines.push(
         "INSERT OR REPLACE INTO ext_permission_nodes",
-        "  (id, code, kind, parent_code, audience, sort, permission_code, name_zh, name_en, icon, i18n_key, is_visible, source, created_at_ms)",
+        "  (id, code, kind, parent_code, audience, sort, permission_code, name_zh, name_en, icon, i18n_key, is_visible, source, created_at_ms, path, entry_code)",
         `VALUES (${values});`,
       );
       continue;
@@ -797,7 +859,9 @@ export function buildPermissionExportSql(
       `  name_en = ${sqlLiteral(row.nameEn)},`,
       `  icon = ${sqlLiteral(row.icon)},`,
       `  sort = ${sqlLiteral(row.sort)},`,
-      `  is_visible = ${sqlLiteral(row.visible ? 1 : 0)}`,
+      `  is_visible = ${sqlLiteral(row.visible ? 1 : 0)},`,
+      `  path = ${sqlLiteral(row.path)},`,
+      `  entry_code = ${sqlLiteral(row.entryCode)}`,
       `WHERE id = ${sqlLiteral(row.id)};`,
     );
   }

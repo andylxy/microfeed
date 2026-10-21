@@ -46,6 +46,8 @@ export interface MenuTreeCtxValue {
   language: AdminLanguage;
   move: (row: MenuRow, direction: "up" | "down") => void;
   onSelect: (code: string) => void;
+  /** 只读一版：拖拽手柄置灰并禁用（键盘移动随之失效），与详情面板的置灰同口径。 */
+  readOnly: boolean;
   rows: MenuRow[];
   search: {
     query: string;
@@ -125,6 +127,7 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
     language,
     move,
     onSelect,
+    readOnly,
     rows,
     search,
     selectedCode,
@@ -182,7 +185,13 @@ export function MenuTreeNode({row}: {row: MenuRow}) {
           {!injected && (
             <button
               aria-label={t("menuAdmin.dragHandle")}
-              className="shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+              className={cn(
+                "shrink-0 rounded-md p-1 text-muted-foreground",
+                readOnly
+                  ? "cursor-not-allowed opacity-50"
+                  : "cursor-grab hover:bg-muted active:cursor-grabbing",
+              )}
+              disabled={readOnly}
               type="button"
               onKeyDown={(event) => {
                 // 键盘移动与「↑ / ↓」按钮同一条 `move` op；越出同层边界时服务端会拒绝。

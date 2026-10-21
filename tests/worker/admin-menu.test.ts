@@ -4,7 +4,14 @@ import {afterEach, describe, expect, it} from "vitest";
 import {readAdminMenu} from "@/server/admin/menu";
 import {resolveUserPermissions} from "@/server/rbac/resolve";
 import type {AdminMenuItem} from "@/shared/AdminNavigation";
+import {buildSidebarItems, roleSeesEntry} from "@/shared/AdminSidebarItems";
 import {ADMIN_MENU_CODES} from "@/shared/Constants";
+import {translate} from "@/shared/i18n";
+import {
+  PERMISSION_NODE_COLUMNS,
+  toPermissionNodeRow,
+  type PermissionNodeTableRow,
+} from "@/shared/PermissionTreeOps";
 
 const ADMIN_PATH = "admin";
 const EDITORS = "u_menu_editor";
@@ -61,11 +68,11 @@ afterEach(async () => {
 });
 
 /**
- * The menu is data (migration 0041, grouped by 0050), not the hard-coded array
- * it used to be. These tests guard the ways that data can rot: a menu code that
- * no longer has a row (the entry silently disappears from the sidebar), a row
- * bound to a permission code that does not exist (nothing could ever see it),
- * and a row that is neither a page code nor a group heading.
+ * The menu seed is data (migration 0041, grouped by 0050), not the hard-coded
+ * array it used to be. Since 2026-10-21 the sidebar reads `ext_permission_nodes`
+ * instead, so this table is now the seed that migration 0133 backfills from plus
+ * what the read-only menu page still shows — the block below keeps it honest
+ * until the page is retired.
  */
 describe("admin menu seed", () => {
   it("has a row for every menu code, plus one group row per parent", async () => {
@@ -307,5 +314,121 @@ describe("readAdminMenu", () => {
     expect(findItem(menu, "group_content")?.url).toBe("/admin/books/");
     expect(findItem(menu, "group_account")?.url).toBe("/admin/rbac/");
     expect(findItem(menu, "group_operations")?.url).toBe("/admin/devices/");
+  });
+});
+
+/**
+ * 侧栏自 2026-10-21 起读 `ext_permission_nodes`（ADR-0042 D6）。`ext_menu` 只剩
+ * 迁移种子与「菜单管理」只读页两个用途，下一次迁移会整页下线。这两条守住切换
+ * 的前提：节点行必须与菜单行逐项对齐，否则切换后侧栏会静默少项或换链接。
+ */
+describe("permission-tree sidebar source", () => {
+  it("mirrors every menu page row as a page node with the same path and entry code", async () => {
+    const menuRows = await env.FEED_DB.prepare(
+      "SELECT code, path, icon, permission_code FROM ext_menu " +
+        "WHERE is_visible = 1 AND parent_code IS NOT NULL",
+    ).all<{code: string; icon: string | null; path: string; permission_code: string | null}>();
+    const nodeRows = await env.FEED_DB.prepare(
+      "SELECT code, path, icon, entry_code FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'page'",
+    ).all<{code: string; entry_code: string | null; icon: string | null; path: string | null}>();
+    const byCode = new Map((nodeRows.results ?? []).map((row) => [row.code, row]));
+
+    const seeded = menuRows.results ?? [];
+    expect(seeded.length).toBeGreaterThan(0);
+    for (const row of seeded) {
+      const node = byCode.get(`page_${row.code}`);
+      expect(node, `no node for menu ${row.code}`).toBeDefined();
+      expect(node?.path, `path drift for ${row.code}`).toBe(row.path);
+      expect(node?.entry_code, `entry code drift for ${row.code}`)
+        .toBe(row.permission_code);
+      // 图标也在渲染输出里：切到节点后侧栏画的是这一列。
+      expect(node?.icon, `icon drift for ${row.code}`).toBe(row.icon);
+    }
+  });
+
+  it("gives every group heading a visible desktop group node", async () => {
+    const groups = await groupCodes();
+    const nodeRows = await env.FEED_DB.prepare(
+      "SELECT code FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'group' AND is_visible = 1",
+    ).all<{code: string}>();
+    const codes = new Set((nodeRows.results ?? []).map((row) => row.code));
+
+    expect(groups.size).toBeGreaterThan(0);
+    for (const code of groups) {
+      expect(codes.has(code), `group ${code} has no node`).toBe(true);
+    }
+  });
+
+  it("leaves path and entry code empty on pages that have no menu row", async () => {
+    // ADR-0042 验证口径 阶段1：`media` 这类只挂码、不进侧栏的页面两列都为空。
+    const media = await env.FEED_DB.prepare(
+      "SELECT path, entry_code FROM ext_permission_nodes WHERE code = 'page_media'",
+    ).first<{entry_code: string | null; path: string | null}>();
+    expect(media).toEqual({path: null, entry_code: null});
+
+    const menuCodes = new Set(
+      (
+        await env.FEED_DB.prepare(
+          "SELECT code FROM ext_menu WHERE parent_code IS NOT NULL",
+        ).all<{code: string}>()
+      ).results?.map((row) => row.code) ?? [],
+    );
+    const nodeRows = await env.FEED_DB.prepare(
+      "SELECT code, path, entry_code FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'page'",
+    ).all<{code: string; entry_code: string | null; path: string | null}>();
+
+    for (const row of nodeRows.results ?? []) {
+      if (menuCodes.has(row.code.replace(/^page_/u, ""))) continue;
+      expect(row.path, `path leaked onto ${row.code}`).toBeNull();
+      expect(row.entry_code, `entry code leaked onto ${row.code}`).toBeNull();
+    }
+  });
+
+  it("keeps the seeded display names equal to the nav text they replace", async () => {
+    // 0127 决策 6：页面节点的名称列是 i18n 文案的冗余副本；侧栏改读节点后这一列
+    // 就是导航上的字，两侧一漂移，切换就等于悄悄改了入口名称（ADR-0042 D6）。
+    const nodeRows = await env.FEED_DB.prepare(
+      "SELECT code, name_zh, name_en FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'page' AND entry_code IS NOT NULL",
+    ).all<{code: string; name_en: string | null; name_zh: string | null}>();
+
+    const rows = nodeRows.results ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const navCode = row.code.replace(/^page_/u, "");
+      expect(row.name_zh, `zh label drift for ${navCode}`)
+        .toBe(translate(`menu.item.${navCode}`, "zh-CN"));
+      expect(row.name_en, `en label drift for ${navCode}`)
+        .toBe(translate(`menu.item.${navCode}`, "en"));
+    }
+  });
+
+  it("gives the preview and the real sidebar the same rows for the same account", async () => {
+    // 预览用 `roleSeesEntry`（没有 locals），真实侧栏用 `rbacAllows`；两侧对非空
+    // 门码的结论必须相同，否则预览会对着一个不存在的侧栏给运营调门码。
+    const permissions = await seedAccount(EDITORS, "r_editor", "user");
+    const real = await readAdminMenu(
+      env.FEED_DB,
+      locals(EDITORS, "user", permissions),
+      ADMIN_PATH,
+      null,
+      true,
+    );
+
+    const nodeRows = await env.FEED_DB.prepare(
+      `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
+        WHERE audience = 'desktop' AND is_visible = 1 AND kind IN ('group', 'page')
+        ORDER BY sort, code`,
+    ).all<PermissionNodeTableRow>();
+    const preview = buildSidebarItems(
+      (nodeRows.results ?? []).map(toPermissionNodeRow),
+      (entryCode) => roleSeesEntry([...permissions], entryCode),
+      ADMIN_PATH,
+    ).items;
+
+    expect(preview).toEqual(real);
   });
 });

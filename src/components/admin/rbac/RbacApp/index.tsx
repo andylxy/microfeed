@@ -44,6 +44,7 @@ import {
   RbacSaveStatus,
   type RbacSaveState,
 } from "@/components/admin/rbac/RbacSaveStatus";
+import SidebarPreview from "@/components/admin/rbac/SidebarPreview";
 import {cn} from "@/lib/utils";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import type {InterfaceCatalogRow} from "@/shared/AppInterface";
@@ -105,7 +106,7 @@ function anonymousGroups(
 interface Props {
   /** App 端接口清单（服务端从代码登记表推导）。 */
   appInterfaces: InterfaceCatalogRow[];
-  /** App 端板子；`null` = 当前账号看不到 App 分类（无任何 App 码）。 */
+  /** App 端板子；`null` = 当前账号看不到 App 分类（无 `system:app-capability:manage`）。 */
   appBoard: RbacBoard | null;
   /** PC 端板子（角色列表的全局来源）。 */
   desktopBoard: RbacBoard;
@@ -148,7 +149,7 @@ async function parseError(response: Response, fallback: string): Promise<string>
  * 手风琴：每一层同层只展开一个（分类层、顶层分组层同理）；搜索态例外
  * （命中强制展开）。结构编辑（改名 / 图标 / 父级 / 显隐 / 移动 / 删除 /
  * 加子分组）集中在右栏详情面板，失焦即保存——与菜单管理同款语法。
- * App 分类对没有任何 App 码的账号隐藏（服务端判定，`appBoard` 传 null）。
+ * App 分类对没有 `system:app-capability:manage` 的账号隐藏（服务端判定，`appBoard` 传 null）。
  * `super_admin` 是通配持有者：整树只读，勾选框全部禁用。
  */
 export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterfaces}: Props) {
@@ -160,6 +161,9 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
   });
   const [selectedRole, setSelectedRole] = useState(desktopBoard.roles[0]?.code ?? "");
   const [saving, setSaving] = useState(false);
+  // 侧栏预览可收起：窄屏先给详情面板让位。行集在 `SidebarPreview` 里算，收起不重算；
+  // 分组折叠态在树内部，收起后重开回到默认全展开。
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
 
   // 两端行集：单页同时装载 desktop 与 app（App 分类可见时）。
   const [rowsByAudience, setRowsByAudience] = useState<
@@ -472,7 +476,6 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
       setLoading(false);
     }
     // boards.app 只由服务端 props 决定（分类可见性），不进依赖。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t]);
 
   useEffect(() => {
@@ -898,7 +901,7 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
     return <AdminCollectionError message={loadError} retry={() => void load()} />;
   }
 
-  // 某个角色持有的授权总数：两端相加。App 分类隐藏时（账号没有任何 App 码）
+  // 某个角色持有的授权总数：两端相加。App 分类隐藏时（账号没有 `system:app-capability:manage`）
   // 服务端只发 PC 板子，这里就只有 PC 端的数——拿不到对端授权，不假装补零。
   const countOfRole = (code: string) =>
     (boards.desktop.roles.find((entry) => entry.code === code)?.permissions.length ?? 0) +
@@ -1178,6 +1181,20 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
             </p>
           )}
         </section>
+        <aside
+          className={cn(
+            "flex w-full shrink-0 flex-col rounded-[14px] border bg-sidebar text-sidebar-foreground shadow-xs lg:sticky lg:top-4 lg:w-72",
+            // 展开时给一个确定高度，预览正文才能自己滚；收起时只剩标题栏，不占一屏。
+            !previewCollapsed && "lg:h-[calc(100svh-6rem)]",
+          )}
+        >
+          <SidebarPreview
+            collapsed={previewCollapsed}
+            nodes={rowsByAudience.desktop ?? []}
+            onToggle={() => setPreviewCollapsed((value) => !value)}
+            permissions={role?.permissions ?? []}
+          />
+        </aside>
       </div>
 
       <RoleManagerDialog

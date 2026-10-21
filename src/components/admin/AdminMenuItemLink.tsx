@@ -46,8 +46,7 @@ import {
 } from "@/client/menu-open-state";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
-  adminMenuItemLabel,
-  menuEntryLabelKey,
+  adminMenuItemText,
   type AdminMenuItem,
 } from "@/shared/AdminNavigation";
 
@@ -61,8 +60,8 @@ interface Props {
 }
 
 /**
- * Menu icons are named in the data (`ext_menu.icon`, e.g. "book"), so this
- * resolves a name to a component instead of keying off a menu id. An unknown
+ * Menu icons are named in the data (`ext_permission_nodes.icon`, e.g. "book"), so
+ * this resolves a name to a component instead of keying off a menu id. An unknown
  * name falls back rather than rendering an empty slot.
  *
  * 导出的键集合必须与 `src/shared/MenuIconNames.ts` 的 MENU_ICON_NAMES 一一对应
@@ -105,7 +104,8 @@ export const MENU_ICONS: Record<string, typeof HomeIcon> = {
   webhook: WebhookIcon,
 };
 
-const FALLBACK_MENU_ICON = ListIcon;
+/** 侧栏预览也用它渲染未知图标名，两处兜底一致才不会画出空槽。 */
+export const FALLBACK_MENU_ICON = ListIcon;
 
 /** 当前页的祖先链必须可见，否则用户看不到自己站在哪里。 */
 export function hasActiveDescendant(item: AdminMenuItem): boolean {
@@ -127,8 +127,8 @@ function rowClasses(active: boolean, disabled: boolean): string {
 /**
  * One row in the admin menu tree.
  *
- * A row with children is a button that expands them in place — the menu is
- * data (`ext_menu.parent_code`), so depth comes from the table and this
+ * A row with children is a button that expands them in place — the navigation is
+ * data (`ext_permission_nodes.parent_code`), so depth comes from the tree and this
  * component recurses to whatever depth the rows describe. A leaf row stays a
  * link. Expand state lives in `menu-open-state` (shared so sibling rows can
  * react to one another: only one top level stays open), is remembered per
@@ -160,10 +160,7 @@ export default function AdminMenuItemLink({
   }, [containsActive, item.id]);
   // 数据库维护的展示名优先（0125 的 name_zh / name_en），两列都为空时回退到
   // i18n 文案。回退必须保留，否则改一个名称就得发一次版本。
-  const label = adminMenuItemLabel(
-    item.label,
-    parseAdminLanguage(i18n.language),
-  ) ?? t(item.labelKey ?? menuEntryLabelKey(item));
+  const label = adminMenuItemText(item, parseAdminLanguage(i18n.language), t);
 
   const toggleOpen = () => {
     toggleMenuCode(item.id, depth, topLevelCodes ?? []);

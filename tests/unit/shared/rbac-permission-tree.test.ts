@@ -9,6 +9,8 @@ function node(
   return {
     audience: "desktop",
     createdAtMs: 0,
+    entryCode: null,
+    path: null,
     icon: null,
     id: overrides.code,
     i18nKey: null,

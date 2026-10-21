@@ -56,6 +56,7 @@ function baseCtx(overrides: Partial<MenuTreeCtxValue> = {}): MenuTreeCtxValue {
     language: "en",
     move: () => {},
     onSelect: () => {},
+    readOnly: false,
     rows: SAMPLE,
     search: {isForcedOpen: () => false, isHighlighted: () => false, query: ""},
     selectedCode: null,
@@ -332,5 +333,16 @@ describe("reorderMenuRows", () => {
 
   it("returns the same reference for a no-op drag", () => {
     expect(reorderMenuRows(SAMPLE, "books", "books", "before")).toBe(SAMPLE);
+  });
+});
+
+describe("只读一版的拖拽手柄", () => {
+  it("greys the handle out and disables it, so nothing looks draggable", () => {
+    expect(renderTree(SAMPLE)).toContain("cursor-grab");
+
+    const readOnly = renderTree(SAMPLE, {readOnly: true});
+    expect(readOnly).not.toContain("cursor-grab");
+    expect(readOnly).toContain("cursor-not-allowed");
+    expect(readOnly).toContain("disabled");
   });
 });

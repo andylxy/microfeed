@@ -9,6 +9,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {useTranslation} from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
+import {adminUrl, browserAdminPath} from "@/shared/AdminPath";
 import {parseAdminLanguage} from "@/shared/AdminLanguage";
 import {
   type MenuAdminOp,
@@ -54,11 +55,45 @@ const PATCH_TO_ROW_KEY: Record<keyof MenuUpdatePatch, keyof MenuAdminRowWithMeta
 };
 
 /**
+ * 本页只读一版（ADR-0042 D6）：菜单入口已并入权限树，节点、路径与入口门码都在
+ * 「角色管理」页维护。这里先保留成只读视图让运营对照，下一版整页下线。
+ *
+ * 写入在前后两层切断——前端所有 op 都经 `postOps`，服务端 `POST /ajax/menu/save`
+ * 一律拒绝。漏关某个按钮也不会留下能写到退役表的入口。控件一并置灰，让「不能改」
+ * 在界面上看得见，点下去不再有反应。
+ *
+ * 标注 `: boolean` 是有意的：写成字面量 `true` 会让 `postOps` 里那句守卫之后的
+ * 代码被判成 unreachable（`allowUnreachableCode: false` 会直接报错）。
+ */
+const READ_ONLY: boolean = true;
+
+/**
+ * 只读提示。独立成件是为了能被静态渲染测到——页面首屏处在加载态，
+ * 主返回里的横幅那一帧还渲染不出来。
+ */
+export function MenuReadOnlyNotice() {
+  const {t} = useTranslation();
+  return (
+    <p className="w-full rounded-[14px] border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm leading-6">
+      <span className="font-semibold">{t("menuAdmin.readOnlyTitle")}</span>
+      <span className="mx-2 text-muted-foreground">·</span>
+      <span className="text-muted-foreground">{t("menuAdmin.readOnlyNotice")}</span>
+      <a
+        className="ml-2 font-medium underline underline-offset-4"
+        href={adminUrl("rbac", browserAdminPath())}
+      >
+        {t("menuAdmin.readOnlyLink")}
+      </a>
+    </p>
+  );
+}
+
+/**
  * 菜单管理页（v4 双面板：左侧树 + 右侧节点详情）。
  *
- * 树只负责呈现与选择（点一行选中它）；改名 / 图标 / 父级 / 显隐 / 移动 / 删除 /
- * 加子分组全部在右侧详情面板里做，失焦即保存——每个控件只发一个聚焦的 op，
- * 服务端返回最新全量行。`path` 与 `permission_code` 只读展示（可达性不在此处改）。
+ * 树负责呈现与选择（点一行选中它）；右侧详情面板展示每个字段。本版只读：
+ * 写入口由 `READ_ONLY` 切断（见上），控件统一置灰，服务端 `POST /ajax/menu/save`
+ * 一律拒绝。`path` 与 `permission_code` 一直是只读展示（可达性不在此处改）。
  * 布局与外壳跟 rbac「权限管理」一致（`RbacApp/index.tsx` L322–497）。
  */
 export default function MenuAdminApp() {
@@ -125,6 +160,8 @@ export default function MenuAdminApp() {
 
   const postOps = useCallback(
     async (ops: MenuAdminOp[]): Promise<boolean> => {
+      // 只读一版：写入口在这里收口，界面上任何路径都发不出 op。
+      if (READ_ONLY) return false;
       setBusy(true);
       setFormError(null);
       try {
@@ -361,9 +398,9 @@ export default function MenuAdminApp() {
   const rootOpen = search.trim().length > 0 || collapsed[MENU_ROOT_NODE] !== true;
 
   // 拖拽内核（镜像 categories 的 Pointer 拖拽，扩展为树感知的三段放置位置）。
-  // 放置位置写回走 `reorder` op，以服务端返回的权威行集为准。
+  // 只读一版在起点就返回：手柄已置灰禁用，这里再挡一道，合成事件也绕不过去。
   const beginDragging = (event: ReactPointerEvent<HTMLButtonElement>, code: string) => {
-    if (event.button !== 0 || savingOrderRef.current) return;
+    if (READ_ONLY || event.button !== 0 || savingOrderRef.current) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     activePointerIdRef.current = event.pointerId;
     dragChangedRef.current = false;
@@ -492,7 +529,9 @@ export default function MenuAdminApp() {
   }
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+    <div className="flex flex-col gap-6 lg:flex-row lg:flex-wrap lg:items-start">
+      {/* 只读一版（ADR-0042 D6）：横幅占满第一行，两栏在它下面换行。 */}
+      <MenuReadOnlyNotice />
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-80">
         <div className="p-1">
           <Input
@@ -524,6 +563,7 @@ export default function MenuAdminApp() {
               },
               language,
               move,
+              readOnly: READ_ONLY,
               onSelect: (code) => {
                 setSelectedCode(code);
                 // 创建表单开着时点树行 = 放弃创建，直接看这一行。
@@ -567,7 +607,7 @@ export default function MenuAdminApp() {
         <div className="mt-2 flex items-center gap-2 border-t p-1 pt-2">
           <Button
             className="flex-1"
-            disabled={busy}
+            disabled={busy || READ_ONLY}
             onClick={exportSql}
             size="sm"
             type="button"
@@ -578,7 +618,7 @@ export default function MenuAdminApp() {
           </Button>
           <Button
             className="flex-1"
-            disabled={busy}
+            disabled={busy || READ_ONLY}
             onClick={() => openCreateGroup("")}
             size="sm"
             type="button"
@@ -598,7 +638,7 @@ export default function MenuAdminApp() {
 
         {creating ? (
           <MenuGroupCreator
-            busy={busy}
+            busy={busy || READ_ONLY}
             draft={draft}
             language={language}
             onCancel={() => {
@@ -612,7 +652,7 @@ export default function MenuAdminApp() {
           />
         ) : selectedRow ? (
           <MenuNodeEditor
-            busy={busy}
+            busy={busy || READ_ONLY}
             confirmPageParent={confirmPageParent}
             language={language}
             onAddChildGroup={openCreateGroup}

@@ -1,18 +1,19 @@
 /**
- * 菜单管理页的纯操作逻辑（票 04）。
+ * 菜单管理页的纯操作逻辑。
  *
  * 这里只有「校验 + 生成绑定参数语句」，不碰 D1、不碰 `cloudflare:workers`：
- * 执行在 `src/server/admin/menu-admin-handlers.ts`，校验在本模块，所以单测可以
- * 直接喂行数组断言错误与语句，不需要 miniflare。
+ * 校验在本模块，所以单测可以直接喂行数组断言错误与语句，不需要 miniflare。
  *
- * 能力边界：管理页能改的是「怎么摆」和「叫什么」——
- *   重命名（name_zh / name_en）、改图标、上移下移、显隐、改父节点、
- *   新建纯分组、删除管理页自建的行；
- * 不能改的是「能打开什么」——`path` 与 `permission_code` 不开放，可达性继续由
- * 迁移 + admin-page-guards 门禁说了算。
+ * 现状（ADR-0042 D6）：`/admin/menu/` 是只读一版，`planMenuOps` 已无生产调用方
+ * ——`POST /ajax/menu/save` 一律返回 `errors.menu.readOnly`。保留它是为了票 04
+ * 退役整页时对照「原先允许哪些 op、各自怎么校验」，届时与端点、权限码、i18n 键
+ * 一起删除。仍在生产路径上的是 `buildMenuExportSql`：导出端点用它把当前数据库
+ * 状态导成 data 迁移文本。
  *
- * 单向性：改的是数据库行，迁移文件不跟着变；`buildMenuExportSql`
- * 把当前数据库状态导成 data 迁移交用户提交。
+ * 能力边界（退役前仍以此为准）：能改「怎么摆」和「叫什么」——重命名、改图标、
+ * 上移下移、显隐、改父节点、新建纯分组、删除管理页自建的行；不能改「能打开
+ * 什么」——`path` 与 `permission_code` 不开放，可达性由迁移 + admin-page-guards
+ * 门禁说了算。
  */
 
 import {isMenuIconName} from "./MenuIconNames";
