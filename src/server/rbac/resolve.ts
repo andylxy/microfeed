@@ -9,6 +9,8 @@
  * adapted to microfeed in `MICROFEED_ADAPTATION_PLAN.md`.
  */
 
+import {PERMISSION_CODES} from "@/shared/Constants";
+
 export const RBAC_WILDCARD = "*";
 
 /**
@@ -31,6 +33,24 @@ export function permissionsInclude(
   return (
     Boolean(permissions?.has(RBAC_WILDCARD)) || Boolean(permissions?.has(code))
   );
+}
+
+/**
+ * App 端权限板在后台是否对当前账号可见。
+ *
+ * 与 App 端四个数据端点的守卫码严格一致：只认 `system:app-capability:manage`
+ * （通配 `*` 经 {@link permissionsInclude} 一并放行）。刻意不读 `app:` 系列码——
+ * 那些是移动端运行时用的业务码，默认会授给 editor，若把它们当成可见性依据，
+ * 就会出现「看得到 App 分类标题、点进去却因守卫只认管理码而 403」的破窗。
+ *
+ * 页面（src/pages/[adminPath]/rbac/index.astro）与 App 端四端点守卫共用
+ * `system:app-capability:manage` 这一枚码（守卫经 `audienceGuardCode('app')`
+ * 取得同一常量），保证「看不看得到」和「能不能读、改、导出」用的是同一把锁。
+ */
+export function isAppBoardVisible(
+  permissions: ReadonlySet<string> | null | undefined,
+): boolean {
+  return permissionsInclude(permissions, PERMISSION_CODES.SYSTEM_APP_CAPABILITY_MANAGE);
 }
 
 export async function resolveUserPermissions(

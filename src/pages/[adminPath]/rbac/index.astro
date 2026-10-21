@@ -5,7 +5,7 @@ import RbacBoardPage from "@/components/admin/rbac/RbacBoardPage.astro";
 import {listAppInterfaces} from "@/server/admin/app-interfaces";
 import {listPcInterfaces} from "@/server/admin/pc-interfaces";
 import {readRbacBoard} from "@/server/admin/rbac-handlers";
-import {permissionsInclude} from "@/server/rbac/resolve";
+import {isAppBoardVisible} from "@/server/rbac/resolve";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {translate} from "@/shared/i18n";
@@ -15,7 +15,7 @@ import {requirePagePermission} from "@/server/rbac/page-guard";
  * 权限管理单页：一棵树合并 PC 端与 App 端两个分类（ADR-0039 单页口径）。
  *
  * 树的合成分类层不入库；App 分类是否出现由账号持有的码在服务端判定——
- * 持有任一 `app:` 码或 `system:app-capability:manage` 才读 App 板子并传入，
+ * 仅持有 `system:app-capability:manage` 才读 App 板子与接口清单并传入，
  * 否则传 `null` 让前端隐藏整个分类，不泄露 App 端的角色授权视图。
  */
 const adminLanguage = adminLanguageFromRequest(Astro.request);
@@ -32,9 +32,7 @@ if (denied) {
 }
 
 const heldCodes = Astro.locals.rbacPermissions;
-const appVisible =
-  permissionsInclude(heldCodes, PERMISSION_CODES.SYSTEM_APP_CAPABILITY_MANAGE) ||
-  Boolean(heldCodes && [...heldCodes].some((code) => code.startsWith("app:")));
+const appVisible = isAppBoardVisible(heldCodes);
 
 const desktopBoard = await readRbacBoard(env.FEED_DB, "desktop");
 const appBoard = appVisible ? await readRbacBoard(env.FEED_DB, "app") : null;
@@ -43,7 +41,7 @@ const appBoard = appVisible ? await readRbacBoard(env.FEED_DB, "app") : null;
 <RbacBoardPage
   activeNavItem={ADMIN_MENU_CODES.RBAC}
   appBoard={appBoard}
-  appInterfaces={listAppInterfaces()}
+  appInterfaces={appVisible ? listAppInterfaces() : []}
   desktopBoard={desktopBoard}
   documentTitle={translate("pageDocumentTitle.rbac", adminLanguage)}
   {feedContent}

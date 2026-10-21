@@ -69,7 +69,7 @@ App 页第三 tab 列出全部 18 个 App 接口（路径 / 方法 / 鉴权级 /
 
 ### R1｜单页合并
 
-`[adminPath]/rbac/` 恢复为完整单页（守 `system:role:manage`）；`rbac/desktop`、`rbac/app` 两个子页与 `ADMIN_MENU_CODES.RBAC_APP` 退役，`rbac_app` 菜单行由 0131 删除（并治愈已应用旧 0130 的库）。树 = 合成根「角色管理」→ 合成分类层「PC 端管理 / App 端管理」（不入库，由 audience 合成）→ 各端真实结点。App 分类是否出现由服务端判定：账号持有任一 `app:` 码或 `system:app-capability:manage` 才读 App 板子传入，否则传 `null` 隐藏整个分类。
+`[adminPath]/rbac/` 恢复为完整单页（守 `system:role:manage`）；`rbac/desktop`、`rbac/app` 两个子页与 `ADMIN_MENU_CODES.RBAC_APP` 退役，`rbac_app` 菜单行由 0131 删除（并治愈已应用旧 0130 的库）。树 = 合成根「角色管理」→ 合成分类层「PC 端管理 / App 端管理」（不入库，由 audience 合成）→ 各端真实结点。App 分类是否出现由服务端判定：账号持有 `system:app-capability:manage` 才读 App 板子与接口清单传入，否则传 `null` 隐藏整个分类（与 App 端四端点的守卫码一致，不留可见性破窗）。
 
 ### R2｜树上即点即存
 
@@ -87,7 +87,7 @@ App 页第三 tab 列出全部 18 个 App 接口（路径 / 方法 / 鉴权级 /
 
 - 每层手风琴：同层只展开一个（分类层、每端顶层、更深各层同规）；搜索态命中强制展开例外。
 - 角色 CRUD 只有弹窗一个入口：`super_admin` / `readonly` 的代码与删除在弹窗里禁用（服务端同样拒绝），改名与改代码合成一次提交。
-- 角色条 chips 计数 = desktop + app grants 之和；角色 CRUD 端点返回 desktop 板子，App 板子角色清单本地同步。App 分类隐藏（账号没有任何 App 码）时服务端只发 PC 板子，计数随之只覆盖 PC 端——那一个数不冒充两端之和。
+- 角色条 chips 计数 = desktop + app grants 之和；角色 CRUD 端点返回 desktop 板子，App 板子角色清单本地同步。App 分类隐藏（账号没有 `system:app-capability:manage`）时服务端只发 PC 板子与空接口清单，计数随之只覆盖 PC 端——那一个数不冒充两端之和。
 
 ### 验证口径增补
 
