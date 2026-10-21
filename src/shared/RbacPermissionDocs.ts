@@ -492,14 +492,6 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     ],
     caveats: ["只授 super_admin（走通配 *），不默认授予 editor。"],
   },
-  "system:menu:manage": {
-    summary: "菜单管理（只读一版）。菜单结构已并入权限树，本页只保留对照视图。",
-    gates: ["页面 /menu", "接口 /ajax/menu/*（写入当前一律 409）"],
-    caveats: [
-      "ADR-0042 只读一版：下一版整页下线，本码一并退役。",
-      "写入已关闭；改菜单请到权限管理页改节点。",
-    ],
-  },
   "system:app-capability:manage": {
     summary:
       "App 能力管理（权限管理页 App 端分区的可见性）。它决定账号能否看到 App 板，不决定移动端业务码的授权。",

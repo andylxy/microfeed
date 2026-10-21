@@ -65,7 +65,7 @@ interface Props {
  * name falls back rather than rendering an empty slot.
  *
  * 导出的键集合必须与 `src/shared/MenuIconNames.ts` 的 MENU_ICON_NAMES 一一对应
- * （`tests/unit/menu-admin-ops.test.ts` 守住）：服务端保存校验读共享清单，
+ * （`tests/unit/menu-icon-registry.test.ts` 守住）：服务端保存校验读共享清单，
  * 渲染读这张表，漂移会以「静默回退 ListIcon」的形态出现。
  */
 export const MENU_ICONS: Record<string, typeof HomeIcon> = {

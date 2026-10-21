@@ -166,7 +166,6 @@ export const en = {
       login_logs: "Login log",
       announcements: "Announcements",
       cloud_usage: "Cloud usage",
-      menu_management: "Menu management",
     },
     group: {
       account: "Account",
@@ -216,61 +215,6 @@ export const en = {
     },
     noPermissions:
       "Your account has no role permissions yet. Ask an administrator to assign a role.",
-  },
-  menuAdmin: {
-    title: "Menu management",
-    intro:
-      "Read-only view of every admin navigation row: display names, icon, path, entry permission code, parent and visibility. Navigation changes belong to the permission tree.",
-    emptyBoard: "There are no menu rows yet.",
-    readOnlyTitle: "This page is read-only",
-    readOnlyNotice:
-      "Menu entries now live in the permission tree. Rename, hide, re-parent and reorder them from the Role management page.",
-    readOnlyLink: "Open Role management",
-    effectiveName: "Effective name",
-    nameZh: "Chinese name",
-    nameEn: "English name",
-    nameZhPlaceholder: "Chinese name",
-    nameEnPlaceholder: "English name",
-    nameDefault: "Default: ",
-    icon: "Icon",
-    iconNone: "No icon",
-    parent: "Parent",
-    parentNone: "Top level",
-    reparentToPageConfirm:
-      "Menu row {{code}} is a page. Rows with children only expand and no longer link anywhere, so its own sidebar entry would disappear. Move it under this page anyway?",
-    visible: "Visibility",
-    hiddenBadge: "Hidden",
-    injectedBadge: "Injected",
-    injectedHint:
-      "Injected by code (a settings section or sub-page), not a menu row — view only here.",
-    restoreDefault: "Restore default",
-    delete: "Delete",
-    deleteConfirm:
-      "Delete menu row {{code}}? Only rows created on this page can be deleted.",
-    createGroup: "New group",
-    createGroupHint:
-      "Groups are pure headings (no path, no permission code). Only groups created here can be deleted; migration-seeded rows can only be hidden.",
-    codePlaceholder: "Group code (letters, digits, underscore)",
-    exportSql: "Export SQL",
-    exportFailed: "Could not export the menu snapshot.",
-    loadFailed: "Could not load the menu rows.",
-    saveFailed: "Could not save the menu changes.",
-    save: "Save",
-    cancel: "Cancel",
-    lockedHint:
-      "Paths and permission codes are maintained by migrations, so every menu entry keeps agreeing with its page guard.",
-    pathReadonly: "Path (read-only)",
-    permissionCodeReadonly: "Permission code (read-only)",
-    searchPlaceholder: "Search by code or name",
-    treeRoot: "Menu permissions",
-    expandAll: "Expand all",
-    collapseAll: "Collapse all",
-    addChildGroup: "Add sub-group",
-    dragHandle: "Drag to reorder",
-    toggleBranch: "Toggle {{name}}",
-    moveUp: "Move up",
-    moveDown: "Move down",
-    noResults: "No menu rows match your search.",
   },
   forbidden: {
     title: "You don't have access to this page",
@@ -2462,7 +2406,6 @@ export const en = {
     announcements: "Announcements",
     loginLogs: "Login log",
     cloudUsage: "Cloud usage",
-    menuManagement: "Menu management",
   },
   publicBook: {
     unknownAuthor: "Unknown author",
@@ -2572,7 +2515,6 @@ export const en = {
     appVersions: "App versions | microfeed.org",
     announcements: "Announcements | microfeed.org",
     cloudUsage: "Cloud usage | microfeed.org",
-    menuManagement: "Menu management | microfeed.org",
   },
   pageMessage: {
     itemNotFound: "The requested item does not exist or has been deleted.",
@@ -2774,27 +2716,6 @@ export const en = {
       invalidInput: "Send a non-empty alias and canonical name.",
       duplicate: "That alias already exists.",
       notFound: "That alias does not exist.",
-    },
-    menu: {
-      invalidInput: "That menu request is not valid.",
-      notFound: "Menu row {{code}} does not exist.",
-      invalidIcon: "Icon {{icon}} is not one of the available menu icons.",
-      readOnly:
-        "Menu writing is closed. The admin navigation now lives in the permission tree.",
-      iconRequired:
-        "Menu row {{code}} is a page, so it needs one of the available icons. Only group rows can be icon-less.",
-      invalidCode:
-        "Group codes use 2 to 64 characters: a lowercase letter first, then lowercase letters, digits, or underscores.",
-      duplicateCode: "A menu row with code {{code}} already exists.",
-      nameRequired: "Enter a Chinese or English name for the group.",
-      nameTooLong: "The name is too long (64 characters at most).",
-      cycle: "A menu row cannot be moved under itself or one of its descendants.",
-      moveBlocked:
-        "That row is already at the edge of its group, so it cannot move further.",
-      seedProtected:
-        "Migration-seeded rows cannot be deleted here; hide them instead.",
-      hasChildren: "This row still has child rows. Move or delete them first.",
-      tooManyOps: "Too many operations in one save (100 at most).",
     },
     permission: {
       invalidInput: "That permission-tree request is not valid.",

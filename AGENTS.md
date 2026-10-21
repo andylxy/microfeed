@@ -210,7 +210,7 @@
 - 组装在 `src/shared/AdminSidebarItems.ts` 的 `buildSidebarItems`：按 `(sort, code)` 读序；`entry_code` 为空的页面行只挂码、不进侧栏；门码非空时按账号权限集合判定（持 `*` 通配视为全见）；子项全空的分组剪掉，父分组被滤掉时子分组升为顶层；分组本身不是页面，链接指向第一个子项。查询在 `src/server/admin/menu.ts` 的 `readAdminMenu`，门控走 `rbacAllows`。
 - 页面可达性由页面自身的 `requirePagePermission` 决定，判据是该页面节点绑定的同一个门码（一入口一门码，故为相等）。两侧一致由迁移人工比对、`tests/unit/admin-page-guards.test.ts` 静态重放迁移、`tests/worker/admin-menu.test.ts` 的「菜单行 ↔ 页面节点」对齐检查共同保证。
 - 同一份组装器给 `/admin/rbac/` 的「侧栏预览」复用：预览按所选角色的权限集合拼行集，运营调整门码即可看到侧栏的变化，两处不会漂移。
-- `ext_menu` 表仍在：全新安装先走它的种子，0133 再把配对行回填进节点表；`/admin/menu` 只读视图也仍读它。
+- `ext_menu` 表只剩迁移种子一个用途：全新安装先走它的种子，0133 再把配对行回填进节点表；0135 已删掉随菜单管理页退役的 `menu_management` 行。
 
 ### 三级子项的注入
 
@@ -224,13 +224,13 @@
 
 ### 名称解析
 
-渲染优先级（见 `src/shared/AdminNavigation.ts` 的 `adminMenuItemLabel`）：`name_zh` / `name_en` 当前语言列优先，该列为空取另一列，两列皆空回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。管理页表格（`/admin/menu`）有一列「生效名称」显示这条优先级算出的当前实际文本，运营无需切换语言即可看到菜单显示内容。
+渲染优先级（见 `src/shared/AdminNavigation.ts` 的 `adminMenuItemLabel`）：`name_zh` / `name_en` 当前语言列优先，该列为空取另一列，两列皆空回退到 `menu.item.*` / `menu.group.*` 的 i18n 文案。
 
-### 菜单管理页 `/admin/menu`
+### 菜单管理页已退役
 
-只读一版（ADR-0042 D6）：菜单入口已并入权限树，改名 / 图标 / 排序 / 显隐 / 父级 / 新建分组全部关闭——前端所有操作经 `postOps` 切断，服务端 `POST /ajax/menu/save` 一律返回 `errors.menu.readOnly`（409）。页面保留给运营对照：左侧树与右侧详情面板的控件全部置灰，顶部横幅指向「角色管理」页。整页连同 `system:menu:manage` 码与 `page_menu_management` 节点的退役属下一批（ADR-0041 D5）。
+菜单入口已并入权限树（ADR-0041 D5 / ADR-0042 D6）：`/admin/menu/` 整页下线，`page_menu_management` 节点与 `system:menu:manage` 码随迁移 0135 一并删除。菜单的改名 / 排序 / 显隐 / 父级 / 新建分组全部在「角色管理」页的权限树里做。
 
-树里的注入子项：三个页面节点的第三级仍由 `menuInjectedRows`（`MenuTreeNode.tsx`）合成只读行，树与侧栏层级一致；这些行只进渲染行集，右侧面板、拖拽、删除、保存拿的都是数据行，写不进任何 op。行的展开是顶层手风琴（同左侧导航），「全展开 / 全收起」只作用于当前展开顶层内部的子层。行 id 前缀：迁移种子行以 `m_` 开头，管理页自建行以 `mm_` 开头（`MENU_ROW_CUSTOM_ID_PREFIX`）。图标名清单 `src/shared/MenuIconNames.ts` 与 `AdminMenuItemLink.MENU_ICONS` 一一对应，由 `tests/unit/menu-admin-ops.test.ts` 守护。
+图标名清单 `src/shared/MenuIconNames.ts` 与 `AdminMenuItemLink.MENU_ICONS` 一一对应，由 `tests/unit/menu-icon-registry.test.ts` 守护。
 
 ### 渲染防闪烁
 

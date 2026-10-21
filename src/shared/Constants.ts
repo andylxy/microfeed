@@ -208,7 +208,6 @@ export const ADMIN_MENU_CODES = {
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
   CLOUD_USAGE: 'cloud_usage',
-  MENU_MANAGEMENT: 'menu_management',
 } as const;
 
 /**
@@ -315,11 +314,6 @@ export const PERMISSION_CODES = {
   // D1 / R2 / Workers 三个分区，与 `SYSTEM_LOGIN_LOG_READ` 同族。挂在
   // group_operations（0089）的 `cloud_usage` 菜单行上，只授 super_admin。
   SYSTEM_CLOUD_USAGE_READ: 'system:cloud-usage:read',
-  // 菜单管理页（/admin/menu，migration 0126）。单码读写共用：打开看板与保存
-  // 改动都是「运营在整理导航」的同一件事，只用一个 :manage 码覆盖读写。
-  // 只授 super_admin（不写 ext_role_permissions），挂在
-  // menu_management 菜单行上——页面守卫与菜单可见性绑同一个码。
-  SYSTEM_MENU_MANAGE: 'system:menu:manage',
   // 权限管理页（/admin/rbac，migration 0130）。App 能力控制不另设入口：
   // 权限管理单页内按终端归属分区（ADR-0039），PC 端与 App 端共用这一页，
   // 页面守卫沿用 SYSTEM_ROLE_MANAGE，这一个码只用于 App 端数据分区的服务端判定。

@@ -7,7 +7,7 @@ import {Input} from "@/components/ui/input";
 import {Switch} from "@/components/ui/switch";
 import {useTranslation} from "@/client/i18n";
 import type {AdminLanguage} from "@/shared/AdminLanguage";
-import {menuIconOptions} from "@/shared/MenuTreeView";
+import {menuIconOptions} from "@/shared/MenuIconNames";
 import type {PermissionUpdatePatch} from "@/shared/PermissionTreeOps";
 import {
   normalizeEntryPath,

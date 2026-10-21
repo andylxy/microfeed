@@ -489,10 +489,6 @@ export const ADMIN_URLS = {
     adminUrl("ajax/annotation-markers/update", browserAdminPath()),
   ajaxAnnotationMarkersDelete: () =>
     adminUrl("ajax/annotation-markers/delete", browserAdminPath()),
-  /** 菜单管理页：全量行（含不可见）、批量保存、导出 SQL（票 03/04）。 */
-  ajaxMenu: () => adminUrl("ajax/menu", browserAdminPath()),
-  ajaxMenuSave: () => adminUrl("ajax/menu/save", browserAdminPath()),
-  ajaxMenuExport: () => adminUrl("ajax/menu/export", browserAdminPath()),
   volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
   ajaxVolumeEntries: () =>

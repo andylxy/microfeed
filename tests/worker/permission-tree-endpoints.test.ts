@@ -82,8 +82,8 @@ describe("GET /ajax/rbac/permission-tree", () => {
     expect(codes.has("group_content")).toBe(true);
     expect(codes.has("page_books")).toBe(true);
     expect(codes.has("content:book:read")).toBe(true);
-    // 两端合计 93 行，减去 App 端的 15 行（1 分组 + 3 页 + 11 码）。
-    expect(rows).toHaveLength(78);
+    // 两端合计 92 行（PC 77 + App 15）；菜单管理页的两行已随 0135 退役。
+    expect(rows).toHaveLength(77);
     // App 端的行不在 PC 端的树里。
     expect(codes.has("group_app")).toBe(false);
     expect(codes.has("app:nav:read")).toBe(false);
@@ -150,7 +150,7 @@ describe("GET /ajax/rbac/permission-tree", () => {
     expect(anonymous.status).toBe(401);
 
     const forbidden = await listPermissionTreeEndpoint({
-      locals: locals(new Set([PERMISSION_CODES.SYSTEM_MENU_MANAGE])),
+      locals: locals(new Set([PERMISSION_CODES.CONTENT_BOOK_READ])),
       request: request("GET", {audience: "desktop"}),
     } as never);
     expect(forbidden.status).toBe(403);

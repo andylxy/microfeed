@@ -40,8 +40,10 @@ function readCatalogCodes(): Set<string> {
     // (ADR-0009 dropped the `api:*` family). Migrations run in filename order,
     // so apply removals before additions for each file.
     for (const match of sql.matchAll(
-      /DELETE\s+FROM\s+ext_permissions[\s\S]*?code\s+(?:IN\s*\((?<list>[^)]*)\)|LIKE\s*'(?<prefix>[^']+)')/giu,
+      /DELETE\s+FROM\s+ext_permissions[\s\S]*?code\s+(?:=\s*'(?<single>[^']+)'|IN\s*\((?<list>[^)]*)\)|LIKE\s*'(?<prefix>[^']+)')/giu,
     )) {
+      const single = match.groups?.single;
+      if (single) codes.delete(single);
       const list = match.groups?.list;
       if (list) {
         for (const literal of list.matchAll(/'([^']+)'/gu)) {

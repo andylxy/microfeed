@@ -70,9 +70,8 @@ afterEach(async () => {
 /**
  * The menu seed is data (migration 0041, grouped by 0050), not the hard-coded
  * array it used to be. Since 2026-10-21 the sidebar reads `ext_permission_nodes`
- * instead, so this table is now the seed that migration 0133 backfills from plus
- * what the read-only menu page still shows — the block below keeps it honest
- * until the page is retired.
+ * instead; this table is now only the seed that migration 0133 backfills from
+ * (migration 0135 removes the retired menu-management row).
  */
 describe("admin menu seed", () => {
   it("has a row for every menu code, plus one group row per parent", async () => {
@@ -297,8 +296,6 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.RBAC,
       // 0131 起单页口径：rbac_app 菜单行随双控制台一起退役。
       ADMIN_MENU_CODES.USERS,
-      // 0126 seeded the menu-management page; it sorts before the audit log.
-      ADMIN_MENU_CODES.MENU_MANAGEMENT,
       ADMIN_MENU_CODES.RBAC_AUDIT,
       "group_operations",
       ADMIN_MENU_CODES.DEVICES,
@@ -319,8 +316,8 @@ describe("readAdminMenu", () => {
 
 /**
  * 侧栏自 2026-10-21 起读 `ext_permission_nodes`（ADR-0042 D6）。`ext_menu` 只剩
- * 迁移种子与「菜单管理」只读页两个用途，下一次迁移会整页下线。这两条守住切换
- * 的前提：节点行必须与菜单行逐项对齐，否则切换后侧栏会静默少项或换链接。
+ * 迁移种子一个用途（菜单管理页与行已随 0135 退役）。这两条守住切换的前提：
+ * 节点行必须与菜单行逐项对齐，否则切换后侧栏会静默少项或换链接。
  */
 describe("permission-tree sidebar source", () => {
   it("mirrors every menu page row as a page node with the same path and entry code", async () => {

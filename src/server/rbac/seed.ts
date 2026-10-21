@@ -113,9 +113,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // Workers 三个分区；只授 super_admin（拍板 B1），不进 EDITOR_PERMISSIONS。
   // Mirror of PERMISSION_CODES in src/shared/Constants.ts.
   {code: "system:cloud-usage:read", name: "Cloudflare 用量查看"},
-  // 菜单管理页（migration 0126）。单码读写共用，只授 super_admin（拍板 B1），
-  // 不进 EDITOR_PERMISSIONS。Mirror of PERMISSION_CODES in src/shared/Constants.ts.
-  {code: "system:menu:manage", name: "菜单管理"},
   // 权限管理页（migration 0130，ADR-0039）。App 能力控制不另设入口：权限管理
   // 单页内按终端归属分区，PC 端与 App 端共用这一页。只授 super_admin（走 `*`），
   // 不进 EDITOR_PERMISSIONS。Mirror of PERMISSION_CODES in src/shared/Constants.ts.

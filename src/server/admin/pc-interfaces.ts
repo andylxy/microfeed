@@ -178,10 +178,6 @@ const C: readonly CatalogEntry[] = [
   ["POST", "/admin/ajax/webhooks/explorer/print", "system:webhook:manage"],
   ["GET", "/admin/ajax/webhooks/explorer/subjects", "system:webhook:manage"],
   ["PATCH", "/admin/ajax/webhooks/settings", "system:webhook:manage"],
-  // 菜单管理（system:menu:manage）
-  ["GET", "/admin/ajax/menu", "system:menu:manage"],
-  ["POST", "/admin/ajax/menu/save", "system:menu:manage"],
-  ["GET", "/admin/ajax/menu/export", "system:menu:manage"],
 ];
 
 /** 展示行：后台会话端点（`session`），门码一枚或多枚。 */
