@@ -8,10 +8,7 @@ import {
   permissionDescendantCodes,
   type PermissionTreeCtxValue,
 } from "@/components/admin/rbac/PermissionTreeNode";
-import {
-  entryCodeChoices,
-  PermissionNodeEditor,
-} from "@/components/admin/rbac/PermissionNodeEditor";
+import {PermissionNodeEditor} from "@/components/admin/rbac/PermissionNodeEditor";
 import type {InterfaceCatalogRow} from "@/shared/AppInterface";
 import {
   permissionBranchState,
@@ -305,7 +302,7 @@ describe("PermissionNodeEditor page entry fields", () => {
     );
   }
 
-  it("shows the path input and the entry-code picker on a page row", () => {
+  it("shows the path input and a read-only entry code on a page row", () => {
     const output = renderEditor(
       node("page_books", {
         entryCode: "content:book:read",
@@ -317,15 +314,16 @@ describe("PermissionNodeEditor page entry fields", () => {
     );
 
     expect(output).toContain("Path");
-    expect(output).toContain('aria-label="Entry permission code"');
     // 受控输入：当前值与占位符都进静态标记（占位符是相对 /admin/ 的口径）。
     expect(output).toContain('value="books"');
     expect(output).toContain('placeholder="rbac"');
-    // 已设门码时下拉显示当前值；提示语说明设了之后谁看得见。
-    expect(output).toContain("读图书");
+    // 门码只读：展示当前码，不再渲染可改的下拉。
+    expect(output).toContain("content:book:read");
+    expect(output).not.toContain('aria-label="Entry permission code"');
     expect(output).toContain(
       "When set, the page only shows for roles holding a permission code with the same value",
     );
+    expect(output).toContain("so it is read-only");
   });
 
   it("keeps both fields off group and code rows", () => {
@@ -336,47 +334,5 @@ describe("PermissionNodeEditor page entry fields", () => {
     const code = renderEditor(rows()[2]!);
     expect(code).not.toContain('aria-label="Entry permission code"');
     expect(code).not.toContain('placeholder="rbac"');
-  });
-});
-
-describe("entryCodeChoices", () => {
-  it("lists the page's own codes, so the picker stays short", () => {
-    expect(entryCodeChoices(rows()[1]!, rows())).toEqual([
-      "content:book:read",
-      "content:book:update",
-    ]);
-  });
-
-  it("lists the gates in use when the page has no codes of its own", () => {
-    // rbac_audit 与 page_rbac 共用门码，自己没有码子节点：清空后必须还能选回来。
-    const tree = [
-      node("page_rbac", {entryCode: "system:role:manage", kind: "page", path: "rbac", sort: 501}),
-      node("page_rbac_audit", {entryCode: null, kind: "page", path: "rbac/audit", sort: 504}),
-    ];
-    expect(entryCodeChoices(tree[1]!, tree)).toEqual(["system:role:manage"]);
-  });
-
-  it("keeps the current value even when nothing else uses that code", () => {
-    const orphan = node("page_audit", {
-      entryCode: "system:role:manage",
-      kind: "page",
-      path: "rbac/audit",
-      sort: 504,
-    });
-    expect(entryCodeChoices(orphan, [orphan])).toEqual(["system:role:manage"]);
-  });
-
-  it("ignores gates of the other console", () => {
-    const tree = [
-      node("page_app", {
-        audience: "app",
-        entryCode: "app:nav:read",
-        kind: "page",
-        path: "app",
-        sort: 1,
-      }),
-      node("page_audit", {entryCode: null, kind: "page", path: "rbac/audit", sort: 504}),
-    ];
-    expect(entryCodeChoices(tree[1]!, tree)).toEqual([]);
   });
 });

@@ -2101,8 +2101,11 @@ export const zhCN: TranslationKey = {
     banAccount: "封禁",
     unbanAccount: "解封",
     permissionTree: {
-      intro:
-        "分组、页面与权限码都存自持节点表。在此改名、排序、改父级、隐藏与归组；角色编辑器的授权树跟随同一份结构。权限码是代码常量：code 行只能改父级与显隐，名字与图标不开放。",
+      docFunction: "功能",
+      docGates: "守的接口",
+      docCaveats: "注意事项",
+      docEmpty: "暂无说明。",
+      docGroup: "分组只做归类，不授予权限。",
       emptyBoard: "权限树还没有任何行。",
       nameZh: "中文名",
       nameEn: "英文名",
@@ -2151,6 +2154,8 @@ export const zhCN: TranslationKey = {
       entryCode: "入口门码",
       entryCodeNone: "只挂码，不进侧栏",
       entryCodeHint: "设置后，只有持有同值权限码的角色才看得到这个页面。",
+      entryCodeReadonlyHint:
+        "入口门码决定这个页面在侧栏对谁可见，改动会让入口与权限守卫不一致，因此只读；需要调整请改权限树映射。",
     },
     sidebarPreview: {
       title: "侧栏预览",

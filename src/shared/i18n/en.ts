@@ -2116,8 +2116,11 @@ export const en = {
     banAccount: "Ban",
     unbanAccount: "Unban",
     permissionTree: {
-      intro:
-        "Groups, pages and permission codes live in one self-hosted table. Rename, reorder, re-parent, hide and group them here; the role editor's grant tree follows the same structure. Permission codes are code constants: a code row only changes parent and visibility, never its name or icon.",
+      docFunction: "What it grants",
+      docGates: "Guards",
+      docCaveats: "Caveats",
+      docEmpty: "No description available.",
+      docGroup: "Groups only organize rows; they grant nothing.",
       emptyBoard: "There are no permission-tree rows yet.",
       nameZh: "Chinese name",
       nameEn: "English name",
@@ -2172,6 +2175,8 @@ export const en = {
       entryCodeNone: "Not in sidebar",
       entryCodeHint:
         "When set, the page only shows for roles holding a permission code with the same value",
+      entryCodeReadonlyHint:
+        "The entry code decides who sees this page in the sidebar. Changing it would desync the entry from its request guard, so it is read-only; edit the permission-tree mapping instead.",
     },
     sidebarPreview: {
       title: "Sidebar preview",

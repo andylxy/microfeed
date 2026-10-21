@@ -1,6 +1,7 @@
 import {useEffect, useState} from "react";
 
 import AdminSelect, {type AdminSelectOption} from "@/components/admin/shared/AdminSelect";
+import {PermissionDocBlock} from "@/components/admin/rbac/PermissionDocBlock";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Switch} from "@/components/ui/switch";
@@ -84,37 +85,6 @@ function PermissionPathInput({
       value={draft}
     />
   );
-}
-
-/**
- * 入口门码下拉的候选码（按显示顺序，已去重）。
- *
- * 三条规则：本页自有码（`kind='code'` 子节点）优先；本页没有自有码时列本端已用作
- * 门码的码——`rbac_audit` 这类共用别页门码的节点属于这一支，不列的话选一次
- * 「只挂码，不进侧栏」就再也设不回来；当前值始终保留，哪怕没有别的页在用它。
- */
-export function entryCodeChoices(
-  row: PermissionNodeRowWithMeta,
-  rows: readonly PermissionNodeRowWithMeta[],
-): string[] {
-  const own = rows
-    .filter(
-      (entry) =>
-        entry.kind === "code" && entry.parentCode === row.code && entry.permissionCode,
-    )
-    .map((entry) => entry.permissionCode as string);
-  const borrowed =
-    own.length > 0
-      ? []
-      : rows
-          .filter(
-            (entry) =>
-              entry.kind === "page" &&
-              entry.audience === row.audience &&
-              entry.entryCode,
-          )
-          .map((entry) => entry.entryCode as string);
-  return [...new Set([...own, ...borrowed, ...(row.entryCode ? [row.entryCode] : [])])];
 }
 
 export interface PermissionNodeEditorProps {
@@ -237,14 +207,7 @@ export function PermissionNodeEditor({
   const parentValue =
     parentOptions.find((option) => option.value === (row.parentCode ?? "")) ?? null;
 
-  // 页面行补「路径 path」与「入口门码 entry_code」（ADR-0041 D1/D2）。
-  const codeLabel = (code: string) => permissionNames.get(code) ?? code;
-  const entryCodeOptions: AdminSelectOption[] = [
-    {label: t("rbac.permissionTree.entryCodeNone"), value: ""},
-    ...entryCodeChoices(row, rows).map((code) => ({label: codeLabel(code), value: code})),
-  ];
-  const entryCodeValue =
-    entryCodeOptions.find((option) => option.value === (row.entryCode ?? "")) ?? null;
+  // 页面行的入口门码只读展示：它决定侧栏可见性，改动会让入口与请求守卫不一致。
 
   return (
     <>
@@ -296,9 +259,7 @@ export function PermissionNodeEditor({
         </div>
       </header>
 
-      <p className="mb-4 text-sm leading-6 text-muted-foreground">
-        {t("rbac.permissionTree.intro")}
-      </p>
+      <PermissionDocBlock row={row} />
 
       {isCodeRow ? (
         <>
@@ -373,23 +334,22 @@ export function PermissionNodeEditor({
                   value={row.path}
                 />
               </label>
-              <label className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-start sm:gap-4">
+              <div className="grid gap-1.5 text-sm sm:grid-cols-[96px_minmax(0,1fr)] sm:items-start sm:gap-4">
                 <span className="text-muted-foreground">
                   {t("rbac.permissionTree.entryCode")}
                 </span>
                 <div className="grid gap-1.5">
-                  <AdminSelect
-                    ariaLabel={t("rbac.permissionTree.entryCode")}
-                    disabled={busy}
-                    onChange={(option) => onField(row, {entryCode: option.value || null})}
-                    options={entryCodeOptions}
-                    value={entryCodeValue}
-                  />
+                  <span className="font-mono text-xs">
+                    {row.entryCode ?? t("rbac.permissionTree.entryCodeNone")}
+                  </span>
                   <p className="text-xs text-muted-foreground">
                     {t("rbac.permissionTree.entryCodeHint")}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("rbac.permissionTree.entryCodeReadonlyHint")}
+                  </p>
                 </div>
-              </label>
+              </div>
             </>
           )}
           <ParentAndVisibility
