@@ -4,7 +4,7 @@
 
 **Blocked by:** 02（编辑器组件）
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：wangEditor 已被主动移除——`src` 内三处注释口径一致（「原 wangEditor 已移除 / 迁到 Markdown 编辑器」），组件、i18n 键、接线与测试均已不存在，条目编辑器现走 `AdminMarkdownEditor` + `AdminRichEditor` + `FangEditor`；两个残留依赖已在本轮清理。本组不再执行。）
 
 - [ ] `AdminRichEditor` 新增三个可选 prop：`enableWangEditor` / `bodyEditor` / `onBodyEditorChange`
 - [ ] **未传 `enableWangEditor` 时模式列表仍精确为 `[rich, html, markdown]`**（现有断言保绿，Page/Channel 不受影响）

@@ -6,7 +6,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：早期草稿，方案与最终交付不符。最终实现见 同目录 `02-books-by-category`（已 done）。）
 
 ## 实现要点
 

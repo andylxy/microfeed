@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（容器模式隔离）
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：wangEditor 已被主动移除——`src` 内三处注释口径一致（「原 wangEditor 已移除 / 迁到 Markdown 编辑器」），组件、i18n 键、接线与测试均已不存在，条目编辑器现走 `AdminMarkdownEditor` + `AdminRichEditor` + `FangEditor`；两个残留依赖已在本轮清理。本组不再执行。）
 
 - [ ] `admin-rich-editor-modes.test.ts` 顶部 `vi.mock` 掉 `@wangeditor/editor` 与 `@wangeditor/editor-for-react`（返回 dummy，避免 node import 崩溃）
 - [ ] 现有断言 `toEqual(["rich", "html", "markdown"])` **仍绿**（未传 `enableWangEditor` 的默认路径）

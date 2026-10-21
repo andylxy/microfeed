@@ -6,7 +6,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：早期草稿，方案与最终交付不符。最终实现见 同目录 `01-wire-routing-and-categories`（已 done）与迁移 `0056_items_book_id`。）
 
 ## 为什么先做
 

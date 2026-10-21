@@ -4,7 +4,7 @@
 
 **Blocked by:** 03（容器模式隔离）
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：wangEditor 已被主动移除——`src` 内三处注释口径一致（「原 wangEditor 已移除 / 迁到 Markdown 编辑器」），组件、i18n 键、接线与测试均已不存在，条目编辑器现走 `AdminMarkdownEditor` + `AdminRichEditor` + `FangEditor`；两个残留依赖已在本轮清理。本组不再执行。）
 
 - [ ] `EditItemApp` 的 `<AdminRichEditor>` 传入 `enableWangEditor`
 - [ ] 传入 `bodyEditor`，读自 `item._microfeed?.body_editor`

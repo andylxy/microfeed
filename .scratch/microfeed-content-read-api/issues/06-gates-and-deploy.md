@@ -5,7 +5,7 @@ legacy bearer 与无权限凭证被拒；未发布内容不可见。
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：早期草稿，方案与最终交付不符。最终实现见 同目录 `07-gates-and-deploy`（已 done）。）
 
 ## Acceptance criteria
 

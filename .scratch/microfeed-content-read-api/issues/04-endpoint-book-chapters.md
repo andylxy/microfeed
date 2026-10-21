@@ -5,7 +5,7 @@
 
 **Blocked by:** 01（`book_id` 双读）、03（登记模式已建立）
 
-**Status:** ready-for-agent
+**Status:** superseded（2026-10-21 核对：早期草稿，方案与最终交付不符。最终实现见 同目录 `04-chapter-detail`（已 done）。）
 
 ## 实现要点
 
