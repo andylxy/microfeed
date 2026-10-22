@@ -50,7 +50,6 @@ interface ReferenceRow {
   chapterId: string;
   chapterTitle: string;
   bookId: string;
-  bookTitle: string;
 }
 
 async function references(query: string): Promise<{items: ReferenceRow[]; total: number}> {
@@ -82,7 +81,7 @@ afterEach(async () => {
     ),
     // 保序回归用的 120 条批量条文（frB000–frB119）
     env.FEED_DB.prepare("DELETE FROM items WHERE id LIKE 'frB%'"),
-    env.FEED_DB.prepare("DELETE FROM channels WHERE id IN (?, ?)").bind(BOOK, OTHER_BOOK),
+    env.FEED_DB.prepare("DELETE FROM channels WHERE id = ?").bind(BOOK),
   ]);
 });
 
@@ -92,9 +91,6 @@ describe("fang references endpoint", () => {
       env.FEED_DB.prepare(
         "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
       ).bind(BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "伤寒论"})),
-      env.FEED_DB.prepare(
-        "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
-      ).bind(OTHER_BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "金匮要略"})),
       item(CHAPTER, BOOK, "chapter", STATUSES.PUBLISHED, {
         title: "辨太阳病脉证并治（上）第五",
         description: "篇首无标记。",
@@ -134,38 +130,29 @@ describe("fang references endpoint", () => {
       STATUSES.UNPUBLISHED,
       STATUSES.PUBLISHED,
     ]);
-    // 篇章/书标题回查照旧
+    // 篇章标题回查照旧
     expect(items[0]!.chapterTitle).toBe("辨太阳病脉证并治（上）第五");
-    expect(items[0]!.bookTitle).toBe("伤寒论");
     expect(items[0]!.title).toBe("第一条");
     // fangList 源的标题来自物化表的 section_title
     expect(items[2]!.title).toBe("第二条");
   });
 
-  it("falls back to the cross-book scan when bookId is absent", async () => {
+  it("rejects a lookup without bookId instead of scanning every book", async () => {
     await env.FEED_DB.batch([
-      env.FEED_DB.prepare(
-        "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
-      ).bind(BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "伤寒论"})),
-      env.FEED_DB.prepare(
-        "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
-      ).bind(OTHER_BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "金匮要略"})),
       item(BODY_SECTION, BOOK, "section", STATUSES.PUBLISHED, {
         title: "第一条",
         description: "$f{桂枝汤}主之。",
         _microfeed: {receiptNo: 1000000},
       }),
-      item(CROSS_BOOK_SECTION, OTHER_BOOK, "section", STATUSES.PUBLISHED, {
-        title: "别书条",
-        description: "$f{桂枝汤}。",
-        _microfeed: {receiptNo: 9},
-      }),
     ]);
 
-    const {items, total} = await references("?name=" + encodeURIComponent("桂枝汤"));
-    expect(items.map((r) => r.id)).toEqual([BODY_SECTION, CROSS_BOOK_SECTION]);
-    expect(total).toBe(2);
-    expect(items[1]!.bookTitle).toBe("金匮要略");
+    const response = await get(
+      "/admin/ajax/tcm/fang-references?name=" + encodeURIComponent("桂枝汤"),
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json() as {error?: string; items?: unknown};
+    expect(body.items).toBeUndefined();
+    expect(body.error).toBeTruthy();
   });
 
   it("returns the receiptNo-ordered top 50, not a rowid-first subset", async () => {
@@ -174,11 +161,6 @@ describe("fang references endpoint", () => {
     // 个子集——桂枝汤在本地一书有 70 条引用，该偏差真实发生。这里用 120 条
     // （同时超过合并 IN 查询的 90 分片，覆盖分片路径），插入序与 receiptNo
     // 序刻意相反：按 seq 前 50 是 S000–S049，按 receiptNo 前 50 是 S119–S070。
-    await env.FEED_DB.batch([
-      env.FEED_DB.prepare(
-        "INSERT INTO channels (id, status, data) VALUES (?, ?, ?)",
-      ).bind(BOOK, STATUSES.PUBLISHED, JSON.stringify({title: "伤寒论"})),
-    ]);
     const inserts = [];
     for (let i = 0; i < 120; i += 1) {
       const id = `frB${String(i).padStart(3, "0")}`;

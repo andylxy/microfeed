@@ -72,6 +72,12 @@ interface ThemeSource {
   url?: string | null;
 }
 
+/** 版本列表项：四个展示字段；`manifest_json` / `bundle_json` 不读取。 */
+type ThemeVersionOption = Pick<
+  StoredThemeVersion,
+  "id" | "name" | "packageId" | "version"
+>;
+
 export interface InstallThemeInput {
   assetOwnerThemeId?: string | null;
   bundle: ThemeBundleV1;
@@ -224,13 +230,28 @@ export default class ThemeStore {
     }
   }
 
-  async listVersions(includeDeleted = true): Promise<StoredThemeVersion[]> {
+  /**
+   * 版本列表的投影只保留 id / name / packageId / version 四列。仅收窄投影无法省略
+   * 溢出页：`created_at` 在表定义里排在 `manifest_json`、`bundle_json` 之后，读取
+   * 排序列就要走完该行的溢出链（本地 themes 10 行 / 169 页 / 692,224 字节，其中
+   * 163 页溢出 / 667,648 字节，三个 JSON 列正文合计 670,307 字节）。
+   * 默认 `includeDeleted = false`（带 `deleted_at IS NULL`）走 0141 的
+   * `SEARCH themes USING COVERING INDEX ix_themes_versions_cover (deleted_at=?)`，
+   * 没有临时 B 树，不读取 themes 表页；该索引在本地文件实测 1 页 / 4,096 字节
+   * （`dbstat`，`probe-cleanup-cover-local-applied.mjs`；副本同值
+   * `probe-facts14.mjs`）。
+   * `includeDeleted = true` 没有 `deleted_at` 等值条件，计划仍是
+   * `SCAN themes USING INDEX sqlite_autoindex_themes_2` 加
+   * `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`，只有测试需要该形态，代价口径见
+   * ADR-0043。
+   */
+  async listVersions(includeDeleted = false): Promise<ThemeVersionOption[]> {
     const result = await this.database.prepare(
-      `SELECT * FROM themes
+      `SELECT id, name, package_id AS packageId, version FROM themes
        ${includeDeleted ? "" : "WHERE deleted_at IS NULL"}
        ORDER BY package_id ASC, created_at DESC`,
-    ).all();
-    return results(result).map(storedThemeFromRow);
+    ).all<ThemeVersionOption>();
+    return results<ThemeVersionOption>(result);
   }
 
   async listDrafts(): Promise<ThemeDraft[]> {
@@ -965,17 +986,23 @@ export default class ThemeStore {
    * `UNIQUE(package_id, version)`（见 {@link purgeVersion}）。dryRun 只返回
    * 将删清单，不删任何行。
    *
-   * 读代价（AGENTS.md:13）：custom 全集一次扫描走全表（`EXPLAIN QUERY PLAN`
-   * 实测 `SCAN themes`——source_kind 无索引，themes_created_at / themes_deleted_at /
-   * themes_asset_owner 三个索引的谓词都不匹配本查询）。rows_read = themes 全表行数
-   * （本地实测 25 行 = custom 17 + bundled 8；生产上界 = bundled 数 + custom 配额 100
-   * + 墓碑累积）。SELECT 只取 id / package_id / version / deleted_at 四个窄列，
-   * 读取字节按每行约 100 字节估（25 行 ≈ 2.5 KB；100 行 ≈ 10 KB）；manifest 与
-   * bundle 两列 JSON 不进投影。keep 集两条主键查各 1 rows_read。表在这个量级
-   * 不新增索引。
+   * 读取代价（见 AGENTS.md「远程 D1 额度与量化回复」）：0138 的
+   * `ix_themes_cleanup_cover`
+   * (source_kind, id, package_id, version, deleted_at) 覆盖本查询的全部投影列，
+   * 应用后查询计划是 `SCAN themes USING COVERING INDEX ix_themes_cleanup_cover`：
+   * 读取条数等于表行数（本地 10 行：`source_kind='bundled'` 8 行 +
+   * `source_kind='local-directory'` 2 行，其中 `deleted_at IS NULL` 9 行，
+   * `probe-facts22.mjs`），不读取主题包行；表本身 692,224 字节 / 169 页，
+   * manifest 与 bundle 两列 JSON 占绝大多数。
+   * 索引在本地文件实测 4,096 字节 / 1 页（`dbstat`，
+   * `probe-cleanup-cover-local-applied.mjs`；0138 已应用到本地与远程）；
+   * 生产上界 = bundled 数 +
+   * custom 配额 100 + 墓碑累积。探针脚本未纳入版本管理，逐项取证范围见
+   * ADR-0043 的「验证」一节。
+   * keep 集两条主键查各 1 rows_read。
    *
-   * 删除逐行进行、非原子：目标行被并发激活时该行抛错，已删的行不回滚
-   * （半清理状态）。与单行 deleteVersion 的语义一致；纯写路径，无新增读。
+   * 删除逐行进行、非原子：目标行被并发激活时该行抛出错误，已删除的行不回滚
+   * （半清理状态）。与单行 deleteVersion 的语义一致；纯写路径，无新增读取。
    */
   async purgeOldVersions(
     bucket?: R2Bucket | null,

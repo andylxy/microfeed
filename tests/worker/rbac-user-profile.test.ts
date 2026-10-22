@@ -373,13 +373,18 @@ describe("profile edit (name / email)", () => {
     const user = await createUser("mail@example.com", "Mail", "Pass1234", cookie, adminId);
     const response = await updateAdminRbacUserProfile({
       locals: locals(adminId, ["system:user:manage"]),
-      request: authedRequest(PROFILE_URL, {email: "mail2@example.com", userId: user.id}, cookie),
+      request: authedRequest(PROFILE_URL, {email: "Mail2@Example.COM", userId: user.id}, cookie),
     } as never);
     expect(response.status).toBe(200);
     const board = await response.json() as {users: {id: string; email: string}[]};
     expect(board.users.find((entry) => entry.id === user.id)?.email).toBe(
       "mail2@example.com",
     );
+    // 查重走等值比较（索引可用），前提是更新路径也存入小写。
+    const row = await env.FEED_DB.prepare(
+      'SELECT "email" FROM "auth_user" WHERE "id" = ?',
+    ).bind(user.id).first<{email: string}>();
+    expect(row?.email).toBe("mail2@example.com");
   });
 
   it("rejects a duplicate email with 409", async () => {
@@ -503,6 +508,22 @@ describe("create with separate username and email fields", () => {
       adminId,
     );
     expect(response.status).toBe(400);
+  });
+
+  it("stores the username and placeholder address in lowercase", async () => {
+    const {adminId, cookie} = await bootstrapAndSignIn();
+    const response = await createUserSplit(
+      {name: "Mixed", password: "Pass1234", username: "MiXeDName"},
+      cookie,
+      adminId,
+    );
+    expect(response.status).toBe(200);
+    // 查重走等值比较（索引可用），前提是写入路径统一转小写。
+    const row = await env.FEED_DB.prepare(
+      "SELECT username, email FROM auth_user WHERE username = ?",
+    ).bind("mixedname").first<{email: string; username: string}>();
+    expect(row?.username).toBe("mixedname");
+    expect(row?.email).toBe("mixedname@users.microfeed.local");
   });
 
   it("rejects a duplicate username regardless of case", async () => {

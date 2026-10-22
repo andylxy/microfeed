@@ -300,11 +300,18 @@ export async function resumeWebhookEndpoint(
  * 外键顺序（0017）：deliveries→endpoints、deliveries→events、attempts→deliveries，
  * 所以 batch 内只能 attempts → deliveries → events → endpoints。deliveries 一删，
  * 「本端点的独占事件」就无从查起，因此删前先用一条 DISTINCT 读把 event id 取出。
- * 读代价量化（AGENTS.md:13）：外层 `endpoint_id = ?` 走 `webhook_deliveries_endpoint`
- * 索引，rows_read ≈ 该端点的投递数；反连接子查询 `endpoint_id <> ?` 用不上该索引
- * （索引前导列是等值匹配），整表读 `webhook_deliveries`，rows_read = 表行数（投递
- * 历史总量）。admin 一次性操作，量级可接受。读与删之间若来了别的端点对同一事件
- * 的新投递，events 删除撞外键、整个 batch 回滚——purge 失败可重试，不会留半删状态。
+ * 读代价量化（只读探针 `.scratch/d1-scan-fix/probe-facts22.mjs` 的 `EXPLAIN QUERY PLAN`）：
+ * 外层 `endpoint_id = ?` 走 `webhook_deliveries_endpoint (endpoint_id, created_at)`，
+ * 该索引不含 `event_id`，所以读取 K 行本端点投递并逐行回表（K = 本端点投递数）；
+ * 反连接子查询 `endpoint_id <> ?` 没有等值前缀可用，计划是 `LIST SUBQUERY 1` +
+ * `SCAN webhook_deliveries` + `CREATE BLOOM FILTER`，整表物化一次，rows_read = W
+ * （W = 保留期内全部投递行数；本地 0 行 / 4,096 字节 / 1 页，上界按
+ * `WEBHOOK_LIMITS.dailyDeliveries` 1,000 × `retentionDays` 30 天 = 30,000 行推得）。
+ * 改成 `NOT EXISTS` 并不成立：子查询仍带 `endpoint_id <> ?`，探针给出的计划是
+ * `SCAN o`，代价变成每条候选一次整表。成立的两步形态与采用条件（按 W 判定，
+ * W ≤ 200 维持现形态）记在 ADR-0043 D8。admin 一次性操作。读与删之间若来了别的
+ * 端点对同一事件的新投递，events 删除撞外键、整个 batch 回滚——purge 失败可重试，
+ * 不会留半删状态。
  *
  * event 用独占引用删法：只删投递曾指向本端点、且没有其他端点投递在用的 event。
  * cron 的「无投递引用」删法会把保留期内的 explorer 事件一并硬删，那是它的保留期

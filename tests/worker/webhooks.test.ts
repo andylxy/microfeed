@@ -976,4 +976,100 @@ describe("webhook reconciliation and retention", () => {
       "SELECT COUNT(*) AS count FROM webhook_deliveries WHERE id = ?",
     ).bind(deliveryId).first()).toEqual({count: 0});
   });
+
+  it("deletes only old events without deliveries and old budget reservations", async () => {
+    await insertEndpoint("retention");
+    // 事件已过期、投递是新的：删除事件会让投递指向不存在的行。
+    const keptDelivery = await insertDelivery("retention", "kept");
+    await env.FEED_DB.prepare(
+      "UPDATE webhook_events SET created_at = datetime('now', '-31 days') WHERE id = ?",
+    ).bind("evt_kept").run();
+    // 事件与投递都已过期：同一次清理一起删除。
+    const expiredDelivery = await insertDelivery("retention", "expired");
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare(
+        "UPDATE webhook_events SET created_at = datetime('now', '-31 days') WHERE id = ?",
+      ).bind("evt_expired"),
+      env.FEED_DB.prepare(
+        "UPDATE webhook_deliveries SET created_at = datetime('now', '-31 days') WHERE id = ?",
+      ).bind(expiredDelivery),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_events (
+          id, event_type, subject_type, subject_id, payload_json, origin,
+          request_id, correlation_id, delivery_count, budget_day, created_at
+        ) VALUES ('evt_orphan', 'item.published', 'item', 'item', '{}',
+          'system', 'request', 'corr', 0, date('now'), datetime('now', '-31 days'))
+      `),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_events (
+          id, event_type, subject_type, subject_id, payload_json, origin,
+          request_id, correlation_id, delivery_count, budget_day, created_at
+        ) VALUES ('evt_fresh', 'item.published', 'item', 'item', '{}',
+          'system', 'request', 'corr', 0, date('now'), CURRENT_TIMESTAMP)
+      `),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_budget_reservations
+          (id, delivery_count, budget_day, created_at)
+        VALUES ('reservation-old', 0, '2026-08-01', datetime('now', '-40 days'))
+      `),
+      env.FEED_DB.prepare(`
+        INSERT INTO webhook_budget_reservations
+          (id, delivery_count, budget_day, created_at)
+        VALUES ('reservation-fresh', 0, date('now'), CURRENT_TIMESTAMP)
+      `),
+    ]);
+
+    await pruneWebhookHistory(env.FEED_DB);
+
+    const counts = await env.FEED_DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM webhook_events WHERE id = 'evt_kept') AS keptEvent,
+        (SELECT COUNT(*) FROM webhook_deliveries WHERE id = ?) AS keptDelivery,
+        (SELECT COUNT(*) FROM webhook_events WHERE id = 'evt_expired') AS expiredEvent,
+        (SELECT COUNT(*) FROM webhook_deliveries WHERE id = ?) AS expiredDelivery,
+        (SELECT COUNT(*) FROM webhook_events WHERE id = 'evt_orphan') AS orphanEvent,
+        (SELECT COUNT(*) FROM webhook_events WHERE id = 'evt_fresh') AS freshEvent,
+        (SELECT COUNT(*) FROM webhook_budget_reservations
+          WHERE id = 'reservation-old') AS oldReservation,
+        (SELECT COUNT(*) FROM webhook_budget_reservations
+          WHERE id = 'reservation-fresh') AS freshReservation
+    `).bind(keptDelivery, expiredDelivery).first<Record<string, number>>();
+    expect(counts).toEqual({
+      keptEvent: 1,
+      keptDelivery: 1,
+      expiredEvent: 0,
+      expiredDelivery: 0,
+      orphanEvent: 0,
+      freshEvent: 1,
+      oldReservation: 0,
+      freshReservation: 1,
+    });
+  });
+
+  it("deletes long-removed endpoints only when no delivery references them", async () => {
+    await insertEndpoint("endpoint-orphan");
+    await insertEndpoint("endpoint-referenced");
+    await insertEndpoint("endpoint-fresh");
+    // 保留期内的投递仍指向该端点，删除端点会让这条投递失去归属。
+    await insertDelivery("endpoint-referenced", "endpoint-kept");
+    await env.FEED_DB.batch([
+      env.FEED_DB.prepare(`
+        UPDATE webhook_endpoints SET deleted_at = datetime('now', '-31 days')
+        WHERE id IN ('endpoint-orphan', 'endpoint-referenced')
+      `),
+      env.FEED_DB.prepare(
+        "UPDATE webhook_endpoints SET deleted_at = CURRENT_TIMESTAMP WHERE id = 'endpoint-fresh'",
+      ),
+    ]);
+
+    await pruneWebhookHistory(env.FEED_DB);
+
+    const counts = await env.FEED_DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM webhook_endpoints WHERE id = 'endpoint-orphan') AS orphan,
+        (SELECT COUNT(*) FROM webhook_endpoints WHERE id = 'endpoint-referenced') AS referenced,
+        (SELECT COUNT(*) FROM webhook_endpoints WHERE id = 'endpoint-fresh') AS fresh
+    `).first<Record<string, number>>();
+    expect(counts).toEqual({orphan: 0, referenced: 1, fresh: 1});
+  });
 });

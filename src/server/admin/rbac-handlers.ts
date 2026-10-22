@@ -1026,13 +1026,10 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     email = adminUsernameEmail(account);
   }
 
-  // Uniqueness, checked once for every path: the username and the address are
-  // the two things an account signs in with, so a clash has to be reported as
-  // one instead of falling through to the write and surfacing as a generic
-  // failure. Both comparisons are case-insensitive — usernames are stored
-  // lowercased and addresses normalised, so "Bob" and "bob" are the same
-  // account. The address check also covers the placeholder addresses that
-  // username-only accounts hold.
+  // 唯一性检查：用户名与邮箱是账号的两条登录凭据，冲突要在写入前返回 409，
+  // 不能拖到写库后再返回通用失败。上面的取值都已过 `normalizeAdminUsername` /
+  // `normalizeAdminEmail`，库里存的也是同一小写形式，等值比较会把 "Bob" 与
+  // "bob" 认成同一账号。邮箱检查同时覆盖只有用户名、使用占位邮箱的账号。
   if (username && await usernameIsTaken(env.FEED_DB, username)) {
     return localizedError(request, "errors.rbac.usernameTaken", 409);
   }
@@ -1074,11 +1071,17 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.createUserFailed", 400);
   }
 
-  // Better Auth's createUser may not echo the id; fall back to a lookup so the
-  // role rows below always land on the right account.
+  // 上一行按结构断言从 `created` 取 `user.id`；取不到时回查一次，下面的角色行
+  // 才能关联到正确账号。`email` 在调用前已转小写，admin 插件的 create-user
+  // 路由也会再转一次，所以等值比较可以直接比较。等值查重的计划为
+  // `SEARCH auth_user USING INDEX sqlite_autoindex_auth_user_2 (email=?)`
+  // （`probe-facts21.mjs`），仅读取 1 条索引项与 1 行表数据（本地 auth_user
+  // 4 行 / 4,096 字节）。该索引的名称与列的出处见 {@link emailIsTaken}
+  // 的文档注释；探针脚本在 `.scratch/d1-scan-fix/`（未纳入版本管理），
+  // 取证范围见 ADR-0043 的「验证」一节。
   if (!newUserId) {
     const row = await env.FEED_DB.prepare(
-      "SELECT id FROM auth_user WHERE lower(email) = lower(?)",
+      "SELECT id FROM auth_user WHERE email = ?",
     ).bind(email).first<{id: string}>();
     newUserId = row?.id ?? null;
   }
@@ -1238,30 +1241,32 @@ function parseRbacUserId(body: {userId?: unknown} | null): string {
 }
 
 /**
- * Whether a username is already taken.
+ * 用户名是否已被占用。
  *
- * Compared case-insensitively: the username plugin stores the lowercased form,
- * so "Bob" and "bob" name one account, and SQLite's UNIQUE index compares bytes
- * rather than letters, so it would happily admit the second spelling. Every
- * pre-write check goes through here so the rule cannot drift between callers.
+ * 调用方传入的值已过 `normalizeAdminUsername`，username plugin 写入数据库的也是
+ * 同一小写形式，等值比较直接走 `auth_user_username` 唯一索引，仅读取 1 条
+ * 索引项与 1 行表数据。对列使用 `lower()` 包裹时查询计划是 `SCAN auth_user`，
+ * 每次查重读取全部账号行（本地 4 行 / 4,096 字节）。
  */
 async function usernameIsTaken(
   database: D1Database,
   username: string,
 ): Promise<boolean> {
   const row = await database.prepare(
-    "SELECT id FROM auth_user WHERE lower(username) = lower(?)",
+    "SELECT id FROM auth_user WHERE username = ?",
   ).bind(username).first<{id: string}>();
   return Boolean(row);
 }
 
 /**
- * Whether an address is already used by an account, optionally ignoring one
- * account (`exceptUserId`) so an edit is not compared against itself.
+ * 邮箱是否已被某个账号使用；编辑账号时用 `exceptUserId` 跳过账号自己。
  *
- * Case-insensitive for the same reason as the username: SQLite's UNIQUE index
- * is byte-wise, so `Bob@example.com` and `bob@example.com` are two rows unless
- * this check stops them.
+ * `email` 已由 `normalizeAdminEmail` 归一化，Better Auth 与初始化路径写入的
+ * 也是小写形式，等值比较走 email 列的 UNIQUE 约束索引
+ * `sqlite_autoindex_auth_user_2`（`0002_better_auth.sql:4` 的列级 UNIQUE，
+ * `sqlite_autoindex_auth_user_1` 已被 `id` 的 TEXT PRIMARY KEY 占用），仅读取 1 条索引项与
+ * 1 行表数据。对列使用 `lower()` 包裹时查询计划是 `SCAN auth_user`（本地 4 行 /
+ * 4,096 字节）。
  */
 async function emailIsTaken(
   database: D1Database,
@@ -1270,10 +1275,10 @@ async function emailIsTaken(
 ): Promise<boolean> {
   const statement = exceptUserId
     ? database.prepare(
-      "SELECT id FROM auth_user WHERE lower(email) = lower(?) AND id <> ?",
+      "SELECT id FROM auth_user WHERE email = ? AND id <> ?",
     ).bind(email, exceptUserId)
     : database.prepare(
-      "SELECT id FROM auth_user WHERE lower(email) = lower(?)",
+      "SELECT id FROM auth_user WHERE email = ?",
     ).bind(email);
   const row = await statement.first<{id: string}>();
   return Boolean(row);
@@ -1472,9 +1477,8 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
     if (isReservedAdminEmailDomain(email)) {
       return localizedError(request, "errors.rbac.reservedEmailDomain", 400);
     }
-    // Compared case-insensitively and against every account but this one, so a
-    // mixed-case row cannot slip past the 409 and surface as a generic failure
-    // inside `adminUpdateUser`.
+    // 与除本账号外的所有账号比较；归一化后的地址与库里的行同一形式，
+    // 大小写混写也会返回 409，不会拖到 `adminUpdateUser` 才返回通用失败。
     if (await emailIsTaken(env.FEED_DB, email, userId)) {
       return localizedError(request, "errors.rbac.emailTaken", 409);
     }

@@ -796,14 +796,32 @@ export async function pruneWebhookHistory(database: D1Database): Promise<void> {
       DELETE FROM webhook_deliveries
       WHERE created_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
     `),
+    // NOT EXISTS 让每条候选事件按 event_id 点查 0140 的
+    // ix_webhook_deliveries_event（计划 `SEARCH d USING COVERING INDEX
+    // ix_webhook_deliveries_event (event_id=?)`，本地文件实测
+    // `probe-local-plan-after-applied.mjs`，副本同值 `probe-round5.mjs`；
+    // 索引 1 页 / 4,096 字节）。改写前的 NOT IN 形态在同表 0 行时仍是
+    // `SCAN d` + `SCAN webhook_deliveries`（`probe-facts7c.mjs`）。
+    // 本地投递表 0 行，两种形态下的子查询都读取 0 行；外层候选事件本地 1 行
+    // （`probe-facts17.mjs`）。
+    // NOT IN 会先把子查询的
+    // webhook_deliveries.event_id 整列物化一次：按默认日投递上限 1,000 行、
+    // 30 天保留期最坏 30,000 行，日上限配置到 1,000,000 时则是 30,000,000 行
+    // （两个数字都是「日上限 × 保留天数」的推得值），每天的清理都要把它们
+    // 读取一遍。探针脚本在 `.scratch/d1-scan-fix/`（未纳入版本管理），逐条取证范围见
+    // ADR-0043 D8。
     database.prepare(`
       DELETE FROM webhook_events
       WHERE created_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
-        AND id NOT IN (SELECT event_id FROM webhook_deliveries)
+        AND NOT EXISTS (
+          SELECT 1 FROM webhook_deliveries d WHERE d.event_id = webhook_events.id
+        )
     `),
     database.prepare(`
       DELETE FROM webhook_daily_usage WHERE usage_day < date('now', '-35 days')
     `),
+    // 按 created_at 的范围删除走 0139 的 ix_webhook_budget_created；缺少该索引时
+    // 计划是 SCAN webhook_budget_reservations 整表（本地 0 行 / 4,096 字节）。
     database.prepare(`
       DELETE FROM webhook_budget_reservations
       WHERE created_at < datetime('now', '-35 days')
@@ -815,10 +833,20 @@ export async function pruneWebhookHistory(database: D1Database): Promise<void> {
       DELETE FROM webhook_alerts
       WHERE created_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
     `),
+    // 同一理由：NOT IN 会把子查询的 webhook_deliveries.endpoint_id 整列物化
+    // 一次，NOT EXISTS 走
+    // `SEARCH webhook_deliveries USING COVERING INDEX
+    // webhook_deliveries_endpoint (endpoint_id=?)`（本地投递表 0 行）。
+    // 外层 `deleted_at < ?` 用不上 webhook_endpoints_status
+    // (status, deleted_at, updated_at)——status 没有等值条件——仍要
+    // `SCAN webhook_endpoints`：本地 0 行 / 4,096 字节。
     database.prepare(`
       DELETE FROM webhook_endpoints
       WHERE deleted_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')
-        AND id NOT IN (SELECT endpoint_id FROM webhook_deliveries)
+        AND NOT EXISTS (
+          SELECT 1 FROM webhook_deliveries d
+          WHERE d.endpoint_id = webhook_endpoints.id
+        )
     `),
   ]);
 }

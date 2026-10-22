@@ -2753,6 +2753,7 @@ export const zhCN: TranslationKey = {
       volumeExists: "已存在同名的卷。",
     },
     fang: {
+      referencesBookMissing: "查询方剂引用需要指定书籍。",
       referencesNameMissing: "请提供要查找引用的方剂名。",
     },
     books: {

@@ -151,27 +151,32 @@ export async function listWebhookExplorerSubjects(
     return [{id: "navigation", label: "Current Page navigation"}];
   }
   if (definition.sourceKind === "item") {
-    // 两条取数路径的实测代价（2026-10-18，本地 9506 行 items，8 次丢弃首次取中位数）：
-    //   items 直查（D1SCAN-003 已知接受项，走 items_updated_at 索引全扫）：
-    //     空搜索词 0.126ms / 读 50 行（LIMIT 早停）；常见词 0.813ms / 约 1600 行；
-    //     稀有词 41.896ms、无命中搜索词 33.715ms —— 这两种均需扫完整条索引，读 9506 行，
-    //     按 5,000,000 rows read/天 计只够 525 次/天。
-    //   走 ext_admin_typeahead 索引（rows read = FTS 匹配行数 + 回表点查行数）：
-    //     `黄芪` 44 行 / 0.119ms、`黄` 约 582 行 / 2.460ms、无命中搜索词 0 行 / 0.065ms，
-    //     最坏读数从 9506 降到约 582（降 93.9%），结果与直查的顺序、集合一致。
-    //   索引体积 1,249,280 字节；items 单行 UPDATE 写放大 3.018 → 4.162ms。
-    // 索引属派生数据、由 prepareItemSearch 维护；未建或未回填时走直查。
-    if (query !== "" && await adminTypeaheadReady(runtimeEnv.FEED_DB)) {
+    // 实测代价（2026-10-21 本地重测，`.scratch/d1-scan-fix/probe-facts20.mjs`：每轮
+    // 新建连接、单轮 9 次取中位数、5 轮再取中位数；区间是 5 轮的中位数的最小值–最大值）：
+    //   空搜索词走 items_updated_at（434,176 字节 / 106 页），LIMIT 50 早停，
+    //     读取 50 行 / 0.128ms（区间 0.115–0.135ms）。
+    //   非空搜索词走 ext_admin_typeahead，候选数取 `probe-facts18.mjs` 的 MATCH 计数：
+    //     `黄芪` 22 个候选 / 0.123ms（0.114–0.124ms）、无命中搜索词 0 个候选 /
+    //     0.287ms（0.272–0.297ms）、单字 `黄` 291 个候选 / 2.632ms（2.421–2.841ms，
+    //     返回 50 行，回表在 ORDER BY 之后、LIMIT 之前完成）。
+    //   移除前的 LIKE 直查：稀有词 34.006ms（33.809–35.808ms）、无命中搜索词
+    //     36.912ms（36.246–41.964ms），两种形态都扫描完整条 items_updated_at 并回表
+    //     9,506 行 / 18,395,136 字节，按 5,000,000 行/日只够 525 次请求。
+    //   派生索引体积 1,249,280 字节 / 305 页（FTS5 影子对象合计）。
+    // 索引属派生数据、由 prepareItemSearch 维护；未创建或未回填时非空搜索返回空候选，
+    // 操作者可以清空搜索词浏览最近条目，避免一次请求吃掉 0.19% 的日读取额度。
+    // 探针脚本在 `.scratch/d1-scan-fix/`（未纳入版本管理），逐项取证范围见 ADR-0043 D6。
+    if (query !== "") {
+      if (!await adminTypeaheadReady(runtimeEnv.FEED_DB)) return [];
       return await itemSubjectsByIndex(runtimeEnv.FEED_DB, query);
     }
     const result = await runtimeEnv.FEED_DB.prepare(`
       SELECT id, status, COALESCE(json_extract(data, '$.title'), '') AS title
       FROM items
       WHERE status != ?
-        AND (? = '' OR lower(id) LIKE ? OR lower(COALESCE(json_extract(data, '$.title'), '')) LIKE ?)
       ORDER BY updated_at DESC, id DESC
       LIMIT 50
-    `).bind(STATUSES.DELETED, query, `%${query}%`, `%${query}%`)
+    `).bind(STATUSES.DELETED)
       .all<Record<string, unknown>>();
     return result.results.map(itemSubject);
   }

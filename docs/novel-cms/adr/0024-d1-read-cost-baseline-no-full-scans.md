@@ -108,9 +108,9 @@
 
 ## 决策
 
-- **D1｜不为「消除全表扫描」做任何改动**——已无扫描，为扫描新增索引无收益。
+- **D1｜不为「消除全表扫描」做任何改动**——已无扫描，为扫描新增索引无收益。适用范围限于本 ADR 审计过的公开读路径与当时列入的后台路径；2026-10-21 对后台与维护路径扩大范围后发现的扫描与新增索引，见 ADR-0043。
 - **D2｜接受「整本读取」**：书页/阅读页读整本书，上界由书大小决定，靠 24h 边缘缓存兜底；目录分页不在本轮（见备选）。
-- **D3｜Admin 侧不纳入**：`readAdminMenu`(62)、webhook explorer(41)、`readRbacUsers`(4) 等量小且低频，不占公开额度。
+- **D3｜Admin 侧不纳入**：`readAdminMenu`(62)、webhook explorer(41)、`readRbacUsers`(4) 等量小且低频，不占公开额度。本条限于该次审计的取舍；webhook explorer 的 LIKE 扫描、后台列表、登录日志与主题维护路径已由 ADR-0043 修复。
 - **D4｜先只出结论与基线**（本轮前半），已证明的修复记录在备选 1。
 - **D5｜实施备选 1（方案 A）**：新增迁移 `0108_index_section_order_coalesce.sql` 建索引 `items_section_order_kind2 (tcm_kind, tcm_parent_id, COALESCE(receiptNo,no), id)`，消掉书页条文查询的 TEMP B-TREE。**已应用到本地 D1**（记入 `d1_migrations` id=104）并复测 **6,010 → 3,127**、计划不再出现 TEMP B-TREE。远端 D1 待用户自行应用。
 - **D6｜复核无回归**：用 app **真实** SQL（字面分片 `IN (…)` 列表）复测，书页条文 **3,045**（比子查询探针的 3,127 更低）；同一 SQL 的卷看板调用方（无 `tcm_kind`）仍走 `items_section_order`、无排序；App 单 parent 查询（`items_section_order_kind`）仍为 2；`getTcmBookChapters` 163 未变。`items` 索引 21 → 22，无新增全表扫描。
@@ -126,7 +126,7 @@
 
 1. 数值取自 **2026-10-12 本地快照**（9,506 items / 13 channels），逐查询累加 `meta.rows_read`，未对整页函数做端到端计量。
 2. 本机 vitest 全部套件在 suite 级失败（根因未定位，见 ADR-0016 局限 3），故本审计用 `.scratch/d1-probe/` 下的 `node:sqlite` + Miniflare 探针，而非 vitest。
-3. 备选 1 先在沙箱副本验证，随后**落成迁移 `0108` 并应用到本地 D1**（`integrity_check` ok、复测 3,127）；**远端 D1 尚未应用**，需用户执行迁移后生效。
+3. 备选 1 先在沙箱副本验证，随后**落成迁移 `0108` 并应用到本地 D1**（`integrity_check` ok、复测 3,127）；远端 D1 于 2026-10-22 的部署中随 `manage deploy` 应用（远程 `d1_migrations` 137 行、137 个在盘迁移文件逐条命中，见 `.scratch/d1-sync-20261022/probe-ledger-and-indexes.stdout.txt`）。
 4. **D1 结论一律以本地快照为准，不连远程**（用户 2026-10-12 定）。
 
 ## 验证

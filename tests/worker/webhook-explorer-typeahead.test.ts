@@ -5,11 +5,12 @@ import {ADMIN_TYPEAHEAD_TABLE} from "@/shared/ItemSearchSql";
 import {listWebhookExplorerSubjects} from "@/server/webhooks/explorer";
 
 /**
- * 后台事件源 typeahead（`sourceKind === "item"`）的两条取数路径。
+ * 后台事件源 typeahead（`sourceKind === "item"`）的取数行为：空搜索词读取最近
+ * 50 条，非空搜索词只走 `ext_admin_typeahead`，索引不可用时返回空候选。
  *
- * 索引 `ext_admin_typeahead` 是派生数据、不进迁移，测试环境里没有它。
+ * 索引 `ext_admin_typeahead` 是派生数据、不进入迁移，测试环境里没有它。
  * 这里用单语句建表 + 显式写索引行：D1 的 `exec` 无法可靠执行含
- * `BEGIN … END` 触发器体的多语句，而本用例只需验证查询侧的两条分支，
+ * `BEGIN … END` 触发器体的多语句，而本用例只需验证查询侧，
  * 触发器的维护由 `CREATE_ADMIN_TYPEAHEAD_INDEX_SQL` 负责（已在本地库实测）。
  */
 const db = env.FEED_DB;
@@ -109,34 +110,33 @@ describe("listWebhookExplorerSubjects item typeahead", () => {
     expect(ids.length).toBeLessThanOrEqual(50);
   });
 
-  it("索引可用时结果与 items 直查完全一致（顺序与集合）", async () => {
+  it("按索引命中的条目返回，顺序跟 items.updated_at 倒序一致", async () => {
     await insertItem("typeahead-hit-1", "黄芪建中汤", "2026-01-03T00:00:00.000Z");
     await insertItem("typeahead-hit-2", "黄芪桂枝五物汤", "2026-01-02T00:00:00.000Z");
     await insertItem("typeahead-miss-1", "桂枝汤", "2026-01-01T00:00:00.000Z");
 
     await buildIndex();
-    const viaIndex = await subjects("黄芪");
-
-    await dropIndex();
-    const viaScan = await subjects("黄芪");
-
-    expect(viaIndex).toEqual(["typeahead-hit-1", "typeahead-hit-2"]);
-    expect(viaScan).toEqual(viaIndex);
+    await expect(subjects("黄芪")).resolves.toEqual([
+      "typeahead-hit-1",
+      "typeahead-hit-2",
+    ]);
   });
 
-  it("索引缺失或为空时走 items 直查，不抛错", async () => {
+  it("索引缺失或为空时非空搜索词返回空候选，空搜索词仍读取最近条目", async () => {
     await insertItem("typeahead-fallback-1", "黄芪建中汤", "2026-01-03T00:00:00.000Z");
     await dropIndex();
-    await expect(subjects("黄芪")).resolves.toEqual(["typeahead-fallback-1"]);
+    await expect(subjects("黄芪")).resolves.toEqual([]);
+    await expect(subjects("")).resolves.toContain("typeahead-fallback-1");
 
-    // 建表但不回填：索引存在却为空，同样应走直查
+    // 建表但不回填：索引存在却为空，判定与缺失时相同
     await db
       .prepare(
         "CREATE VIRTUAL TABLE IF NOT EXISTS ext_admin_typeahead USING fts5(" +
           "haystack, content_id UNINDEXED, tokenize = 'unicode61')",
       )
       .run();
-    await expect(subjects("黄芪")).resolves.toEqual(["typeahead-fallback-1"]);
+    await expect(subjects("黄芪")).resolves.toEqual([]);
+    await expect(subjects("")).resolves.toContain("typeahead-fallback-1");
   });
 
   it("搜索词含双引号时不抛错", async () => {

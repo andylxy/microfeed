@@ -1,0 +1,37 @@
+-- 0141_index_themes_versions_cover.sql
+--
+-- 0141: themes 增加版本列表的覆盖索引
+--
+-- ThemeStore.listVersions(includeDeleted = false) 读取 id / name / package_id /
+-- version 四列，按 `package_id ASC, created_at DESC` 排序，过滤
+-- `deleted_at IS NULL`。
+-- `created_at` 在表定义里排在 `manifest_json`、`bundle_json` 之后，所以即使
+-- 投影不含两个 JSON 列，读取排序列也要走完该行的溢出页：本地 themes 10 行
+-- （其中 `deleted_at IS NULL` 9 行）/ 169 页 / 692,224 字节（`probe-facts17.mjs`
+-- 对本地文件的 `dbstat` 查询），按 dbstat 分页类型为 163 页溢出 / 667,648
+-- 字节 + 5 页叶子 / 20,480 字节 + 1 页内部节点 / 4,096 字节，三个 JSON 列
+-- 正文合计 670,307 字节（`probe-facts15.mjs`）。修复前的计划是
+-- `SEARCH themes USING INDEX themes_deleted_at (deleted_at=?)` 加
+-- `USE TEMP B-TREE FOR ORDER BY`。
+-- 本索引包含 `deleted_at`、排序两键与四个投影列，计划变为
+-- `SEARCH themes USING COVERING INDEX ix_themes_versions_cover (deleted_at=?)`，
+-- 没有临时 B 树，也不读取 themes 的表页；该索引在 `VACUUM INTO` 副本上实测
+-- 1 页 / 4,096 字节
+-- （`probe-facts14.mjs`）。带 `WHERE deleted_at IS NULL` 的部分索引 planner 不会
+-- 选用，`INDEXED BY` 强制后仍是回表复查谓词的非覆盖扫描（`probe-facts12.mjs`、
+-- `probe-facts13.mjs`）；`package_id` 前置、`deleted_at` 收尾的全覆盖索引只能让
+-- 不带过滤条件的形态去掉临时 B 树（`probe-facts11.mjs`）。
+-- `VACUUM INTO` 副本上的 node:sqlite 计时（每轮新建连接，单次运行包含 5 轮并记录中位数，下面是
+-- 三次独立运行的区间，`probe-facts16.mjs`）：创建索引前 1.96–2.60 ms，创建索引
+-- 后 0.94–1.22 ms，同排序键的 `SELECT *` 3.40–3.60 ms。
+-- `listVersions` 的默认参数随之改为 `includeDeleted = false`，本索引服务的正是该
+-- 形态；`includeDeleted = true`
+-- 只有测试显式传入，该形态不带 `deleted_at`
+-- 等值条件，计划仍是 `SCAN themes USING INDEX sqlite_autoindex_themes_2` 加
+-- `USE TEMP B-TREE FOR LAST TERM OF ORDER BY`，本索引不改变它。
+-- 创建索引的写入行数按创建索引前的表行数推得 10 行，占远程 D1 每日 100,000 行
+-- 写入额度的 0.01%。
+-- 回滚：DROP INDEX IF EXISTS ix_themes_versions_cover;
+
+CREATE INDEX IF NOT EXISTS ix_themes_versions_cover
+  ON themes(deleted_at, package_id ASC, created_at DESC, id, name, version);

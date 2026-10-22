@@ -998,4 +998,51 @@ describe("versioned theme storage", () => {
 
     expect(await store.getVersion(stale.id, true)).not.toBeNull();
   });
+
+  it("lists only the selector fields and can hide soft-deleted versions", async () => {
+    // 事件源的主题候选只需要 id/name/packageId/version；读取整行会把
+    // manifest_json 与 bundle_json 一起带出来。
+    const store = new ThemeStore(env.FEED_DB);
+    const packageId = `local.list-projection.${crypto.randomUUID()}`;
+    const first = await store.installVersion({
+      ...packageData(packageId, "1.0.0"),
+      source: {kind: "local-directory", path: "/list-projection"},
+    });
+    const second = await store.installVersion({
+      ...packageData(packageId, "2.0.0"),
+      source: {kind: "local-directory", path: "/list-projection"},
+    });
+    await store.deleteVersion(second.id, env.MEDIA_BUCKET);
+
+    const all = (await store.listVersions(true))
+      .filter((row) => row.packageId === packageId);
+    expect(all.map((row) => row.id).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
+    const byId = new Map(all.map((row) => [row.id, row]));
+    expect(byId.get(first.id)).toEqual({
+      id: first.id,
+      name: packageId,
+      packageId,
+      version: "1.0.0",
+    });
+    expect(byId.get(second.id)).toEqual({
+      id: second.id,
+      name: packageId,
+      packageId,
+      version: "2.0.0",
+    });
+    for (const row of all) {
+      expect(Object.keys(row).sort()).toEqual([
+        "id",
+        "name",
+        "packageId",
+        "version",
+      ]);
+    }
+
+    const live = (await store.listVersions(false))
+      .filter((row) => row.packageId === packageId);
+    expect(live.map((row) => row.id)).toEqual([first.id]);
+  });
 });

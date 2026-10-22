@@ -18,9 +18,8 @@ interface Props {
   onChange: (next: FangYaoEntry[]) => void;
   /** The fang item's own title, used to find the 条文 that cite it. */
   fangName: string;
-  /** The fang's owning book (`_microfeed.sourceBookId`). When set, the
-   *  citation search is scoped to this book — several books have same-named
-   *  formulas (桂枝汤 ×4), and each editor page should cite only its own. */
+  /** 方剂所属书（`_microfeed.sourceBookId`）。引用检索要求该项：多本书有
+   *  同名方剂（桂枝汤 ×4），每个编辑页面只引用自己书的条文。 */
   bookId?: string;
   /** Whether a save can currently run (mirrors the editor's autosave phase). */
   disabled?: boolean;
@@ -36,15 +35,13 @@ interface FangReference {
   /** 所属篇章（tcm_parent_id），后端 2026-10-01 起下发；空 = 未分组兜底。 */
   chapterId?: string;
   chapterTitle?: string;
-  /** 所属书频道（book_id → channels.data.title）。 */
+  /** 所属书频道（book_id）。 */
   bookId?: string;
-  bookTitle?: string;
 }
 
 /** 一组「同一本书同一篇章」的引用，组内条文号用「、」串联展示。 */
 interface FangReferenceGroup {
   key: string;
-  bookTitle: string;
   chapterTitle: string;
   references: FangReference[];
 }
@@ -62,7 +59,6 @@ function groupReferences(references: FangReference[]): FangReferenceGroup[] {
     if (!group) {
       group = {
         key,
-        bookTitle: reference.bookTitle ?? "",
         chapterTitle: reference.chapterTitle ?? "",
         references: [],
       };
@@ -135,12 +131,18 @@ export default function FangEditor({
     setReferences(null);
     setReferencesTotal(0);
     setReferencesError(false);
+    // 方剂的 bookId 取自 `_microfeed.sourceBookId`；缺少该字段时接口按设计返回 400，
+    // 这里直接显示不可用状态，不发送这条注定失败的请求。
+    if (!bookId) {
+      setReferencesError(true);
+      return;
+    }
     const url = new URL(
       ADMIN_URLS.ajaxTcmFangReferences(),
       window.location.origin,
     );
     url.searchParams.set("name", fangName);
-    if (bookId) url.searchParams.set("bookId", bookId);
+    url.searchParams.set("bookId", bookId);
     Requests.axiosGet(url.toString())
       .then((res: any) => {
         setReferences(Array.isArray(res?.data?.items) ? res.data.items : []);
@@ -173,9 +175,6 @@ export default function FangEditor({
   };
 
   const referenceGroups = references ? groupReferences(references) : [];
-  // 跨书时在篇章名旁标注书名；单书时省略（默认场景就是单书）。
-  const crossBook =
-    references ? new Set(references.map((r) => r.bookId ?? "")).size > 1 : false;
 
   return (
     <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
@@ -319,11 +318,6 @@ export default function FangEditor({
               <div key={group.key}>
                 <p className="text-xs font-medium text-muted-foreground">
                   {group.chapterTitle || t("items.fangReferencesUngrouped")}
-                  {crossBook && group.bookTitle ? (
-                    <span className="ml-1 font-normal">
-                      ・{group.bookTitle}
-                    </span>
-                  ) : null}
                 </p>
                 <p className="mt-1 text-sm leading-6">
                   {group.references.map((reference, index) => (

@@ -2776,6 +2776,7 @@ export const en = {
       volumeExists: "A volume with that name already exists.",
     },
     fang: {
+      referencesBookMissing: "A book is required to look up fang references.",
       referencesNameMissing: "Provide the formula name to look up references for.",
     },
     books: {
