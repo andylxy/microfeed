@@ -13,7 +13,11 @@ import {
   requirePermission,
   requireRbac,
 } from "@/server/rbac/guard";
-import {resolveUserPermissions, userMayEnterAdmin} from "@/server/rbac/resolve";
+import {
+  resolveUserAccess,
+  resolveUserPermissions,
+  userMayEnterAdmin,
+} from "@/server/rbac/resolve";
 import {checkReplay} from "@/server/rbac/replay";
 import {RBAC_PERMISSIONS} from "@/server/rbac/seed";
 import {
@@ -33,11 +37,13 @@ import {
   replaceRolePermissions,
   replaceUserRoles,
   setRbacRoleAdminLogin,
+  setRbacRoleMember,
   restoreUserDevice,
   revokeUserDevice,
   updateAdminRbacRole,
   updateAdminRbacRoleCode,
   updateAdminRbacRoleLogin,
+  updateAdminRbacRoleMember,
   updateAdminRbacRoleName,
   updateAdminRbacUser,
   updateAdminRbacUserBan,
@@ -95,6 +101,23 @@ describe("RBAC permission resolution", () => {
     await seedUser("u2", "user");
     const permissions = await resolveUserPermissions(env.FEED_DB, "u2");
     expect(permissions.size).toBe(0);
+  });
+
+  it("会员标记按角色并集计算，没有授权行的角色也参与", async () => {
+    await createRbacRole(env.FEED_DB, "member_role", "Member role");
+    await createRbacRole(env.FEED_DB, "plain_role", "Plain role");
+    await setRbacRoleMember(env.FEED_DB, "member_role", true);
+    await seedUser("u-member", "user");
+    await assignRole("u-member", "r_plain_role");
+    expect((await resolveUserAccess(env.FEED_DB, "u-member")).isMember).toBe(false);
+
+    // 再挂一个会员角色（它没有任何授权行）→ 并集为真：内连接会漏掉这种角色，
+    // 所以 resolveUserAccess 用 LEFT JOIN。
+    await assignRole("u-member", "r_member_role");
+    expect((await resolveUserAccess(env.FEED_DB, "u-member")).isMember).toBe(true);
+
+    await deleteRbacRole(env.FEED_DB, "member_role");
+    await deleteRbacRole(env.FEED_DB, "plain_role");
   });
 });
 
@@ -984,11 +1007,12 @@ describe("RBAC role CRUD (pure functions)", () => {
 });
 
 describe("角色的「登录后台」开关", () => {
-  it("新角色默认允许，板子上带出这个字段", async () => {
+  it("新角色默认不允许，板子上带出这个字段", async () => {
     await createRbacRole(env.FEED_DB, "login_default", "Login default");
     const board = await readRbacBoard(env.FEED_DB, "desktop");
+    // 0144 起新建角色默认关：需要登录后台的角色由运营显式打开。
     expect(board.roles.find((role) => role.code === "login_default")?.allowAdminLogin)
-      .toBe(true);
+      .toBe(false);
     await deleteRbacRole(env.FEED_DB, "login_default");
   });
 
@@ -1050,6 +1074,8 @@ describe("RBAC role code rename (Feature A)", () => {
   it("rebuilds the role under the new code, keeping grants and assignments", async () => {
     await createRbacRole(env.FEED_DB, "code_a", "Before");
     await replaceRolePermissions(env.FEED_DB, "code_a", ["content:book:read"], "desktop");
+    // 会员标记也必须跟着改代码一起过去。
+    await setRbacRoleMember(env.FEED_DB, "code_a", true);
     await seedUser("u-code-a", "user");
     await assignRole("u-code-a", "r_code_a");
 
@@ -1060,6 +1086,7 @@ describe("RBAC role code rename (Feature A)", () => {
     expect(board.roles.find((role) => role.code === "code_a")).toBeUndefined();
     const moved = board.roles.find((role) => role.code === "code_b");
     expect(moved?.name).toBe("Before");
+    expect(moved?.isMember).toBe(true);
     expect(moved?.permissions).toContain("content:book:read");
 
     const users = await readRbacUsers(env.FEED_DB);
@@ -1163,7 +1190,11 @@ describe("RBAC role CRUD endpoints", () => {
     } as never);
     expect(allowed.status).toBe(200);
     const board = await allowed.json() as Awaited<ReturnType<typeof readRbacBoard>>;
-    expect(board.roles.find((role) => role.code === "endpoint_role")?.name).toBe("Endpoint");
+    const created = board.roles.find((role) => role.code === "endpoint_role");
+    expect(created?.name).toBe("Endpoint");
+    // 0144 起：新建角色默认不允许登录后台、默认不是会员。
+    expect(created?.allowAdminLogin).toBe(false);
+    expect(created?.isMember).toBe(false);
     await deleteRbacRole(env.FEED_DB, "endpoint_role");
   });
 
@@ -1298,6 +1329,59 @@ describe("RBAC role CRUD endpoints", () => {
       .toBe(true);
 
     await deleteRbacRole(env.FEED_DB, "login_ep");
+  });
+
+  it("toggles the member flag through the endpoint", async () => {
+    await createRbacRole(env.FEED_DB, "member_ep", "Member ep");
+    const memberRequest = (body: unknown) =>
+      new Request("https://feed.example.com/admin/ajax/rbac/role-member", {
+        body: JSON.stringify(body),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+    const manage = {
+      authUser: {id: "u9"},
+      rbacPermissions: new Set(["system:role:manage"]),
+    };
+
+    // 新建角色默认不是会员。
+    const created = await readRbacBoard(env.FEED_DB, "desktop");
+    expect(created.roles.find((role) => role.code === "member_ep")?.isMember).toBe(false);
+
+    // 同一道门：没有会话 401，有会话但缺码 403。
+    const anonymous = await updateAdminRbacRoleMember({
+      locals: {},
+      request: memberRequest({code: "member_ep", member: true}),
+    } as never);
+    expect(anonymous.status).toBe(401);
+    const forbidden = await updateAdminRbacRoleMember({
+      locals: {authUser: {id: "u9"}, rbacPermissions: new Set(["content:book:read"])},
+      request: memberRequest({code: "member_ep", member: true}),
+    } as never);
+    expect(forbidden.status).toBe(403);
+
+    const ok = await updateAdminRbacRoleMember({
+      locals: manage,
+      request: memberRequest({code: "member_ep", member: true}),
+    } as never);
+    expect(ok.status).toBe(200);
+    const board = await ok.json() as Awaited<ReturnType<typeof readRbacBoard>>;
+    expect(board.roles.find((role) => role.code === "member_ep")?.isMember).toBe(true);
+
+    // 只认布尔：字符串 "true" 不能静默存成会员。
+    const notBoolean = await updateAdminRbacRoleMember({
+      locals: manage,
+      request: memberRequest({code: "member_ep", member: "true"}),
+    } as never);
+    expect(notBoolean.status).toBe(400);
+
+    const missing = await updateAdminRbacRoleMember({
+      locals: manage,
+      request: memberRequest({code: "ghost", member: true}),
+    } as never);
+    expect(missing.status).toBe(404);
+
+    await deleteRbacRole(env.FEED_DB, "member_ep");
   });
 });
 

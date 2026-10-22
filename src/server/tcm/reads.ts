@@ -15,6 +15,7 @@
  * deterministic wrapping.
  */
 
+import {MEMBER_BOOK_STATUS} from "@/shared/ExtBook";
 import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
 import {TCM_CHAPTER_ORDER_SQL} from "./ordering";
 import {JINGSHU_ONLY_YAO_NAMES} from "./zhongyao-anchor";
@@ -306,6 +307,23 @@ async function withEmpty<T>(label: string, op: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * 与 {@link withEmpty} 的差别只在失败处理：读取失败留痕后就地抛出。
+ *
+ * 走共享缓存的读取（getAppNav / getAppBookChapters）用这一支：失败降级成空值
+ * 会被 `cachedAppResponse` 当成成功响应写进 24h 缓存，一次瞬时故障会让整只桶
+ * 持续吐空；抛出的失败既不进缓存、也不再读库，调用方（端点）把 500 交还给
+ * App，由 App 按既有失败路径保留旧快照。
+ */
+async function withRethrow<T>(label: string, op: () => Promise<T>): Promise<T> {
+  try {
+    return await op();
+  } catch (e) {
+    console.error(`[tcm-reads] ${label} 读取失败:`, e);
+    throw e;
+  }
+}
+
 /** 源 WorkInfo.Case 存的是字符串数字；App 按 caseTag 区分行为（1/2/3 隐方药页、5=伤寒显单位页）。 */
 function caseTagOf(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -323,18 +341,53 @@ function descriptionOf(dataJson: unknown): string {
   }
 }
 
-/** 分类 → 该分类下已发布的书（全部中医 + 小说共用同一约定）。 */
-export async function getAppNav(db: D1Database): Promise<AppNavCategory[]> {
-  return withEmpty("getAppNav", async () => {
+/**
+ * 目录受众档位：会员与公开各一档。同一个值同时决定收录哪些状态、以及端点用哪只
+ * 缓存桶，两处不会各自推一遍。
+ */
+export type AppNavTier = "member" | "public";
+
+/**
+ * 由鉴权算出的会员标记推导档位：`true` → 会员档，其余（含未登录 / undefined）→ 公开档。
+ * 四个 App 端点各自算一次，抽到这里保证映射只有一处，改判定时不会漏某个端点。
+ */
+export function tierFromAppMember(appMember: boolean | undefined): AppNavTier {
+  return appMember === true ? "member" : "public";
+}
+
+/**
+ * 分类 → 该分类下可见的书（全部中医 + 小说共用同一约定）。
+ *
+ * `tier` 由调用方的会员标记决定（`locals.appMember`）：
+ *   - `member`：收录「显示」(1) 与「会员」(10)；
+ *   - `public`：只收录「显示」(1)。
+ * 会员书在 App 目录里对会员可见，点开后再由 App 侧做会员校验；它不进公开站
+ * （`ext_book_status.public_visible` 为 0，迁移 0143）。「隐藏」(2) 与「已删除」(3)
+ * 任何情况下都不收录。
+ *
+ * 读代价（2026-10-22 本机快照）：`channels_status` 走 `status = ?` 索引（`IN` 两个值
+ * 即两次 seek），`ext_category` 走主键；`ORDER BY c.sort, ch.created_at` 走临时 B 树，
+ * 行数是该状态下的书目数（本站约 13 本），排序代价可忽略。
+ */
+export async function getAppNav(
+  db: D1Database,
+  tier: AppNavTier = "public",
+): Promise<AppNavCategory[]> {
+  // 失败抛出而非降级空值：本函数的结果进 24h 共享缓存，空值会被当成成功响应
+  // 写入缓存（见 withRethrow）。
+  return withRethrow("getAppNav", async () => {
+    const statuses = tier === "member" ? [1, MEMBER_BOOK_STATUS] : [1];
+    const placeholders = statuses.map(() => "?").join(", ");
     const {results} = await db
       .prepare(
         // 容器频道（方剂 等）的条目归属真实典籍，频道自身不是作品：列进导航只会让
         // App 点开一个空壳书页。
         "SELECT c.id AS categoryId, c.name AS categoryName, ch.id AS bookId, ch.data AS data " +
-          "FROM ext_category c JOIN channels ch ON ch.genre = c.id AND ch.status = 1 " +
+          `FROM ext_category c JOIN channels ch ON ch.genre = c.id AND ch.status IN (${placeholders}) ` +
           "WHERE json_extract(ch.data, '$._microfeed.tcmContainer') IS NULL " +
           "ORDER BY c.sort, ch.created_at",
       )
+      .bind(...statuses)
       .all();
     const order: string[] = [];
     const byCategory = new Map<string, AppNavCategory>();
@@ -363,12 +416,30 @@ export async function getAppNav(db: D1Database): Promise<AppNavCategory[]> {
   });
 }
 
-/** 一本书的目录（published 篇章，按源章序号排序）。 */
+/** 这本书是否只对会员开放（`channels.status` 是字典里的「会员」行）。 */
+async function bookIsMemberOnly(db: D1Database, bookId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT status FROM channels WHERE id = ?")
+    .bind(bookId)
+    .first<{status: number | null}>();
+  return Number(row?.status) === MEMBER_BOOK_STATUS;
+}
+
+/**
+ * 一本书的目录（published 篇章，按源章序号排序）。
+ *
+ * 公开档请求会员书时返回空目录：会员门与正文接口同一口径，避免「目录看不到、
+ * 正文却读得到」。一次主键查 `channels` 判断状态；该端点有 24h 缓存，只在未命中
+ * 时多这一行读取。
+ */
 export async function getAppBookChapters(
   db: D1Database,
   bookId: string,
+  tier: AppNavTier = "public",
 ): Promise<AppChapterEntry[]> {
-  return withEmpty("getAppBookChapters", async () => {
+  // 失败抛出而非降级空值：本函数的结果进 24h 共享缓存（见 withRethrow）。
+  return withRethrow("getAppBookChapters", async () => {
+    if (tier !== "member" && await bookIsMemberOnly(db, bookId)) return [];
     const {results} = await db
       .prepare(
         "SELECT id, data FROM items " +
@@ -389,19 +460,35 @@ export async function getAppBookChapters(
   });
 }
 
-/** 一个篇章的逐条条文（unlisted 条文对 App 可读；deleted 除外）。 */
+/**
+ * 一个篇章的逐条条文（unlisted 条文对 App 可读；deleted 除外）。
+ *
+ * 会员门只决定「会员书是否对本次请求放行」：公开档请求会员书的篇章时返回空，
+ * 会员档放行。条文正文、注释（`note`）与视频讲解（`sectionvideo`）一律照发
+ * 原始值，不随书状态或调用方档位变化。
+ *
+ * 书状态由下面那条 `LEFT JOIN channels` 顺带取回，与章节主键查同一条语句完成，
+ * 不多一次往返；本函数也不查角色（档位门用的是鉴权时算出的会员标记）。
+ * 没有 `book_id` 的章节（非 TCM 来源）`bookStatus` 为 null，同样照发。
+ */
 export async function getAppChapterContent(
   db: D1Database,
   chapterId: string,
+  tier: AppNavTier = "public",
 ): Promise<AppChapterContent[]> {
   return withEmpty("getAppChapterContent", async () => {
     const chapterRow = await db
       .prepare(
-        "SELECT data FROM items WHERE id = ? AND tcm_kind = 'chapter' AND status != 3",
+        "SELECT i.data AS data, c.status AS bookStatus " +
+          "FROM items i LEFT JOIN channels c ON c.id = i.book_id " +
+          "WHERE i.id = ? AND i.tcm_kind = 'chapter' AND i.status != 3",
       )
       .bind(chapterId)
-      .first();
+      .first<{data: unknown; bookStatus: number | null}>();
     if (!chapterRow) return [];
+    if (tier !== "member" && Number(chapterRow.bookStatus) === MEMBER_BOOK_STATUS) {
+      return [];
+    }
     const chapterPocket = pocketOf(chapterRow.data);
     const {results} = await db
       .prepare(
@@ -443,21 +530,31 @@ export async function getAppChapterContent(
  * ⚠️ 实测修正（2026-09-30 golden 抓包）：spec 初稿称 1001000 桂林古本走 `id`+数字数值，
  * 但 netcore 实际 wire 对 1001000 与 10001 完全一致——都是大写 `ID`（字符串占位）+ 字符串数值
  * （`yaoCount:"4"`、`height:"0"`、`drinkNum:"3"`）。故 1001000 不在此集合，所有书统一走
- * 非数值 wire（大写 `ID` + 字符串数值），与 netcore 逐字节对齐。集合保留为逐书开关。 */
+ * 非数值 wire（大写 `ID` + 字符串数值），与 netcore 逐字节一致。集合保留为逐书开关。 */
 const FANG_NUMERIC_WIRE_BOOKNOS = new Set<string>([]);
 
-/** 一个频道（来源典籍）下的全部方剂，含组成明细。 */
+/**
+ * 一个频道（来源典籍）下的全部方剂，含组成明细。
+ *
+ * 公开档请求会员书的方剂时返回空。状态与 `bookNo` 同一条 `channels` 主键查取回，
+ * 不额外往返。
+ */
 export async function getAppBookFang(
   db: D1Database,
   bookId: string,
+  tier: AppNavTier = "public",
 ): Promise<AppFang[]> {
   return withEmpty("getAppBookFang", async () => {
     const bookRow = await db
       .prepare(
-        "SELECT json_extract(data, '$._microfeed.bookNo') AS bn FROM channels WHERE id = ?",
+        "SELECT json_extract(data, '$._microfeed.bookNo') AS bn, status " +
+          "FROM channels WHERE id = ?",
       )
       .bind(bookId)
-      .first();
+      .first<{bn: string | null; status: number | null}>();
+    if (tier !== "member" && Number(bookRow?.status) === MEMBER_BOOK_STATUS) {
+      return [];
+    }
     const numericWire = FANG_NUMERIC_WIRE_BOOKNOS.has(
       String(bookRow?.bn ?? ""),
     );

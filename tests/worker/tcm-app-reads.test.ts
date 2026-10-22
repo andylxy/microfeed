@@ -17,6 +17,9 @@ const db = env.FEED_DB;
 const CHANNEL_ID = "tcmtestbook";
 /** 容器频道（方剂 型）：只用来锚定真实典籍的条目，自身不是作品。 */
 const CONTAINER_ID = "tcmtestcont";
+/** 会员书（状态 10）与隐藏书（状态 2），验证 GetNav 的收录范围。 */
+const MEMBER_CHANNEL_ID = "tcmtestmember";
+const HIDDEN_CHANNEL_ID = "tcmtesthidden";
 const INSERTED: string[] = [];
 
 afterEach(async () => {
@@ -25,7 +28,9 @@ afterEach(async () => {
     .map((id) => `'${id}'`)
     .join(",");
   if (itemIds) await db.exec(`DELETE FROM items WHERE id IN (${itemIds});`);
-  await db.exec(`DELETE FROM channels WHERE id IN ('${CHANNEL_ID}', '${CONTAINER_ID}');`);
+  await db.exec(
+    `DELETE FROM channels WHERE id IN ('${CHANNEL_ID}', '${CONTAINER_ID}', '${MEMBER_CHANNEL_ID}', '${HIDDEN_CHANNEL_ID}');`,
+  );
   await db.exec("DELETE FROM ext_category WHERE id = '1runoCsI7dr' AND name = '伤寒';");
   INSERTED.length = 0;
 });
@@ -113,7 +118,7 @@ async function seed(): Promise<{chapterId: string; fangId: string}> {
     title: "第1条・辨太阳病脉证并治",
     description: "<p>$u{桂枝}$w{三两。去皮}</p>",
     content_format: "html",
-    _microfeed: {bookId: CHANNEL_ID, receiptNo: 1, note: "注", videoMemo: "", fangList: ["桂枝汤"], bieMing: "牡桂,桂木"},
+    _microfeed: {bookId: CHANNEL_ID, receiptNo: 1, note: "注", videoMemo: "v1", fangList: ["桂枝汤"], bieMing: "牡桂,桂木"},
   });
   await insertItem("tcmtestsec2", "section", chapterId, CHANNEL_ID, 4, {
     title: "第2条・辨太阳病脉证并治",
@@ -178,10 +183,48 @@ describe("TCM app read functions", () => {
     expect(content[0]!.data[0]!.id).toBe("tcmtestsec1");
     expect(content[0]!.data[0]!.text).toBe("$u{桂枝}$w{三两。去皮}");
     expect(content[0]!.data[0]!.fangList).toEqual(["桂枝汤"]);
+    // 注释与视频讲解照发原始值，不随档位或书状态变化。
     expect(content[0]!.data[0]!.note).toBe("注");
+    expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
     expect(content[0]!.data[1]!.text).toBe("$u{芍药}$w{三两}");
     // 未知篇章 → 空数组而非 404
     expect(await getAppChapterContent(db, "nope")).toEqual([]);
+  });
+
+  it("GetChapterContent 显示书：不论档位，note 与 sectionvideo 照发原始值", async () => {
+    const {chapterId} = await seed();
+    // 注释与视频讲解的下发不随档位或书状态变化：公开档与会员档都照发。
+    for (const tier of ["public", "member"] as const) {
+      const content = await getAppChapterContent(db, chapterId, tier);
+      expect(content[0]!.data[0]!.note).toBe("注");
+      expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
+      // 第二条本就没有注释 / 视频：仍是 null，不会因档位变成空串。
+      expect(content[0]!.data[1]!.note).toBeNull();
+      expect(content[0]!.data[1]!.sectionvideo).toBeNull();
+    }
+  });
+
+  it("GetChapterContent 非 TCM 章节（无 book_id）：note 与 sectionvideo 照发原始值", async () => {
+    // 没有 book_id 的章节（非 TCM 来源）bookStatus 为 null，不触发会员书门，
+    // 注释与视频照发——与有 book_id 的章节同一口径。
+    const chapterId = "tcmtestnonbook";
+    await insertItem(chapterId, "chapter", null, null, 1, {
+      title: "非 TCM 篇章",
+      description: "<p>无关正文</p>",
+      content_format: "html",
+      _microfeed: {section: 1},
+    });
+    await insertItem("tcmtestnonsec", "section", chapterId, null, 4, {
+      title: "非 TCM 条文",
+      description: "<p>条文正文</p>",
+      content_format: "html",
+      _microfeed: {receiptNo: 1, note: "注", videoMemo: "v1", fangList: []},
+    });
+    for (const tier of ["public", "member"] as const) {
+      const content = await getAppChapterContent(db, chapterId, tier);
+      expect(content[0]!.data[0]!.note).toBe("注");
+      expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
+    }
   });
 
   it("GetNav groups books by category with pocket metadata", async () => {
@@ -205,6 +248,67 @@ describe("TCM app read functions", () => {
     const shanghan = nav.find((c) => c.caseId === "1runoCsI7dr");
     expect(shanghan).toBeDefined();
     expect(shanghan!.navList.map((b) => b.bookNo)).toEqual([CHANNEL_ID]);
+  });
+
+  /** 同分类下再放一本会员书（10）与一本隐藏书（2）。`_microfeed.genre` 必须给，
+   *  否则 0113 的触发器把 genre 列刷成 NULL，JOIN 匹配不上。 */
+  async function seedMemberAndHidden(): Promise<void> {
+    for (const [id, status, title] of [
+      [MEMBER_CHANNEL_ID, 10, "会员书"],
+      [HIDDEN_CHANNEL_ID, 2, "隐藏书"],
+    ] as const) {
+      await db
+        .prepare(
+          "INSERT OR REPLACE INTO channels (id, status, is_primary, data, genre) VALUES (?, ?, NULL, ?, '1runoCsI7dr')",
+        )
+        .bind(id, status, JSON.stringify({title, _microfeed: {genre: "1runoCsI7dr"}}))
+        .run();
+    }
+  }
+
+  it("GetNav 非会员只收录显示书，会员书与隐藏书都不给", async () => {
+    await seed();
+    await seedMemberAndHidden();
+    const nav = await getAppNav(db);
+    const ids = nav.find((c) => c.caseId === "1runoCsI7dr")!.navList.map((b) => b.bookNo);
+    expect(ids).toContain(CHANNEL_ID);            // 显示 → 收录
+    expect(ids).not.toContain(MEMBER_CHANNEL_ID); // 会员 → 非会员看不到
+    expect(ids).not.toContain(HIDDEN_CHANNEL_ID); // 隐藏 → 不收录
+  });
+
+  it("GetNav 会员额外收录会员书，隐藏书仍不给", async () => {
+    await seed();
+    await seedMemberAndHidden();
+    const nav = await getAppNav(db, "member");
+    const ids = nav.find((c) => c.caseId === "1runoCsI7dr")!.navList.map((b) => b.bookNo);
+    expect(ids).toContain(CHANNEL_ID);            // 显示 → 收录
+    expect(ids).toContain(MEMBER_CHANNEL_ID);     // 会员 → 会员可见
+    expect(ids).not.toContain(HIDDEN_CHANNEL_ID); // 隐藏 → 不收录
+  });
+
+  it("会员书：公开档读不到章节 / 正文 / 方剂，会员档能读到", async () => {
+    const {chapterId} = await seed();
+    await db
+      .prepare("UPDATE channels SET status = 10 WHERE id = ?")
+      .bind(CHANNEL_ID)
+      .run();
+
+    expect(await getAppBookChapters(db, CHANNEL_ID)).toEqual([]);
+    expect(await getAppChapterContent(db, chapterId)).toEqual([]);
+    expect(await getAppBookFang(db, CHANNEL_ID)).toEqual([]);
+
+    expect((await getAppBookChapters(db, CHANNEL_ID, "member")).length)
+      .toBeGreaterThan(0);
+    const memberContent = await getAppChapterContent(db, chapterId, "member");
+    expect(memberContent).toHaveLength(1);
+    // 会员档下注释与视频讲解照发原始值。
+    expect(memberContent[0]!.data[0]!.note).toBe("注");
+    expect(memberContent[0]!.data[0]!.sectionvideo).toBe("v1");
+    // 第二条本就没有注释 / 视频：空串归一成 null。
+    expect(memberContent[0]!.data[1]!.note).toBeNull();
+    expect(memberContent[0]!.data[1]!.sectionvideo).toBeNull();
+    expect((await getAppBookFang(db, CHANNEL_ID, "member")).length)
+      .toBeGreaterThan(0);
   });
 
   it("GetBookIdFang returns formulas of one source book with composition detail", async () => {

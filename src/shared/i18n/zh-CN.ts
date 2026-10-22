@@ -2083,6 +2083,10 @@ export const zhCN: TranslationKey = {
     adminLoginHint:
       "关闭后，只持有该角色的账号无法进入后台（App 接口不受影响）；账号同时持多个角色时，任一角色允许即可进入。",
     adminLoginLocked: "超级管理员必须保留登录后台。",
+    member: "会员",
+    memberEnabled: "是",
+    memberDisabled: "否",
+    memberHint: "角色是否为会员的标记，默认否。持会员角色的账号在 App 目录里能看到「会员」状态的书；后台权限不受它影响。",
     newAccount: "新建账号",
     accountName: "名称",
     accountIdentifier: "账号（邮箱或用户名）",
@@ -2464,6 +2468,8 @@ export const zhCN: TranslationKey = {
         renameCode: "修改角色代码",
         delete: "删除角色",
         permissions: "修改角色权限",
+        login: "修改后台登录开关",
+        member: "修改会员标记",
       },
       user: {
         create: "创建账号",

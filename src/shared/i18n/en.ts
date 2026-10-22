@@ -2091,6 +2091,11 @@ export const en = {
     adminLoginHint:
       "When off, accounts holding only this role cannot enter the dashboard (the App API is unaffected). An account with several roles gets in as soon as one of them allows it.",
     adminLoginLocked: "Super admin must keep admin sign-in on.",
+    member: "Member",
+    memberEnabled: "Yes",
+    memberDisabled: "No",
+    memberHint:
+      "Whether this role counts as a member. Off by default. Accounts holding a member role see member-status books in the app catalog; dashboard permissions are unaffected.",
     newAccount: "New account",
     accountName: "Name",
     accountIdentifier: "Account (email or username)",
@@ -2478,6 +2483,8 @@ export const en = {
         renameCode: "Change role code",
         delete: "Delete role",
         permissions: "Edit role permissions",
+        login: "Change admin sign-in",
+        member: "Change member flag",
       },
       user: {
         create: "Create account",

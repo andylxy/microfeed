@@ -33,6 +33,8 @@ export interface RoleManagerPanelsProps {
   onCreate: (draft: RoleDraft) => Promise<boolean>;
   /** 改「登录后台」开关；返回 `false` 表示服务端拒绝（如 super_admin 固定为允许）。 */
   onAdminLogin: (code: string, allow: boolean) => Promise<boolean>;
+  /** 改「会员」标记；返回 `false` 表示服务端拒绝。 */
+  onMember: (code: string, member: boolean) => Promise<boolean>;
   /** 删除角色；返回 `false` 表示服务端拒绝。 */
   onDelete: (code: string) => Promise<boolean>;
   /** 左列换选：页面上的授权树跟着换角色。 */
@@ -55,6 +57,7 @@ export function RoleManagerPanels({
   onAdminLogin,
   onCreate,
   onDelete,
+  onMember,
   onSelect,
   onUpdate,
   roles,
@@ -130,6 +133,11 @@ export function RoleManagerPanels({
   const toggleAdminLogin = async (allow: boolean) => {
     if (!role) return;
     await onAdminLogin(role.code, allow);
+  };
+
+  const toggleMember = async (member: boolean) => {
+    if (!role) return;
+    await onMember(role.code, member);
   };
 
   const removeRole = async () => {
@@ -402,6 +410,26 @@ export function RoleManagerPanels({
 
               <p className="text-xs text-muted-foreground">
                 {t("rbac.adminLoginHint")}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                  {t("rbac.member")}
+                </span>
+                <Switch
+                  aria-label={t("rbac.member")}
+                  checked={role.isMember}
+                  disabled={saving}
+                  onCheckedChange={(next) => void toggleMember(next)}
+                  size="sm"
+                />
+                <span className="text-xs text-foreground">
+                  {role.isMember ? t("rbac.memberEnabled") : t("rbac.memberDisabled")}
+                </span>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {t("rbac.memberHint")}
               </p>
             </div>
           </>

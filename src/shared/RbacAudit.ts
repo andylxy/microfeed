@@ -33,6 +33,8 @@ export const RBAC_AUDIT_ACTIONS = [
   "role.renameCode",
   "role.delete",
   "role.permissions",
+  "role.login",
+  "role.member",
   "user.create",
   "user.delete",
   "user.ban",

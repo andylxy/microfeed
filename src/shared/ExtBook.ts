@@ -12,6 +12,12 @@ export interface BookAuthor {
   name: string;
 }
 
+/**
+ * 「会员」书籍状态码（`ext_book_status` 的 0143 种子行）：只对持会员角色的账号
+ * 可见，不进公开站。状态字典本身是数据表，这个常量只给「会员门」与目录收录用。
+ */
+export const MEMBER_BOOK_STATUS = 10;
+
 /** One row of the dashboard book list. */
 export interface BookAdmin {
   id: string;

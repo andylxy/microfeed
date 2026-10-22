@@ -56,3 +56,9 @@ App 内容命名空间按登录凭证逐请求鉴权，不读这一列：关掉�
 - 端点：同一文件锁 `role-login` 的三档守卫（401 / 403 / 200）、非布尔体 400、`super_admin` 400 且板子仍为允许。
 - 组件：`tests/unit/components/rbac-role-manager.test.ts` 锁开关文案（Allowed / Not allowed）与通配角色禁用态。
 - 浏览器人工核对仍是最后一道：关掉某角色的开关后，用只持该角色的账号登录后台应看到 403 文案，登录页仍可换账号。
+
+## 修订（2026-10-22）：新建角色默认不允许
+
+- D1 原文的「默认允许」只描述 0132 当时的形态：`ext_roles.allow_admin_login` 的列默认值仍是 1，种子角色（`super_admin` / `editor` / `readonly`）靠它才能进后台，这一点不变。
+- 从 0144 起，**通过管理界面新建的角色**默认不允许登录后台：`createRbacRole` 的 INSERT 显式写 `allow_admin_login = 0`（同批加 `is_member`，默认 0）。没有改列默认值——SQLite 改默认要重建表，会牵连 `ext_role_permissions` / `ext_user_roles` 两张子表。
+- 验证口径同步更新：`tests/worker/rbac.test.ts` 的「新角色默认」断言由允许改为不允许；`role.login` / `role.member` 两个审计动作登记进 `RBAC_AUDIT_ACTIONS` 与 `rbacAudit.actionLabel`。

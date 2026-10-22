@@ -306,6 +306,9 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       attribution = result.attribution;
+      // 会员标记随鉴权结果一起下发给内容端点（与权限码同一趟查询得出）：
+      // GetNav 据此决定要不要收录会员书，不必再查一次角色。
+      context.locals.appMember = result.isMember;
       // Version gate, stage 2 (ADR-0020): the caller is now identified, so the
       // grayscale device/user/percent rules layer on top of the global floor.
       if (pathname.startsWith("/api/AppBookRequest/")) {

@@ -459,6 +459,7 @@ export const ADMIN_URLS = {
   ajaxRbacRoleCode: () => adminUrl("ajax/rbac/role-code", browserAdminPath()),
   ajaxRbacRoleDelete: () => adminUrl("ajax/rbac/role-delete", browserAdminPath()),
   ajaxRbacRoleLogin: () => adminUrl("ajax/rbac/role-login", browserAdminPath()),
+  ajaxRbacRoleMember: () => adminUrl("ajax/rbac/role-member", browserAdminPath()),
   ajaxRbacUserCreate: () => adminUrl("ajax/rbac/user-create", browserAdminPath()),
   ajaxRbacUserDelete: () => adminUrl("ajax/rbac/user-delete", browserAdminPath()),
   ajaxRbacUserBan: () => adminUrl("ajax/rbac/user-ban", browserAdminPath()),

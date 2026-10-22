@@ -32,7 +32,7 @@ import {
   isDeviceRevoked,
   permissionsInclude,
   registerUserDevice,
-  resolveUserPermissions,
+  resolveUserAccess,
 } from "@/server/rbac/resolve";
 import {LOGIN_CREDENTIAL_PREFIX} from "@/shared/LoginCredential";
 import {apiPathDetails, type ApiAttribution} from "./access";
@@ -42,7 +42,7 @@ import {requiredApiPermission} from "./api-permissions";
 const THROTTLE_KEY_SUFFIX = ":/api/bearer";
 
 export type CredentialBearerDecision =
-  | {kind: "allow"; attribution: ApiAttribution}
+  | {kind: "allow"; attribution: ApiAttribution; isMember: boolean}
   | {kind: "deviceRevoked"}
   | {kind: "forbidden"; attribution: ApiAttribution}
   | {kind: "notFound"}
@@ -130,9 +130,11 @@ export async function decideLoginCredentialApiRequest(
   const requiredCodes = required === null
     ? []
     : typeof required === "string" ? [required] : required;
-  const permissions = await resolveUserPermissions(database, verified.userId);
+  // 权限码与会员标记同一趟查询取回：会员标记由鉴权结果下发给内容端点，
+  // 端点不必再查一次角色。
+  const access = await resolveUserAccess(database, verified.userId);
   const grantedCode = requiredCodes.find(
-    (code) => permissionsInclude(permissions, code),
+    (code) => permissionsInclude(access.permissions, code),
   );
   const attribution: ApiAttribution = {
     apiKeyId: null,
@@ -146,5 +148,5 @@ export async function decideLoginCredentialApiRequest(
   // "Last used" means a call this credential actually got through, so it is
   // recorded only once authorization has passed.
   await markLoginCredentialUsed(database, verified.credentialId);
-  return {kind: "allow", attribution};
+  return {kind: "allow", attribution, isMember: access.isMember};
 }

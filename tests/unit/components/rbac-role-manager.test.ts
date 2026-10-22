@@ -11,8 +11,9 @@ function role(
   name: string,
   permissions: string[] = [],
   allowAdminLogin = true,
+  isMember = false,
 ): RbacBoardRole {
-  return {allowAdminLogin, code, name, permissions};
+  return {allowAdminLogin, code, isMember, name, permissions};
 }
 
 function renderPanels(roles: RbacBoardRole[], selectedCode: string): string {
@@ -23,6 +24,7 @@ function renderPanels(roles: RbacBoardRole[], selectedCode: string): string {
       onAdminLogin: async () => true,
       onCreate: async () => true,
       onDelete: async () => true,
+      onMember: async () => true,
       onSelect: () => {},
       onUpdate: async () => true,
       roles,
@@ -107,5 +109,18 @@ describe("角色管理弹窗", () => {
     const output = renderPanels([role("super_admin", "Super admin")], "super_admin");
     expect(output).toContain("Super admin must keep admin sign-in on.");
     expect(switchDisabled(output)).toBe(true);
+  });
+
+  it("右栏给出「会员」开关，默认不是会员", () => {
+    const output = renderPanels([role("editor", "Editor")], "editor");
+    expect(output).toContain('aria-label="Member"');
+    expect(output).toContain("Whether this role counts as a member");
+    expect(output).toContain("No");
+  });
+
+  it("会员角色显示「是」", () => {
+    const output = renderPanels([role("vip", "VIP", [], true, true)], "vip");
+    expect(output).toContain('aria-label="Member"');
+    expect(output).toContain("Yes");
   });
 });

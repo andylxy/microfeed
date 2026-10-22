@@ -15,20 +15,24 @@ import * as GetAllZhongYao from "@/pages/api/AppBookRequest/GetAllZhongYao";
 import * as GetAliaZhongYao from "@/pages/api/AppBookRequest/GetAliaZhongYao";
 import * as GetBookChapter from "@/pages/api/AppBookRequest/GetBookChapter";
 import * as GetNav from "@/pages/api/AppBookRequest/GetNav";
+import {purgeAppBookCache} from "@/server/cache/app-cache";
 
 const CACHE_ORIGIN = "https://app-cache.microfeed.internal";
 const ORIGIN = "https://app.example.com";
 
 /**
- * `GetBookChapter` 按 bookId 分键，所以它需要一个库里没有的 id：
- * `withEmpty`（`reads.ts`）把任何读取失败都降级成空数组，于是首请求照样走完整
- * 的「查库 → 写缓存」路径。这里锁定的是缓存机制本身，不是响应内容。
+ * `GetBookChapter` 按 bookId 分键，所以它需要一个库里没有的 id：未知 id 查询
+ * 无行、返回空数组（不是失败），首请求照样走完整的「查库 → 写缓存」路径。
+ * 这里锁定的是缓存机制本身，不是响应内容。
  */
 const EMPTY_BOOK_ID = "BkAppCacheEmpty01";
 
-/** 构造 Astro APIContext（端点不读 request/url，`as never` 让 tsc 放行）。 */
+/**
+ * 构造 Astro APIContext：端点不读 request，但 GetNav 会读 `locals.appMember`
+ * （非会员走公开桶），所以 locals 必须给一个空对象。
+ */
 function ctx(path: string): never {
-  return {url: new URL(ORIGIN + path)} as never;
+  return {locals: {}, url: new URL(ORIGIN + path)} as never;
 }
 
 /** Workers 运行时 Cache Storage 的最小接口（`caches.default`，按 URL 存取）。 */
@@ -44,7 +48,7 @@ function peekCache(): WorkerCache {
 
 /**
  * `cacheKey` 是 `CACHE_ORIGIN` 之下的完整路径——`caches.default` 的键就是整个
- * URL，所以带分键的端点要传 `"/app/book-chapters/<bookId>"` 而不是裸名字。
+ * URL，所以带分键的端点要传 `"/app/book-chapters/<bookId>:<tier>"` 这样的完整路径，不能只传裸名字。
  */
 async function expectCachedAfterFirst(
   path: string,
@@ -82,17 +86,93 @@ describe("App 公共端点服务端缓存", () => {
     );
   });
 
-  it("GetNav：同上", async () => {
+  it("GetNav：非会员走公开桶（/app/nav-v3/public）", async () => {
     await expectCachedAfterFirst(
-      "/api/AppBookRequest/GetNav", GetNav.GET, "/app/nav",
+      "/api/AppBookRequest/GetNav", GetNav.GET, "/app/nav-v3/public",
     );
   });
 
-  it("GetBookChapter：按 bookId 分键，缓存后不再读库", async () => {
+  it("GetNav：会员走另一只桶（/app/nav-v3/member）", async () => {
+    const response = await GetNav.GET({
+      locals: {appMember: true},
+      url: new URL(`${ORIGIN}/api/AppBookRequest/GetNav`),
+    } as never);
+    expect(response.status).toBe(200);
+    expect(
+      await peekCache().match(new URL("/app/nav-v3/member", CACHE_ORIGIN)),
+    ).toBeDefined();
+  });
+
+  it("GetBookChapter：按 bookId 与会员档分键，缓存后不再读库", async () => {
     await expectCachedAfterFirst(
       `/api/AppBookRequest/GetBookChapter?bookId=${EMPTY_BOOK_ID}`,
       GetBookChapter.GET,
-      `/app/book-chapters/${EMPTY_BOOK_ID}`,
+      `/app/book-chapters/${EMPTY_BOOK_ID}:public`,
     );
+  });
+
+  it("GetBookChapter：非法 bookId 一律 400，缓存键不成立", async () => {
+    // bookId 进缓存键前要过白名单：`/` `\` `?` `#` `:` 会被 URL 归一化改写键的
+    // 写法（`a/../b` 与 `b` 同键），放行即允许用一个键换掉另一本书的缓存条目。
+    // 合法形状由上面「按 bookId 与会员档分键」一例覆盖（EMPTY_BOOK_ID 走通）。
+    for (const bookId of ["a/../b", "a%2Fb", "a#b", "a?b", "a:b", "a\\b", "..", "a b"]) {
+      const response = await GetBookChapter.GET(
+        ctx(`/api/AppBookRequest/GetBookChapter?bookId=${encodeURIComponent(bookId)}`),
+      );
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it("GetBookChapter：读取失败（D1 抛错）不写缓存", async () => {
+    const failBookId = "BkAppCacheFail01";
+    const original = env.FEED_DB;
+    (env as {FEED_DB: unknown}).FEED_DB = new Proxy({}, {
+      get() { throw new Error("d1 down"); },
+    });
+    try {
+      // 失败抛出而非降级空值：空值会被 cachedAppResponse 当成成功响应写进 24h 缓存。
+      // 直接调用路由时抛出原样逸出（生产里由 Astro 管线转成 500 回给 App）。
+      await expect(
+        GetBookChapter.GET(
+          ctx(`/api/AppBookRequest/GetBookChapter?bookId=${failBookId}`),
+        ),
+      ).rejects.toThrow("d1 down");
+    } finally {
+      (env as {FEED_DB: unknown}).FEED_DB = original;
+    }
+    expect(
+      await peekCache().match(
+        new URL(`/app/book-chapters/${failBookId}:public`, CACHE_ORIGIN),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("purgeAppBookCache 清掉目录两桶与该书章节表两桶", async () => {
+    const keyOf = (path: string) => new URL(path, CACHE_ORIGIN);
+    const getNav = (member: boolean) =>
+      GetNav.GET({
+        locals: {appMember: member},
+        url: new URL(`${ORIGIN}/api/AppBookRequest/GetNav`),
+      } as never);
+    await getNav(false);
+    await getNav(true);
+    await GetBookChapter.GET({
+      locals: {},
+      url: new URL(`${ORIGIN}/api/AppBookRequest/GetBookChapter?bookId=${EMPTY_BOOK_ID}`),
+    } as never);
+
+    expect(await peekCache().match(keyOf("/app/nav-v3/public"))).toBeDefined();
+    expect(await peekCache().match(keyOf("/app/nav-v3/member"))).toBeDefined();
+    expect(
+      await peekCache().match(keyOf(`/app/book-chapters/${EMPTY_BOOK_ID}:public`)),
+    ).toBeDefined();
+
+    await purgeAppBookCache(EMPTY_BOOK_ID);
+
+    expect(await peekCache().match(keyOf("/app/nav-v3/public"))).toBeUndefined();
+    expect(await peekCache().match(keyOf("/app/nav-v3/member"))).toBeUndefined();
+    expect(
+      await peekCache().match(keyOf(`/app/book-chapters/${EMPTY_BOOK_ID}:public`)),
+    ).toBeUndefined();
   });
 });

@@ -864,6 +864,30 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
     }
   };
 
+  // 「会员」标记：只改角色身上的布尔，不动授权行，服务端整表回传。
+  const setRoleMember = async (code: string, member: boolean): Promise<boolean> => {
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacRoleMember(), {
+        body: JSON.stringify({code, member}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("errors.rbac.unknownRole")), "error");
+        return false;
+      }
+      applyRolesFrom((await response.json()) as RbacBoard);
+      showToast(t("rbac.saved"), "success");
+      return true;
+    } catch {
+      showToast(t("errors.rbac.unknownRole"), "error");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const deleteRole = async (code: string): Promise<boolean> => {
     const target = boards.desktop.roles.find((entry) => entry.code === code);
     if (!target) return false;
@@ -1203,6 +1227,7 @@ export default function RbacApp({appBoard, appInterfaces, desktopBoard, pcInterf
         onClose={() => setRoleManagerOpen(false)}
         onCreate={createRole}
         onDelete={deleteRole}
+        onMember={setRoleMember}
         onOpenChange={setRoleManagerOpen}
         onSelect={setSelectedRole}
         onUpdate={updateRole}

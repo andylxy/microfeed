@@ -53,26 +53,59 @@ export function isAppBoardVisible(
   return permissionsInclude(permissions, PERMISSION_CODES.SYSTEM_APP_CAPABILITY_MANAGE);
 }
 
+export interface UserAccess {
+  /** 该账号全部权限码的并集（多角色合并）。 */
+  permissions: Set<string>;
+  /**
+   * 账号所持角色里是否有「会员」角色（`ext_roles.is_member` 的并集，migration 0144）。
+   * 内容端点据此决定要不要收录会员书。
+   */
+  isMember: boolean;
+}
+
+/**
+ * 一次查询同时取回权限码与会员标记——鉴权时本来就要查角色，会员标记搭同一趟车，
+ * 内容端点不必再查一次。
+ *
+ * 用 LEFT JOIN 保留没有授权行的角色（比如刚建的空角色）：它也要参与会员并集，
+ * 内连接会把它整行滤掉。`p.code` 因此可能为 NULL，跳过即可。
+ *
+ * 读代价（2026-10-22 本机快照 EXPLAIN QUERY PLAN）：四个访问点全走索引，无表扫描——
+ * `ur` 走 `ext_user_roles` 主键 `(user_id, role_id)`（覆盖索引），`r` / `p` 走各自
+ * 主键，`rp` 走 `ext_role_permissions` 主键 `(role_id, permission_id)`（覆盖索引）。
+ * 返回行数 = 该账号角色数 × 每个角色的授权数（本机 4 角色 / 62 条授权，几十行量级）。
+ */
+export async function resolveUserAccess(
+  db: D1Database,
+  userId: string,
+): Promise<UserAccess> {
+  const result = await db
+    .prepare(
+      `SELECT DISTINCT p.code AS code, r.is_member AS isMember
+       FROM ext_user_roles ur
+       JOIN ext_roles r ON r.id = ur.role_id
+       LEFT JOIN ext_role_permissions rp ON rp.role_id = ur.role_id
+       LEFT JOIN ext_permissions p ON p.id = rp.permission_id
+       WHERE ur.user_id = ?`,
+    )
+    .bind(userId)
+    .all<{code: string | null; isMember: number | null}>();
+
+  const permissions = new Set<string>();
+  let isMember = false;
+  for (const row of result.results ?? []) {
+    if (row.code !== null) permissions.add(row.code);
+    if (Number(row.isMember) === 1) isMember = true;
+  }
+  return {permissions, isMember};
+}
+
+/** 只要权限码的旧入口；会员标记见 {@link resolveUserAccess}。 */
 export async function resolveUserPermissions(
   db: D1Database,
   userId: string,
 ): Promise<Set<string>> {
-  const result = await db
-    .prepare(
-      `SELECT DISTINCT p.code AS code
-       FROM ext_user_roles ur
-       JOIN ext_role_permissions rp ON rp.role_id = ur.role_id
-       JOIN ext_permissions p ON p.id = rp.permission_id
-       WHERE ur.user_id = ?`,
-    )
-    .bind(userId)
-    .all<{code: string}>();
-
-  const permissions = new Set<string>();
-  for (const row of result.results ?? []) {
-    permissions.add(row.code);
-  }
-  return permissions;
+  return (await resolveUserAccess(db, userId)).permissions;
 }
 
 export interface RbacResolved {

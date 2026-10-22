@@ -35,12 +35,24 @@ const CH = "rtbook001";
 const CHAP = "rtchap001";
 const SEC = "rtsec001";
 const FANG = "rtfang001";
+/** 会员书用例专用：独立 id，避免撞上同文件早前用例写进的公开桶缓存。 */
+const MEMBER_BOOK = "rtbook002";
+const MEMBER_CHAP = "rtchap002";
 
 const INSERTED: string[] = [];
+/** 播种的频道（含用例里另建的会员书），afterEach 一并清掉。 */
+const SEEDED_CHANNELS: string[] = [CH];
 
-/** 构造 Astro APIContext（仅路由实际用到的 url / request 字段）；`as never` 让 tsc 放行。 */
+/**
+ * 构造 Astro APIContext（仅路由实际用到的字段）；`as never` 让 tsc 放行。
+ * `locals` 给空对象：GetNav 会读 `locals.appMember`（非会员走公开桶）。
+ */
 function ctx(path: string): never {
-  return {url: new URL(ORIGIN + path)} as never;
+  return {locals: {}, url: new URL(ORIGIN + path)} as never;
+}
+/** 端点上下文：`appMember` 由鉴权写进 locals，端点据此选档（会员 / 公开）。 */
+function ctxTier(path: string, appMember: boolean): never {
+  return {locals: {appMember}, url: new URL(ORIGIN + path)} as never;
 }
 function ctxReq(path: string, init: RequestInit): never {
   return {request: new Request(ORIGIN + path, init)} as never;
@@ -137,9 +149,11 @@ afterEach(async () => {
     .map((id) => `'${id}'`)
     .join(",");
   if (itemIds) await db.exec(`DELETE FROM items WHERE id IN (${itemIds});`);
-  await db.exec(`DELETE FROM channels WHERE id = '${CH}';`);
+  const channelIds = SEEDED_CHANNELS.map((id) => `'${id}'`).join(",");
+  if (channelIds) await db.exec(`DELETE FROM channels WHERE id IN (${channelIds});`);
   await db.exec(`DELETE FROM ext_category WHERE id = '${CAT}';`);
   INSERTED.length = 0;
+  SEEDED_CHANNELS.length = 0;
 });
 
 async function bodyOf(res: Response): Promise<Record<string, unknown>> {
@@ -195,6 +209,51 @@ describe("TCM app route wire contract", () => {
     expect(rows[0]!.ID).toBe("0");
     expect(rows[0]!.yaoCount).toBe("5");
     expect(rows[0]!.standardYaoList[0]!.weight).toBe("300");
+  });
+
+  it("会员书：公开档端点读不到，会员档端点能读到（接线到 locals.appMember）", async () => {
+    INSERTED.push(MEMBER_BOOK);
+    SEEDED_CHANNELS.push(MEMBER_BOOK);
+    await db
+      .prepare(
+        "INSERT OR REPLACE INTO channels (id, status, is_primary, data, genre) VALUES (?, 10, NULL, ?, ?)",
+      )
+      .bind(
+        MEMBER_BOOK,
+        JSON.stringify({
+          title: "会员书",
+          description: "测试",
+          _microfeed: {author: "张仲景", genre: CAT},
+        }),
+        CAT,
+      )
+      .run();
+    await insertItem(MEMBER_CHAP, "chapter", null, MEMBER_BOOK, 1, {
+      title: "会员章",
+      description: "<p>会员条文</p>",
+      content_format: "html",
+      _microfeed: {bookId: MEMBER_BOOK, section: 1},
+    });
+
+    const chaptersOf = async (appMember: boolean) => {
+      const body = await bodyOf(await GetBookChapter.GET(ctxTier(
+        `/api/AppBookRequest/GetBookChapter?bookId=${MEMBER_BOOK}`,
+        appMember,
+      )));
+      return body.data as Array<{bookNo: string}>;
+    };
+    expect(await chaptersOf(false)).toEqual([]);
+    expect((await chaptersOf(true)).length).toBeGreaterThan(0);
+
+    const contentOf = async (appMember: boolean) => {
+      const body = await bodyOf(await GetChapterContent.GET(ctxTier(
+        `/api/AppBookRequest/GetChapterContent?chapterId=${MEMBER_CHAP}`,
+        appMember,
+      )));
+      return body.data as unknown[];
+    };
+    expect(await contentOf(false)).toEqual([]);
+    expect((await contentOf(true)).length).toBeGreaterThan(0);
   });
 
   it("GetAllZhongYao / GetAliaZhongYao return envelope + array data", async () => {

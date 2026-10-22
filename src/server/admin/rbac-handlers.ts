@@ -91,10 +91,17 @@ export async function readRbacBoard(
   const [roles, catalog, grants, nodes] = await Promise.all([
     db
       .prepare(
-        `SELECT id, code, name, allow_admin_login AS allowAdminLogin
+        `SELECT id, code, name, allow_admin_login AS allowAdminLogin,
+                is_member AS isMember
          FROM ext_roles ORDER BY code`,
       )
-      .all<{allowAdminLogin: number | null; code: string; id: string; name: string}>(),
+      .all<{
+        allowAdminLogin: number | null;
+        code: string;
+        id: string;
+        isMember: number;
+        name: string;
+      }>(),
     db
       .prepare("SELECT code, name FROM ext_permissions ORDER BY code")
       .all<{code: string; name: string}>(),
@@ -148,6 +155,7 @@ export async function readRbacBoard(
     roles: (roles.results ?? []).map((row) => ({
       allowAdminLogin: Number(row.allowAdminLogin) === 1,
       code: row.code,
+      isMember: Number(row.isMember) === 1,
       name: row.name,
       permissions: (byRole.get(row.id) ?? []).sort(),
     })),
@@ -572,7 +580,12 @@ export async function createRbacRole(
   }
   await db.batch([
     db
-      .prepare("INSERT INTO ext_roles (id, code, name) VALUES (?, ?, ?)")
+      .prepare(
+        // 两个布尔都显式写 0：`allow_admin_login` 的列默认值是 1（0132 给种子角色
+        // 留的），新建角色默认不允许登录后台；`is_member` 默认不是会员。
+        `INSERT INTO ext_roles (id, code, name, allow_admin_login, is_member)
+         VALUES (?, ?, ?, 0, 0)`,
+      )
       .bind(roleId(code), code, name),
     // Same batch: the role and the record of who created it are atomic.
     ...(audit ? [auditStatement(db, audit)] : []),
@@ -646,6 +659,39 @@ export async function setRbacRoleAdminLogin(
 }
 
 /**
+ * 改角色的「会员」标记（`ext_roles.is_member`，migration 0144）。
+ *
+ * 该标记驱动 App 侧会员档：鉴权时经 `resolveUserAccess` 并入 `locals.appMember`，
+ * GetNav / 章节正文等 App 接口据此选内容桶（改它下一次请求即生效，缓存键只含
+ * 档位、不含身份）。与「登录后台」不同，它对 `super_admin` 同样开放——没有一个
+ * 必须固定的取值。
+ */
+export async function setRbacRoleMember(
+  db: D1Database,
+  code: string,
+  member: boolean,
+  audit?: PendingAudit,
+): Promise<RoleMutationResult> {
+  const role = await db
+    .prepare("SELECT id FROM ext_roles WHERE code = ?")
+    .bind(code)
+    .first<{id: string}>();
+  if (!role) {
+    return {ok: false, reason: "unknownRole"};
+  }
+  await db.batch([
+    db.prepare(
+      `UPDATE ext_roles
+       SET is_member = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE code = ?`,
+    ).bind(member ? 1 : 0, code),
+    // 同一批：开关与「谁改的」一起提交。
+    ...(audit ? [auditStatement(db, audit)] : []),
+  ]);
+  return {ok: true};
+}
+
+/**
  * Change a role's code.
  *
  * `ext_roles.id` is `r_<code>` and both `ext_user_roles.role_id` and
@@ -694,8 +740,8 @@ export async function renameRbacRoleCode(
   await db.batch([
     db.prepare(
       `INSERT INTO ext_roles
-         (id, code, name, allow_admin_login, created_at, updated_at)
-       SELECT ?, ?, name, allow_admin_login, created_at, CURRENT_TIMESTAMP
+         (id, code, name, allow_admin_login, is_member, created_at, updated_at)
+       SELECT ?, ?, name, allow_admin_login, is_member, created_at, CURRENT_TIMESTAMP
        FROM ext_roles WHERE id = ?`,
     ).bind(newId, newCode, oldId),
     db.prepare(
@@ -851,6 +897,43 @@ export const updateAdminRbacRoleLogin: APIRoute = async ({locals, request}) => {
     action: "role.login",
     actor: locals.authUser,
     detail: allow ? "allow" : "deny",
+    target: code,
+  });
+  if (!result.ok) {
+    return localizedError(
+      request,
+      `errors.rbac.${result.reason}`,
+      result.reason === "unknownRole" ? 404 : 400,
+    );
+  }
+  return jsonResponse(await readRbacBoard(env.FEED_DB, "desktop"));
+};
+
+/**
+ * 「会员」标记的端点。与其他角色改动同一道门（`system:role:manage`），返回 PC
+ * 板子——角色清单两端同源，前端拿它整表刷新。
+ */
+export const updateAdminRbacRoleMember: APIRoute = async ({locals, request}) => {
+  const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_ROLE_MANAGE,
+    request,
+    env.FEED_DB,
+  );
+  if (guard) return guard;
+
+  const body = await request.json().catch(() => null) as
+    | {code?: unknown; member?: unknown}
+    | null;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  // 只认布尔：字符串 "false" 是真值，放过它会把「非会员」静默存成会员。
+  const member = body?.member;
+  if (!code || typeof member !== "boolean") {
+    return localizedError(request, "errors.rbac.invalidRole", 400);
+  }
+
+  const result = await setRbacRoleMember(env.FEED_DB, code, member, {
+    action: "role.member",
+    actor: locals.authUser,
+    detail: member ? "member" : "non-member",
     target: code,
   });
   if (!result.ok) {

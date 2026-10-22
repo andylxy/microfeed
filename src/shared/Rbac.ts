@@ -55,6 +55,11 @@ export interface RbacBoardRole {
    */
   allowAdminLogin: boolean;
   code: string;
+  /**
+   * 该角色是否为会员（`ext_roles.is_member`，migration 0144）。鉴权时并入
+   * `locals.appMember`，决定 App 端点（GetNav / 章节正文等）的内容档；新建角色默认 false。
+   */
+  isMember: boolean;
   name: string;
   permissions: string[];
 }

@@ -77,6 +77,12 @@ declare global {
       rbacMustChangePassword?: boolean;
       rbacDeviceRevoked?: boolean;
       rbacBanned?: boolean;
+      /**
+       * 调用方是否持「会员」角色（`ext_roles.is_member` 的并集，migration 0144）。
+       * 由 App 登录凭证鉴权时与权限码同一趟查询得出，内容端点据此决定要不要
+       * 收录会员书；后台会话路径不设这个字段。
+       */
+      appMember?: boolean;
     }
   }
 }
