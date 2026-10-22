@@ -1,6 +1,7 @@
 import {STATUSES} from "@/shared/Constants";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import {fetchSectionsByParents} from "@/server/feed/tcmSections";
+import {listAdminListHiddenCodes} from "@/server/feed/extBookStatus";
 import {
   UNFILED_VOLUME_KEY,
   type VolumeBookOption,
@@ -536,9 +537,11 @@ export async function listVolumeBooks(
     "SELECT id, data, status FROM channels ORDER BY created_at ASC",
   ).all();
   const rows = Array.isArray(result.results) ? result.results : [];
+  // 删除态取自书籍状态字典（迁移 0142），与后台书籍列表同一口径。
+  const deletedCodes = new Set(await listAdminListHiddenCodes(db));
   const books: VolumeBookOption[] = [];
   for (const row of rows) {
-    if (Number(row.status) === STATUSES.DELETED) continue;
+    if (deletedCodes.has(Number(row.status ?? 0))) continue;
     const data = safeParseJson(row.data);
     const microfeed = data._microfeed && typeof data._microfeed === "object"
       ? data._microfeed as Record<string, unknown>

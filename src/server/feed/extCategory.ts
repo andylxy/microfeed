@@ -2,6 +2,7 @@ import {bodyToPlainText} from "@/shared/BodyFormat";
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
+import {listPublicVisibleStatusCodes} from "@/server/feed/extBookStatus";
 import {
   bookWordCounts,
   chapterWordCount,
@@ -40,16 +41,30 @@ export interface CategoryDb {
   prepare(query: string): CategoryDbPreparedStatement;
 }
 
+/** `status IN (?, ?)` for the dictionary's public-visible codes (migration
+ *  0142/0143): the four public listings below share this shape, so the
+ *  placeholder list is built once here instead of four times. */
+function publicStatusClause(publicCodes: readonly number[]): string {
+  return `status IN (${publicCodes.map(() => "?").join(", ")})`;
+}
+
 /** Public book cards for the shelf/home page. A microfeed site has one primary
  * feed, but novel samples and future multi-book channels can still be listed
- * from the published channels table without changing the feed contract. */
+ * from the published channels table without changing the feed contract.
+ *
+ * Which statuses count as published is data now (`ext_book_status.public_visible`,
+ * migration 0142): the code list is one small read, then the channel query is
+ * unchanged in shape. */
 export async function listPublishedBookSamples(
   db: CategoryDb,
 ): Promise<ChannelBookSummary[]> {
+  const publicCodes = await listPublicVisibleStatusCodes(db);
+  if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     "SELECT id, data, genre FROM channels " +
-      "WHERE status = ? ORDER BY is_primary DESC, created_at ASC",
-  ).bind(STATUSES.PUBLISHED).all();
+      `WHERE ${publicStatusClause(publicCodes)} ` +
+      "ORDER BY is_primary DESC, created_at ASC",
+  ).bind(...publicCodes).all();
   const catRows = await db.prepare(
     "SELECT id, name FROM ext_category WHERE visible = 1",
   ).all();
@@ -120,9 +135,13 @@ export async function searchPublishedBooks(
 ): Promise<ChannelBookSummary[]> {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return [];
+  const publicCodes = await listPublicVisibleStatusCodes(db);
+  if (publicCodes.length === 0) return [];
   const result = await db.prepare(
-    "SELECT id, data, genre FROM channels WHERE status = ? ORDER BY created_at ASC",
-  ).bind(STATUSES.PUBLISHED).all();
+    "SELECT id, data, genre FROM channels " +
+      `WHERE ${publicStatusClause(publicCodes)} ` +
+      "ORDER BY created_at ASC",
+  ).bind(...publicCodes).all();
   const catRows = await db.prepare(
     "SELECT id, name FROM ext_category WHERE visible = 1",
   ).all();
@@ -362,37 +381,48 @@ export async function setCategoryVisible(
  * assigned, which silently emptied the whole nav on sites whose channel had
  * not been given a genre yet.
  *
- * `channels.status` stores the numeric `STATUSES` value, not the status name,
- * so the join must compare against the number — comparing to `'published'`
- * matched nothing and made every count zero.
+ * `channels.status` stores the numeric status value, not the status name, so
+ * the join compares against numbers. Which numbers count as "published" is
+ * data now (`ext_book_status.public_visible`, migration 0142) — the code list
+ * is read once and bound into the join, so a newly public status is counted
+ * here exactly as it is on the shelf.
  *
  * Container channels (方剂 等) are excluded from the count: they are not works,
  * so counting one would inflate the category the way it inflated the shelf.
  */
 export async function listCategoryNav(db: CategoryDb): Promise<Category[]> {
+  // 计数口径与书架/分类页/详情页同源：前台可见的状态码来自字典（迁移 0142），
+  // 否则运营新开一个前台可见状态时，这里会仍按旧常量数出 0。
+  const publicCodes = await listPublicVisibleStatusCodes(db);
+  if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     "SELECT c.id, c.name, c.slug, c.parent_id, c.sort, c.visible, c.created_at, " +
       "COUNT(ch.id) AS book_count " +
       "FROM ext_category c " +
-      "LEFT JOIN channels ch ON ch.genre = c.id AND ch.status = ? " +
+      `LEFT JOIN channels ch ON ch.genre = c.id ` +
+      `AND ${publicStatusClause(publicCodes)} ` +
       "AND json_extract(ch.data, '$._microfeed.tcmContainer') IS NULL " +
       "WHERE c.visible = 1 " +
       "GROUP BY c.id " +
       "ORDER BY c.sort ASC, c.created_at ASC",
-  ).bind(STATUSES.PUBLISHED).all();
+  ).bind(...publicCodes).all();
   return result.results.map(rowToCategory);
 }
 
 /** Books (channels) assigned to a given genre (category id), for the public
- *  category page. Only published channels are returned. */
+ *  category page. Only published channels are returned — the set comes from
+ *  `ext_book_status.public_visible` (migration 0142), not a constant. */
 export async function listChannelsByGenre(
   db: CategoryDb,
   genre: string,
 ): Promise<ChannelBookSummary[]> {
+  const publicCodes = await listPublicVisibleStatusCodes(db);
+  if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     // `channels.status` is the numeric STATUSES value, not the status name.
-    "SELECT id, data FROM channels WHERE genre = ? AND status = ?",
-  ).bind(genre, STATUSES.PUBLISHED).all();
+    "SELECT id, data FROM channels WHERE genre = ? " +
+      `AND ${publicStatusClause(publicCodes)}`,
+  ).bind(genre, ...publicCodes).all();
   // Container channels (方剂 等) are not works — see listPublishedBookSamples.
   const rows = result.results.filter(
     (row) => !isTcmContainerChannel(safeParseJson(row.data)._microfeed),
@@ -464,14 +494,18 @@ function safeParseJson(value: unknown): Record<string, unknown> {
 
 /** A single book (channel) by id, for the public book detail page. Returns the
  *  same summary shape as the shelf/category listings, plus the raw `_microfeed`
- *  pocket so the detail header can render genre/tags/serial status. */
+ *  pocket so the detail header can render genre/tags/serial status. The
+ *  visibility set is `ext_book_status.public_visible` (migration 0142). */
 export async function getBookById(
   db: CategoryDb,
   id: string,
 ): Promise<ChannelBookSummary | null> {
+  const publicCodes = await listPublicVisibleStatusCodes(db);
+  if (publicCodes.length === 0) return null;
   const row = await db.prepare(
-    "SELECT id, data, genre FROM channels WHERE id = ? AND status = ?",
-  ).bind(id, STATUSES.PUBLISHED).first();
+    "SELECT id, data, genre FROM channels WHERE id = ? " +
+      `AND ${publicStatusClause(publicCodes)}`,
+  ).bind(id, ...publicCodes).first();
   if (!row) return null;
   // The detail page renders the genre as a tag. `channels.genre` holds the
   // category *id*, so resolve the display name here — otherwise the raw id

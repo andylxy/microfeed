@@ -19,10 +19,15 @@ import {
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
 import {STATUSES} from "@/shared/Constants";
+import {
+  bookStatusBadgeStyle,
+  bookStatusDisplayName,
+} from "@/shared/ExtBook";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
   BookAdmin,
   BookCategoryOption,
+  BookStatusOption,
   BooksBoard,
 } from "@/shared/ExtBook";
 
@@ -152,7 +157,7 @@ function BookForm({
         options={visibilityOptions}
         value={visibilityOptions.find(
           ({value}) => Number(value) === form.status,
-        ) ?? visibilityOptions[0]}
+        ) ?? null}
       />
       <div className="space-y-1">
         <label className="text-sm font-medium" htmlFor="book-description">
@@ -184,12 +189,15 @@ function BookForm({
  *
  * A book is a `channels` row, so the site's own feed (the primary channel)
  * shows up as one of them — it is editable but cannot be deleted. Deletion is
- * a soft `status = 3`, and the chapters of a deleted book are left alone.
+ * a soft delete that writes the status dictionary's delete state; the chapters
+ * are left alone so a mistyped delete can be restored.
  */
 export default function BooksApp() {
-  const {t} = useTranslation();
+  const {t, i18n} = useTranslation();
+  const zh = i18n.language.startsWith("zh");
   const [books, setBooks] = useState<BookAdmin[]>([]);
   const [categories, setCategories] = useState<BookCategoryOption[]>([]);
+  const [statuses, setStatuses] = useState<BookStatusOption[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -197,6 +205,8 @@ export default function BooksApp() {
   const [editing, setEditing] = useState<BookAdmin | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState<BookAdmin | null>(null);
+  const [confirmingPurge, setConfirmingPurge] = useState<BookAdmin | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [form, setForm] = useState<BookFormState>(EMPTY_FORM);
 
   const load = useCallback(async () => {
@@ -208,6 +218,7 @@ export default function BooksApp() {
       if (!response.ok) throw new Error(data.error ?? t("books.loadFailed"));
       setBooks(Array.isArray(data.books) ? data.books : []);
       setCategories(Array.isArray(data.categories) ? data.categories : []);
+      setStatuses(Array.isArray(data.statuses) ? data.statuses : []);
       setError(null);
     } catch (loadError) {
       setError(
@@ -220,11 +231,19 @@ export default function BooksApp() {
     }
   }, [t]);
 
+  // 软删除的作品（status 命中字典里的删除态）随看板返回，主列表不显示它们，
+  // 由「已删除」筹码单列——恢复与物理删除都只对这批行开放。已删除视图不叠
+  // 分类筛选（筹码整行隐藏，避免出现空列表又没法重置筛选）。
+  const liveBooks = books.filter((book) => !book.isDeleted);
+  const deletedBooks = books.filter((book) => book.isDeleted);
   const visibleBooks = categoryFilter
-    ? books.filter((book) => book.categoryId === categoryFilter)
-    : books;
+    ? liveBooks.filter((book) => book.categoryId === categoryFilter)
+    : liveBooks;
+  const listedBooks = showDeleted ? deletedBooks : visibleBooks;
   const countFor = (id: string) =>
-    books.filter((book) => book.categoryId === id).length;
+    liveBooks.filter((book) => book.categoryId === id).length;
+  const firstSelectableCode = statuses.find((row) => row.formSelectable)?.code
+    ?? STATUSES.PUBLISHED;
 
   useEffect(() => {
     void load();
@@ -241,14 +260,24 @@ export default function BooksApp() {
     {label: t("books.serializing"), value: "serializing"},
     {label: t("books.finished"), value: "finished"},
   ];
-  const visibilityOptions: AdminSelectOption[] = [
-    {label: t("books.published"), value: String(STATUSES.PUBLISHED)},
-    {label: t("books.draft"), value: String(STATUSES.UNPUBLISHED)},
-  ];
+  // 显示/隐藏不再是代码里的两项常量：选项来自 `ext_book_status`（迁移 0142），
+  // 运营在「书籍状态」页增删状态后这里自动跟上，不需要部署。
+  const visibilityOptions: AdminSelectOption[] = statuses
+    .filter((row) => row.formSelectable)
+    .map((row) => ({
+      label: bookStatusDisplayName(row, zh),
+      value: String(row.code),
+    }));
+  const statusLabel = (code: number): string => {
+    const row = statuses.find((item) => item.code === code);
+    return row ? bookStatusDisplayName(row, zh) : t("books.statusUnknown");
+  };
 
   const startCreate = () => {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    // A new book needs a status the form offers; the first selectable row is
+    // the default (normally the system "visible" code).
+    setForm({...EMPTY_FORM, status: firstSelectableCode});
     setCreating(true);
   };
 
@@ -320,6 +349,62 @@ export default function BooksApp() {
     }
   };
 
+  /**
+   * 恢复软删除的作品：把它切回表单可选状态里的第一个（通常是「显示」）。
+   * 走既有更新通道——服务端只允许「切换到表单可选状态」，正好卡住误恢复。
+   */
+  const restore = async (book: BookAdmin) => {
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxBook(book.id), {
+        body: JSON.stringify({status: firstSelectableCode}),
+        headers: {"content-type": "application/json"},
+        method: "PUT",
+      });
+      const data = await response.json().catch(() => ({})) as Record<string, any>;
+      if (!response.ok) throw new Error(data.error ?? t("books.saveFailed"));
+      showToast(t("saveAction.saved"), "success");
+      setConfirmingPurge(null);
+      setShowDeleted(false);
+      await load();
+    } catch (restoreError) {
+      showToast(
+        restoreError instanceof Error
+          ? restoreError.message
+          : t("books.saveFailed"),
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** 物理删除：连章节一起清库。确认框里带章节数，删完即不可恢复。 */
+  const purge = async (book: BookAdmin) => {
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxBookPurge(book.id), {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({})) as Record<string, any>;
+      if (!response.ok) throw new Error(data.error ?? t("books.purgeFailed"));
+      // 服务端返回真正删掉的章节数（含已软删除的章节），提示语按这个数报。
+      showToast(t("books.purged", {count: Number(data.chapters ?? 0)}), "success");
+      setConfirmingPurge(null);
+      setShowDeleted(false);
+      await load();
+    } catch (purgeError) {
+      showToast(
+        purgeError instanceof Error
+          ? purgeError.message
+          : t("books.purgeFailed"),
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return <AdminCollectionLoading label={t("books.title")} />;
   }
@@ -360,7 +445,22 @@ export default function BooksApp() {
         />
       )}
 
-      {categories.length > 0 && (
+      {deletedBooks.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            className={`rounded-full border px-3 py-1 text-sm ${showDeleted
+              ? "border-destructive text-destructive"
+              : "text-muted-foreground"}`}
+            onClick={() => setShowDeleted((current) => !current)}
+            type="button"
+          >
+            {t("books.deletedChip")}
+            <small className="ml-1 opacity-70">{deletedBooks.length}</small>
+          </button>
+        </div>
+      )}
+
+      {!showDeleted && categories.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <button
             className={`rounded-full border px-3 py-1 text-sm ${!categoryFilter
@@ -387,15 +487,20 @@ export default function BooksApp() {
         </div>
       )}
 
-      {visibleBooks.length === 0 && !creating && (
+      {listedBooks.length === 0 && !creating && !showDeleted && (
         <p className="text-sm text-muted-foreground">
           {categoryFilter ? t("books.emptyCategory") : t("books.empty")}
         </p>
       )}
 
       <div className="rounded-lg border">
-        {visibleBooks.map((book) => {
+        {listedBooks.map((book) => {
           const isEditingThis = editing?.id === book.id;
+          // 状态徽章按行上色（迁移 0143）：有配色的行画成彩块，没有的保持纯文字。
+          const badgeStyle = bookStatusBadgeStyle(
+            statuses.find((item) => item.code === book.status)
+              ?? {colorFg: null, colorBg: null},
+          );
           return (
             <div
               className={isEditingThis ? "" : "border-b last:border-b-0"}
@@ -412,10 +517,13 @@ export default function BooksApp() {
                         {t("books.primaryBadge")}
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground">
-                      {book.status === STATUSES.PUBLISHED
-                        ? t("books.published")
-                        : t("books.draft")}
+                    <span
+                      className={badgeStyle
+                        ? "rounded px-1.5 py-0.5 text-xs font-medium"
+                        : "text-xs text-muted-foreground"}
+                      style={badgeStyle}
+                    >
+                      {statusLabel(book.status)}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -430,23 +538,47 @@ export default function BooksApp() {
                 </div>
                 {!isEditingThis && (
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => startEdit(book)}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      {t("books.editBook")}
-                    </Button>
-                    {!book.isPrimary && (
-                      <Button
-                        onClick={() => setConfirming(book)}
-                        size="sm"
-                        type="button"
-                        variant="destructive"
-                      >
-                        {t("books.deleteAction")}
-                      </Button>
+                    {book.isDeleted ? (
+                      <>
+                        {/* 软删除的行只给恢复与物理删除：编辑会顺手把它改回可见状态 */}
+                        <Button
+                          onClick={() => void restore(book)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          {t("books.restoreAction")}
+                        </Button>
+                        <Button
+                          onClick={() => setConfirmingPurge(book)}
+                          size="sm"
+                          type="button"
+                          variant="destructive"
+                        >
+                          {t("books.purgeAction")}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => startEdit(book)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          {t("books.editBook")}
+                        </Button>
+                        {!book.isPrimary && (
+                          <Button
+                            onClick={() => setConfirming(book)}
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                          >
+                            {t("books.deleteAction")}
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -486,6 +618,33 @@ export default function BooksApp() {
             </Button>
             <Button
               onClick={() => setConfirming(null)}
+              type="button"
+              variant="ghost"
+            >
+              {t("books.cancelAction")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {confirmingPurge && (
+        <div className="space-y-3 rounded-lg border border-destructive p-4">
+          <p className="text-sm">
+            {t("books.confirmPurge", {
+              title: confirmingPurge.title || t("books.untitled"),
+            })}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              disabled={saving}
+              onClick={() => void purge(confirmingPurge)}
+              type="button"
+              variant="destructive"
+            >
+              {t("books.purgeAction")}
+            </Button>
+            <Button
+              onClick={() => setConfirmingPurge(null)}
               type="button"
               variant="ghost"
             >

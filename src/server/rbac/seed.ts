@@ -19,6 +19,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:book:read", name: "查看书"},
   {code: "content:book:update", name: "编辑书"},
   {code: "content:book:delete", name: "删除书"},
+  // 书籍状态字典（migration 0142）。只授 super_admin（走 `*`），不进
+  // EDITOR_PERMISSIONS：状态种类影响前台可见面，属于管理侧决策。
+  // Mirror of PERMISSION_CODES in src/shared/Constants.ts.
+  {code: "content:book-status:manage", name: "书籍状态管理"},
   // content - categories
   {code: "content:category:create", name: "新建分类"},
   {code: "content:category:read", name: "查看分类"},

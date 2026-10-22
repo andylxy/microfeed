@@ -82,8 +82,9 @@ describe("GET /ajax/rbac/permission-tree", () => {
     expect(codes.has("group_content")).toBe(true);
     expect(codes.has("page_books")).toBe(true);
     expect(codes.has("content:book:read")).toBe(true);
-    // 两端合计 92 行（PC 77 + App 15）；菜单管理页的两行已随 0135 退役。
-    expect(rows).toHaveLength(77);
+    // 两端合计 94 行（PC 79 + App 15）；菜单管理页的两行已随 0135 退役，
+    // 书籍状态字典的页行与码叶子随 0142 进入 PC 端。
+    expect(rows).toHaveLength(79);
     // App 端的行不在 PC 端的树里。
     expect(codes.has("group_app")).toBe(false);
     expect(codes.has("app:nav:read")).toBe(false);

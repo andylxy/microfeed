@@ -8,6 +8,8 @@ import {
   listAdminBooks,
   listBookCategoryOptions,
   loadBooksBoard,
+  purgeAdminBook,
+  readBookStatusCode,
   updateAdminBook,
   type BookDb,
   type BookDbAllResult,
@@ -92,6 +94,38 @@ function emptyDatabase(): SqliteBookDb {
       sort INTEGER DEFAULT 0,
       visible INTEGER DEFAULT 1
     );
+    CREATE TABLE ext_book_status (
+      code INTEGER PRIMARY KEY,
+      name_zh TEXT NOT NULL,
+      name_en TEXT NOT NULL,
+      form_selectable INTEGER NOT NULL DEFAULT 1,
+      public_visible INTEGER NOT NULL DEFAULT 0,
+      admin_list_hidden INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      sort INTEGER NOT NULL DEFAULT 0,
+      color_fg TEXT,
+      color_bg TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE ext_marker_citations (
+      book_id TEXT NOT NULL,
+      marker_code TEXT NOT NULL,
+      marker_name TEXT NOT NULL,
+      section_id TEXT NOT NULL,
+      section_title TEXT NOT NULL DEFAULT '',
+      section_seq INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (book_id, marker_code, marker_name, section_id)
+    );
+    CREATE TABLE ext_marker_citation_state (
+      book_id TEXT PRIMARY KEY,
+      computed_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO ext_book_status
+      (code, name_zh, name_en, form_selectable, public_visible, admin_list_hidden, is_system, sort) VALUES
+      (1, '显示', 'Visible', 1, 1, 0, 1, 100),
+      (2, '隐藏', 'Hidden', 1, 0, 0, 1, 200),
+      (3, '已删除', 'Deleted', 0, 0, 1, 1, 300);
   `);
   return new SqliteBookDb(database);
 }
@@ -205,7 +239,9 @@ describe("novel-cms book management", () => {
     seed(db);
     const books = await listAdminBooks(db);
 
-    expect(books.map((book) => book.id)).toEqual(["primary1", "book2"]);
+    // 软删除的作品也在列（isDeleted 标记），由前端「已删除」筹码单列。
+    expect(books.map((book) => book.id)).toEqual(["primary1", "book2", "gone3"]);
+    expect(books.map((book) => book.isDeleted)).toEqual([false, false, true]);
     expect(books[0]).toMatchObject({
       author: "主笔",
       categoryName: "东方玄幻",
@@ -292,17 +328,115 @@ describe("novel-cms book management", () => {
 
     expect(await deleteAdminBook(db, "book2")).toBe(true);
     expect(await getAdminBook(db, "book2")).toMatchObject({status: 3});
-    expect(await listAdminBooks(db)).toHaveLength(1);
+    // 软删除不从列表消失（恢复要靠它），只是打上 isDeleted。
+    const books = await listAdminBooks(db);
+    expect(books).toHaveLength(3);
+    expect(books.find((book) => book.id === "book2")?.isDeleted).toBe(true);
 
     expect(await deleteAdminBook(db, "primary1")).toBe(false);
     expect(await deleteAdminBook(db, "missing")).toBe(false);
+  });
+
+  it("restores a soft-deleted book through the normal update path", async () => {
+    const db = emptyDatabase();
+    seed(db);
+    await deleteAdminBook(db, "book2");
+
+    // 恢复 = 切回表单可选状态（服务端只放行这一类切换）。
+    const restored = await updateAdminBook(db, "book2", {status: 1});
+    expect(restored).toMatchObject({status: 1});
+    const books = await listAdminBooks(db);
+    expect(books.find((book) => book.id === "book2")?.isDeleted).toBe(false);
+  });
+
+  it("purges a book with its chapters and auxiliary rows", async () => {
+    const db = emptyDatabase();
+    seed(db);
+    const database = (db as unknown as {database: DatabaseSync}).database;
+    database.prepare(
+      "INSERT INTO ext_book_stats (book_id, chapters_all) VALUES ('book2', 2)",
+    ).run();
+    database.prepare(
+      "INSERT INTO ext_marker_citations (book_id, marker_code, marker_name, section_id) " +
+        "VALUES ('book2', 'm1', '标记', 'chap1')",
+    ).run();
+    database.prepare(
+      "INSERT INTO ext_marker_citation_state (book_id, computed_at_ms) " +
+        "VALUES ('book2', 1)",
+    ).run();
+
+    // 两步流程：先软删除，再物理删除。
+    await deleteAdminBook(db, "book2");
+    const result = await purgeAdminBook(db, "book2");
+    // 3 = 两章已发布 + 一章软删除（chap4）：物理删除连软删的章节一起清，
+    // 不留孤儿行，所以计数含它。
+    expect(result).toEqual({purged: true, chapters: 3});
+    // 书行、章节行、物化行、引用索引四张表都清空。
+    expect(database.prepare("SELECT id FROM channels WHERE id = 'book2'").all())
+      .toHaveLength(0);
+    expect(database.prepare("SELECT id FROM items WHERE book_id = 'book2'").all())
+      .toHaveLength(0);
+    expect(database.prepare("SELECT book_id FROM ext_book_stats WHERE book_id = 'book2'").all())
+      .toHaveLength(0);
+    expect(database.prepare("SELECT book_id FROM ext_marker_citations WHERE book_id = 'book2'").all())
+      .toHaveLength(0);
+    expect(database.prepare("SELECT book_id FROM ext_marker_citation_state WHERE book_id = 'book2'").all())
+      .toHaveLength(0);
+    // 别的书不受影响。
+    expect(await getAdminBook(db, "primary1")).not.toBeNull();
+  });
+
+  it("refuses to purge the primary channel, a live book, or a missing book", async () => {
+    const db = emptyDatabase();
+    seed(db);
+    expect(await purgeAdminBook(db, "primary1"))
+      .toEqual({purged: false, reason: "primary"});
+    // 物理删除只跑两步流程的第二段：还在展示的书必须先软删除。
+    expect(await purgeAdminBook(db, "book2"))
+      .toEqual({purged: false, reason: "notDeleted"});
+    expect(await purgeAdminBook(db, "missing"))
+      .toEqual({purged: false, reason: "missing"});
+    expect(await listAdminBooks(db)).toHaveLength(3);
   });
 
   it("loads the board in one call", async () => {
     const db = emptyDatabase();
     seed(db);
     const board = await loadBooksBoard(db);
-    expect(board.books).toHaveLength(2);
+    // 含软删除的那本（gone3）。
+    expect(board.books).toHaveLength(3);
     expect(board.categories).toEqual([{id: "cat_east", name: "东方玄幻"}]);
+    // 状态字典随看板一起返回：书籍表单的显示/隐藏选项与列表行标签都读它。
+    expect(board.statuses).toEqual([
+      {code: 1, nameZh: "显示", nameEn: "Visible", formSelectable: true, colorFg: null, colorBg: null},
+      {code: 2, nameZh: "隐藏", nameEn: "Hidden", formSelectable: true, colorFg: null, colorBg: null},
+      {code: 3, nameZh: "已删除", nameEn: "Deleted", formSelectable: false, colorFg: null, colorBg: null},
+    ]);
+  });
+
+  it("hides only the statuses the dictionary marks admin-list-hidden", async () => {
+    const db = emptyDatabase();
+    seed(db);
+    const database = (db as unknown as {database: DatabaseSync}).database;
+    // A custom status (code 10) is list-visible by default: the admin list
+    // exclusion is a row flag, not the constant 3.
+    database.prepare(
+      "INSERT INTO ext_book_status " +
+        "(code, name_zh, name_en, form_selectable, public_visible, " +
+        "admin_list_hidden, is_system, sort) VALUES (10, '修订中', 'Revising', 1, 0, 0, 0, 400)",
+    ).run();
+    database.prepare(
+      "INSERT INTO channels (id, status, is_primary, data, created_at) " +
+        "VALUES (?,?,?,?,?)",
+    ).run("book10", 10, null, JSON.stringify({title: "修订中的书"}), "2026-01-04 00:00:00");
+
+    const books = await listAdminBooks(db);
+    expect(books.map((book) => book.id)).toEqual([
+      "primary1", "book2", "gone3", "book10",
+    ]);
+    // 只有 code 3 命中删除态；code 10 是普通自定义状态。
+    expect(books.filter((book) => book.isDeleted).map((book) => book.id))
+      .toEqual(["gone3"]);
+    expect(await readBookStatusCode(db, "book10")).toBe(10);
   });
 });

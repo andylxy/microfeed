@@ -273,6 +273,8 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.ADMIN_HOME,
       "group_content",
       ADMIN_MENU_CODES.BOOKS,
+      // 0142: the book status dictionary sits right after the books board.
+      ADMIN_MENU_CODES.BOOK_STATUSES,
       ADMIN_MENU_CODES.VOLUMES,
       ADMIN_MENU_CODES.CATEGORIES,
       ADMIN_MENU_CODES.ALL_ITEMS,

@@ -89,6 +89,23 @@ function databaseWithCategories(): CategoryDb {
       words_all          INTEGER NOT NULL DEFAULT 0,
       computed_at_ms     INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE ext_book_status (
+      code INTEGER PRIMARY KEY,
+      name_zh TEXT NOT NULL,
+      name_en TEXT NOT NULL,
+      form_selectable INTEGER NOT NULL DEFAULT 1,
+      public_visible INTEGER NOT NULL DEFAULT 0,
+      admin_list_hidden INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      sort INTEGER NOT NULL DEFAULT 0,
+      color_fg TEXT,
+      color_bg TEXT
+    );
+    INSERT INTO ext_book_status
+      (code, name_zh, name_en, form_selectable, public_visible, admin_list_hidden, is_system, sort) VALUES
+      (1, '显示', 'Visible', 1, 1, 0, 1, 100),
+      (2, '隐藏', 'Hidden', 1, 0, 0, 1, 200),
+      (3, '已删除', 'Deleted', 0, 0, 1, 1, 300);
     INSERT INTO ext_category (id, name, slug, sort, visible, created_at) VALUES
       ('cat_empty', '空分类', 'empty', 1, 1, 1),
       ('cat_book', '东方玄幻', 'eastern-fantasy', 2, 1, 2),

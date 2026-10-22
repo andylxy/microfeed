@@ -1,4 +1,8 @@
 import {readBookStats} from "@/server/feed/bookWordCount";
+import {
+  listAdminListHiddenCodes,
+  listBookStatusRows,
+} from "@/server/feed/extBookStatus";
 import {STATUSES} from "@/shared/Constants";
 import {randomShortUUID} from "@/shared/StringUtils";
 import type {
@@ -6,6 +10,7 @@ import type {
   BookCategoryOption,
   BookInput,
   BooksBoard,
+  BookStatusOption,
 } from "@/shared/ExtBook";
 
 export type {
@@ -117,11 +122,13 @@ function toBookAdmin(
   row: Record<string, unknown>,
   stats: {chapters: Map<string, number>; words: Map<string, number>},
   names: Map<string, string>,
+  deletedCodes: ReadonlySet<number>,
 ): BookAdmin {
   const data = safeParseJson(row.data);
   const microfeed = microfeedOf(data);
   const id = asText(row.id);
   const categoryId = asText(microfeed.genre).trim();
+  const status = Number(row.status ?? 0);
   return {
     author: firstAuthorName(data),
     categoryId,
@@ -131,8 +138,9 @@ function toBookAdmin(
     description: asText(data.description),
     id,
     isPrimary: Number(row.is_primary ?? 0) === 1,
+    isDeleted: deletedCodes.has(status),
     serialStatus: asText(microfeed.serialStatus),
-    status: Number(row.status ?? 0),
+    status,
     title: asText(data.title),
     // Counted from the chapters that exist, never from `_microfeed.wordCount`:
     // a hand-typed total is never recomputed, and the sample books declared
@@ -141,19 +149,23 @@ function toBookAdmin(
   };
 }
 
-/** Every book for the dashboard, including drafts. Deleted channels stay hidden
- *  — deletion is a soft `status = 3` so their chapters keep resolving. */
+/** Every book for the dashboard, deleted ones included — the board needs them
+ *  so an operator can restore or purge. Which codes count as "deleted" is a
+ *  row flag on `ext_book_status` (`admin_list_hidden`), and the flag travels
+ *  with each row as `isDeleted` so the client never re-derives it. */
 export async function listAdminBooks(db: BookDb): Promise<BookAdmin[]> {
+  const hiddenCodes = await listAdminListHiddenCodes(db);
+  const deletedCodes = new Set(hiddenCodes);
   const result = await db.prepare(
     "SELECT id, data, status, is_primary FROM channels " +
-      "WHERE status IS NULL OR status != ? ORDER BY created_at ASC",
-  ).bind(STATUSES.DELETED).all();
+      "ORDER BY created_at ASC",
+  ).all();
   const rows = Array.isArray(result.results) ? result.results : [];
   // 把书单回传，让 `bookStats` 只读这些书的物化行（本地 13 行），而不是先扫
   // `items` 推导「有哪些书」再算——那正是被迁移 0103 消掉的那笔账。
   const stats = await bookStats(db, rows.map((row) => asText(row.id)));
   const names = await categoryNames(db);
-  return rows.map((row) => toBookAdmin(row, stats, names));
+  return rows.map((row) => toBookAdmin(row, stats, names, deletedCodes));
 }
 
 export async function getAdminBook(
@@ -164,11 +176,26 @@ export async function getAdminBook(
     "SELECT id, data, status, is_primary FROM channels WHERE id = ?",
   ).bind(id).first();
   if (!row) return null;
+  const deletedCodes = new Set(await listAdminListHiddenCodes(db));
   // One book, one book's chapters — the old whole-corpus scan made a single
   // detail fetch cost the same as loading the whole shelf.
   const stats = await bookStats(db, [id]);
   const names = await categoryNames(db);
-  return toBookAdmin(row, stats, names);
+  return toBookAdmin(row, stats, names, deletedCodes);
+}
+
+/** The stored `status` code of one book, or null when the row is gone. Cheap
+ *  (primary-key point read) so the update path can tell "keeping a status the
+ *  form no longer offers" apart from "switching to one it never offered". */
+export async function readBookStatusCode(
+  db: BookDb,
+  id: string,
+): Promise<number | null> {
+  const row = await db.prepare(
+    "SELECT status FROM channels WHERE id = ?",
+  ).bind(id).first();
+  if (!row) return null;
+  return Number(row.status ?? 0);
 }
 
 /** Categories a book can be filed under. */
@@ -182,13 +209,30 @@ export async function listBookCategoryOptions(
   return rows.map((row) => ({id: asText(row.id), name: asText(row.name)}));
 }
 
+/** The book status dictionary: the edit form's options and the list row labels.
+ *  A handful of rows (`ext_book_status`), read whole — no filtering needed. */
+export async function listBookStatusOptions(
+  db: BookDb,
+): Promise<BookStatusOption[]> {
+  const rows = await listBookStatusRows(db);
+  return rows.map((row) => ({
+    code: row.code,
+    nameZh: row.nameZh,
+    nameEn: row.nameEn,
+    formSelectable: row.formSelectable,
+    colorFg: row.colorFg,
+    colorBg: row.colorBg,
+  }));
+}
+
 /** The book list plus the category picker, in one round trip for the page. */
 export async function loadBooksBoard(db: BookDb): Promise<BooksBoard> {
-  const [books, categories] = await Promise.all([
+  const [books, categories, statuses] = await Promise.all([
     listAdminBooks(db),
     listBookCategoryOptions(db),
+    listBookStatusOptions(db),
   ]);
-  return {books, categories};
+  return {books, categories, statuses};
 }
 
 /** Build the `data` JSON for a book from dashboard input. */
@@ -283,9 +327,13 @@ export async function updateAdminBook(
   return getAdminBook(db, id);
 }
 
-/** Soft delete: `status = 3`. The row and its chapters stay in place so a
- *  mistyped delete is recoverable, and nothing on the public site resolves a
- *  deleted channel. */
+/** Soft delete. The row and its chapters stay in place so a mistyped delete is
+ *  recoverable, and nothing on the public site resolves a deleted channel.
+ *
+ *  The code written is the dictionary's delete state (`admin_list_hidden`,
+ *  migration 0142) — not a constant here, so flagging a different row as the
+ *  delete state moves the soft-delete target with it. An empty dictionary
+ *  falls back to the system code, which is what a fresh install carries. */
 export async function deleteAdminBook(
   db: BookDb,
   id: string,
@@ -295,8 +343,58 @@ export async function deleteAdminBook(
   ).bind(id).first();
   if (!row) return false;
   if (Number(row.is_primary ?? 0) === 1) return false;
+  const hiddenCodes = await listAdminListHiddenCodes(db);
+  const deleteCode = hiddenCodes[0] ?? STATUSES.DELETED;
   await db.prepare(
     "UPDATE channels SET status = ?, updated_at = ? WHERE id = ?",
-  ).bind(STATUSES.DELETED, nowIso(), id).run();
+  ).bind(deleteCode, nowIso(), id).run();
   return true;
+}
+
+export type PurgeBookResult =
+  | {purged: true; chapters: number}
+  | {purged: false; reason: "missing" | "primary" | "notDeleted"};
+
+/**
+ * 物理删除：把作品连它的章节一起从库里清掉，不可恢复。
+ *
+ * 四张表都靠 `book_id` 挂书且没有外键（本地实测无 `REFERENCES channels`），
+ * 所以逐张显式删：`items`（章节，其 DELETE 触发器会自行清理 site_search_*
+ * 影子行）、`ext_book_stats`（物化字数）、`ext_marker_citations` 与
+ * `ext_marker_citation_state`（懒建引用索引，迁移 0111）。站点主频道拒绝
+ * 物理删除——它是站点自己的 feed。
+ *
+ * 只接受已经处于删除态的作品：物理删除是软删除之后的第二步，端点自带这道闸，
+ * 避免一次请求直接销毁还在展示的书（页面按钮也只在已删除行上出现）。
+ *
+ * 语句顺序执行、不做事务包裹（与仓内其他写路径一致）；章节数随结果返回，
+ * 供提示语如实告知删掉了多少行。
+ */
+export async function purgeAdminBook(
+  db: BookDb,
+  id: string,
+): Promise<PurgeBookResult> {
+  const row = await db.prepare(
+    "SELECT is_primary, status FROM channels WHERE id = ?",
+  ).bind(id).first();
+  if (!row) return {purged: false, reason: "missing"};
+  if (Number(row.is_primary ?? 0) === 1) return {purged: false, reason: "primary"};
+  const hiddenCodes = await listAdminListHiddenCodes(db);
+  if (!hiddenCodes.includes(Number(row.status ?? 0))) {
+    return {purged: false, reason: "notDeleted"};
+  }
+  const counted = await db.prepare(
+    "SELECT COUNT(*) AS n FROM items WHERE book_id = ?",
+  ).bind(id).first();
+  const chapters = Number(counted?.n ?? 0);
+  await db.prepare("DELETE FROM items WHERE book_id = ?").bind(id).run();
+  await db.prepare("DELETE FROM ext_book_stats WHERE book_id = ?").bind(id).run();
+  await db.prepare(
+    "DELETE FROM ext_marker_citations WHERE book_id = ?",
+  ).bind(id).run();
+  await db.prepare(
+    "DELETE FROM ext_marker_citation_state WHERE book_id = ?",
+  ).bind(id).run();
+  await db.prepare("DELETE FROM channels WHERE id = ?").bind(id).run();
+  return {purged: true, chapters};
 }

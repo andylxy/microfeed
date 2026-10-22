@@ -79,6 +79,27 @@ function chapter(
   ];
 }
 
+/** 书籍状态字典的最小种子：删除态取 code 3（迁移 0142 的系统行）。 */
+const BOOK_STATUS_SEED = `
+    CREATE TABLE ext_book_status (
+      code INTEGER PRIMARY KEY,
+      name_zh TEXT NOT NULL,
+      name_en TEXT NOT NULL,
+      form_selectable INTEGER NOT NULL DEFAULT 1,
+      public_visible INTEGER NOT NULL DEFAULT 0,
+      admin_list_hidden INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      sort INTEGER NOT NULL DEFAULT 0,
+      color_fg TEXT,
+      color_bg TEXT
+    );
+    INSERT INTO ext_book_status
+      (code, name_zh, name_en, form_selectable, public_visible, admin_list_hidden, is_system, sort) VALUES
+      (1, '显示', 'Visible', 1, 1, 0, 1, 100),
+      (2, '隐藏', 'Hidden', 1, 0, 0, 1, 200),
+      (3, '已删除', 'Deleted', 0, 0, 1, 1, 300);
+`;
+
 function databaseWithBook(chapters: Array<[string, number, string, string, string]>): VolumeDb {
   const database = new DatabaseSync(":memory:");
   database.exec(`
@@ -101,6 +122,7 @@ function databaseWithBook(chapters: Array<[string, number, string, string, strin
       ('bk1', '{"title":"星河剑歌"}', 1, 1),
       ('bk2', '{"title":"别的书"}', 1, 2),
       ('bk_gone', '{"title":"已删除"}', 3, 3);
+    ${BOOK_STATUS_SEED}
   `);
   const insert = database.prepare(
     "INSERT INTO items (id, status, data, pub_date, book_id) VALUES (?, ?, ?, ?, ?)",
@@ -153,6 +175,7 @@ function databaseWithTcmBook(): VolumeDb {
     INSERT INTO channels (id, data, status, created_at) VALUES
       ('bk_tcm', '{"title":"伤寒杂病论・(桂林古本)"}', 1, 1),
       ('tcmfang0001', '{"title":"方剂","_microfeed":{"tcmContainer":"fang"}}', 1, 2);
+    ${BOOK_STATUS_SEED}
   `);
   const insert = database.prepare(
     "INSERT INTO items (id, status, data, pub_date, book_id, tcm_kind, tcm_parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
