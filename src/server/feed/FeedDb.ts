@@ -648,13 +648,44 @@ export default class FeedDb {
     }
   }
 
+  /**
+   * 确认主频道行并返回它的 id：库里有 is_primary=1 的行就直接取；
+   * 没有就按出厂默认数据建一行（is_primary=1、status=已发布）再取。
+   * is_primary 带 UNIQUE 约束，INSERT OR IGNORE 包容并发首存，建后重新查
+   * 一次拿到实际写入的那一行；两条语句放进同一个 batch，只付一次往返。
+   */
+  async ensurePrimaryChannelId(): Promise<string> {
+    const [, selected] = await this.FEED_DB.batch([
+      this.getInsertSql('channels', {
+        'id': randomShortUUID(),
+        'status': STATUSES.PUBLISHED,
+        'is_primary': 1,
+        'data': JSON.stringify(this._defaultChannel()),
+      }, true),
+      this.FEED_DB.prepare(
+        "SELECT id FROM channels WHERE is_primary = 1 LIMIT 1",
+      ),
+    ]);
+    const row = (selected.results[0] ?? null) as {id?: string} | null;
+    if (row?.id == null) {
+      throw new Error('Primary channel row is still missing after INSERT OR IGNORE');
+    }
+    return row.id;
+  }
+
   _putChannelToContentStatement(channel: any) {
     const {id, status, is_primary, ...data} = channel;
     const keyValuePairs: any = {
-      status,
-      'is_primary': is_primary,
       data: JSON.stringify(data),
     };
+    // 载荷里没有的列不进 SET 子句：D1 绑定 undefined 会直接抛出类型错误，
+    // 而「这一列不出现在 SET 里」表达的正是「不改这一列」。
+    if (status !== undefined) {
+      keyValuePairs.status = status;
+    }
+    if (is_primary !== undefined) {
+      keyValuePairs['is_primary'] = is_primary;
+    }
     // Denormalized mirror: keep channels.genre in sync with the primary
     // category id stored in data._microfeed.genre (the SSOT). Only novel
     // channels carry _microfeed, so non-novel channels leave genre untouched.
@@ -754,6 +785,13 @@ export default class FeedDb {
     const statements: D1PreparedStatement[] = [];
     try {
       if (channel) {
+        // 主频道载荷可能不带 id：库里有 is_primary=1 的行时 getContent 返回
+        // 行数据（带 id），没有时返回 _defaultChannel() 内存占位（不带
+        // id）。与 upsertItem 对 item 缺 id 时自动生成 id 的约定同思路：
+        // 先把行确认出来再更新，避免 UPDATE ... WHERE id = ? 绑定 undefined。
+        if (!channel.id) {
+          channel.id = await this.ensurePrimaryChannelId();
+        }
         statements.push(this._putChannelToContentStatement(channel));
       }
 
