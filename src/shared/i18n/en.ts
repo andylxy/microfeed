@@ -1373,7 +1373,7 @@ export const en = {
     // Section annotations (TCM sections only; App GetChapterContent contract fields, ADR-0029)
     tcmNoteLabel: "Note",
     tcmVideoLabel: "Video memo",
-    tcmPocketHint: "These map to the App's note and sectionvideo fields. Both fields hold Markdown source, stored verbatim and returned unchanged by the API; edits do not take part in the App cache signature (text only), so they reach the App with the next body edit; clearing and saving sends null.",
+    tcmPocketHint: "These map to the App's note and sectionvideo fields. Both fields hold Markdown source, stored verbatim; the API sends them raw to member-tier callers and empties them for the public tier; edits do not take part in the App cache signature (text only), so they reach the App with the next body edit; clearing and saving sends null.",
     // Fang composition editor (tcm_kind='fang' items only)
     fangEditorTitle: "Ingredients",
     fangEditorIntro: "A formula's ingredients live in _microfeed.fangYaoList, which the App's GetBookIdFang reads. Picking a herb writes its item ID; saving leaves the other pocket fields untouched.",

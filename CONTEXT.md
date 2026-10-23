@@ -101,6 +101,22 @@ _Avoid_: 「App 匿名端点」—— version 与 announcements 在 2026-10-16 �
 App 命名空间的安全模型（实为 fail-open）：「未登记进集成清单即视为匿名」。名称「反向」仅指登记方向与常规白名单相反；其风险是新增敏感端点若漏登记会静默公开，以回归测试约束，不翻转为 fail-closed。
 _Avoid_: 白名单（方向相反）
 
+**会员角色**：
+带 `is_member` 标记的角色（`ext_roles.is_member`，迁移 0144）。账号持任一会员角色即视为会员；它只决定 App 端内容档，不授予任何后台权限。
+_Avoid_: 用户状态、是否会员用户、会员账号
+
+**会员书**：
+状态为「会员」（书籍状态字典 code 10）的书。只对会员档请求收录与放行，不进公开站。
+_Avoid_: 会员内容、VIP 书
+
+**会员档**：
+单次 App 请求按「账号是否持会员角色」分出的档位（`member` / `public`），鉴权时由一趟查询算出（`locals.appMember`，与权限码同查）。GetNav 的收录范围、会员书的访问门、以及章节附注 / 视频讲解的下发都按它分流（[ADR-0044](docs/novel-cms/adr/0044-app-member-tier.md)）。
+_Avoid_: 会员等级、用户档位
+
+**视频讲解**：
+条目的视频讲解地址，存 `_microfeed.videoMemo`（wire 字段名 `sectionvideo`）。与「附注」并列的会员权益字段，只对会员档经 App 章节接口下发。
+_Avoid_: sectionvideo（wire 字段名，不是术语）、解说视频
+
 ## 标注标记（行内语义）
 
 **标注标记**：
@@ -155,7 +171,7 @@ TCM 典籍里的最小阅读单位（`tcm_kind = 'section'`）。它才是 `$f{�
 _Avoid_: 章节、小节、条目
 
 **附注**：
-条文正文之外的补充说明文字，存 `_microfeed.note`（源字段 `BookBody.SectionNote`）。内容形态是纯文本：`\n` 分段，可原样携带 `$<code>{}` 标注标记。只有 App 章节接口输出它，公开阅读页不渲染。它不参与条文签名（`signature = md5(text)`），所以修改附注不会让移动端把该条文判为过期。
+条文正文之外的补充说明文字，存 `_microfeed.note`（源字段 `BookBody.SectionNote`）。内容形态是纯文本：`\n` 分段，可原样携带 `$<code>{}` 标注标记。只有 App 章节接口输出它（且只对会员档，公开档置空，见「会员档」与 [ADR-0044](docs/novel-cms/adr/0044-app-member-tier.md)），公开阅读页不渲染。它不参与条文签名（`signature = md5(text)`），所以修改附注不会让移动端把该条文判为过期。
 _Avoid_: 注释、笔记、解说（「解说」在样式目录里是标记码 `n` 的显示名，指行内标记）；与「标注标记」是两回事
 
 **扁平条目**：

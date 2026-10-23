@@ -2,7 +2,6 @@ import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
-import {purgeAppBookCache} from "@/server/cache/app-cache";
 import {
   PUBLIC_CACHE_TAGS,
   purgePublicCache,
@@ -29,8 +28,6 @@ export const PUT: APIRoute = async ({locals, params, request}) => {
       body,
     );
     await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
-    // 状态 / 标题 / 作者都进了 App 目录：改完立刻清两桶（含该书章节表两桶）。
-    await purgeAppBookCache(bookId);
     return jsonResponse(book);
   } catch (error) {
     const response = serviceError(error);
@@ -48,8 +45,6 @@ export const DELETE: APIRoute = async ({locals, params, request}) => {
       params.bookId ?? "",
     );
     await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
-    // 软删除后这本书不再进 App 目录，清两桶。
-    await purgeAppBookCache(params.bookId ?? "");
     return jsonResponse(result);
   } catch (error) {
     const response = serviceError(error);

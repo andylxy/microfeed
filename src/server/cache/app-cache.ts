@@ -18,7 +18,7 @@ import type {AppNavTier} from "@/server/tcm/reads";
  * `GetAllMingCi` 不走这里：它的返回随调用者权限变化（有码全量、无码空数组），
  * 共享缓存会把有码用户的数据吐给无码用户。
  *
- * TTL 是 86400 秒（24h）而不是 300 秒，理由是未命中上限的算术：
+ * TTL 是 86400 秒（24h）。为何不用 300 秒——未命中上限的算术：
  * `caches.default` 的内容**不跨数据中心复制**（CF 文档），且 `cache.put`/`match`
  * **不支持 `stale-while-revalidate` / `stale-if-error`**（同为 CF 文档实测），所以
  * 一个 URL 的每日未命中次数 = `min(当日请求数 R, 86400/TTL × POP 数 P)`。
@@ -131,23 +131,18 @@ export async function cachedAppResponse(
   return response;
 }
 
+/** 目录两只桶的缓存键（会员 / 公开）。 */
+function navCacheKeys(): URL[] {
+  return APP_NAV_TIERS.map((tier) => appCacheKey(APP_NAV_CACHE, tier));
+}
+
 /**
- * 清掉一本书相关的 App 缓存：目录两桶 + 该书章节表两桶。
- *
- * 书状态从「显示」改成「会员」时，公开桶里旧的那份必须立刻消失——否则非会员
- * 最多还能看 24h。书的标题 / 作者也在目录里，所以任何书变更都清。
- * 本地 dev 或受限运行时没有 Cache Storage，静默跳过。
+ * 静默删一批缓存键：本地 dev 或受限运行时没有 Cache Storage 时静默跳过；单个键
+ * 删不掉也不影响正确性，下一次未命中会重写。
  */
-export async function purgeAppBookCache(bookId: string): Promise<void> {
+async function deleteCacheKeys(keys: URL[]): Promise<void> {
   const storage = appCacheOrNull();
   if (!storage) return;
-  const keys = [
-    ...APP_NAV_TIERS.map((tier) => appCacheKey(APP_NAV_CACHE, tier)),
-  ];
-  for (const tier of APP_NAV_TIERS) {
-    const suffix = bookChaptersKeySuffix(bookId, tier);
-    if (suffix !== null) keys.push(appCacheKey(APP_BOOK_CHAPTERS_CACHE, suffix));
-  }
   for (const key of keys) {
     try {
       await storage.delete(key);
@@ -155,4 +150,36 @@ export async function purgeAppBookCache(bookId: string): Promise<void> {
       // 删不掉不影响正确性：下一次未命中会重写。
     }
   }
+}
+
+/**
+ * 清掉 App 目录的两只桶（会员 / 公开）。
+ *
+ * 分类的任何变更都会改目录的收录与排序（GetNav 按 `ch.genre = c.id` 聚合、按
+ * `c.sort` 排序；删分类会把该分类下全部书的 genre 置空，书从目录消失）——书数据
+ * 没变，所以由分类写路径清这两只桶，不动书章节表。
+ */
+export async function purgeAppNavCache(): Promise<void> {
+  await deleteCacheKeys(navCacheKeys());
+}
+
+/**
+ * 清掉一本书相关的 App 缓存：目录两桶 + 该书章节表两桶。
+ *
+ * 书状态从「显示」改成「会员」时，公开桶里旧的那份必须立刻消失——否则非会员
+ * 最多还能看 24h。书的标题 / 作者也在目录里，所以任何书变更都清。
+ *
+ * 调用点收在 `extBook.ts` 的四个写函数（建 / 改 / 软删 / 物理删）：`channels`
+ * 的收录与状态写都经它们，清桶跟着写函数走，端点无须各自记忆（`FeedDb` 删封面图
+ * 也写 channels，但只动 `$.image`、不影响目录收录）。分类写路径
+ * （`extCategory.ts` 的改 / 删 / 排序）清的是 {@link purgeAppNavCache} 两只
+ * 目录桶——书数据没变，不碰章节表。
+ */
+export async function purgeAppBookCache(bookId: string): Promise<void> {
+  const keys = navCacheKeys();
+  for (const tier of APP_NAV_TIERS) {
+    const suffix = bookChaptersKeySuffix(bookId, tier);
+    if (suffix !== null) keys.push(appCacheKey(APP_BOOK_CHAPTERS_CACHE, suffix));
+  }
+  await deleteCacheKeys(keys);
 }

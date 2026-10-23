@@ -183,30 +183,34 @@ describe("TCM app read functions", () => {
     expect(content[0]!.data[0]!.id).toBe("tcmtestsec1");
     expect(content[0]!.data[0]!.text).toBe("$u{桂枝}$w{三两。去皮}");
     expect(content[0]!.data[0]!.fangList).toEqual(["桂枝汤"]);
-    // 注释与视频讲解照发原始值，不随档位或书状态变化。
-    expect(content[0]!.data[0]!.note).toBe("注");
-    expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
+    // 公开档（默认档）：附注与视频讲解是会员权益，置空（ADR-0044 内容门）。
+    expect(content[0]!.data[0]!.note).toBeNull();
+    expect(content[0]!.data[0]!.sectionvideo).toBeNull();
     expect(content[0]!.data[1]!.text).toBe("$u{芍药}$w{三两}");
     // 未知篇章 → 空数组而非 404
     expect(await getAppChapterContent(db, "nope")).toEqual([]);
   });
 
-  it("GetChapterContent 显示书：不论档位，note 与 sectionvideo 照发原始值", async () => {
+  it("GetChapterContent 显示书：会员档照发 note 与 sectionvideo，公开档置空", async () => {
     const {chapterId} = await seed();
-    // 注释与视频讲解的下发不随档位或书状态变化：公开档与会员档都照发。
-    for (const tier of ["public", "member"] as const) {
-      const content = await getAppChapterContent(db, chapterId, tier);
-      expect(content[0]!.data[0]!.note).toBe("注");
-      expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
-      // 第二条本就没有注释 / 视频：仍是 null，不会因档位变成空串。
-      expect(content[0]!.data[1]!.note).toBeNull();
-      expect(content[0]!.data[1]!.sectionvideo).toBeNull();
-    }
+    // 内容门按调用方会员档（ADR-0044），与书状态无关：公开档置空、会员档照发。
+    const pub = await getAppChapterContent(db, chapterId, "public");
+    expect(pub[0]!.data[0]!.note).toBeNull();
+    expect(pub[0]!.data[0]!.sectionvideo).toBeNull();
+    // 第二条本就没有注释 / 视频：仍是 null，不会因档位变成空串。
+    expect(pub[0]!.data[1]!.note).toBeNull();
+    expect(pub[0]!.data[1]!.sectionvideo).toBeNull();
+
+    const mem = await getAppChapterContent(db, chapterId, "member");
+    expect(mem[0]!.data[0]!.note).toBe("注");
+    expect(mem[0]!.data[0]!.sectionvideo).toBe("v1");
+    expect(mem[0]!.data[1]!.note).toBeNull();
+    expect(mem[0]!.data[1]!.sectionvideo).toBeNull();
   });
 
-  it("GetChapterContent 非 TCM 章节（无 book_id）：note 与 sectionvideo 照发原始值", async () => {
-    // 没有 book_id 的章节（非 TCM 来源）bookStatus 为 null，不触发会员书门，
-    // 注释与视频照发——与有 book_id 的章节同一口径。
+  it("GetChapterContent 非 TCM 章节（无 book_id）：会员档照发、公开档置空", async () => {
+    // 内容门不看书状态（ADR-0044）：非 TCM 章节与显示书同口径——
+    // 会员档照发原始值，公开档置空，无特例分支。
     const chapterId = "tcmtestnonbook";
     await insertItem(chapterId, "chapter", null, null, 1, {
       title: "非 TCM 篇章",
@@ -220,11 +224,13 @@ describe("TCM app read functions", () => {
       content_format: "html",
       _microfeed: {receiptNo: 1, note: "注", videoMemo: "v1", fangList: []},
     });
-    for (const tier of ["public", "member"] as const) {
-      const content = await getAppChapterContent(db, chapterId, tier);
-      expect(content[0]!.data[0]!.note).toBe("注");
-      expect(content[0]!.data[0]!.sectionvideo).toBe("v1");
-    }
+    const pub = await getAppChapterContent(db, chapterId, "public");
+    expect(pub[0]!.data[0]!.note).toBeNull();
+    expect(pub[0]!.data[0]!.sectionvideo).toBeNull();
+
+    const mem = await getAppChapterContent(db, chapterId, "member");
+    expect(mem[0]!.data[0]!.note).toBe("注");
+    expect(mem[0]!.data[0]!.sectionvideo).toBe("v1");
   });
 
   it("GetNav groups books by category with pocket metadata", async () => {

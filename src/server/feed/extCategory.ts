@@ -3,6 +3,7 @@ import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
 import {TCM_CHAPTER_ORDER_SQL} from "@/server/tcm/ordering";
 import {listPublicVisibleStatusCodes} from "@/server/feed/extBookStatus";
+import {purgeAppNavCache} from "@/server/cache/app-cache";
 import {
   bookWordCounts,
   chapterWordCount,
@@ -325,6 +326,8 @@ export async function updateCategory(
     visible ? 1 : 0,
     id,
   ).run();
+  // 分类名与排序都进 App 目录（GetNav 按 c.sort 排序、回显分类名）：清两只目录桶。
+  await purgeAppNavCache();
   return getCategory(db, id);
 }
 
@@ -345,6 +348,9 @@ export async function deleteCategory(
       "UPDATE channels SET genre = NULL WHERE genre = ?",
     ).bind(id),
   ] as unknown as D1PreparedStatement[]) as CategoryDbRunResult[];
+  // genre 置空后该分类下的书全部从 App 目录消失：清两只目录桶。
+  // 批次失败即抛错，能走到这里就是写成功，与另两个写函数一样无条件清桶。
+  await purgeAppNavCache();
   return Boolean(result?.success);
 }
 
@@ -361,6 +367,8 @@ export async function reorderCategories(
       db.prepare("UPDATE ext_category SET sort = ? WHERE id = ?").bind(i, id),
     ) as unknown as D1PreparedStatement[],
   );
+  // 目录顺序随 sort 变：清两只目录桶。
+  await purgeAppNavCache();
 }
 
 export async function setCategoryVisible(

@@ -2,7 +2,6 @@ import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, localizedError, serviceError} from "@/server/http";
-import {purgeAppBookCache} from "@/server/cache/app-cache";
 import {
   PUBLIC_CACHE_TAGS,
   purgePublicCache,
@@ -31,8 +30,6 @@ export const DELETE: APIRoute = async ({locals, params, request}) => {
     );
     // 章节行没了，搜索影子表与书架缓存都要跟着清。
     await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
-    // App 目录与章节表也缓存着，一并清。
-    await purgeAppBookCache(params.bookId);
     return jsonResponse(result);
   } catch (error) {
     const response = serviceError(error);

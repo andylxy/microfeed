@@ -15,7 +15,7 @@ import * as GetAllZhongYao from "@/pages/api/AppBookRequest/GetAllZhongYao";
 import * as GetAliaZhongYao from "@/pages/api/AppBookRequest/GetAliaZhongYao";
 import * as GetBookChapter from "@/pages/api/AppBookRequest/GetBookChapter";
 import * as GetNav from "@/pages/api/AppBookRequest/GetNav";
-import {purgeAppBookCache} from "@/server/cache/app-cache";
+import {purgeAppBookCache, purgeAppNavCache} from "@/server/cache/app-cache";
 
 const CACHE_ORIGIN = "https://app-cache.microfeed.internal";
 const ORIGIN = "https://app.example.com";
@@ -147,19 +147,26 @@ describe("App 公共端点服务端缓存", () => {
     ).toBeUndefined();
   });
 
-  it("purgeAppBookCache 清掉目录两桶与该书章节表两桶", async () => {
-    const keyOf = (path: string) => new URL(path, CACHE_ORIGIN);
-    const getNav = (member: boolean) =>
-      GetNav.GET({
-        locals: {appMember: member},
-        url: new URL(`${ORIGIN}/api/AppBookRequest/GetNav`),
-      } as never);
-    await getNav(false);
-    await getNav(true);
+  const keyOf = (path: string) => new URL(path, CACHE_ORIGIN);
+
+  /** 预热两个 purge 测试共同关心的四只桶：nav 公开 / nav 会员 / 一本书章节表公开档。 */
+  async function warmPurgeBuckets(): Promise<void> {
+    await GetNav.GET({
+      locals: {appMember: false},
+      url: new URL(`${ORIGIN}/api/AppBookRequest/GetNav`),
+    } as never);
+    await GetNav.GET({
+      locals: {appMember: true},
+      url: new URL(`${ORIGIN}/api/AppBookRequest/GetNav`),
+    } as never);
     await GetBookChapter.GET({
       locals: {},
       url: new URL(`${ORIGIN}/api/AppBookRequest/GetBookChapter?bookId=${EMPTY_BOOK_ID}`),
     } as never);
+  }
+
+  it("purgeAppBookCache 清掉目录两桶与该书章节表两桶", async () => {
+    await warmPurgeBuckets();
 
     expect(await peekCache().match(keyOf("/app/nav-v3/public"))).toBeDefined();
     expect(await peekCache().match(keyOf("/app/nav-v3/member"))).toBeDefined();
@@ -174,5 +181,27 @@ describe("App 公共端点服务端缓存", () => {
     expect(
       await peekCache().match(keyOf(`/app/book-chapters/${EMPTY_BOOK_ID}:public`)),
     ).toBeUndefined();
+  });
+
+  it("purgeAppNavCache 只清目录两桶，不碰书章节表（分类写路径）", async () => {
+    // 分类变更（extCategory 的改/删/排序）只动目录的收录与排序，书数据不动，
+    // 所以它的清缓存路径只清 nav-v3 两桶，不能顺手清掉书章节表。若误清章节表，
+    // 下面这条 book-chapters 断言会失败。
+    await warmPurgeBuckets();
+
+    expect(await peekCache().match(keyOf("/app/nav-v3/public"))).toBeDefined();
+    expect(await peekCache().match(keyOf("/app/nav-v3/member"))).toBeDefined();
+    expect(
+      await peekCache().match(keyOf(`/app/book-chapters/${EMPTY_BOOK_ID}:public`)),
+    ).toBeDefined();
+
+    await purgeAppNavCache();
+
+    expect(await peekCache().match(keyOf("/app/nav-v3/public"))).toBeUndefined();
+    expect(await peekCache().match(keyOf("/app/nav-v3/member"))).toBeUndefined();
+    // 章节表两桶必须保留：分类写路径不负责清它们。
+    expect(
+      await peekCache().match(keyOf(`/app/book-chapters/${EMPTY_BOOK_ID}:public`)),
+    ).toBeDefined();
   });
 });

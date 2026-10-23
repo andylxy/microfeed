@@ -1,4 +1,5 @@
 import {readBookStats} from "@/server/feed/bookWordCount";
+import {purgeAppBookCache} from "@/server/cache/app-cache";
 import {
   listAdminListHiddenCodes,
   listBookStatusRows,
@@ -161,8 +162,8 @@ export async function listAdminBooks(db: BookDb): Promise<BookAdmin[]> {
       "ORDER BY created_at ASC",
   ).all();
   const rows = Array.isArray(result.results) ? result.results : [];
-  // 把书单回传，让 `bookStats` 只读这些书的物化行（本地 13 行），而不是先扫
-  // `items` 推导「有哪些书」再算——那正是被迁移 0103 消掉的那笔账。
+  // 把书单回传，让 `bookStats` 只读这些书的物化行（本地 13 行），不必先扫
+  // `items` 推导「有哪些书」——那正是被迁移 0103 消掉的那笔账。
   const stats = await bookStats(db, rows.map((row) => asText(row.id)));
   const names = await categoryNames(db);
   return rows.map((row) => toBookAdmin(row, stats, names, deletedCodes));
@@ -271,6 +272,10 @@ export async function createAdminBook(
     timestamp,
     timestamp,
   ).run();
+  // 新书的收录状态（含状态 10 会员书）立刻反映进 App 目录：清两桶 + 章节表两桶。
+  // 清桶跟着写函数走：channels 的收录与状态写都经本文件四个写函数，端点无须各自记忆
+  // （`FeedDb.removeImageMetadata` 也写 channels，但只动封面图 `$.image`，不影响目录收录）。
+  await purgeAppBookCache(id);
   const created = await getAdminBook(db, id);
   if (!created) throw new Error("book create did not read back");
   return created;
@@ -324,6 +329,8 @@ export async function updateAdminBook(
     patch.status ?? Number(row.status ?? STATUSES.PUBLISHED),
     id,
   ).run();
+  // 状态 / 标题 / 作者 / 封面都进了 App 目录：任何书编辑都清两桶（含章节表）。
+  await purgeAppBookCache(id);
   return getAdminBook(db, id);
 }
 
@@ -348,6 +355,8 @@ export async function deleteAdminBook(
   await db.prepare(
     "UPDATE channels SET status = ?, updated_at = ? WHERE id = ?",
   ).bind(deleteCode, nowIso(), id).run();
+  // 软删除后这本书不再进 App 目录，清两桶。
+  await purgeAppBookCache(id);
   return true;
 }
 
@@ -396,5 +405,7 @@ export async function purgeAdminBook(
     "DELETE FROM ext_marker_citation_state WHERE book_id = ?",
   ).bind(id).run();
   await db.prepare("DELETE FROM channels WHERE id = ?").bind(id).run();
+  // 书连章节都没了，App 目录与该书章节表缓存一并清。
+  await purgeAppBookCache(id);
   return {purged: true, chapters};
 }

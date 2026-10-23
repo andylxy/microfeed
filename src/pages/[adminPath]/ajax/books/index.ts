@@ -2,7 +2,6 @@ import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
-import {purgeAppBookCache} from "@/server/cache/app-cache";
 import {
   PUBLIC_CACHE_TAGS,
   purgePublicCache,
@@ -48,8 +47,6 @@ export const POST: APIRoute = async ({locals, request}) => {
     // Books are channels, and the shelf/category pages are cached — without this
     // a new book stays invisible for the whole cache window.
     await purgePublicCache([PUBLIC_CACHE_TAGS.PUBLIC], cache);
-    // App 目录与章节表也缓存着：新书要立刻出现。
-    await purgeAppBookCache(book.id);
     return jsonResponse(book, {status: 201});
   } catch (error) {
     const response = serviceError(error);

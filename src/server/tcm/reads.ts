@@ -463,13 +463,19 @@ export async function getAppBookChapters(
 /**
  * 一个篇章的逐条条文（unlisted 条文对 App 可读；deleted 除外）。
  *
- * 会员门只决定「会员书是否对本次请求放行」：公开档请求会员书的篇章时返回空，
- * 会员档放行。条文正文、注释（`note`）与视频讲解（`sectionvideo`）一律照发
- * 原始值，不随书状态或调用方档位变化。
+ * 两层门，判定维度不同（[ADR-0044](docs/novel-cms/adr/0044-app-member-tier.md)）：
+ * 1. **访问门（按书本状态）**：会员书（status=10）只对会员档放行，公开档请求
+ *    返回空数组——决定「能不能读这本书」。
+ * 2. **内容门（按调用方会员档）**：附注（`note`）与视频讲解（`sectionvideo`）
+ *    是 App 端会员权益——会员档照发原始值，公开档置空（`null`，与「没有附注」
+ *    的表示一致）；不看书状态，非 TCM 章节（无 `book_id`）同样适用。
  *
- * 书状态由下面那条 `LEFT JOIN channels` 顺带取回，与章节主键查同一条语句完成，
- * 不多一次往返；本函数也不查角色（档位门用的是鉴权时算出的会员标记）。
- * 没有 `book_id` 的章节（非 TCM 来源）`bookStatus` 为 null，同样照发。
+ * 档位来自鉴权时算出的会员标记（`locals.appMember`，与权限码同一趟查询），
+ * 本函数不查角色；书状态由 `LEFT JOIN channels` 同语句取回，不增往返。
+ *
+ * ⚠ App 本地缓存穿透（ADR-0044「后果」节）：App 按 signatureId 把章节正文存进
+ * GreenDAO 且下载后永不重拉——公开档缓存过的空附注版本，用户开通会员后不会
+ * 自动刷新；改动前已下载的版本也会继续带附注。服务端只保证新下载正确门控。
  */
 export async function getAppChapterContent(
   db: D1Database,
@@ -498,14 +504,17 @@ export async function getAppChapterContent(
       )
       .bind(chapterId)
       .all();
+    // 附注与视频讲解是会员权益（内容门，ADR-0044）：会员档照发原始值，
+    // 公开档置空；不看 bookStatus——非 TCM 章节同样适用。
+    const withExtras = tier === "member";
     const sections = (results ?? []).map((row) => {
       const pocket = pocketOf(row.data);
       const text = rawParagraphText(descriptionOf(row.data));
       return {
         id: String(row.id),
         text,
-        note: textOrNull(pocket.note),
-        sectionvideo: textOrNull(pocket.videoMemo),
+        note: withExtras ? textOrNull(pocket.note) : null,
+        sectionvideo: withExtras ? textOrNull(pocket.videoMemo) : null,
         height: 0,
         // 旧后端 Signature = MD5(UTF8(text))，数据变动即改变 → 移动端据此判断条文过期。
         signature: md5(text),

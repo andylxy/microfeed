@@ -5,10 +5,10 @@ import {jsonResponse} from "@/server/http";
 import {appEnvelope} from "@/server/tcm/envelope";
 import {getAppChapterContent, tierFromAppMember, type AppNavTier} from "@/server/tcm/reads";
 
-// 会员门只决定「会员书是否对本次请求放行」：公开档请求会员书的篇章时返回空数组。
-// 条文正文、注释与视频讲解一律照发原始值，不随书状态或调用方档位变化。
-// `applyWorkerCachePolicy` 已把 `/api/*` 强制成 `private, no-store`，会员 / 公开两档的差异
-// 不会被中间层缓存串味；端点自身也不走 app-cache。
+// 两层门（ADR-0044）：访问门按书本状态——会员书只对会员档放行，公开档返回空数组；
+// 内容门按调用方会员档——附注（note）与视频讲解（sectionvideo）是会员权益，
+// 会员档照发原始值、公开档置空。`applyWorkerCachePolicy` 已把 `/api/*` 强制成
+// `private, no-store`，两档差异不会被中间层缓存串味；端点自身也不走 app-cache。
 export const GET: APIRoute = async ({locals, url}) => {
   // The legacy app calls this endpoint with the old .NET backend's parameter
   // names — `bookId` (channel) + `contentId` (chapter section) + `signatureId`
