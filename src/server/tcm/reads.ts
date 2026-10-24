@@ -686,6 +686,12 @@ async function jingshuYaoText(db: D1Database): Promise<Map<string, JingshuEntry>
     const title = typeof data.title === "string" ? data.title : "";
     // 药条形如「14、铁锈」/「28、灶心土  ,伏龙肝」；排除 `$m{…}` 标记条目（方剂分类等非药条）。
     if (!/^\d+[、.\s]/.test(title) || /\$m\{/.test(title)) continue;
+    // 修复（2026-10-24）：同名多条目此前只留第一条，石蜜因此少一整条正文（约 100 字）。
+    // netcore 按条目顺序把两条正文接在一起，段间用 `\r\n\r\n$q{《神农本草经疏》}` 分隔，此处对齐。
+    // 只读 description：本函数只查经疏一本书（JINGSHU_BOOK_ID），该书的正文自 2026-10-24 起
+    // 完整存在 description 里（标题 + 分段正文），`_microfeed.note` 已清空。
+    // ⚠️ 不要在这里读 `_microfeed.note`：`getAppAllYao` 没有 tier 参数、对所有调用方返回同一份
+    // text，而 note 是会员权益字段（ADR-0044），读进来就会泄到公开响应里。
     const text = jingshuParagraphText(typeof data.description === "string" ? data.description : "");
     const names = title
       .replace(/^\d+[、.\s]*/, "")
@@ -694,7 +700,11 @@ async function jingshuYaoText(db: D1Database): Promise<Map<string, JingshuEntry>
       .filter((n) => n !== "");
     const primary = names[0] ?? "";
     for (const name of names) {
-      if (!map.has(name)) map.set(name, {text, entry: primary});
+      const prev = map.get(name);
+      if (prev === undefined) map.set(name, {text, entry: primary});
+      else if (prev.entry === primary) prev.text = prev.text + "\r\n\r\n$q{《神农本草经疏》}" + text;
+      // 同名但 entry 不同（跨条目的同名，全库 19 组、均为症状名）→ 后者正文不进本 map。
+      // 与旧行为一致；这 19 组都不在 429 药名名单里，不影响 GetAllZhongYao 输出。
     }
   }
   return map;
