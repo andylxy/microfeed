@@ -71,6 +71,18 @@ describe("table-only API keys", () => {
     expect((await listApiKeys(env.FEED_DB)).map(({name}) => name).sort())
       .toEqual(["Analytics", "Publishing"]);
 
+    // 哈希化（ADR-0047 D3）：创建/轮换响应一次性携带明文；列表行只有 hint，
+    // 且 api_keys 表不再有明文列。
+    const listed = await listApiKeys(env.FEED_DB);
+    expect(listed.every((row) => row.apiKey === undefined)).toBe(true);
+    expect(listed.every((row) => /^[a-f0-9]{4}$/u.test(row.apiKeyHint)))
+      .toBe(true);
+    const plaintextColumns = await env.FEED_DB.prepare(
+      "SELECT COUNT(*) AS c FROM pragma_table_info('api_keys') " +
+        "WHERE name = 'api_key'",
+    ).first<{c: number}>();
+    expect(plaintextColumns?.c).toBe(0);
+
     await expect(createApiKey(env.FEED_DB, {name: "publishing"}))
       .rejects.toBeInstanceOf(ApiKeyNameConflictError);
     const renamed = await renameApiKey(env.FEED_DB, first.id, "Website");

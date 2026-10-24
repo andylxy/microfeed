@@ -15,18 +15,31 @@
 // 旧后端响应字段（LoginOutPut）名称保持不变；按拍板不再下发
 // AccessKeyId/AccessKeySecret，Token 字段承载 `mflc_` 凭证。
 
+import {verifyPassword} from "better-auth/crypto";
+
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {
   createLoginCredential,
   listLoginCredentialsForUser,
   LoginCredentialLimitError,
 } from "@/server/auth/login-credentials";
+import {accountIsBlocked} from "@/server/rbac/resolve";
 import type {LoginCredentialRecord} from "@/shared/LoginCredential";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
 type MicrofeedRuntimeEnv = Parameters<typeof createMicrofeedAuth>[0];
 
 const APP_LOGIN_CREDENTIAL_PREFIX = "app-login:";
+
+/**
+ * 时序抹平（ADR-0047 D5）：固定随机口令的一次性 scrypt 哈希（预生成嵌入，
+ * 与真实口令哈希同形态同参数）。账号不存在时也执行一次同等代价的校验，
+ * 「账号不存在」与「口令错误」两条路径的口令校验次数恒为 1。
+ */
+const DUMMY_PASSWORD_HASH =
+  "5c640d716513bbe3db95f6233f032d80:c3bcd962d04963b9f8054b479fe0d49d1c8" +
+  "1c46e93745856726528ad812ff996e9c0bde4e86de564ef0f9c74046d1502701b4e8" +
+  "efa96ff7991537eab01feae3e";
 
 interface AuthUserRow {
   email: string;
@@ -123,7 +136,16 @@ export async function appLogin(
 
   const user = await findAuthUser(database, account);
   if (!user) {
+    // 时序抹平（ADR-0047 D5）：先执行一次等价口令校验再返回统一文案，
+    // 两条路径的口令校验次数恒为 1，耗时一致。
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
     // 不区分「账号不存在」与「口令错误」，避免账号枚举。
+    return "登录失败,请检查账号密码";
+  }
+
+  // 封禁前置（ADR-0047 D5）：封禁账号在登录一步即被拒，不签发新凭证
+  // （此前封禁账号能换到有效 Token，靠后续逐请求 401 兜住）。
+  if (await accountIsBlocked(database, user.id)) {
     return "登录失败,请检查账号密码";
   }
 

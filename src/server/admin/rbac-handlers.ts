@@ -35,6 +35,7 @@ import {
 } from "@/server/rbac/audit";
 import {PERMISSION_CODES} from "@/shared/Constants";
 import {permissionId, roleId} from "@/server/rbac/seed";
+import {readAppRequestQuotaRows} from "@/server/rbac/app-quota";
 import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {
   adminAccountKind,
@@ -1818,7 +1819,19 @@ export async function readRbacUserLoginCredentials(
   db: D1Database,
   userId: string,
 ): Promise<LoginCredentialBoard> {
-  return {credentials: await listLoginCredentialsForUser(db, userId), userId};
+  const credentials = await listLoginCredentialsForUser(db, userId);
+  // 合并当日 App 用量（ADR-0048 限流计数）进面板 board 视图：一次 IN 查询，
+  // 凭证数上界 = 5，远低于 D1 单语句 100 绑定参数上限。配额视图只在此处
+  // 组装，鉴权存储层的记录类型不携带它。
+  const quotaRows = await readAppRequestQuotaRows(
+    db,
+    credentials.map((credential) => credential.id),
+  );
+  return {
+    credentials,
+    quota: Object.fromEntries(quotaRows),
+    userId,
+  };
 }
 
 /** GET `?userId=` — list login credentials; omit `userId` to list your own. */

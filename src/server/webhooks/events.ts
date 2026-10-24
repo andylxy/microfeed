@@ -837,9 +837,9 @@ export async function pruneWebhookHistory(database: D1Database): Promise<void> {
     // 一次，NOT EXISTS 走
     // `SEARCH webhook_deliveries USING COVERING INDEX
     // webhook_deliveries_endpoint (endpoint_id=?)`（本地投递表 0 行）。
-    // 外层 `deleted_at < ?` 用不上 webhook_endpoints_status
-    // (status, deleted_at, updated_at)——status 没有等值条件——仍要
-    // `SCAN webhook_endpoints`：本地 0 行 / 4,096 字节。
+    // 外层 `deleted_at < ?` 的范围删除走迁移 0149 的
+    // ix_webhook_endpoints_deleted_at；内层 NOT EXISTS 按
+    // webhook_deliveries_endpoint (endpoint_id=?) 点查。本地 0 行 / 4,096 字节。
     database.prepare(`
       DELETE FROM webhook_endpoints
       WHERE deleted_at < datetime('now', '-${WEBHOOK_LIMITS.retentionDays} days')

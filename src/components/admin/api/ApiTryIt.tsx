@@ -8,6 +8,7 @@ import {useMemo, useState} from "react";
 
 import AdminSectionCard from "@/components/admin/shared/AdminSectionCard";
 import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
@@ -93,17 +94,19 @@ export default function ApiTryIt({
   settingsUrl,
 }: Props) {
   const {t} = useTranslation();
-  const [selectedId, setSelectedId] = useState(apiKeys[0]?.id ?? "");
+  // 库里只存哈希（ADR-0047 D3），列表行没有明文——令牌由使用者在创建/轮换后
+  // 自行保存并粘贴到这里，仅在页面内存中使用。
+  const [token, setToken] = useState("");
   const [language, setLanguage] = useState<ExampleLanguage>("javascript");
   const [copied, setCopied] = useState(false);
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<unknown>();
-  const selected = apiKeys.find(({id}) => id === selectedId);
+  const effectiveToken = token.trim();
   const code = useMemo(
-    () => buildApiExampleCode(endpointUrl, selected?.apiKey),
-    [endpointUrl, selected?.apiKey],
+    () => buildApiExampleCode(endpointUrl, effectiveToken || undefined),
+    [endpointUrl, effectiveToken],
   );
-  const requestsDisabled = !settings.enabled || !selected;
+  const requestsDisabled = !settings.enabled || !effectiveToken;
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(code[language]);
@@ -116,13 +119,13 @@ export default function ApiTryIt({
   };
 
   const run = async () => {
-    if (!selected || !settings.enabled) return;
+    if (!effectiveToken || !settings.enabled) return;
     setRunning(true);
     setOutput(undefined);
     try {
       const response = await fetch(endpointUrl, {
         credentials: "same-origin",
-        headers: {Authorization: `Bearer ${selected.apiKey}`},
+        headers: {Authorization: `Bearer ${effectiveToken}`},
       });
       const body = await response.text();
       let data: unknown = body;
@@ -153,20 +156,22 @@ export default function ApiTryIt({
     >
         {apiKeys.length ? (
           <div className="mb-5 max-w-md">
-            <Label htmlFor="overview-api-key">{t("api.apiKeyForExample")}</Label>
-            <select
-              className="mt-2 h-10 w-full cursor-pointer rounded-[10px] border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+            <Label htmlFor="overview-api-key">{t("api.pasteApiKey")}</Label>
+            <Input
+              autoComplete="off"
+              className="mt-2"
               id="overview-api-key"
-              value={selectedId}
               onChange={(event) => {
-                setSelectedId(event.target.value);
+                setToken(event.target.value);
                 setOutput(undefined);
               }}
-            >
-              {apiKeys.map((apiKey) => (
-                <option key={apiKey.id} value={apiKey.id}>{apiKey.name}</option>
-              ))}
-            </select>
+              placeholder="mf_…"
+              type="password"
+              value={token}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("api.pasteApiKeyHint")}
+            </p>
           </div>
         ) : (
           <p className="mb-5 text-sm text-muted-foreground">

@@ -14,6 +14,12 @@ export const LOGIN_CREDENTIAL_PREFIX = "mflc_";
 /** Max login credentials a single user may hold at once. */
 export const MAX_LOGIN_CREDENTIALS_PER_USER = 5;
 
+/** 一把凭证当日的 App 内容端点用量（ADR-0048 限流计数的面板视图）。 */
+export interface AppRequestQuotaUsage {
+  count: number;
+  resetAtMs: number;
+}
+
 export interface LoginCredentialRecord {
   createdAtMs: number;
   expiresAtMs: number | null;
@@ -29,5 +35,11 @@ export interface LoginCredentialRecord {
 /** What the dashboard needs to render one user's credential panel. */
 export interface LoginCredentialBoard {
   credentials: LoginCredentialRecord[];
+  /**
+   * 当日 App 内容端点用量（ADR-0048 限流计数），按凭证 id 索引：没有键 =
+   * 该凭证当日还没有 App 调用。配额只进面板视图（rbac-handlers 合并），
+   * 不进鉴权存储层的记录类型。
+   */
+  quota: Record<string, AppRequestQuotaUsage>;
   userId: string;
 }

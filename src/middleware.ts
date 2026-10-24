@@ -42,6 +42,7 @@ import {
   canonicalAppBookRequestPath,
   decideApiRequest,
   isIntegrationApiPath,
+  legacyApiAttribution,
   providedApiKey,
   type ApiAttribution,
   writeApiAccessLog,
@@ -51,11 +52,18 @@ import {
   decideLoginCredentialApiRequest,
   providedLoginCredential,
 } from "@/server/api/credential-bearer";
+import {
+  appQuotaExhaustedMarker,
+  appRequestQuotaResponse,
+  consumeAppRequestQuota,
+  markQuotaExhausted,
+} from "@/server/rbac/app-quota";
 import {resolveRbacContext, RBAC_WILDCARD, userMayEnterAdmin} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {checkReplay} from "@/server/rbac/replay";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
 import {applyWorkerCachePolicy} from "@/server/cache/public-cache";
+import {withSecurityHeaders} from "@/server/security-headers";
 import {publicSiteFileResponse} from "@/server/site-files/public";
 
 const AUTH_BASE_PATH = "/api/auth";
@@ -218,6 +226,15 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     if (!isIntegrationApiPath(pathname)) {
       return next();
     }
+    // 配额标记检查（ADR-0048）：已达上限的凭证直接 429，零 D1。先于防重放
+    // （它写 nonce 行）与版本门（它读库）——被拒流量的 D1 代价必须为零。
+    const bearerToken = providedLoginCredential(context.request);
+    if (bearerToken) {
+      const quotaRetryAfter = await appQuotaExhaustedMarker(bearerToken);
+      if (quotaRetryAfter !== null) {
+        return appRequestQuotaResponse(quotaRetryAfter);
+      }
+    }
     // 内容端点：先防重放（App 带 `X-Timestamp` / `X-Nonce`，在
     // `ext_replay_nonces` 里去重），再过版本门，最后由下面的 API 鉴权段按调用方
     // 登录凭证（`mflc_…`）校验该端点要求的 RBAC 码（`api-permissions.ts` 分发）。
@@ -316,6 +333,23 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
           userId: attribution.userId,
         });
         if (postAuthGate) return postAuthGate;
+        // 配额消费（ADR-0048）：凭证有效且版本门通过才计数；无效 token 到不了
+        // 这里，表不会被随机 token 灌垃圾行。被拒（达上限）不计数，只补一次
+        // Cache 标记让后续请求在鉴权前就被拦下。
+        const token = providedLoginCredential(context.request);
+        if (token && attribution.credentialId) {
+          const quota = await consumeAppRequestQuota(
+            db,
+            attribution.credentialId,
+          );
+          if (!quota.allowed) {
+            await markQuotaExhausted(
+              token,
+              Date.now() + quota.retryAfterSeconds * 1000,
+            );
+            return appRequestQuotaResponse(quota.retryAfterSeconds);
+          }
+        }
       }
     } else {
       // Legacy bearer path — unchanged, except that the novel content read API
@@ -339,6 +373,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         pathname,
         env.MICROFEED_ADMIN_AUTH_MODE,
       );
+      // legacy bearer 双向留痕（ADR-0047 D4）：allow 把归属交给下方 next() 之后
+      // 的统一写入（真实状态码）；insufficient-scope 在返回前写 deny 行。
+      // 解析不出的凭证没有可归属主体，不写。
+      const legacyAttribution = (decision === "allow-integration" ||
+          decision === "insufficient-scope")
+        ? await legacyApiAttribution(db, context.request)
+        : null;
       if (decision === "allow-reference") {
         return addLegacyApiDeprecationHeaders(
           await next(),
@@ -357,12 +398,23 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       if (decision === "insufficient-scope") {
+        if (legacyAttribution) {
+          await writeApiAccessLog(
+            db,
+            legacyAttribution,
+            context.request.method,
+            pathname,
+            false,
+            403,
+          );
+        }
         return addLegacyApiDeprecationHeaders(
           apiInsufficientScopeResponse(),
           context.url,
           pathname,
         );
       }
+      attribution = legacyAttribution;
     }
 
     if (isUnsafeMethod(context.request.method)) {
@@ -647,8 +699,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (!(response instanceof Response)) {
     throw new TypeError("microfeed middleware did not return a response");
   }
-  return applyWorkerCachePolicy(context.request, response, {
-    adminPath: normalizeAdminPath(env.MICROFEED_ADMIN_PATH),
+  const adminPath = normalizeAdminPath(env.MICROFEED_ADMIN_PATH);
+  const withCachePolicy = applyWorkerCachePolicy(context.request, response, {
+    adminPath,
     deploymentEnvironment: env.DEPLOYMENT_ENVIRONMENT,
   });
+  // 安全响应头（ADR-0047 D2）加在缓存策略之后：两批头互不重叠，且这里覆盖
+  // handleRequest 的全部出口（含早退的 308 / 404 / 426 / 429）。
+  return withSecurityHeaders(context.request, withCachePolicy, {adminPath});
 });

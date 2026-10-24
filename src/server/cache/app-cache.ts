@@ -42,16 +42,21 @@ export const APP_NAV_CACHE = "nav-v3";
 export const APP_NAV_TIERS = ["member", "public"] as const;
 /** 一本书的章节目录缓存名（键后缀是 `<bookId>:<tier>`）。 */
 export const APP_BOOK_CHAPTERS_CACHE = "book-chapters";
+/** 章节正文缓存名（ADR-0048 D2；键后缀是 `<chapterId>:<tier>`）。 */
+export const APP_CHAPTER_CONTENT_CACHE = "chapter-content-v1";
+/** 一本书的方剂缓存名（ADR-0048 D2；键后缀是 `<bookId>:<tier>`）。 */
+export const APP_BOOK_FANG_CACHE = "book-fang-v1";
 
 /**
- * bookId 白名单：字母、数字、下划线、连字符，1-64 位。本机快照的 channel id
- * 是 11 位字母数字（导入id 同形），放到 64 位留足余量。
+ * 缓存键 id 白名单：字母、数字、下划线、连字符，1-64 位。本机快照的 channel /
+ * item id 都是 11 位字母数字（导入 id 同形），放到 64 位留足余量。
  *
- * bookId 是查询参数，先进白名单再进缓存键：`/` `\` `?` `#` `:` 这类字符会被
- * URL 归一化改写键的写法（`a/../b` 与 `b` 同键、`#` 之后整段掉出路径），
- * 放行即允许用一个键换掉另一本书的缓存条目。真实 id 用不到这些字符。
+ * bookId / chapterId 都是查询参数，先进白名单再进缓存键：`/` `\` `?` `#` `:`
+ * 这类字符会被 URL 归一化改写键的写法（`a/../b` 与 `b` 同键、`#` 之后整段掉出
+ * 路径），放行即允许用一个键换掉另一本书/另一章的缓存条目。真实 id 用不到
+ * 这些字符。
  */
-const APP_BOOK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const APP_CACHE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Workers 运行时 Cache Storage 的最小接口（`caches.default`，按 URL 存取）。 */
 interface WorkerCache {
@@ -87,18 +92,36 @@ function appCacheKey(cacheName: string, keySuffix?: string): URL {
   return new URL(`/app/${encodeURIComponent(cacheName)}${suffix}`, APP_CACHE_ORIGIN);
 }
 
+/** 键后缀的统一拼法 `<id>:<tier>`：id 先过白名单，非法值返回 null。 */
+function idTierKeySuffix(id: string, tier: AppNavTier): string | null {
+  return APP_CACHE_ID_PATTERN.test(id) ? `${id}:${tier}` : null;
+}
+
 /**
  * 章节目录缓存键的后缀 `<bookId>:<tier>`：写（GetBookChapter）与清
  * （purgeAppBookCache）共用这一处拼法，两边不会各拼一遍而清错键。
- *
- * bookId 先过 {@link APP_BOOK_ID_PATTERN} 白名单：非法值返回 null，端点回
- * 400，键不会被构造出来。
  */
 export function bookChaptersKeySuffix(
   bookId: string,
   tier: AppNavTier,
 ): string | null {
-  return APP_BOOK_ID_PATTERN.test(bookId) ? `${bookId}:${tier}` : null;
+  return idTierKeySuffix(bookId, tier);
+}
+
+/** 章节正文缓存键的后缀 `<chapterId>:<tier>`（ADR-0048 D2）。 */
+export function chapterContentKeySuffix(
+  chapterId: string,
+  tier: AppNavTier,
+): string | null {
+  return idTierKeySuffix(chapterId, tier);
+}
+
+/** 方剂缓存键的后缀 `<bookId>:<tier>`（ADR-0048 D2）。 */
+export function bookFangKeySuffix(
+  bookId: string,
+  tier: AppNavTier,
+): string | null {
+  return idTierKeySuffix(bookId, tier);
 }
 
 /**
@@ -180,6 +203,33 @@ export async function purgeAppBookCache(bookId: string): Promise<void> {
   for (const tier of APP_NAV_TIERS) {
     const suffix = bookChaptersKeySuffix(bookId, tier);
     if (suffix !== null) keys.push(appCacheKey(APP_BOOK_CHAPTERS_CACHE, suffix));
+  }
+  await deleteCacheKeys(keys);
+}
+
+/**
+ * 清掉一章正文的两只桶（ADR-0048 D2）。条目写路径按 tcm_kind 分派到这里：
+ * `chapter` 直接传章 id；`section` 传其 `tcm_parent_id`（所属章）。
+ */
+export async function purgeAppChapterContentCache(
+  chapterId: string,
+): Promise<void> {
+  const keys: URL[] = [];
+  for (const tier of APP_NAV_TIERS) {
+    const suffix = chapterContentKeySuffix(chapterId, tier);
+    if (suffix !== null) {
+      keys.push(appCacheKey(APP_CHAPTER_CONTENT_CACHE, suffix));
+    }
+  }
+  await deleteCacheKeys(keys);
+}
+
+/** 清掉一本书方剂表的两只桶（ADR-0048 D2）。 */
+export async function purgeAppBookFangCache(bookId: string): Promise<void> {
+  const keys: URL[] = [];
+  for (const tier of APP_NAV_TIERS) {
+    const suffix = bookFangKeySuffix(bookId, tier);
+    if (suffix !== null) keys.push(appCacheKey(APP_BOOK_FANG_CACHE, suffix));
   }
   await deleteCacheKeys(keys);
 }

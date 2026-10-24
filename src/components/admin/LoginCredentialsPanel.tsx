@@ -7,6 +7,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import type {
+  AppRequestQuotaUsage,
   LoginCredentialBoard,
   LoginCredentialRecord,
 } from "@/shared/LoginCredential";
@@ -59,6 +60,8 @@ export default function LoginCredentialsPanel({userId}: Props) {
   const [credentials, setCredentials] = useState<LoginCredentialRecord[] | null>(
     null,
   );
+  // 当日 App 用量按凭证 id 索引（随 board 响应整份替换），没有键 = 当日无调用。
+  const [quota, setQuota] = useState<Record<string, AppRequestQuotaUsage>>({});
   // A failed load is its own state: rendering it as an empty list would say
   // "this account has no credentials", which is a different (and wrong) claim.
   const [loadFailed, setLoadFailed] = useState(false);
@@ -81,6 +84,7 @@ export default function LoginCredentialsPanel({userId}: Props) {
       if (!response.ok) throw new Error("load failed");
       const board = (await response.json()) as LoginCredentialBoard;
       setCredentials(board.credentials);
+      setQuota(board.quota ?? {});
       setLoadFailed(false);
     } catch {
       setLoadFailed(true);
@@ -116,6 +120,7 @@ export default function LoginCredentialsPanel({userId}: Props) {
       }
       const board = (await response.json()) as LoginCredentialBoard;
       setCredentials(board.credentials);
+      setQuota(board.quota ?? {});
       setLoadFailed(false);
       setName("");
       showToast(t("loginCredentials.created"), "success");
@@ -148,6 +153,7 @@ export default function LoginCredentialsPanel({userId}: Props) {
       }
       const board = (await response.json()) as LoginCredentialBoard;
       setCredentials(board.credentials);
+      setQuota(board.quota ?? {});
       showToast(t("loginCredentials.revoked"), "success");
     } catch {
       showToast(t("loginCredentials.revokeFailed"), "error");
@@ -227,7 +233,9 @@ export default function LoginCredentialsPanel({userId}: Props) {
         )
         : (
           <ul className="space-y-2">
-            {credentials.map((credential) => (
+            {credentials.map((credential) => {
+              const usage = quota[credential.id];
+              return (
               <li
                 className="rounded-[10px] border px-3 py-2.5 text-sm"
                 key={credential.id}
@@ -282,9 +290,21 @@ export default function LoginCredentialsPanel({userId}: Props) {
                       })
                       : t("loginCredentials.noExpiry")}
                   </span>
+                  {usage && (
+                    <span
+                      title={t("loginCredentials.appQuotaTitle", {
+                        date: formatAdminDateTime(new Date(usage.resetAtMs)),
+                      })}
+                    >
+                      {t("loginCredentials.appQuota", {
+                        count: usage.count,
+                      })}
+                    </span>
+                  )}
                 </div>
               </li>
-            ))}
+            );
+          })}
           </ul>
         )}
     </div>

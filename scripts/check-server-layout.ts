@@ -53,6 +53,9 @@ const WHITELIST = new Set([
   "installation-identity.ts",
   "maintenance.ts",
   "mutation.ts",
+  // 全局安全响应头（ADR-0047 D2 / F2）：middleware 导出层的单一包裹点，
+  // 与 http.ts 同属跨域响应助手，2026-10-24 新增。
+  "security-headers.ts",
 ]);
 
 const entries = readdirSync(serverRoot);

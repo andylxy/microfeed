@@ -1,3 +1,5 @@
+import sanitizeHtml from "sanitize-html";
+
 import type {AuditDb} from "@/server/feed/extContentAudit";
 import {listItemAuditRows} from "@/server/feed/extReview";
 
@@ -5,6 +7,26 @@ import {listItemAuditRows} from "@/server/feed/extReview";
  * Audit browsing, kept separate from `/admin/review/`: the review page decides
  * what to do with unconfirmed changes; this page only *shows* what happened.
  */
+
+/** 审核记录正文消毒白名单（ADR-0047 F1）：编辑提交的富文本在审核页以 HTML 渲染，
+ * 白名单外的标签、事件属性与非 http(s) 协议在读取时全部剥离；`a` 强制
+ * `rel="noopener noreferrer"`。这里是 `contentHtml` 的唯一生产点。 */
+const REVIEW_HTML_SANITIZER: sanitizeHtml.IOptions = {
+  allowedTags: [
+    "p", "br", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "blockquote", "pre", "code",
+    "em", "strong", "a", "img",
+    "table", "thead", "tbody", "tr", "td", "th",
+    "hr", "span", "div",
+  ],
+  allowedAttributes: {
+    a: ["href", "title", "rel"],
+    img: ["src", "alt", "title"],
+  },
+  transformTags: {
+    a: sanitizeHtml.simpleTransform("a", {rel: "noopener noreferrer"}),
+  },
+};
 
 export interface AuditChapterRow {
   id: string;
@@ -70,8 +92,10 @@ export async function listReviewRecordsHandler(
       chapterNo: typeof rawChapterNo === "string" || typeof rawChapterNo === "number"
         ? rawChapterNo
         : null,
+      // 消毒后的富文本（ADR-0047 F1）：组件端以 HTML 渲染，这里剥离全部
+      // 白名单外的注入载荷。
       contentHtml: typeof data["description"] === "string"
-        ? data["description"]
+        ? sanitizeHtml(data["description"], REVIEW_HTML_SANITIZER)
         : "",
       id: String(record["id"] ?? ""),
       reviewedAt: Number.isFinite(reviewedAt) && reviewedAt > 0 ? reviewedAt : null,

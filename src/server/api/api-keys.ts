@@ -1,4 +1,5 @@
 import {SETTINGS_CATEGORIES} from "@/shared/Constants";
+import {sha256Hex} from "@/shared/crypto";
 import {
   API_KEY_SCOPES,
   resolveApiAccessSettings,
@@ -9,7 +10,7 @@ import {
 } from "@/shared/Api";
 
 interface ApiKeyRow {
-  api_key: string;
+  api_key_hint: string | null;
   created_at_ms: number;
   id: string;
   name: string;
@@ -29,14 +30,23 @@ export class ApiKeyNameConflictError extends Error {
 }
 
 function apiKeyFromRow(row: ApiKeyRow): ApiKeyRecord {
+  // 明文不再入库（ADR-0047 D3）：列表行只有 hint；apiKey 仅在创建/轮换响应
+  // 里由调用方补上。
   return {
-    apiKey: row.api_key,
+    apiKeyHint: row.api_key_hint ?? "",
     createdAtMs: Number(row.created_at_ms),
     id: row.id,
     name: row.name,
     scopes: normalizeApiKeyScopes(row.scopes),
     updatedAtMs: Number(row.updated_at_ms),
   };
+}
+
+/** 哈希与列表识别提示：与 mflc_ 凭证同一哈希口径（sha256Hex，无盐）。 */
+async function apiKeyHashAndHint(
+  plaintext: string,
+): Promise<{hash: string; hint: string}> {
+  return {hash: await sha256Hex(plaintext), hint: plaintext.slice(-4)};
 }
 
 function normalizeApiKeyScopes(scopes: unknown): ApiKeyScope[] {
@@ -105,20 +115,19 @@ function upsertApiSettingsStatement(
 function removeLegacyApiKeyStatement(
   database: D1Database,
   id: string,
-  apiKey: string,
 ): D1PreparedStatement {
+  // 明文不再入库后无法按 token 值比对，legacy `$.apps` 残留按 id 清理
+  // （0006 迁移把 token 与 id 一并带进了 api_keys）。
   return database.prepare(
     "UPDATE settings SET data = CASE " +
       "WHEN json_valid(data) AND json_type(data, '$.apps') = 'array' THEN " +
       "json_set(data, '$.apps', json(COALESCE((" +
       "SELECT json_group_array(json(value)) FROM json_each(data, '$.apps') " +
-      "WHERE COALESCE(json_extract(value, '$.id'), '') != ? " +
-      "AND COALESCE(json_extract(value, '$.token'), '') != ?" +
+      "WHERE COALESCE(json_extract(value, '$.id'), '') != ?" +
       "), '[]'))) ELSE data END, updated_at = ? " +
       "WHERE category = ?",
   ).bind(
     id,
-    apiKey,
     new Date().toISOString(),
     SETTINGS_CATEGORIES.API_SETTINGS,
   );
@@ -157,7 +166,7 @@ export async function listApiKeys(
   database: D1Database,
 ): Promise<ApiKeyRecord[]> {
   const result = await database.prepare(
-    "SELECT id, name, api_key, scopes, created_at_ms, updated_at_ms " +
+    "SELECT id, name, api_key_hint, scopes, created_at_ms, updated_at_ms " +
       "FROM api_keys ORDER BY created_at_ms DESC, id DESC",
   ).all<ApiKeyRow>();
   return result.results.map(apiKeyFromRow);
@@ -168,34 +177,50 @@ export async function findApiKey(
   id: string,
 ): Promise<ApiKeyRecord | null> {
   const row = await database.prepare(
-    "SELECT id, name, api_key, scopes, created_at_ms, updated_at_ms " +
+    "SELECT id, name, api_key_hint, scopes, created_at_ms, updated_at_ms " +
       "FROM api_keys WHERE id = ? LIMIT 1",
   ).bind(id).first<ApiKeyRow>();
   return row ? apiKeyFromRow(row) : null;
+}
+
+/**
+ * 按明文经哈希查 key 行（ADR-0047 D3）：存在性 / scope 判定 / 审计归属三个
+ * 入口共用这一处查表形状，均为 `sha256Hex(明文)` 等值查 `secret_hash`。
+ */
+async function lookupApiKeyBySecret(
+  database: D1Database,
+  providedApiKey: string,
+): Promise<{id: string; scopes: string} | null> {
+  if (!providedApiKey) return null;
+  return database.prepare(
+    "SELECT id, scopes FROM api_keys WHERE secret_hash = ? LIMIT 1",
+  ).bind(await sha256Hex(providedApiKey)).first<{id: string; scopes: string}>();
 }
 
 export async function apiKeyExists(
   database: D1Database,
   providedApiKey: string,
 ): Promise<boolean> {
-  if (!providedApiKey) {
-    return false;
-  }
-  const row = await database.prepare(
-    "SELECT 1 AS found FROM api_keys WHERE api_key = ? LIMIT 1",
-  ).bind(providedApiKey).first<{found: number}>();
-  return row?.found === 1;
+  return (await lookupApiKeyBySecret(database, providedApiKey)) !== null;
 }
 
 export async function apiKeyScopes(
   database: D1Database,
   providedApiKey: string,
 ): Promise<Set<ApiKeyScope> | null> {
-  if (!providedApiKey) return null;
-  const row = await database.prepare(
-    "SELECT scopes FROM api_keys WHERE api_key = ? LIMIT 1",
-  ).bind(providedApiKey).first<{scopes: string}>();
+  const row = await lookupApiKeyBySecret(database, providedApiKey);
   return row ? new Set(normalizeApiKeyScopes(row.scopes)) : null;
+}
+
+/**
+ * 按明文解析 key 的 id（ADR-0047 D4）：legacy bearer 的审计归属需要 key 身份，
+ * scope 判定仍走 {@link apiKeyScopes}，这里只取 id。
+ */
+export async function findApiKeyIdBySecret(
+  database: D1Database,
+  providedApiKey: string,
+): Promise<string | null> {
+  return (await lookupApiKeyBySecret(database, providedApiKey))?.id ?? null;
 }
 
 export async function createApiKey(
@@ -207,8 +232,12 @@ export async function createApiKey(
   },
 ): Promise<ApiKeyRecord> {
   const now = Date.now();
+  const plaintext = generateApiKey();
+  const {hash, hint} = await apiKeyHashAndHint(plaintext);
   const apiKey: ApiKeyRecord = {
-    apiKey: generateApiKey(),
+    // 完整明文只随创建响应返回一次（ADR-0047 D3）。
+    apiKey: plaintext,
+    apiKeyHint: hint,
     createdAtMs: now,
     id: crypto.randomUUID(),
     name: normalizeApiKeyName(input.name),
@@ -224,12 +253,13 @@ export async function createApiKey(
       : []),
     database.prepare(
       "INSERT INTO api_keys " +
-        "(id, name, api_key, scopes, created_at_ms, updated_at_ms) " +
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "(id, name, secret_hash, api_key_hint, scopes, created_at_ms, updated_at_ms) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       apiKey.id,
       apiKey.name,
-      apiKey.apiKey,
+      hash,
+      hint,
       apiKey.scopes.join(" "),
       apiKey.createdAtMs,
       apiKey.updatedAtMs,
@@ -274,13 +304,18 @@ export async function rotateApiKey(
     return null;
   }
   const now = Date.now();
+  const plaintext = generateApiKey();
+  const {hash, hint} = await apiKeyHashAndHint(plaintext);
   await database.batch([
     database.prepare(
-      "UPDATE api_keys SET api_key = ?, updated_at_ms = ? WHERE id = ?",
-    ).bind(generateApiKey(), now, id),
-    removeLegacyApiKeyStatement(database, id, existing.apiKey),
+      "UPDATE api_keys SET secret_hash = ?, api_key_hint = ?, updated_at_ms = ? " +
+        "WHERE id = ?",
+    ).bind(hash, hint, now, id),
+    removeLegacyApiKeyStatement(database, id),
   ]);
-  return findApiKey(database, id);
+  const updated = await findApiKey(database, id);
+  // 轮换响应同样只此一次携带完整明文。
+  return updated ? {...updated, apiKey: plaintext} : null;
 }
 
 export async function revokeApiKey(
@@ -297,7 +332,7 @@ export async function revokeApiKey(
     // ON DELETE CASCADE). Nothing writes ext_api_key_owners today, but this
     // keeps the revoke contract true if a writer ever lands — no orphan rows.
     database.prepare("DELETE FROM ext_api_key_owners WHERE api_key_id = ?").bind(id),
-    removeLegacyApiKeyStatement(database, id, existing.apiKey),
+    removeLegacyApiKeyStatement(database, id),
   ]);
   return true;
 }

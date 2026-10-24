@@ -1,4 +1,8 @@
-import {apiKeyScopes, readApiAccessSettings} from "./api-keys";
+import {
+  apiKeyScopes,
+  findApiKeyIdBySecret,
+  readApiAccessSettings,
+} from "./api-keys";
 import {builtInAdminAuthEnabled} from "@/shared/AdminAuth";
 import {
   API_BASE_PATH,
@@ -375,4 +379,29 @@ export async function writeApiAccessLog(
     // quota, …) and must not be invisible — surface it instead of swallowing.
     console.error("api access log write failed", {path, method, status, granted, error});
   }
+}
+
+/**
+ * legacy bearer 调用的审计归属（ADR-0047 D4 / F5）：解析不出来的凭证没有
+ * 可归属主体，返回 null（不写审计行）。owner 缺席时用 `apikey:<id>` 占位，
+ * 保证 user_id 恒有值。
+ */
+export async function legacyApiAttribution(
+  database: D1Database,
+  request: Request,
+): Promise<ApiAttribution | null> {
+  const provided = providedApiKey(request);
+  if (!provided) return null;
+  const apiKeyId = await findApiKeyIdBySecret(database, provided);
+  if (!apiKeyId) return null;
+  const owner = await database.prepare(
+    "SELECT user_id AS userId FROM ext_api_key_owners " +
+      "WHERE api_key_id = ? LIMIT 1",
+  ).bind(apiKeyId).first<{userId: string}>();
+  return {
+    apiKeyId,
+    credentialId: null,
+    userId: owner?.userId ?? `apikey:${apiKeyId}`,
+    permissionCode: null,
+  };
 }

@@ -1,5 +1,9 @@
 import {readBookStats} from "@/server/feed/bookWordCount";
-import {purgeAppBookCache} from "@/server/cache/app-cache";
+import {
+  purgeAppBookCache,
+  purgeAppBookFangCache,
+  purgeAppChapterContentCache,
+} from "@/server/cache/app-cache";
 import {
   listAdminListHiddenCodes,
   listBookStatusRows,
@@ -281,6 +285,26 @@ export async function createAdminBook(
   return created;
 }
 
+/**
+ * 按书清空 App 章节正文桶（ADR-0048 D2 的「按书全量」形态）：一次
+ * `items_book_kind` 索引查询取全部章 id（行数 = 章节数），逐章清两桶。
+ * 调用方：本文件的状态变更三分支（update 状态分支 / 软删 / 物删——物删必须在
+ * DELETE items 之前调用，章 id 随行消失）与卷板四处理器（批量改挂
+ * `tcm_parent_id` 时新旧两章同受影响，且批量提交晚于 saveInternalItem 返回、
+ * 逐条精确判定会读到提交前旧值）。卷板场景只清正文桶、不清方剂桶。
+ */
+export async function purgeBookChapterContentCaches(
+  db: BookDb,
+  bookId: string,
+): Promise<void> {
+  const chapters = await db.prepare(
+    "SELECT id FROM items WHERE book_id = ? AND tcm_kind = 'chapter'",
+  ).bind(bookId).all<{id: string}>();
+  for (const chapter of chapters.results ?? []) {
+    await purgeAppChapterContentCache(chapter.id);
+  }
+}
+
 /** Merge a partial edit into the stored `data`, keeping unknown keys intact so
  *  fields the dashboard does not show are never dropped. */
 export async function updateAdminBook(
@@ -319,6 +343,8 @@ export async function updateAdminBook(
   next._microfeed = microfeed;
 
   const genre = typeof microfeed.genre === "string" ? microfeed.genre : null;
+  const previousStatus = Number(row.status ?? STATUSES.PUBLISHED);
+  const nextStatus = patch.status ?? previousStatus;
   await db.prepare(
     "UPDATE channels SET data = ?, genre = ?, updated_at = ?, " +
       "status = ? WHERE id = ?",
@@ -326,11 +352,18 @@ export async function updateAdminBook(
     JSON.stringify(next),
     genre,
     nowIso(),
-    patch.status ?? Number(row.status ?? STATUSES.PUBLISHED),
+    nextStatus,
     id,
   ).run();
   // 状态 / 标题 / 作者 / 封面都进了 App 目录：任何书编辑都清两桶（含章节表）。
   await purgeAppBookCache(id);
+  // 状态变更（如会员 ⇄ 公开）额外清章节正文与方剂桶（ADR-0048 D2）：公开桶里
+  // 会员书的「空响应」、两桶里的 note/video 权益差异都随状态翻转失效。标题类
+  // 编辑不改章节内容，不清。
+  if (nextStatus !== previousStatus) {
+    await purgeBookChapterContentCaches(db, id);
+    await purgeAppBookFangCache(id);
+  }
   return getAdminBook(db, id);
 }
 
@@ -355,8 +388,11 @@ export async function deleteAdminBook(
   await db.prepare(
     "UPDATE channels SET status = ?, updated_at = ? WHERE id = ?",
   ).bind(deleteCode, nowIso(), id).run();
-  // 软删除后这本书不再进 App 目录，清两桶。
+  // 软删除后这本书不再进 App 目录，清两桶；状态翻转同样使章节正文与方剂桶
+  // 失效（ADR-0048 D2，与 updateAdminBook 的状态分支同一口径）。
   await purgeAppBookCache(id);
+  await purgeBookChapterContentCaches(db, id);
+  await purgeAppBookFangCache(id);
   return true;
 }
 
@@ -396,6 +432,9 @@ export async function purgeAdminBook(
     "SELECT COUNT(*) AS n FROM items WHERE book_id = ?",
   ).bind(id).first();
   const chapters = Number(counted?.n ?? 0);
+  // 章节即将物理删除，先按书清正文桶（ADR-0048 D2——章 id 随行消失，必须在
+  // DELETE 之前取），再逐表删。
+  await purgeBookChapterContentCaches(db, id);
   await db.prepare("DELETE FROM items WHERE book_id = ?").bind(id).run();
   await db.prepare("DELETE FROM ext_book_stats WHERE book_id = ?").bind(id).run();
   await db.prepare(
@@ -405,7 +444,8 @@ export async function purgeAdminBook(
     "DELETE FROM ext_marker_citation_state WHERE book_id = ?",
   ).bind(id).run();
   await db.prepare("DELETE FROM channels WHERE id = ?").bind(id).run();
-  // 书连章节都没了，App 目录与该书章节表缓存一并清。
+  // 书连章节都没了，App 目录与该书章节表缓存一并清，方剂桶同口径。
   await purgeAppBookCache(id);
+  await purgeAppBookFangCache(id);
   return {purged: true, chapters};
 }

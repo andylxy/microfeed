@@ -16,7 +16,9 @@ import {ADMIN_API_PAGES, adminApiPageUrl} from "@/shared/AdminApiNavigation";
 import {isMenuIconName} from "@/shared/MenuIconNames";
 
 const apiKey: ApiKeyRecord = {
-  apiKey: "mf_abcdefghijklmnopqrstuvwxyz",
+  // 哈希化（ADR-0047 D3）后列表行没有明文，apiKeyHint 供识别；apiKey 仅在
+  // 创建/轮换响应里出现一次。
+  apiKeyHint: "wxyz",
   createdAtMs: 1_725_000_000_000,
   id: "api-key-1",
   name: "Publishing",
@@ -100,19 +102,21 @@ describe("API admin pages", () => {
     expect(output).not.toContain(">Copy prompt<");
   });
 
-  it("prefills Bearer examples from a selected API key", () => {
+  it("builds Bearer examples from a pasted API key", () => {
+    const pasted = "mf_abcdefghijklmnopqrstuvwxyz";
     const code = buildApiExampleCode(
       "https://feed.example.com/api/v1/feed/?limit=3",
-      apiKey.apiKey,
+      pasted,
     );
-    expect(code.javascript).toContain(`Bearer ${apiKey.apiKey}`);
+    expect(code.javascript).toContain(`Bearer ${pasted}`);
     expect(code.javascript).toContain("await fetch");
-    expect(code.curl).toContain(`Bearer ${apiKey.apiKey}`);
+    expect(code.curl).toContain(`Bearer ${pasted}`);
     expect(highlightApiExampleCode(code.javascript, "javascript"))
       .toContainEqual({kind: "keyword", value: "await"});
     expect(highlightApiExampleCode(code.curl, "curl"))
       .toContainEqual({kind: "command", value: "curl"});
 
+    // 未粘贴令牌时示例回落到占位符，页面上不会出现任何明文。
     const output = renderToStaticMarkup(React.createElement(ApiOverviewApp, {
       apiKeys: [apiKey],
       authenticationUrl: "/admin/api/auth/",
@@ -121,8 +125,9 @@ describe("API admin pages", () => {
       settings: {enabled: true, publicDocsEnabled: true},
       settingsUrl: "/admin/api/settings/",
     }));
-    expect(output).toContain("API key for this example");
-    expect(output).toContain(`Bearer ${apiKey.apiKey}`);
+    expect(output).toContain("Paste an API key");
+    expect(output).toContain("Bearer YOUR_API_KEY");
+    expect(output).not.toContain(pasted);
     expect(output).toContain("JavaScript");
     expect(output).toContain("cURL");
     expect(output).toContain("Try it now");
@@ -144,7 +149,8 @@ describe("API admin pages", () => {
     expect(authentication).toContain("Create API key");
     expect(authentication).toContain("Rotate");
     expect(authentication).toContain("Revoke");
-    expect(authentication).not.toContain(apiKey.apiKey);
+    // 列表行只有 hint 掩码，明文从不出现（ADR-0047 D3）。
+    expect(authentication).toContain("mf_…wxyz");
 
     const settings = renderToStaticMarkup(React.createElement(ApiSettingsApp, {
       initialSettings: {enabled: true, publicDocsEnabled: false},

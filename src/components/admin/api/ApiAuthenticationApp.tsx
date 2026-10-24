@@ -197,25 +197,33 @@ export default function ApiAuthenticationApp({
                       </div>
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
                         <code className="max-w-full overflow-x-auto rounded-md bg-muted px-2 py-1 text-xs">
-                          {visible ? apiKey.apiKey : maskedApiKey(apiKey.apiKey)}
+                          {visible && apiKey.apiKey
+                            ? apiKey.apiKey
+                            : apiKey.apiKey
+                            ? maskedApiKey(apiKey.apiKey)
+                            : `mf_…${apiKey.apiKeyHint}`}
                         </code>
-                        <Button
-                          aria-label={visible ? t("api.hideApiKey") : t("api.revealApiKey")}
-                          onClick={() => setRevealed((current) => {
-                            const next = new Set(current);
-                            if (next.has(apiKey.id)) next.delete(apiKey.id);
-                            else next.add(apiKey.id);
-                            return next;
-                          })}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          {visible ? <EyeOffIcon /> : <EyeIcon />}
-                        </Button>
-                        <Button aria-label={t("api.copyApiKey")} onClick={() => copy(apiKey.apiKey)} size="icon-sm" type="button" variant="ghost">
-                          <CopyIcon />
-                        </Button>
+                        {apiKey.apiKey && (
+                          <>
+                            <Button
+                              aria-label={visible ? t("api.hideApiKey") : t("api.revealApiKey")}
+                              onClick={() => setRevealed((current) => {
+                                const next = new Set(current);
+                                if (next.has(apiKey.id)) next.delete(apiKey.id);
+                                else next.add(apiKey.id);
+                                return next;
+                              })}
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              {visible ? <EyeOffIcon /> : <EyeIcon />}
+                            </Button>
+                            <Button aria-label={t("api.copyApiKey")} onClick={() => copy(apiKey.apiKey ?? "")} size="icon-sm" type="button" variant="ghost">
+                              <CopyIcon />
+                            </Button>
+                          </>
+                        )}
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
                         {apiKey.scopes.includes("content:write") ? t("api.readAndWrite") : t("api.readOnly")}

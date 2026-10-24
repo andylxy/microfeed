@@ -134,6 +134,10 @@ GitHub. See [Update with GitHub Actions](/manage/update/github-actions/).
   before mutation. Remote restore requires an unchanged, newly initialized
   target and exact instance-name confirmation, and leaves a resumable
   maintenance journal if migration or data restoration fails.
+- Deployments must sit behind Cloudflare: login throttling and the App request
+  quota key their rate limits on `cf-connecting-ip`, which Cloudflare always
+  injects. Behind any other proxy a client could forge `x-forwarded-for` and
+  rotate the throttling key (ADR-0048).
 
 ## Command summary
 

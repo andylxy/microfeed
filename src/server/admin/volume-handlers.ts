@@ -7,6 +7,7 @@ import {z} from "zod";
 import {AppError} from "@/shared/errors";
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
+import {purgeBookChapterContentCaches} from "@/server/feed/extBook";
 import FeedDb from "@/server/feed/FeedDb";
 import {createFeedCrud} from "@/server/feed/feed";
 import {planContentChange} from "@/server/feed/extContentReview";
@@ -267,6 +268,20 @@ async function purgeVolumeBoardCache(
   await database.purgePublicCacheTags([...tags]);
 }
 
+/**
+ * 卷板写后的 App 章节正文桶清理（ADR-0048 D2）：归卷批量 `UPDATE
+ * tcm_parent_id`，新旧两章的正文缓存同时失效；批量提交晚于
+ * `saveInternalItem` 返回，逐条判定会读到提交前的旧值——按书全量清
+ * （`extBook.purgeBookChapterContentCaches`，一次索引查询取全部章 id）。
+ * 卷板移动不涉及方剂，不清方剂桶。
+ */
+async function purgeVolumeBoardAppCaches(
+  db: VolumeDb,
+  bookId: string,
+): Promise<void> {
+  await purgeBookChapterContentCaches(db, bookId);
+}
+
 /** 每个写入请求一份 FeedDb 与 FeedCrud，外加这本书的书形判定。
  *
  *  这里只读三下：`channels` 主键点查（这本书还在不在）、一次 `items_book_kind` 上的
@@ -429,6 +444,7 @@ export async function assignChaptersHandler(
     );
   }
   await purgeVolumeBoardCache(database, applied);
+  await purgeVolumeBoardAppCaches(db, bookId);
   return {updated: applied.length};
 }
 
@@ -492,6 +508,7 @@ export async function renameVolumeHandler(
     database,
     renamedTcmChapterId ? [...applied, renamedTcmChapterId] : applied,
   );
+  await purgeVolumeBoardAppCaches(db, bookId);
   return {updated: applied.length};
 }
 /** 改写给定章节的 `chapterNo`——这正是章节在卷内移动、以及跨卷移动的方式。 */
@@ -517,6 +534,7 @@ export async function reorderChaptersHandler(
   }));
   const applied = await patchChapters(db, database, feedCrud, targets);
   await purgeVolumeBoardCache(database, applied);
+  await purgeVolumeBoardAppCaches(db, bookId);
   return {updated: applied.length};
 }
 
@@ -558,5 +576,6 @@ export async function setVolumeOrderHandler(
   }
   const applied = await patchChapters(db, database, feedCrud, targets);
   await purgeVolumeBoardCache(database, applied);
+  await purgeVolumeBoardAppCaches(db, bookId);
   return {updated: applied.length};
 }

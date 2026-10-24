@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {
   listAuditChaptersHandler,
   listAuditTrailHandler,
+  listReviewRecordsHandler,
   setAuditRowArchivedHandler,
 } from "@/server/admin/audit-handlers";
 import type {
@@ -75,6 +76,16 @@ function emptyDatabase(): {database: DatabaseSync; db: SqliteAuditDb} {
       created_at TIMESTAMP,
       archived INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE ext_content_review (
+      id VARCHAR(11) PRIMARY KEY,
+      item_id VARCHAR(11),
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      submitted_at INTEGER,
+      reviewed_at INTEGER,
+      proposed_data TEXT,
+      snapshot_data TEXT
+    );
   `);
   return {database, db: new SqliteAuditDb(database)};
 }
@@ -90,6 +101,21 @@ function addAuditRow(
     "INSERT INTO ext_content_audit (id, item_id, action, actor_type, " +
       "diff_data, is_checkpoint, created_at) VALUES (?,?,?,?,?,?,?)",
   ).run(id, itemId, "edit", "author", "[]", isCheckpoint ? 1 : 0, createdAt);
+}
+
+function addReviewRow(
+  database: DatabaseSync,
+  id: string,
+  itemId: string,
+  description: string,
+) {
+  database.prepare(
+    "INSERT INTO ext_content_review (id, item_id, action, status, " +
+      "submitted_at, proposed_data) VALUES (?,?,?,?,?,?)",
+  ).run(id, itemId, "edit", "pending", 1700000000000, JSON.stringify({
+    title: "第一章",
+    description,
+  }));
 }
 
 describe("audit browsing", () => {
@@ -163,5 +189,50 @@ describe("audit browsing", () => {
     const {db} = emptyDatabase();
     await expect(listAuditTrailHandler(db, "missing")).resolves
       .toMatchObject({item: null, rows: []});
+  });
+
+  it("strips script, event attributes and javascript: links from review HTML", async () => {
+    // ADR-0047 F1：编辑提交的富文本在审核页以 HTML 渲染，读取时按白名单消毒。
+    const {database, db} = emptyDatabase();
+    addReviewRow(
+      database,
+      "r1",
+      "chap1",
+      "<p onclick=\"steal()\">正文</p><script>alert(1)</script>" +
+        "<img src=\"x\" onerror=\"alert(2)\">" +
+        "<a href=\"javascript:alert(3)\">链接</a>",
+    );
+
+    const {records} = await listReviewRecordsHandler(db, "chap1");
+    const html = records[0]?.contentHtml ?? "";
+    expect(html).toContain("<p>正文</p>");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("javascript:");
+    // 链接标签保留，但危险协议被剥离。
+    expect(html).toContain("<a rel=\"noopener noreferrer\">链接</a>");
+  });
+
+  it("keeps whitelisted tags intact when sanitizing review HTML", async () => {
+    const {database, db} = emptyDatabase();
+    addReviewRow(
+      database,
+      "r1",
+      "chap1",
+      "<h2>小节</h2><table><tbody><tr><td>格</td></tr></tbody></table>" +
+        "<em>重</em><pre><code>文</code></pre>" +
+        "<a href=\"https://example.com/a\" title=\"注\">外链</a>",
+    );
+
+    const {records} = await listReviewRecordsHandler(db, "chap1");
+    const html = records[0]?.contentHtml ?? "";
+    expect(html).toContain("<h2>小节</h2>");
+    expect(html).toContain("<table><tbody><tr><td>格</td></tr></tbody></table>");
+    expect(html).toContain("<em>重</em>");
+    expect(html).toContain("<pre><code>文</code></pre>");
+    expect(html).toContain(
+      "<a href=\"https://example.com/a\" title=\"注\" rel=\"noopener noreferrer\">外链</a>",
+    );
   });
 });

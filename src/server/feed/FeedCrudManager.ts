@@ -5,6 +5,10 @@ import {
 } from "@/shared/StringUtils";
 import {ENCLOSURE_CATEGORIES, ENCLOSURE_CATEGORIES_DICT, LANGUAGE_CODES_LIST} from "@/shared/Constants";
 import type {DatabaseMutationCommit} from "@/server/mutation";
+import {
+  purgeAppBookFangCache,
+  purgeAppChapterContentCache,
+} from "@/server/cache/app-cache";
 
 const LANGUAGE_CODES = LANGUAGE_CODES_LIST.map((lc: any) => lc.code);
 
@@ -15,6 +19,37 @@ export default class FeedCrudManager {
     this.feedContent = feedContent;
     this.feedDb = feedDb;
     this.request = request;
+  }
+
+  /**
+   * 条目写后的 App 缓存失效分发（ADR-0048 D2）：内部 item 不携带
+   * `tcm_kind`（真实列由 TCM 写端点维护，通用 upsert 只写 data 等八列，
+   * 见迁移 0070），所以写后做一次主键点读取归属——条目写本身低频，代价是
+   * 每次写 1 行读。分派规则（唯一定义处）：
+   * `chapter` → 清该章正文两桶；`section` → 按 `tcm_parent_id` 清所属章；
+   * `fang` → 按 pocket `sourceBookId` 清该书方剂两桶；其余 kind 不清。
+   */
+  private async purgeAppContentCaches(itemId: string): Promise<void> {
+    // 没有 D1 句柄的环境（单测 mock FeedDb）没有 App 缓存可清，跳过。
+    const d1 = this.feedDb?.FEED_DB;
+    if (!d1) return;
+    const row = await d1.prepare(
+      "SELECT tcm_kind AS kind, tcm_parent_id AS parentId, " +
+        "json_extract(data, '$._microfeed.sourceBookId') AS sourceBookId " +
+        "FROM items WHERE id = ?",
+    ).bind(itemId).first<{
+      kind: string | null;
+      parentId: string | null;
+      sourceBookId: string | null;
+    }>();
+    if (!row) return;
+    if (row.kind === "chapter") {
+      await purgeAppChapterContentCache(itemId);
+    } else if (row.kind === "section" && row.parentId) {
+      await purgeAppChapterContentCache(row.parentId);
+    } else if (row.kind === "fang" && row.sourceBookId) {
+      await purgeAppBookFangCache(row.sourceBookId);
+    }
   }
 
   _mediaReferenceForStorage(value: string): string {
@@ -184,6 +219,7 @@ export default class FeedCrudManager {
           commit(statements, this.feedContent.item)
         : undefined,
     );
+    await this.purgeAppContentCaches(itemId);
     return itemId;
   }
 
@@ -199,6 +235,7 @@ export default class FeedCrudManager {
           commit(statements, this.feedContent.item)
         : undefined,
     );
+    await this.purgeAppContentCaches(String(item.id));
     return item.id;
   }
 

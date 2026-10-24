@@ -3,7 +3,10 @@ import {env} from "cloudflare:workers";
 
 import {createAdminRbacUser} from "@/server/admin/rbac-handlers";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
-import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
+import {
+  listLoginCredentialsForUser,
+  verifyLoginCredentialToken,
+} from "@/server/auth/login-credentials";
 import {appLogin} from "@/server/tcm/app-auth";
 import {POST as appLoginPost} from "@/pages/api/AppBookRequest/login";
 import {
@@ -151,6 +154,23 @@ describe("App login (ticket 12)", () => {
     expect(await appLogin(env, appRequest("/api/AppBookRequest/login"), {
       UserName: "x",
     })).toBe("请检查账号密码");
+  });
+
+  it("rejects a banned account at login without issuing a credential", async () => {
+    await createAccount({account: "banneduser", name: "Banned", password: "secret1"});
+    const bannedId = (await db.prepare(
+      'SELECT id FROM "auth_user" WHERE username = ?',
+    ).bind("banneduser").first<{id: string}>())?.id ?? "";
+    await db.prepare(
+      'UPDATE "auth_user" SET banned = 1 WHERE id = ?',
+    ).bind(bannedId).run();
+
+    const denied = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "banneduser",
+      Password: "secret1",
+    });
+    expect(denied).toBe("登录失败,请检查账号密码");
+    expect(await listLoginCredentialsForUser(db, bannedId)).toHaveLength(0);
   });
 });
 
