@@ -24,6 +24,7 @@ import {
 import {createLoginSessionCookies} from "@/server/auth/login-session";
 import {LOGIN_THROTTLE_MAX_ATTEMPTS} from "@/server/auth/login-throttle";
 import {permissionId} from "@/server/rbac/seed";
+import {registerUserDevice} from "@/server/rbac/resolve";
 import {MAX_LOGIN_CREDENTIALS_PER_USER} from "@/shared/LoginCredential";
 
 const ORIGIN = "https://feed.example.com";
@@ -884,5 +885,77 @@ describe("credential expiry", () => {
     };
     const stored = forever.credentials.find((entry) => entry.name === "forever");
     expect(stored?.expiresAtMs).toBeNull();
+  });
+});
+
+describe("hot-path write throttles (ADR-0049 D4)", () => {
+  it("skips last_used_at_ms writes within the 60s window", async () => {
+    await seedUser("u_throttle");
+    // 节流路径只消费 user_id，无需角色：挂角色反而要求 ext_roles 行存在。
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "throttled",
+      userId: "u_throttle",
+    });
+
+    // 新行 last_used 为 NULL：首次调用写一次。
+    await markLoginCredentialUsed(env.FEED_DB, credential.id);
+    const first = await env.FEED_DB.prepare(
+      "SELECT last_used_at_ms FROM ext_login_credentials WHERE id = ?",
+    ).bind(credential.id).first<{last_used_at_ms: number}>();
+
+    // 60s 窗口内再调用：last_used_at_ms 保持首次的值（0 行写）。
+    await markLoginCredentialUsed(env.FEED_DB, credential.id);
+    const second = await env.FEED_DB.prepare(
+      "SELECT last_used_at_ms FROM ext_login_credentials WHERE id = ?",
+    ).bind(credential.id).first<{last_used_at_ms: number}>();
+    expect(second?.last_used_at_ms).toBe(first?.last_used_at_ms);
+
+    // 把行拨回 61s 前：下一次调用恢复写入。
+    await env.FEED_DB.prepare(
+      "UPDATE ext_login_credentials SET last_used_at_ms = ? WHERE id = ?",
+    ).bind(Date.now() - 61_000, credential.id).run();
+    await markLoginCredentialUsed(env.FEED_DB, credential.id);
+    const third = await env.FEED_DB.prepare(
+      "SELECT last_used_at_ms FROM ext_login_credentials WHERE id = ?",
+    ).bind(credential.id).first<{last_used_at_ms: number}>();
+    expect((third?.last_used_at_ms ?? 0)).toBeGreaterThan(
+      Date.now() - 61_000,
+    );
+  });
+
+  it("skips device last_seen writes within the 5min window and never lifts revocation", async () => {
+    await seedUser("u_device");
+    const request = new Request(`${ORIGIN}/api/v1/feed/`, {
+      headers: {"x-device-id": "devicethrottle01"},
+    });
+
+    // 首次：登记为 active。
+    await registerUserDevice(env.FEED_DB, "u_device", request);
+    const row = () => env.FEED_DB.prepare(
+      "SELECT last_seen_at, status FROM ext_user_devices " +
+        "WHERE user_id = 'u_device' AND device_id = 'devicethrottle01'",
+    ).first<{last_seen_at: string; status: string}>();
+    const first = await row();
+    expect(first?.status).toBe("active");
+
+    // 5 分钟窗口内重复请求：last_seen_at 不变（0 行写）。
+    await registerUserDevice(env.FEED_DB, "u_device", request);
+    expect((await row())?.last_seen_at).toBe(first?.last_seen_at);
+
+    // 超窗口后写回；先把行拨旧再吊销——写回只动 last_seen_at，吊销不解除。
+    await env.FEED_DB.prepare(
+      "UPDATE ext_user_devices SET last_seen_at = ? " +
+        "WHERE user_id = 'u_device' AND device_id = 'devicethrottle01'",
+    ).bind(new Date(Date.now() - 6 * 60_000).toISOString()).run();
+    await env.FEED_DB.prepare(
+      "UPDATE ext_user_devices SET status = 'revoked' " +
+        "WHERE user_id = 'u_device' AND device_id = 'devicethrottle01'",
+    ).run();
+    await registerUserDevice(env.FEED_DB, "u_device", request);
+    const after = await row();
+    expect(after?.status).toBe("revoked");
+    expect(after?.last_seen_at).not.toBe(
+      new Date(Date.now() - 6 * 60_000).toISOString(),
+    );
   });
 });

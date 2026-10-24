@@ -567,11 +567,26 @@ function guidanceSnapshot(
  *
  * 未配置 Token / 密文解不开 / 账号 ID 缺失三种情形返回引导态快照，
  * Cloudflare 接口整体失败则抛 {@link AppError}，由端点转成错误卡文案。
+ *
+ * 成功快照走 isolate 内 5 分钟缓存（ADR-0049 D13③）：看板每次打开要打两次
+ * CF 外网 API；用量数据分钟级更新，`fetchedAt` 如实标注抓取时刻，读缓存时
+ * 透传——面板显示的是「5 分钟内的真实读数」。引导态不缓存（配置 Token 后
+ * 立即可见）。
  */
+const USAGE_SNAPSHOT_TTL_MS = 5 * 60_000;
+
+let usageSnapshotCache: {
+  snapshot: CloudUsageSnapshot;
+  expiresAt: number;
+} | null = null;
+
 export async function getCloudUsageHandler(
   env: CloudUsageEnv,
 ): Promise<CloudUsageSnapshot> {
   const now = new Date();
+  if (usageSnapshotCache && usageSnapshotCache.expiresAt > now.getTime()) {
+    return usageSnapshotCache.snapshot;
+  }
   const token = await readCloudflareToken(env);
   if (token.state === "absent") {
     return guidanceSnapshot(undefined, undefined, now);
@@ -601,7 +616,7 @@ export async function getCloudUsageHandler(
 
   // 周期边界仍用请求到达时刻（`now`）算：额度按哪个 UTC 日结算由查询时刻决定，
   // 数据晚几秒到达不该把结算日推后一天。`fetchedAt` 另取一次，是抓取完成的时刻。
-  return {
+  const snapshot: CloudUsageSnapshot = {
     configured: true,
     tokenHint: token.tokenHint,
     fetchedAt: new Date().toISOString(),
@@ -609,4 +624,9 @@ export async function getCloudUsageHandler(
     r2: assembleR2(monthlyPeriod(now), window, payload),
     workers: assembleWorkers(dailyPeriod(now), window, payload),
   };
+  usageSnapshotCache = {
+    snapshot,
+    expiresAt: Date.now() + USAGE_SNAPSHOT_TTL_MS,
+  };
+  return snapshot;
 }

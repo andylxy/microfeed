@@ -11,6 +11,14 @@ export const LOG_RETENTION_DAYS = {
   apiAccess: 90,
   /** App 登录日志（`ext_app_login_log`）：按设备 × 自然日累计。 */
   appLogin: 180,
+  /**
+   * 已吊销设备的残留行（`ext_user_devices`）：设备行随客户端换 id 线性增长，
+   * 吊销且 90 天无心跳的行已无任何判定价值（isDeviceRevoked 只看 status）。
+   * 未吊销的行不清理——设备面板还要展示活跃设备。审计链
+   * （`ext_content_audit` / `ext_rbac_audit`）维持只增不删的既有不变量，
+   * 不在这里清理。
+   */
+  revokedDevice: 90,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -29,6 +37,9 @@ export async function pruneRetainedLogs(
   const loginCutoff = new Date(
     now - LOG_RETENTION_DAYS.appLogin * DAY_MS,
   ).toISOString();
+  const deviceCutoff = new Date(
+    now - LOG_RETENTION_DAYS.revokedDevice * DAY_MS,
+  ).toISOString();
   await db.batch([
     db.prepare("DELETE FROM auth_session WHERE expiresAt <= ?").bind(
       new Date(now).toISOString(),
@@ -39,6 +50,12 @@ export async function pruneRetainedLogs(
     db.prepare(
       "DELETE FROM ext_app_login_log WHERE login_at < ?",
     ).bind(loginCutoff),
+    // revoked 行数量少：`ext_user_devices_status (status)` 先收束，再按
+    // last_seen_at 过滤（ISO 字符串字典序 = 时间序）。
+    db.prepare(
+      "DELETE FROM ext_user_devices " +
+        "WHERE status = 'revoked' AND last_seen_at < ?",
+    ).bind(deviceCutoff),
   ]);
 }
 

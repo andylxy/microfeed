@@ -83,6 +83,17 @@ declare global {
        * 收录会员书；后台会话路径不设这个字段。
        */
       appMember?: boolean;
+      /**
+       * App 凭证判定结果（ADR-0049 D11）：middleware 在凭证通过后挂上，
+       * 供 /api/app/* 能力端点复用——免掉每个端点各自的凭证校验与权限解析
+       * （此前 version/permission 系每请求重复 2–3 次校验、2 次解析）。
+       * 后台会话路径与匿名路径不设这个字段。
+       */
+      appAuth?: {
+        userId: string;
+        credentialId: string;
+        permissions: Set<string>;
+      };
     }
   }
 }

@@ -8,6 +8,7 @@ import type {DatabaseMutationCommit} from "@/server/mutation";
 import {
   purgeAppBookFangCache,
   purgeAppChapterContentCache,
+  purgeAppYaoCache,
 } from "@/server/cache/app-cache";
 
 const LANGUAGE_CODES = LANGUAGE_CODES_LIST.map((lc: any) => lc.code);
@@ -22,16 +23,24 @@ export default class FeedCrudManager {
   }
 
   /**
-   * 条目写后的 App 缓存失效分发（ADR-0048 D2）：内部 item 不携带
-   * `tcm_kind`（真实列由 TCM 写端点维护，通用 upsert 只写 data 等八列，
-   * 见迁移 0070），所以写后做一次主键点读取归属——条目写本身低频，代价是
-   * 每次写 1 行读。分派规则（唯一定义处）：
-   * `chapter` → 清该章正文两桶；`section` → 按 `tcm_parent_id` 清所属章；
-   * `fang` → 按 pocket `sourceBookId` 清该书方剂两桶；其余 kind 不清。
+   * 条目写后的 App 缓存失效分发（ADR-0048 D2 时序修正见 ADR-0049 D5）：
+   * 内部 item 不携带 `tcm_kind`（真实列由 TCM 写端点维护，通用 upsert 只写
+   * data 等八列，见迁移 0070），所以写后做一次主键点读取归属——条目写本身
+   * 低频，代价是每次写 1 行读。分派规则（唯一定义处）：
+   * `chapter` → 清该章正文两桶；`section` → 按 `tcm_parent_id` 清所属章并清
+   * 中药两桶（经疏正文随 section 变化）；`fang` → 按 pocket `sourceBookId`
+   * 清该书方剂两桶；其余 kind 不清。
+   *
+   * ⚠️ 时序：本方法读取的是**当前库内行**。collect 模式（statements 缓冲、
+   * 由调用方稍后 batch）下必须在提交之后调用，否则读到提交前状态——
+   * createItem 读不到行（空转）、改挂章节清旧不清新。调用方约定：
+   * items/service 三处在 batch 之后调；review-handlers 两个直接模式入口在
+   * saveInternalItem 之后调；volume-handlers 的 patchChapters 用按书全量
+   * 清（purgeVolumeBoardAppCaches）覆盖，不逐条调。
    */
-  private async purgeAppContentCaches(itemId: string): Promise<void> {
+  async purgeAppContentCaches(itemId: string): Promise<void> {
     // 没有 D1 句柄的环境（单测 mock FeedDb）没有 App 缓存可清，跳过。
-    const d1 = this.feedDb?.FEED_DB;
+    const d1 = this.feedDb?.FEED_DB as D1Database | undefined;
     if (!d1) return;
     const row = await d1.prepare(
       "SELECT tcm_kind AS kind, tcm_parent_id AS parentId, " +
@@ -47,6 +56,10 @@ export default class FeedCrudManager {
       await purgeAppChapterContentCache(itemId);
     } else if (row.kind === "section" && row.parentId) {
       await purgeAppChapterContentCache(row.parentId);
+      // 经疏正文（jingshuYaoText）读全部 section 的 bieMing：任何 section 写
+      // 都可能改变 GetAllZhongYao 内容（ADR-0049 D2）；section 写低频，清桶
+      // 代价是一次目录重建。
+      await purgeAppYaoCache();
     } else if (row.kind === "fang" && row.sourceBookId) {
       await purgeAppBookFangCache(row.sourceBookId);
     }
@@ -219,7 +232,6 @@ export default class FeedCrudManager {
           commit(statements, this.feedContent.item)
         : undefined,
     );
-    await this.purgeAppContentCaches(itemId);
     return itemId;
   }
 
@@ -235,7 +247,6 @@ export default class FeedCrudManager {
           commit(statements, this.feedContent.item)
         : undefined,
     );
-    await this.purgeAppContentCaches(String(item.id));
     return item.id;
   }
 

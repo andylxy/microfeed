@@ -90,8 +90,8 @@ describe("table-only API keys", () => {
 
     const rotated = await rotateApiKey(env.FEED_DB, first.id);
     expect(rotated?.apiKey).not.toBe(first.apiKey);
-    expect(await apiKeyExists(env.FEED_DB, first.apiKey)).toBe(false);
-    expect(await apiKeyExists(env.FEED_DB, rotated!.apiKey)).toBe(true);
+    expect(await apiKeyExists(env.FEED_DB, first.apiKey!)).toBe(false);
+    expect(await apiKeyExists(env.FEED_DB, rotated!.apiKey!)).toBe(true);
 
     expect(await revokeApiKey(env.FEED_DB, second.id)).toBe(true);
     expect(await revokeApiKey(env.FEED_DB, second.id)).toBe(false);
@@ -109,7 +109,7 @@ describe("table-only API keys", () => {
       enabled: true,
       publicDocsEnabled: false,
     });
-    expect(await apiKeyExists(env.FEED_DB, apiKey.apiKey)).toBe(true);
+    expect(await apiKeyExists(env.FEED_DB, apiKey.apiKey!)).toBe(true);
   });
 
   it("keeps rollback JSON until rotation or revocation", async () => {
@@ -181,7 +181,7 @@ describe("API access decisions", () => {
     expect(await decideApiRequest(
       env.FEED_DB,
       request(`${API_BASE_PATH}feed/`, {
-        "X-MicrofeedAPI-Key": apiKey.apiKey,
+        "X-MicrofeedAPI-Key": apiKey.apiKey!,
       }),
       `${API_BASE_PATH}feed/`,
     )).toBe("allow-integration");
@@ -189,13 +189,13 @@ describe("API access decisions", () => {
       env.FEED_DB,
       request(`${API_BASE_PATH}feed/`, {
         authorization: "Bearer invalid",
-        "X-MicrofeedAPI-Key": apiKey.apiKey,
+        "X-MicrofeedAPI-Key": apiKey.apiKey!,
       }),
       `${API_BASE_PATH}feed/`,
     )).toBe("unauthorized");
     expect(providedApiKey(request(`${API_BASE_PATH}feed/`, {
       authorization: "Bearer invalid",
-      "X-MicrofeedAPI-Key": apiKey.apiKey,
+      "X-MicrofeedAPI-Key": apiKey.apiKey!,
     }))).toBe("invalid");
   });
 

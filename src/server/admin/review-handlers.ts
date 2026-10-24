@@ -155,6 +155,8 @@ export async function applyReviewActionHandler(
   const content = await database.getContent(null) as unknown as FeedContent;
   const feedCrud = createFeedCrud(content, database, request);
   await feedCrud.saveInternalItem(item);
+  // 直接模式：putContent 已就地提交，随后按归属清 App 桶（ADR-0049 D5）。
+  await feedCrud.purgeAppContentCaches(itemId);
 
   await recordAudit(database.FEED_DB as unknown as AuditDb, {
     action,
@@ -210,6 +212,8 @@ export async function restoreItemVersionHandler(
   const content = await database.getContent(null) as unknown as FeedContent;
   const feedCrud = createFeedCrud(content, database, request);
   await feedCrud.saveInternalItem(item);
+  // 直接模式：putContent 已就地提交，随后按归属清 App 桶（ADR-0049 D5）。
+  await feedCrud.purgeAppContentCaches(itemId);
 
   // Trail the real difference, not an empty diff: that is what makes a restore
   // row reviewable like any other change.

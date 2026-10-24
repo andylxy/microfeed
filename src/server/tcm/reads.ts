@@ -440,23 +440,25 @@ export async function getAppBookChapters(
   // 失败抛出而非降级空值：本函数的结果进 24h 共享缓存（见 withRethrow）。
   return withRethrow("getAppBookChapters", async () => {
     if (tier !== "member" && await bookIsMemberOnly(db, bookId)) return [];
+    // 窄投影（ADR-0049 D13）：目录只需要 title 与 pocket.section 两个字段，
+    // 不读整段正文 data（每章可达数十 KB）。
     const {results} = await db
       .prepare(
-        "SELECT id, data FROM items " +
+        "SELECT id, " +
+          "json_extract(data, '$.title') AS title, " +
+          "json_extract(data, '$._microfeed.section') AS section " +
+          "FROM items " +
           "WHERE tcm_kind = 'chapter' AND book_id = ? AND status = 1 " +
           "ORDER BY " + TCM_CHAPTER_ORDER_SQL,
       )
       .bind(bookId)
       .all();
-    return (results ?? []).map((row) => {
-      const pocket = pocketOf(row.data);
-      return {
-        bookId: bookId,
-        chapterSection: toNumber(pocket.section),
-        chapterHeader: titleOf(row.data),
-        signatureId: String(row.id),
-      };
-    });
+    return (results ?? []).map((row) => ({
+      bookId: bookId,
+      chapterSection: toNumber(row.section),
+      chapterHeader: String(row.title ?? ""),
+      signatureId: String(row.id),
+    }));
   });
 }
 
@@ -482,20 +484,24 @@ export async function getAppChapterContent(
   chapterId: string,
   tier: AppNavTier = "public",
 ): Promise<AppChapterContent[]> {
-  return withEmpty("getAppChapterContent", async () => {
+  return withRethrow("getAppChapterContent", async () => {
+    // 窄投影（ADR-0049 D13）：章行只取 header 与 pocket.section 两个字段，
+    // 正文全文（章节 data 的 description 大列）不进内存——条文正文来自下面
+    // 的 section 查询。
     const chapterRow = await db
       .prepare(
-        "SELECT i.data AS data, c.status AS bookStatus " +
+        "SELECT json_extract(i.data, '$.title') AS title, " +
+          "json_extract(i.data, '$._microfeed.section') AS section, " +
+          "c.status AS bookStatus " +
           "FROM items i LEFT JOIN channels c ON c.id = i.book_id " +
           "WHERE i.id = ? AND i.tcm_kind = 'chapter' AND i.status != 3",
       )
       .bind(chapterId)
-      .first<{data: unknown; bookStatus: number | null}>();
+      .first<{title: string | null; section: unknown; bookStatus: number | null}>();
     if (!chapterRow) return [];
     if (tier !== "member" && Number(chapterRow.bookStatus) === MEMBER_BOOK_STATUS) {
       return [];
     }
-    const chapterPocket = pocketOf(chapterRow.data);
     const {results} = await db
       .prepare(
         "SELECT id, data FROM items " +
@@ -524,8 +530,8 @@ export async function getAppChapterContent(
     });
     return [
       {
-        section: toNumber(chapterPocket.section),
-        header: titleOf(chapterRow.data),
+        section: toNumber(chapterRow.section),
+        header: String(chapterRow.title ?? ""),
         signatureId: chapterId,
         data: sections,
       },
@@ -553,7 +559,7 @@ export async function getAppBookFang(
   bookId: string,
   tier: AppNavTier = "public",
 ): Promise<AppFang[]> {
-  return withEmpty("getAppBookFang", async () => {
+  return withRethrow("getAppBookFang", async () => {
     const bookRow = await db
       .prepare(
         "SELECT json_extract(data, '$._microfeed.bookNo') AS bn, status " +
@@ -743,7 +749,7 @@ const JINGSHU_NAME_ALIAS: Record<string, string> = {
  * 需把药名加入该锚点（见 `.scratch/tcm-import/gen_429_anchor.mjs`），这是有意的边界。
  */
 export async function getAppAllYao(db: D1Database): Promise<AppZhongYao[]> {
-  return withEmpty("getAppAllYao", async () => {
+  return withRethrow("getAppAllYao", async () => {
     const [{results}, jingshu] = await Promise.all([
       db
         .prepare(
@@ -816,7 +822,9 @@ const ALIAS_SPLIT_PATTERN = /[,，；; 。.、]+/;
 export async function getDerivedYaoAliases(
   db: D1Database,
 ): Promise<Map<string, string>> {
-  return withEmpty("getDerivedYaoAliases", async () => {
+  // 重抛而非降级（ADR-0049 D1）：本函数的合并结果进 24h 别名共享桶
+  // （GetAliaZhongYao），D1 故障被吞成空 Map 会让空响应写桶 24h。
+  return withRethrow("getDerivedYaoAliases", async () => {
     const merged = new Map<string, string>();
     const add = (bieming: string, name: string) => {
       if (bieming !== "") merged.set(bieming, name);
@@ -872,7 +880,7 @@ export async function getDerivedYaoAliases(
  * 表可能尚未迁移（旧库）→ 查询失败静默跳过，不影响三源。
  */
 export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
-  return withEmpty("getAppYaoAliases", async () => {
+  return withRethrow("getAppYaoAliases", async () => {
     const merged = await getDerivedYaoAliases(db);
     try {
       const manual = await db
@@ -890,8 +898,13 @@ export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
           merged.set(bieming, str(row.name));
         }
       }
-    } catch {
-      // ext_tcm_aliases 不存在（迁移未应用）——忽略。
+    } catch (error) {
+      // 仅吞「表尚不存在」（旧库未应用 ext_tcm_aliases 迁移）；其余 D1 故障
+      // 重抛——结果进共享桶，吞掉会让空响应写桶 24h（ADR-0049 D1）。
+      if (!(error instanceof Error) ||
+          !/no such table/u.test(error.message)) {
+        throw error;
+      }
     }
     return [...merged].map(([bieming, name]) => ({bieming, name}));
   });

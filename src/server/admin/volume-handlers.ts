@@ -197,14 +197,47 @@ async function patchChapters(
     before: ItemRecord;
     after: ItemRecord;
   }> = [];
+  // 守卫批查（ADR-0049 D10）：同一 `(where, bind)` 形状的 targets 合并为
+  // IN 点查，每批 ≤90 个 id（低于 D1 单语句 100 绑定参数上限，留 bind 余量）。
+  // 守卫语义不变：不属于这本书、或不是该改的那一类的 id 在这里出局。
+  const allowedIds = new Set<string>();
+  const guardGroups = new Map<string, ChapterPatch[]>();
   for (const target of targets) {
-    // 守卫：主键点查，只问结构列。不属于这本书、或不是该改的那一类的行在这里跳过，
-    // 写入别人的条目在这个入口就没有路径。
-    const allowed = await db.prepare(
-      `SELECT id FROM items WHERE id = ? AND ${target.guard.where}`,
-    ).bind(target.itemId, ...target.guard.bind).first();
-    if (!allowed) continue;
-    const existing = await database.getItemById(target.itemId);
+    const key = `${target.guard.where}|${JSON.stringify(target.guard.bind)}`;
+    const group = guardGroups.get(key) ?? [];
+    group.push(target);
+    guardGroups.set(key, group);
+  }
+  for (const [key, group] of guardGroups) {
+    const where = key.slice(0, key.indexOf("|"));
+    const bind = JSON.parse(key.slice(key.indexOf("|") + 1)) as unknown[];
+    for (let start = 0; start < group.length; start += 90) {
+      const chunk = group.slice(start, start + 90);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = await db.prepare(
+        `SELECT id FROM items WHERE id IN (${placeholders}) AND ${where}`,
+      ).bind(...chunk.map((entry) => entry.itemId), ...bind)
+        .all();
+      for (const row of rows.results ?? []) allowedIds.add(String(row.id));
+    }
+  }
+
+  // 整行读并行化（ADR-0049 D10）：getItemById 的解析逻辑不动（避免重实现
+  // 漂移），把 N 次串行往返折成 ⌈N/32⌉ 批并行；守卫出局的 id 不读。
+  const survivors = targets.filter((target) => allowedIds.has(target.itemId));
+  const existingRows = new Map<string, ItemRecord | null>();
+  for (let start = 0; start < survivors.length; start += 32) {
+    const chunk = survivors.slice(start, start + 32);
+    const rows = await Promise.all(
+      chunk.map(async (target) =>
+        [target.itemId, await database.getItemById(target.itemId)] as const
+      ),
+    );
+    for (const [itemId, row] of rows) existingRows.set(itemId, row);
+  }
+
+  for (const target of survivors) {
+    const existing = existingRows.get(target.itemId);
     if (!existing) continue;
     const before = existing as unknown as ItemRecord;
     const microfeed = microfeedOf(before);
@@ -443,8 +476,10 @@ export async function assignChaptersHandler(
         tcmChapterStatement(db, itemId, parentId, target)),
     );
   }
-  await purgeVolumeBoardCache(database, applied);
-  await purgeVolumeBoardAppCaches(db, bookId);
+  if (applied.length > 0) {
+    await purgeVolumeBoardCache(database, applied);
+    await purgeVolumeBoardAppCaches(db, bookId);
+  }
   return {updated: applied.length};
 }
 
@@ -504,11 +539,13 @@ export async function renameVolumeHandler(
       ]);
     }
   }
-  await purgeVolumeBoardCache(
-    database,
-    renamedTcmChapterId ? [...applied, renamedTcmChapterId] : applied,
-  );
-  await purgeVolumeBoardAppCaches(db, bookId);
+  if (applied.length > 0) {
+    await purgeVolumeBoardCache(
+      database,
+      renamedTcmChapterId ? [...applied, renamedTcmChapterId] : applied,
+    );
+    await purgeVolumeBoardAppCaches(db, bookId);
+  }
   return {updated: applied.length};
 }
 /** 改写给定章节的 `chapterNo`——这正是章节在卷内移动、以及跨卷移动的方式。 */
@@ -533,8 +570,10 @@ export async function reorderChaptersHandler(
     patch: {chapterNo: update.chapterNo},
   }));
   const applied = await patchChapters(db, database, feedCrud, targets);
-  await purgeVolumeBoardCache(database, applied);
-  await purgeVolumeBoardAppCaches(db, bookId);
+  if (applied.length > 0) {
+    await purgeVolumeBoardCache(database, applied);
+    await purgeVolumeBoardAppCaches(db, bookId);
+  }
   return {updated: applied.length};
 }
 
@@ -558,14 +597,21 @@ export async function setVolumeOrderHandler(
   const chapterIds = tcm ? await tcmChapterIdByTitle(db, bookId) : null;
   const guard = membershipGuard(tcm, bookId);
   const targets: ChapterPatch[] = [];
-  for (const entry of orders) {
-    const name = entry.volume.trim();
-    // 空卷名就是未归类桶；中医典籍的卷名要换成那行篇章的 id，对不上就跳过这一项。
-    const volumeKey = name
-      ? (tcm ? (chapterIds?.get(name) ?? "") : name)
-      : UNFILED_VOLUME_KEY;
-    if (!volumeKey) continue;
-    for (const itemId of await listVolumeEntryIds(db, bookId, volumeKey, tcm)) {
+  // 逐卷串行 → 并行（ADR-0049 D10）：卷数是载荷规模（前端全量带），各卷的
+  // id 列表查询互不依赖。
+  const volumeIdLists = await Promise.all(
+    orders.map(async (entry) => {
+      const name = entry.volume.trim();
+      // 空卷名就是未归类桶；中医典籍的卷名要换成那行篇章的 id，对不上就跳过这一项。
+      const volumeKey = name
+        ? (tcm ? (chapterIds?.get(name) ?? "") : name)
+        : UNFILED_VOLUME_KEY;
+      if (!volumeKey) return [];
+      return listVolumeEntryIds(db, bookId, volumeKey, tcm);
+    }),
+  );
+  for (const [index, entry] of orders.entries()) {
+    for (const itemId of volumeIdLists[index] ?? []) {
       targets.push({
         allow: () => true,
         guard,
@@ -575,7 +621,9 @@ export async function setVolumeOrderHandler(
     }
   }
   const applied = await patchChapters(db, database, feedCrud, targets);
-  await purgeVolumeBoardCache(database, applied);
-  await purgeVolumeBoardAppCaches(db, bookId);
+  if (applied.length > 0) {
+    await purgeVolumeBoardCache(database, applied);
+    await purgeVolumeBoardAppCaches(db, bookId);
+  }
   return {updated: applied.length};
 }

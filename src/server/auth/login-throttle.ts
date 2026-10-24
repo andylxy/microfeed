@@ -7,7 +7,9 @@
  * Astro route at all).
  *
  * Rows self-prune: once `reset_at_ms` has passed the window restarts, so the
- * table stays bounded without a cleanup job.
+ * table stays bounded without a cleanup job — **for keys that recur**. A
+ * one-off key (e.g. an attacker rotating IPs) leaves its row in place; the
+ * table is bounded by the number of distinct keys, not by time.
  *
  * The window helpers here (`loginThrottleAllows` / `recordLoginFailure`) are
  * deliberately NOT shared with `auth-endpoint-throttle.ts`, which counts

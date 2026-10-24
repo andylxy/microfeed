@@ -518,9 +518,12 @@ async function fuzzyRows(
   const filters = contentFilters(options);
   const rank = "bm25(site_search_title_trigram, 0.0, 0.0, 1.0)";
   const after = cursorFilter(cursor, rank);
+  // 候选阶段窄投影（ADR-0049 D12）：250 个候选只需要标题命中判定与游标
+  // 字段，正文大列（每行可达数 KB）留给最终 ≤limit 个命中的回填，避免
+  // 「250 × 正文字节」的读放大。content_text 以空串占位保持行形状。
   const sql = `
     SELECT
-      ${SEARCH_SELECT},
+      ${SEARCH_SELECT.replace("d.content_text,", "'' AS content_text,")},
       ${rank} AS search_rank,
       d.title AS highlighted_title,
       '' AS highlighted_content
@@ -622,6 +625,7 @@ export async function searchContent(
     fuzzyCursor,
   );
   const scannable = candidates.slice(0, FUZZY_CANDIDATE_LIMIT);
+  const fuzzyStart = results.length;
   let lastScanned: SearchRow | undefined;
   for (const row of scannable) {
     lastScanned = row;
@@ -635,6 +639,23 @@ export async function searchContent(
       fuzzyTitleSegments(row.title, match.matchedTokens),
     ));
     if (results.length === options.limit) break;
+  }
+  // 正文回填（ADR-0049 D12）：只有页内最终命中的 ≤limit 条按 content_id
+  // 补取全文，响应契约（content_text 字段）不变。
+  const fuzzyResults = results.slice(fuzzyStart);
+  if (fuzzyResults.length > 0) {
+    const ids = fuzzyResults.map((entry) => entry.id);
+    const placeholders = ids.map(() => "?").join(", ");
+    const texts = await database.prepare(
+      `SELECT content_id, content_text FROM site_search_documents ` +
+        `WHERE content_id IN (${placeholders})`,
+    ).bind(...ids).all<{content_id: string; content_text: string}>();
+    const textById = new Map(
+      (texts.results ?? []).map((row) => [row.content_id, row.content_text]),
+    );
+    for (const entry of fuzzyResults) {
+      entry.content_text = textById.get(entry.id) ?? "";
+    }
   }
   const lastIndex = lastScanned ? scannable.indexOf(lastScanned) : -1;
   const hasUnscannedCandidates = Boolean(lastScanned) && (

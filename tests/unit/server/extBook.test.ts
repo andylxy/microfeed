@@ -76,7 +76,11 @@ function emptyDatabase(): SqliteBookDb {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       content_text TEXT NOT NULL DEFAULT '',
-      book_id TEXT
+      book_id TEXT,
+      -- 真实 schema（迁移 0070）的两个 TCM 列：按书清章节正文桶的查询
+      -- （extBook.purgeBookChapterContentCaches）按 tcm_kind 过滤。
+      tcm_kind TEXT,
+      tcm_parent_id TEXT
     );
     CREATE TABLE ext_book_stats (
       book_id            VARCHAR(11) PRIMARY KEY,

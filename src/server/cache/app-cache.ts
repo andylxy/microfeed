@@ -1,5 +1,4 @@
 import {appEnvelope} from "@/server/tcm/envelope";
-import {jsonResponse} from "@/server/http";
 import type {AppNavTier} from "@/server/tcm/reads";
 
 /**
@@ -46,6 +45,10 @@ export const APP_BOOK_CHAPTERS_CACHE = "book-chapters";
 export const APP_CHAPTER_CONTENT_CACHE = "chapter-content-v1";
 /** 一本书的方剂缓存名（ADR-0048 D2；键后缀是 `<bookId>:<tier>`）。 */
 export const APP_BOOK_FANG_CACHE = "book-fang-v1";
+/** 全库中药目录缓存名（GetAllZhongYao；无 tier 分桶，内容不随身份变化）。 */
+export const APP_ZHONGYAO_CACHE = "zhongyao";
+/** 全库别名缓存名（GetAliaZhongYao；含派生别名，随中药 bieMing 与手工别名变化）。 */
+export const APP_YAO_ALIASES_CACHE = "yao-aliases";
 
 /**
  * 缓存键 id 白名单：字母、数字、下划线、连字符，1-64 位。本机快照的 channel /
@@ -143,11 +146,14 @@ export async function cachedAppResponse(
     hit = undefined;
   }
   if (hit) return hit;
-  const response = jsonResponse(appEnvelope(await load()), {
-    headers: {"cache-control": `public, max-age=${APP_CACHE_TTL}`},
-  });
+  // 单份 JSON 字符串构造两个 Response（ADR-0049 D13④）：`response.clone()`
+  // 会 tee 出双份流缓冲（zhongyao 目录 ≈2MB 时峰值翻倍）；字符串复用没有
+  // 这个代价。
+  const body = JSON.stringify(appEnvelope(await load()));
+  const headers = {"cache-control": `public, max-age=${APP_CACHE_TTL}`};
+  const response = new Response(body, {headers});
   try {
-    await appCache().put(key, response.clone());
+    await appCache().put(key, new Response(body, {headers}));
   } catch {
     // 缓存写入失败（本地 dev / 权限受限）不阻塞响应，退化为直连 D1。
   }
@@ -166,13 +172,14 @@ function navCacheKeys(): URL[] {
 async function deleteCacheKeys(keys: URL[]): Promise<void> {
   const storage = appCacheOrNull();
   if (!storage) return;
-  for (const key of keys) {
+  // 删除是各 POP 本地操作、互不依赖：并行收束串行往返（ADR-0049 D13⑤）。
+  await Promise.all(keys.map(async (key) => {
     try {
       await storage.delete(key);
     } catch {
       // 删不掉不影响正确性：下一次未命中会重写。
     }
-  }
+  }));
 }
 
 /**
@@ -232,4 +239,21 @@ export async function purgeAppBookFangCache(bookId: string): Promise<void> {
     if (suffix !== null) keys.push(appCacheKey(APP_BOOK_FANG_CACHE, suffix));
   }
   await deleteCacheKeys(keys);
+}
+
+/**
+ * 清掉全库中药目录与别名两桶（ADR-0049 D2）：中药行携带 bieMing，一条中药
+ * 写入同时使 GetAllZhongYao（含经疏正文）与 GetAliaZhongYao（派生别名）陈旧，
+ * 所以 yao 写与经疏 section 写清两键。
+ */
+export async function purgeAppYaoCache(): Promise<void> {
+  await deleteCacheKeys([
+    appCacheKey(APP_ZHONGYAO_CACHE),
+    appCacheKey(APP_YAO_ALIASES_CACHE),
+  ]);
+}
+
+/** 只清别名桶（手工别名写入不影响中药目录本身，ADR-0049 D2）。 */
+export async function purgeAppYaoAliasesCache(): Promise<void> {
+  await deleteCacheKeys([appCacheKey(APP_YAO_ALIASES_CACHE)]);
 }

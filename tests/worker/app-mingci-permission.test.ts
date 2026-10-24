@@ -74,6 +74,7 @@ async function callWithBearer(secret: string | null): Promise<Response> {
   const headers: Record<string, string> = {};
   if (secret) headers.authorization = `Bearer ${secret}`;
   return mingCiPermissionGet({
+    locals: {},
     request: new Request(URL_, {headers}),
   } as never);
 }

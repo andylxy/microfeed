@@ -186,15 +186,20 @@ export async function findApiKey(
 /**
  * 按明文经哈希查 key 行（ADR-0047 D3）：存在性 / scope 判定 / 审计归属三个
  * 入口共用这一处查表形状，均为 `sha256Hex(明文)` 等值查 `secret_hash`。
+ * scopes 已归一化为 Set——调用方（含 access.ts 的合并判定，ADR-0049 D6）
+ * 不必再各自解析。
  */
-async function lookupApiKeyBySecret(
+export async function lookupApiKeyBySecret(
   database: D1Database,
   providedApiKey: string,
-): Promise<{id: string; scopes: string} | null> {
+): Promise<{id: string; scopes: Set<ApiKeyScope>} | null> {
   if (!providedApiKey) return null;
-  return database.prepare(
+  const row = await database.prepare(
     "SELECT id, scopes FROM api_keys WHERE secret_hash = ? LIMIT 1",
   ).bind(await sha256Hex(providedApiKey)).first<{id: string; scopes: string}>();
+  return row
+    ? {id: row.id, scopes: new Set(normalizeApiKeyScopes(row.scopes))}
+    : null;
 }
 
 export async function apiKeyExists(
@@ -202,25 +207,6 @@ export async function apiKeyExists(
   providedApiKey: string,
 ): Promise<boolean> {
   return (await lookupApiKeyBySecret(database, providedApiKey)) !== null;
-}
-
-export async function apiKeyScopes(
-  database: D1Database,
-  providedApiKey: string,
-): Promise<Set<ApiKeyScope> | null> {
-  const row = await lookupApiKeyBySecret(database, providedApiKey);
-  return row ? new Set(normalizeApiKeyScopes(row.scopes)) : null;
-}
-
-/**
- * 按明文解析 key 的 id（ADR-0047 D4）：legacy bearer 的审计归属需要 key 身份，
- * scope 判定仍走 {@link apiKeyScopes}，这里只取 id。
- */
-export async function findApiKeyIdBySecret(
-  database: D1Database,
-  providedApiKey: string,
-): Promise<string | null> {
-  return (await lookupApiKeyBySecret(database, providedApiKey))?.id ?? null;
 }
 
 export async function createApiKey(

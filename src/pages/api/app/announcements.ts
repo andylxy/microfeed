@@ -34,12 +34,12 @@ const ANNOUNCEMENT_LIMIT = ANNOUNCEMENT_FETCH_LIMIT;
 
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};
 
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
   const db = env.FEED_DB;
 
   // 鉴权前置。错误措辞与 search-permission / mingci-permission **逐字一致**（空格版，
   // 不是 `{error: outcome.kind}` 那种连字符形态 —— 评审第 12 轮指出两者曾不一致）。
-  const outcome = await resolveAnnouncementPermission(db, request);
+  const outcome = await resolveAnnouncementPermission(db, request, locals.appAuth);
   if (outcome.kind === "missing-bearer") {
     return jsonResponse({error: "missing bearer"}, {status: 401, headers: NO_STORE});
   }

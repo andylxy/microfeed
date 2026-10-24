@@ -73,6 +73,12 @@ export const SNAPSHOT_TABLES = {
     // Credential access log v2 (migration 0038) — same durable audit-trail
     // nature as ext_api_access_log above, keyed by login credential.
     "ext_api_access_log_v2",
+    // mf_ key 哈希化（migration 0148）建表重造的临时名：RENAME 后该表名不存在，
+    // 分类器扫迁移 DDL 时仍会遇到——与 ext_api_access_log_v2 同款处理。
+    "api_keys_hashed",
+    // App 内容端点限流计数（migration 0147，ADR-0048/0049）：每把凭证一行
+    // 固定窗口计数，随本地→远程同步走 durable 口径。
+    "ext_app_request_quota",
     // NOTE: `microfeed_installation` is deliberately NOT listed here — it is
     // `targetSpecific` below (restore rewrites it per target), and listing it
     // twice makes `assertClassifiedTables` refuse the snapshot.

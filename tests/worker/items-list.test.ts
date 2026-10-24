@@ -62,9 +62,9 @@ async function databaseWithItems() {
     new Request("https://feed.example.com/admin/items/list/"),
   );
   await database.getContent();
-  await env.FEED_DB.prepare(
-    "DELETE FROM items WHERE id LIKE 'pagination-%' OR id = 'canonical-write'",
-  ).run();
+  // 全表清空（ADR-0049 门禁修复）：迁移 0099/0101 会向 items 写入十余章
+  // 回填行，遗留行混进分页断言——本文件的分页语义只由 ITEMS 种子定义。
+  await env.FEED_DB.prepare("DELETE FROM items").run();
   await env.FEED_DB.batch(ITEMS.map((item) =>
     env.FEED_DB.prepare(
       "INSERT INTO items (id, status, data, pub_date, created_at, updated_at) " +

@@ -73,6 +73,9 @@ export async function createItem(
       if (commit) await commit(statements, created);
       else await (feedCrud.feedDb.FEED_DB).batch(statements);
     }
+    // App 桶分派在提交之后（ADR-0049 D5）：collect 模式下此前在缓冲期调用，
+    // 读到提交前状态——createItem 读不到行而空转。
+    await feedCrud.purgeAppContentCaches(id);
   }
   return id;
 }
@@ -83,8 +86,13 @@ export async function updateItem(
   id: string,
   input: ItemInput,
   commit?: DatabaseMutationCommit<Record<string, unknown>>,
+  // 调用方已读过的旧行（ADR-0049 D13）：传入即免掉本函数的重复整行读；
+  // undefined = 未预载（旧行为）。
+  preloaded?: ItemInput | null,
 ): Promise<ItemInput | null> {
-  const existing = await database.getItemById(id);
+  const existing = preloaded !== undefined
+    ? preloaded
+    : await database.getItemById(id);
   if (!existing) return null;
   const normalized = normalizedInput(input, existing.status);
   const patch = feedCrud._publicToInternalSchemaForItem(normalized);
@@ -123,6 +131,8 @@ export async function updateItem(
     if (commit) await commit(statements, item);
     else await database.FEED_DB.batch(statements);
   }
+  // 提交后分派（ADR-0049 D5）：改挂章节时新旧两章按提交后归属清理。
+  await feedCrud.purgeAppContentCaches(id);
 
   // The review gate writes the approved content back over what was just saved.
   // Purge the public cache so a request landing in between does not render the
@@ -165,5 +175,7 @@ export async function deleteItem(
     if (commit) await commit(statements, deleted);
     else await database.FEED_DB.batch(statements);
   }
+  // 软删行仍带 tcm 列，提交后按归属清章桶（ADR-0049 D5）。
+  await feedCrud.purgeAppContentCaches(id);
   return true;
 }

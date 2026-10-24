@@ -1,6 +1,5 @@
 import {
-  apiKeyScopes,
-  findApiKeyIdBySecret,
+  lookupApiKeyBySecret,
   readApiAccessSettings,
 } from "./api-keys";
 import {builtInAdminAuthEnabled} from "@/shared/AdminAuth";
@@ -289,36 +288,80 @@ export async function decideApiRequest(
   request: Request,
   pathname: string,
   adminAuthMode?: string,
-): Promise<ApiRequestDecision> {
+): Promise<string> {
+  return (await decideLegacyApiRequest(
+    database,
+    request,
+    pathname,
+    adminAuthMode,
+  )).decision;
+}
+
+export interface LegacyApiDecision {
+  decision: "allow-integration" | "allow-reference" | "not-found" |
+    "unauthorized" | "insufficient-scope";
+  /**
+   * 可归属主体（ADR-0047 D4，单次哈希查表同趟取回 id+scopes，ADR-0049 D6）：
+   * allow-integration 与 insufficient-scope 携带；其余情形为 null（解析不出
+   * 的凭证没有可归属主体，不写审计行）。
+   */
+  attribution: ApiAttribution | null;
+}
+
+export async function decideLegacyApiRequest(
+  database: D1Database,
+  request: Request,
+  pathname: string,
+  adminAuthMode?: string,
+): Promise<LegacyApiDecision> {
   const settings = await readApiAccessSettings(database);
   const details = apiPathDetails(pathname);
   if (details?.kind === "reference") {
-    return settings.enabled && settings.publicDocsEnabled
-      ? "allow-reference"
-      : "not-found";
+    return {
+      decision: settings.enabled && settings.publicDocsEnabled
+        ? "allow-reference"
+        : "not-found",
+      attribution: null,
+    };
   }
   if (details?.kind !== "integration" || !settings.enabled) {
-    return "not-found";
+    return {decision: "not-found", attribution: null};
   }
   const apiKey = providedApiKey(request);
-  if (!apiKey) return "unauthorized";
+  if (!apiKey) return {decision: "unauthorized", attribution: null};
   const requiredScope = ["GET", "HEAD"].includes(request.method.toUpperCase())
     ? OAUTH_SCOPES.READ
     : OAUTH_SCOPES.WRITE;
-  const integrationScopes = await apiKeyScopes(database, apiKey);
-  if (integrationScopes) {
-    return integrationScopes.has(requiredScope)
-      ? "allow-integration"
-      : "insufficient-scope";
+  // 单次查表同时给出 scopes 与 id：scope 判定与审计归属共用（原实现各查一次）。
+  const keyRow = await lookupApiKeyBySecret(database, apiKey);
+  if (keyRow) {
+    const owner = await database.prepare(
+      "SELECT user_id AS userId FROM ext_api_key_owners " +
+        "WHERE api_key_id = ? LIMIT 1",
+    ).bind(keyRow.id).first<{userId: string}>();
+    return {
+      decision: keyRow.scopes.has(requiredScope)
+        ? "allow-integration"
+        : "insufficient-scope",
+      attribution: {
+        apiKeyId: keyRow.id,
+        credentialId: null,
+        userId: owner?.userId ?? `apikey:${keyRow.id}`,
+        permissionCode: null,
+      },
+    };
   }
   if (!builtInAdminAuthEnabled(adminAuthMode)) {
-    return "unauthorized";
+    return {decision: "unauthorized", attribution: null};
   }
   const grant = await verifyOAuthAccessToken(database, apiKey);
-  if (!grant) return "unauthorized";
-  return grant.scopes.has(requiredScope)
-    ? "allow-integration"
-    : "insufficient-scope";
+  if (!grant) return {decision: "unauthorized", attribution: null};
+  return {
+    decision: grant.scopes.has(requiredScope)
+      ? "allow-integration"
+      : "insufficient-scope",
+    attribution: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -379,29 +422,4 @@ export async function writeApiAccessLog(
     // quota, …) and must not be invisible — surface it instead of swallowing.
     console.error("api access log write failed", {path, method, status, granted, error});
   }
-}
-
-/**
- * legacy bearer 调用的审计归属（ADR-0047 D4 / F5）：解析不出来的凭证没有
- * 可归属主体，返回 null（不写审计行）。owner 缺席时用 `apikey:<id>` 占位，
- * 保证 user_id 恒有值。
- */
-export async function legacyApiAttribution(
-  database: D1Database,
-  request: Request,
-): Promise<ApiAttribution | null> {
-  const provided = providedApiKey(request);
-  if (!provided) return null;
-  const apiKeyId = await findApiKeyIdBySecret(database, provided);
-  if (!apiKeyId) return null;
-  const owner = await database.prepare(
-    "SELECT user_id AS userId FROM ext_api_key_owners " +
-      "WHERE api_key_id = ? LIMIT 1",
-  ).bind(apiKeyId).first<{userId: string}>();
-  return {
-    apiKeyId,
-    credentialId: null,
-    userId: owner?.userId ?? `apikey:${apiKeyId}`,
-    permissionCode: null,
-  };
 }

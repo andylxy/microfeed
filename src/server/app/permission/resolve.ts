@@ -51,12 +51,18 @@ function failed(context: string, error: unknown, module: string): AppPermissionF
  *
  * <p>凭证校验与权限解析都在这里完成，调用方拿到的是一份确定的权限集合，
  * 之后按自己的权限码判布尔即可。</p>
+ *
+ * <p>`precomputed`（ADR-0049 D11）：middleware 已对同一请求做过凭证校验与
+ * 权限解析并挂在 `locals.appAuth`，路由透传进来即直接采用——省掉每端点
+ * 2 次重复校验 + 1 次重复解析。未提供时行为不变（登录路由等非中间件路径）。</p>
  */
 export async function resolveAppPermissionSet(
   db: D1Database,
   request: Request,
   module: string,
+  precomputed?: {permissions: Set<string>} | undefined,
 ): Promise<AppPermissionSetOutcome> {
+  if (precomputed) return {kind: "ok", permissions: precomputed.permissions};
   const token = providedLoginCredentialBearer(request);
   if (!token) return {kind: "missing-bearer"};
 

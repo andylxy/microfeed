@@ -40,9 +40,8 @@ import {isAdminPasswordSetupPath} from "@/server/auth/password-setup";
 import {
   addLegacyApiDeprecationHeaders,
   canonicalAppBookRequestPath,
-  decideApiRequest,
+  decideLegacyApiRequest,
   isIntegrationApiPath,
-  legacyApiAttribution,
   providedApiKey,
   type ApiAttribution,
   writeApiAccessLog,
@@ -60,6 +59,7 @@ import {
 } from "@/server/rbac/app-quota";
 import {resolveRbacContext, RBAC_WILDCARD, userMayEnterAdmin} from "@/server/rbac/resolve";
 import {requireAppVersion} from "@/server/rbac/guard";
+import {readVersionGateInputs, type VersionGateInputs} from "@/server/app/version/resolve";
 import {checkReplay} from "@/server/rbac/replay";
 import {createFeedCrud, loadFeed} from "@/server/feed/feed";
 import {applyWorkerCachePolicy} from "@/server/cache/public-cache";
@@ -222,6 +222,9 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
   // TCM app namespace (spec `.scratch/tcm-import/spec.md` §6). The app's
   // pre-auth endpoints (login / captcha) and its config
   // dictionaries stay anonymous, exactly as the legacy backend served them.
+  // 版本门输入（ADR-0049 D11）：stage1 在此一次读回，stage2（下方凭证分支内）
+  // 显式复用——AppBookRequest 之外的 /api/ 路径不进版本门，保持 null 即可。
+  let versionInputs: VersionGateInputs | null = null;
   if (pathname.startsWith("/api/AppBookRequest/")) {
     if (!isIntegrationApiPath(pathname)) {
       return next();
@@ -243,7 +246,10 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     // Version gate, stage 1 (ADR-0020): before authentication only the global
     // floor and `all` rules are known. A missing / non-integer `app-version`
     // header is a 426 — that is the force-upgrade target, not an edge case.
-    const versionGate = await requireAppVersion(env.FEED_DB, context.request);
+    versionInputs = await readVersionGateInputs(env.FEED_DB);
+    const versionGate = await requireAppVersion(env.FEED_DB, context.request, {
+      inputs: versionInputs,
+    });
     if (versionGate) return versionGate;
   }
 
@@ -326,11 +332,19 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       // 会员标记随鉴权结果一起下发给内容端点（与权限码同一趟查询得出）：
       // GetNav 据此决定要不要收录会员书，不必再查一次角色。
       context.locals.appMember = result.isMember;
+      // 凭证判定结果挂 locals（ADR-0049 D11）：/api/app/* 能力端点复用，
+      // 免掉各自重复的凭证校验与权限解析。
+      context.locals.appAuth = {
+        userId: result.attribution.userId,
+        credentialId: result.attribution.credentialId ?? "",
+        permissions: result.permissions,
+      };
       // Version gate, stage 2 (ADR-0020): the caller is now identified, so the
       // grayscale device/user/percent rules layer on top of the global floor.
       if (pathname.startsWith("/api/AppBookRequest/")) {
         const postAuthGate = await requireAppVersion(db, context.request, {
           userId: attribution.userId,
+          inputs: versionInputs ?? undefined,
         });
         if (postAuthGate) return postAuthGate;
         // 配额消费（ADR-0048）：凭证有效且版本门通过才计数；无效 token 到不了
@@ -367,19 +381,17 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       ) {
         return apiNotFoundResponse(context.request);
       }
-      const decision = await decideApiRequest(
-        db,
-        context.request,
-        pathname,
-        env.MICROFEED_ADMIN_AUTH_MODE,
-      );
-      // legacy bearer 双向留痕（ADR-0047 D4）：allow 把归属交给下方 next() 之后
-      // 的统一写入（真实状态码）；insufficient-scope 在返回前写 deny 行。
-      // 解析不出的凭证没有可归属主体，不写。
-      const legacyAttribution = (decision === "allow-integration" ||
-          decision === "insufficient-scope")
-        ? await legacyApiAttribution(db, context.request)
-        : null;
+      // legacy bearer 双向留痕（ADR-0047 D4）：判定与归属一次查表同趟取回
+      // （ADR-0049 D6）。allow 把归属交给下方 next() 之后的统一写入（真实
+      // 状态码）；insufficient-scope 在返回前写 deny 行。解析不出的凭证没有
+      // 可归属主体（attribution 为 null），不写。
+      const {decision, attribution: legacyAttribution} =
+        await decideLegacyApiRequest(
+          db,
+          context.request,
+          pathname,
+          env.MICROFEED_ADMIN_AUTH_MODE,
+        );
       if (decision === "allow-reference") {
         return addLegacyApiDeprecationHeaders(
           await next(),

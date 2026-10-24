@@ -23,8 +23,14 @@ export type AnnouncementPermissionOutcome = AppPermissionOutcome<{allowed: boole
 export async function resolveAnnouncementPermission(
   db: D1Database,
   request: Request,
+  precomputed?: {permissions: Set<string>} | undefined,
 ): Promise<AnnouncementPermissionOutcome> {
-  const set = await resolveAppPermissionSet(db, request, "app/announcement");
+  const set = await resolveAppPermissionSet(
+    db,
+    request,
+    "app/announcement",
+    precomputed,
+  );
   if (set.kind === "ok") {
     return {
       kind: "ok",

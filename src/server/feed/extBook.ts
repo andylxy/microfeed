@@ -299,10 +299,12 @@ export async function purgeBookChapterContentCaches(
 ): Promise<void> {
   const chapters = await db.prepare(
     "SELECT id FROM items WHERE book_id = ? AND tcm_kind = 'chapter'",
-  ).bind(bookId).all<{id: string}>();
-  for (const chapter of chapters.results ?? []) {
-    await purgeAppChapterContentCache(chapter.id);
-  }
+  ).bind(bookId).all();
+  // 桶删除是 POP 本地操作：并行收束（ADR-0049 D13⑤）。
+  await Promise.all(
+    (chapters.results ?? []).map((chapter) =>
+      purgeAppChapterContentCache(String(chapter.id))),
+  );
 }
 
 /** Merge a partial edit into the stored `data`, keeping unknown keys intact so

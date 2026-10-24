@@ -285,13 +285,29 @@ function insertRepresentativeData(database: DatabaseSync, position: number): voi
       );
     `);
   } else {
-    database.exec(`
-      INSERT INTO api_keys
-        (id, name, api_key, created_at_ms, updated_at_ms)
-      VALUES
-        ('snapshot-api-key', 'Snapshot integration', 'snapshot-secret',
-         1725000000000, 1725000000000);
-    `);
+    // 0148（mf_ key 哈希化）前后 schema 不同：按实际列分支插入——注意判据用
+    // api_key_hint（0148 独有）；secret_hash 自 0033 就存在，不能作判据。
+    const hasHashColumn = (database.prepare(
+      "SELECT COUNT(*) AS c FROM pragma_table_info('api_keys') WHERE name = 'api_key_hint'",
+    ).get() as {c: number}).c > 0;
+    if (hasHashColumn) {
+      database.exec(`
+        INSERT INTO api_keys
+          (id, name, secret_hash, api_key_hint, created_at_ms, updated_at_ms)
+        VALUES
+          ('snapshot-api-key', 'Snapshot integration',
+           '${createHash("sha256").update("snapshot-secret").digest("hex")}',
+           'cret', 1725000000000, 1725000000000);
+      `);
+    } else {
+      database.exec(`
+        INSERT INTO api_keys
+          (id, name, api_key, created_at_ms, updated_at_ms)
+        VALUES
+          ('snapshot-api-key', 'Snapshot integration', 'snapshot-secret',
+           1725000000000, 1725000000000);
+      `);
+    }
   }
   if (position >= 2) {
     database.exec(`
@@ -451,13 +467,24 @@ describe("migration upgrades from historical snapshot positions", () => {
           "SELECT json_extract(data, '$.title') AS title FROM channels " +
             "WHERE id = 'channel0001'",
         ).get()).toEqual({title: "Saved channel"});
-        expect(database.prepare(
-          "SELECT id, name, api_key FROM api_keys WHERE id = 'snapshot-api-key'",
-        ).get()).toEqual({
-          api_key: "snapshot-secret",
+        // 0148（mf_ key 哈希化）后的不变量：明文列不存在；行在重造中幸存。
+        // 0148 之前的插入经滚动后 secret_hash/api_key_hint 为 NULL（SQLite
+        // 无法在库内做 sha256），0148 后的直接插入带真哈希——两组合法形态。
+        const keyRow = database.prepare(
+          "SELECT id, name, secret_hash, api_key_hint FROM api_keys " +
+            "WHERE id = 'snapshot-api-key'",
+        ).get() as {
+          api_key_hint: string | null;
+          id: string;
+          name: string;
+          secret_hash: string | null;
+        } | undefined;
+        expect(keyRow).toMatchObject({
           id: "snapshot-api-key",
           name: "Snapshot integration",
         });
+        expect(keyRow?.secret_hash === null)
+          .toBe(keyRow?.api_key_hint === null);
         const indexes = database.prepare(
           "SELECT name FROM sqlite_schema WHERE type = 'index' AND " +
             "sql IS NOT NULL ORDER BY name",

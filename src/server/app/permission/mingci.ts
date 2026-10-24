@@ -30,8 +30,14 @@ export type MingCiPermissionOutcome = AppPermissionOutcome<{allowed: boolean}>;
 export async function resolveMingCiPermission(
   db: D1Database,
   request: Request,
+  precomputed?: {permissions: Set<string>} | undefined,
 ): Promise<MingCiPermissionOutcome> {
-  const set = await resolveAppPermissionSet(db, request, "app/mingci-permission");
+  const set = await resolveAppPermissionSet(
+    db,
+    request,
+    "app/mingci-permission",
+    precomputed,
+  );
   if (set.kind === "ok") {
     return {
       kind: "ok",

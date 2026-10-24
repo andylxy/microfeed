@@ -14,9 +14,11 @@
  *
  * **副作用：每次调用记一条登录**（需求 3 追加，2026-10-04）。App 每次启动只检查一次
  * （工单 18），所以「一次启动 = 一次登录」，写入 `ext_app_login_log`：更新最后登录时间、
- * 登录次数 +1。放在这个端点而不是设备登记，是为了覆盖**身份解析失败/凭证无效的启动**
- * —— 那种情况下 `verified` 为 null，登录日志仍按设备记录，否则「找出启动过的 App」
- * 会漏掉这部分。带了有效 Bearer 的检查会解析出用户并一并写入。
+ * 登录次数 +1。**该日志实际只覆盖携带有效凭证的启动**：无凭证 / 凭证无效的请求在
+ * middleware 的鉴权分支就被 401 拦下（`/api/app/*` 均为 integration 路径，无凭证即
+ * unauthorized），到不了本文件——文件内的「鉴权前写日志」只在凭证有效时执行，
+ * 无效凭证的启动不会留下日志行（ADR-0049 D11 注释更正；要覆盖那部分启动需要在
+ * middleware 的 401 路径记日志，另行立项）。
  *
  * **刻意不限流**（spec §12，票据 15 已定）。⚠️ 但该决定的前提是「只读不写」，而登录日志
  * 引入后本端点**每次请求都会写一行**（一次 upsert），前提已变：现在它是一个（很小的）
@@ -50,21 +52,25 @@ import {jsonResponse} from "@/server/http";
 
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};
 
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
   const db = env.FEED_DB;
 
   // 需求 3 追加：每个检查算一次登录。**写在鉴权之前** —— 这条日志的用途是「找出启动过的
   // App」，而最需要被找出的恰恰是**凭证缺失 / 无效**的那部分（它们随后会被 401 挡掉）。
   // 放在鉴权之后就等于把目标人群排除在日志外（评审第 12 轮指出的回归）。
   // **不**阻断响应：写失败不该影响升级检查。没有 `X-Device-Id` 时无法归属设备，跳过。
+  // middleware 已验过凭证时（locals.appAuth，ADR-0049 D11）复用其 userId，
+  // 不再校验一次；凭证缺失/无效的请求仍走完整校验路径（日志语义不变）。
   const deviceId = deviceIdFromRequest(request);
   if (deviceId) {
     try {
       // 复用既有的 bearer 解析（`mflc_…` 前缀校验也在里面）：不在本文件重写一份。
       const token = providedLoginCredentialBearer(request);
-      const verified = token
-        ? await verifyLoginCredentialToken(db, token)
-        : null;
+      const verified = !token
+        ? null
+        : locals.appAuth
+        ? {userId: locals.appAuth.userId}
+        : await verifyLoginCredentialToken(db, token);
       await recordLoginLog(db, verified?.userId ?? null, deviceId);
     } catch (error) {
       console.warn("app/version: 登录日志写入失败，忽略", error);
@@ -73,7 +79,7 @@ export const GET: APIRoute = async ({request}) => {
 
   // 鉴权。错误措辞与 search-permission / mingci-permission **逐字一致**
   // （`"missing bearer"` 空格版；此前发 `{error: outcome.kind}` 会变成连字符形态，评审第 12 轮）。
-  const outcome = await resolveVersionPermission(db, request);
+  const outcome = await resolveVersionPermission(db, request, locals.appAuth);
   if (outcome.kind === "missing-bearer") {
     return jsonResponse({error: "missing bearer"}, {status: 401, headers: NO_STORE});
   }

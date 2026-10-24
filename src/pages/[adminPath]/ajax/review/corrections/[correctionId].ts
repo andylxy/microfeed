@@ -1,10 +1,9 @@
-import {cache, env} from "cloudflare:workers";
+import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
 import type {CorrectionDb} from "@/server/feed/extContentCorrection";
-import FeedDb from "@/server/feed/FeedDb";
-import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
+import {purgeWritebackCaches} from "@/server/feed/writeback-cache";
 import {
   approveCorrection,
   rejectCorrection,
@@ -48,14 +47,9 @@ export const POST: APIRoute = async ({locals, params, request}) => {
     );
     // Writing the correction back updates items.data directly, skipping the save
     // path that invalidates the public cache, so the reader would keep showing
-    // the pre-correction text. Purge here.
-    const feedDb = new FeedDb(env, request, cache);
-    await feedDb.purgePublicCacheTags([
-      PUBLIC_CACHE_TAGS.PUBLIC,
-      PUBLIC_CACHE_TAGS.ITEMS,
-      PUBLIC_CACHE_TAGS.CHANNEL_PRIMARY,
-      PUBLIC_CACHE_TAGS.item(applied.itemId),
-    ]);
+    // the pre-correction text. The helper purges the CDN tags plus the App
+    // chapter-content bucket the tags do not cover (ADR-0049 D3).
+    await purgeWritebackCaches(env, request, applied.itemId);
     return jsonResponse(applied);
   } catch (error) {
     const response = serviceError(error);

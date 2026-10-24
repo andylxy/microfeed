@@ -239,19 +239,41 @@ export async function replaceRolePermissions(
     }
   }
 
+  // 差量写（ADR-0049 D13①）：查回该角色在本端的现有码集，只删移除、只增
+  // 新增——保存未变更的角色从 1+N 行写降为 0 行写。role_id → 现有码的映射
+  // 一条 JOIN 读回。
+  const current = await db
+    .prepare(
+      `SELECT p.code AS code FROM ext_role_permissions rp
+       JOIN ext_permissions p ON p.id = rp.permission_id
+       JOIN ext_permission_nodes n ON n.permission_code = p.code
+       WHERE rp.role_id = ? AND n.kind = 'code' AND n.audience = ?`,
+    )
+    .bind(role.id, audience)
+    .all<{code: string}>();
+  const currentCodes = new Set((current.results ?? []).map((row) => row.code));
+  const nextCodes = new Set(codes);
+  const removed = [...currentCodes].filter((code) => !nextCodes.has(code));
+  const added = codes.filter((code) => !currentCodes.has(code));
+
   await db.batch([
-    db
-      .prepare(
-        `DELETE FROM ext_role_permissions
-         WHERE role_id = ?
-           AND permission_id IN (
-             SELECT p.id FROM ext_permissions p
-             JOIN ext_permission_nodes n ON n.permission_code = p.code
-             WHERE n.kind = 'code' AND n.audience = ?
-           )`,
-      )
-      .bind(role.id, audience),
-    ...codes.map((code) =>
+    ...(removed.length > 0
+      ? [
+        db
+          .prepare(
+            `DELETE FROM ext_role_permissions
+             WHERE role_id = ?
+               AND permission_id IN (
+                 SELECT p.id FROM ext_permissions p
+                 JOIN ext_permission_nodes n ON n.permission_code = p.code
+                 WHERE n.kind = 'code' AND n.audience = ?
+                   AND p.code IN (${removed.map(() => "?").join(", ")})
+               )`,
+          )
+          .bind(role.id, audience, ...removed),
+      ]
+      : []),
+    ...added.map((code) =>
       db
         .prepare(
           `INSERT OR IGNORE INTO ext_role_permissions (role_id, permission_id)
@@ -365,6 +387,9 @@ export async function readAllDevices(
 ): Promise<AdminDeviceRow[]> {
   const clause = options.status ? "WHERE d.status = ?" : "";
   const binds: unknown[] = options.status ? [options.status] : [];
+  // LIMIT 上界（ADR-0049 D8）：设备行随客户端换 id 增长（清理任务只删
+  // revoked 残留），面板按最近活跃截断 500 行——超出部分的设备仍能被搜索
+  // 定位（按用户查），只是不进全量列表。
   const rows = await db
     .prepare(
       `SELECT d.device_id AS deviceId, d.user_id AS userId,
@@ -374,7 +399,8 @@ export async function readAllDevices(
        FROM ext_user_devices d
        JOIN auth_user u ON u.id = d.user_id
        ${clause}
-       ORDER BY d.last_seen_at DESC`,
+       ORDER BY d.last_seen_at DESC
+       LIMIT 500`,
     )
     .bind(...binds)
     .all<AdminDeviceRow>();

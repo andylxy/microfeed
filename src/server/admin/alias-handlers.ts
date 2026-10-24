@@ -4,6 +4,7 @@ import type {APIRoute} from "astro";
 import {jsonResponse, localizedError} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {getDerivedYaoAliases} from "@/server/tcm/reads";
+import {purgeAppYaoAliasesCache} from "@/server/cache/app-cache";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
 export interface AdminAliasRow {
@@ -93,11 +94,19 @@ export const listAliasesEndpoint: APIRoute = async ({locals, request}) => {
   );
 };
 
+const ALIAS_TEXT_MAX = 200;
+
 function parseAliasBody(body: unknown): {bieming: string; name: string} {
   const parsed = body as {bieming?: unknown; name?: unknown} | null;
+  // 长度上限（ADR-0049 D7）：只 trim 不限长时超大 JSON 可直存 D1 单行；
+  // 对齐 tcm-entry 的 NAME_MAX 口径。
+  const text = (value: unknown): string =>
+    typeof value === "string" && value.trim().length <= ALIAS_TEXT_MAX
+      ? value.trim()
+      : "";
   return {
-    bieming: typeof parsed?.bieming === "string" ? parsed.bieming.trim() : "",
-    name: typeof parsed?.name === "string" ? parsed.name.trim() : "",
+    bieming: text(parsed?.bieming),
+    name: text(parsed?.name),
   };
 }
 
@@ -127,6 +136,8 @@ export const createAliasEndpoint: APIRoute = async ({locals, request}) => {
     )
     .bind(crypto.randomUUID(), bieming, name, now, now)
     .run();
+  // 手工别名写使 GetAliaZhongYao 桶陈旧（ADR-0049 D2），先清再回板。
+  await purgeAppYaoAliasesCache();
   return jsonResponse({aliases: await listAliases(env.FEED_DB)});
 };
 
@@ -165,6 +176,8 @@ export const updateAliasEndpoint: APIRoute = async ({locals, request}) => {
     )
     .bind(bieming, name, Date.now(), id)
     .run();
+  // 手工别名写使 GetAliaZhongYao 桶陈旧（ADR-0049 D2），先清再回板。
+  await purgeAppYaoAliasesCache();
   return jsonResponse({aliases: await listAliases(env.FEED_DB)});
 };
 
@@ -204,7 +217,9 @@ export const deleteAliasEndpoint: APIRoute = async ({locals, request}) => {
       .prepare("DELETE FROM ext_tcm_aliases WHERE id = ?")
       .bind(id)
       .run();
-    return jsonResponse({aliases: await listAliases(env.FEED_DB)});
+    // 手工别名写使 GetAliaZhongYao 桶陈旧（ADR-0049 D2），先清再回板。
+  await purgeAppYaoAliasesCache();
+  return jsonResponse({aliases: await listAliases(env.FEED_DB)});
   }
 
   const bieming =
@@ -232,7 +247,9 @@ export const deleteAliasEndpoint: APIRoute = async ({locals, request}) => {
         .bind(crypto.randomUUID(), bieming, bieming, now, now)
         .run();
     }
-    return jsonResponse({aliases: await listAliases(env.FEED_DB)});
+    // 手工别名写使 GetAliaZhongYao 桶陈旧（ADR-0049 D2），先清再回板。
+  await purgeAppYaoAliasesCache();
+  return jsonResponse({aliases: await listAliases(env.FEED_DB)});
   }
 
   return localizedError(request, "errors.aliases.invalidInput", 400);

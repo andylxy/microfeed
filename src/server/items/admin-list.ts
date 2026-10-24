@@ -261,8 +261,15 @@ export async function listAdminItems(
         ...(tcmKindFilter !== "all" ? [tcmKindFilter] : []),
       ];
       const branchParamCount = branchBindings.length + 2;
-      const booksPerQuery = Math.floor(
-        (D1_MAX_BOUND_PARAMS - 1) / branchParamCount,
+      // 每条语句的分支数受三重上限：绑定参数（每分支 branchParamCount 个 +
+      // 外层 1 个 LIMIT）、**复合 SELECT 项数——D1 运行时实测上限 5 项**
+      // （worker 池二分探针 `.scratch/module-hardening/probe-compound-limit.mjs`；
+      // 33 分支与 30 分支都报 `too many terms in compound SELECT`），以及
+      // 每语句往返代价——分块数随书数线性增长，归并在 TS 侧完成（上方
+      // compareRows），分块只多付往返、不改变结果。取 min(5, 参数预算)。
+      const booksPerQuery = Math.min(
+        5,
+        Math.floor((D1_MAX_BOUND_PARAMS - 1) / branchParamCount),
       );
       // SQLite 文本排序按 BINARY 比较；排序键与 id 都是 ASCII，JS 的 `<`
       // 与它一致。顺序必须与 SQL 的 ORDER BY 完全相同，各片结果才能直接

@@ -232,7 +232,7 @@ TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book
 公开读路径有两层且互不借力——CDN 边缘缓存（`Cloudflare-CDN-Cache-Control` 控制，覆盖 `isPublicPagePath` 的公开 HTML）与 Worker Cache API（`caches.default`，`cachedAppResponse` 持有，供被中间件强制 `no-store` 的 `/api/*` 用）。`/api/*` 一律不可 CDN 缓存；可 Worker 缓存的前提是返回体与调用者身份无关（`GetAllMingCi` 因按权限裁剪反被排除；身份只到「会员/公开」粒度的端点按 tier 分桶——ADR-0044 的 GetNav/GetBookChapter 与 ADR-0048 的 GetChapterContent/GetBookIdFang 都是这一形态，tier 进键、写路径显式清桶）。Cache API 另有两个坑：`cache.put`/`match` 不支持 `stale-while-revalidate` 与 `stale-if-error`，且 `cache.put` 不兼容 tiered caching。
 
 **写时清理完整性**：
-缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都打上 `Cache-Tag` 并 purge——漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。清理点集中在 `FeedDb.putContent` 与 `purgePublicCache` 的调用处；绕过它们直接 `FEED_DB.batch()` 的写入（如卷板的四个处理器）必须自带清理。App 侧章节正文与方剂两桶（ADR-0048 D2）的清理路径有三条合并覆盖：`FeedCrudManager` 写后按 `tcm_kind` 分派、卷板四处理器按书全量清正文桶、书的写函数在状态变更（含软删/物理删）时按书清两桶。
+缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都打上 `Cache-Tag` 并 purge——漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。清理点集中在 `FeedDb.putContent` 与 `purgePublicCache` 的调用处；绕过它们直接 `FEED_DB.batch()` 的写入（如卷板的四个处理器）必须自带清理。App 侧章节正文与方剂两桶（ADR-0048 D2）的清理路径有三条合并覆盖：`FeedCrudManager` 写后按 `tcm_kind` 分派、卷板四处理器按书全量清正文桶、书的写函数在状态变更（含软删/物理删）时按书清两桶。中药目录与别名两桶（ADR-0049 D2）由 tcm-entry 的 yao 写、别名板写与 `FeedCrudManager` 的 section 分派清理。
 
 **章节回跳锚点**：
 阅读页与目录之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>/v/<篇章 id>/#mf-toc-<条 id>`（TCM 书；扁平条目书没有篇章，退回 `/book/<bookId>#mf-toc-<条 id>`），卷页给每个条文设 `id="mf-toc-<条 id>"`。哈希不能只在一侧改——收尾脚本（`web-body-end`）会在目录重建后按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)。

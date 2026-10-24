@@ -199,7 +199,14 @@ export async function isDeviceRevoked(
  * ⚠️ `ON CONFLICT … DO UPDATE SET last_seen_at` deliberately updates **only**
  * `last_seen_at`. Writing `status = 'active'` here would silently lift a
  * revocation on the next request (CONTEXT「设备登记」不变量).
+ *
+ * 写节流（ADR-0049 D4）：本函数在每个已授权请求上跑；`WHERE` 守卫让 5 分钟
+ * 内的重复请求 0 行写（matched-but-unchanged 不计 rows_written）。设备面板的
+ * 「最后活跃」粒度是分钟级展示，5 分钟抖动不可见。revoked 行的 last_seen 也
+ * 会随超期触发写回，但 UPDATE 只动 last_seen_at，不解除吊销——不变量保持。
  */
+export const DEVICE_SEEN_THROTTLE_MS = 300_000;
+
 export async function registerUserDevice(
   db: D1Database,
   userId: string,
@@ -212,9 +219,10 @@ export async function registerUserDevice(
     .prepare(
       `INSERT INTO ext_user_devices (user_id, device_id, last_seen_at, status, created_at)
        VALUES (?, ?, ?, 'active', ?)
-       ON CONFLICT(user_id, device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+       ON CONFLICT(user_id, device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+       WHERE ext_user_devices.last_seen_at < ?`,
     )
-    .bind(userId, deviceId, now, now)
+    .bind(userId, deviceId, now, now, new Date(Date.now() - DEVICE_SEEN_THROTTLE_MS).toISOString())
     .run();
   // 登录日志**不**在这里写：本函数在每个鉴权请求上都会跑，在那里计数会把「登录次数」
   // 变成「请求次数」，而且它在身份验证之后、覆盖不到未登录启动。写入点已改到

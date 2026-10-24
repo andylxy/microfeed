@@ -33,8 +33,14 @@ export type VersionPermissionOutcome = AppPermissionOutcome<{allowed: boolean}>;
 export async function resolveVersionPermission(
   db: D1Database,
   request: Request,
+  precomputed?: {permissions: Set<string>} | undefined,
 ): Promise<VersionPermissionOutcome> {
-  const set = await resolveAppPermissionSet(db, request, "app/version");
+  const set = await resolveAppPermissionSet(
+    db,
+    request,
+    "app/version",
+    precomputed,
+  );
   if (set.kind === "ok") {
     return {
       kind: "ok",

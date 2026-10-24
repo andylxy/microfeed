@@ -12,9 +12,9 @@ const NOVEL_ID = "kindnovel01";
 const ITEM_IDS = [CHAPTER_ID, SECTION_ID, FANG_ID, NOVEL_ID];
 
 async function seed() {
-  await env.FEED_DB.prepare(
-    "DELETE FROM items WHERE id IN ('kindchapter1', 'kindsection1', 'kindfang001', 'kindnovel01')",
-  ).run();
+  // 全表清空（ADR-0049 门禁修复）：迁移 0099/0101 的回填章行会混进
+  // 「全量条数」断言——本文件的列表语义只由四个 kind 种子定义。
+  await env.FEED_DB.prepare("DELETE FROM items").run();
   await env.FEED_DB.batch([
     env.FEED_DB.prepare(
       "INSERT INTO items (id, status, data, pub_date, created_at, updated_at, book_id, tcm_kind, tcm_parent_id) " +

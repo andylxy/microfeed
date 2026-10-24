@@ -138,7 +138,7 @@ export async function appLogin(
   if (!user) {
     // 时序抹平（ADR-0047 D5）：先执行一次等价口令校验再返回统一文案，
     // 两条路径的口令校验次数恒为 1，耗时一致。
-    await verifyPassword(password, DUMMY_PASSWORD_HASH);
+    await verifyPassword({hash: DUMMY_PASSWORD_HASH, password});
     // 不区分「账号不存在」与「口令错误」，避免账号枚举。
     return "登录失败,请检查账号密码";
   }

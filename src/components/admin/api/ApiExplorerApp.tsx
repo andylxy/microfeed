@@ -65,7 +65,7 @@ export default function ApiExplorerApp({
       </div>
       <div className="overflow-hidden rounded-xl border bg-background">
         <ApiReference
-          key={settings.enabled}
+          key={settings.enabled ? "enabled" : "disabled"}
           apiKey={effectiveToken || undefined}
           document={document}
           followDocumentColorMode

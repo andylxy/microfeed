@@ -739,6 +739,8 @@ export const updateApiItem: APIRoute = async ({locals, params, request}) => {
       mapResult: webhookItemObject,
       mutation: "updated",
     }),
+    // before 已在上面读过：传入复用，service 层不再重复整行读（ADR-0049 D13）。
+    before,
   );
   if (!item) {
     return publicLocalizedError(request, "errors.item.notFound", 404);
@@ -810,9 +812,14 @@ export const prepareApiMediaUpload: APIRoute = async ({locals, request}) => {
     return publicLocalizedError(request, "errors.api.mediaItemIdRequired", 400);
   }
 
-  const extension = localPath.slice(
+  // 扩展名白名单（ADR-0049 D7）：来自客户端路径的扩展名只接受 1-8 位字母
+  // 数字，杜绝 `.`/`/` 拼出嵌套 R2 键；合法媒体扩展名都在此集合内。
+  const rawExtension = localPath.slice(
     (localPath.lastIndexOf(".") - 1 >>> 0) + 2,
   );
+  const extension = /^[A-Za-z0-9]{1,8}$/.test(rawExtension)
+    ? rawExtension.toLowerCase()
+    : "";
   const filenamePrefix = itemId ? category : "item";
   const folderPrefix = itemId ? "media" : "images";
   const filename = `${filenamePrefix}-${randomHex(32)}` +

@@ -3,11 +3,15 @@ import {describe, expect, it} from "vitest";
 import {
   APP_BOOK_FANG_CACHE,
   APP_CHAPTER_CONTENT_CACHE,
+  APP_YAO_ALIASES_CACHE,
+  APP_ZHONGYAO_CACHE,
   bookFangKeySuffix,
   cachedAppResponse,
   chapterContentKeySuffix,
   purgeAppBookFangCache,
   purgeAppChapterContentCache,
+  purgeAppYaoAliasesCache,
+  purgeAppYaoCache,
 } from "@/server/cache/app-cache";
 
 /**
@@ -104,5 +108,46 @@ describe("app chapter-content / book-fang cache buckets", () => {
     await purgeAppBookFangCache("bkfang0001");
     await cachedAppResponse(APP_BOOK_FANG_CACHE, load, "bkfang0001:public");
     expect(loads).toBe(2);
+  });
+
+  it("purging yao buckets drops both zhongyao and aliases (ADR-0049 D2)", async () => {
+    let zhongyaoLoads = 0;
+    let aliasLoads = 0;
+    await cachedAppResponse(APP_ZHONGYAO_CACHE, async () => {
+      zhongyaoLoads += 1;
+      return [];
+    });
+    await cachedAppResponse(APP_YAO_ALIASES_CACHE, async () => {
+      aliasLoads += 1;
+      return [];
+    });
+    expect(zhongyaoLoads).toBe(1);
+    expect(aliasLoads).toBe(1);
+
+    // 一条中药写入清两键：目录与派生别名同时失效。
+    await purgeAppYaoCache();
+    await cachedAppResponse(APP_ZHONGYAO_CACHE, async () => {
+      zhongyaoLoads += 1;
+      return [];
+    });
+    await cachedAppResponse(APP_YAO_ALIASES_CACHE, async () => {
+      aliasLoads += 1;
+      return [];
+    });
+    expect(zhongyaoLoads).toBe(2);
+    expect(aliasLoads).toBe(2);
+
+    // 手工别名写只清别名键，目录不受影响。
+    await purgeAppYaoAliasesCache();
+    await cachedAppResponse(APP_YAO_ALIASES_CACHE, async () => {
+      aliasLoads += 1;
+      return [];
+    });
+    expect(aliasLoads).toBe(3);
+    await cachedAppResponse(APP_ZHONGYAO_CACHE, async () => {
+      zhongyaoLoads += 1;
+      return [];
+    });
+    expect(zhongyaoLoads).toBe(2);
   });
 });

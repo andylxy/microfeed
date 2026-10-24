@@ -77,14 +77,36 @@ export interface VersionGateContext {
  * 所以软规则在这里是隐形的；它们通过 `/api/app/version` 那个面向调用方的 `force`
  * 来上报（见 `src/pages/api/app/version.ts`）。
  */
-export async function resolveMinVersionForRequest(
+/** config+rules 一次读回的输入（middleware 两阶段间显式传递，无全局状态）。 */
+export interface VersionGateInputs {
+  config: Awaited<ReturnType<typeof readAppVersionConfig>>;
+  rules: Awaited<ReturnType<typeof readRolloutRules>>;
+}
+
+/** 版本门的两个输入一次读回（中间件 stage1 调用，stage2 显式复用，ADR-0049 D11）。 */
+export async function readVersionGateInputs(
   db: D1Database,
-  context: VersionGateContext = {},
-): Promise<ResolvedMinVersion> {
+): Promise<VersionGateInputs> {
   const [config, rules] = await Promise.all([
     readAppVersionConfig(db),
     readRolloutRules(db),
   ]);
+  return {config, rules};
+}
+
+export async function resolveMinVersionForRequest(
+  db: D1Database,
+  context: VersionGateContext = {},
+): Promise<ResolvedMinVersion> {
+  return resolveMinVersionFromInputs(await readVersionGateInputs(db), context);
+}
+
+/** 由既有输入解析地板（纯函数）：middleware stage2 复用 stage1 的输入。 */
+export function resolveMinVersionFromInputs(
+  inputs: VersionGateInputs,
+  context: VersionGateContext = {},
+): ResolvedMinVersion {
+  const {config, rules} = inputs;
   const globalFloor = config.minVersionCode > 0 ? config.minVersionCode : 0;
   const userId = context.userId ?? null;
   const deviceId = context.deviceId ?? null;

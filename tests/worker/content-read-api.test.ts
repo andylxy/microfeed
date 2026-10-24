@@ -49,7 +49,9 @@ async function seedBook(id: string, genre: string, status: number): Promise<void
     .bind(
       id,
       status,
-      JSON.stringify({title: `Book ${id}`}),
+      // 0113 的触发器从 JSON 回填 genre 镜像列：JSON 缺 `_microfeed.genre`
+      // 会把刚写入的 genre 列覆写成 NULL，书就不挂在分类下了。
+      JSON.stringify({title: `Book ${id}`, _microfeed: {genre}}),
       Date.now(),
       Date.now(),
       genre,

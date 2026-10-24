@@ -42,7 +42,13 @@ import {requiredApiPermission} from "./api-permissions";
 const THROTTLE_KEY_SUFFIX = ":/api/bearer";
 
 export type CredentialBearerDecision =
-  | {kind: "allow"; attribution: ApiAttribution; isMember: boolean}
+  | {
+    kind: "allow";
+    attribution: ApiAttribution;
+    isMember: boolean;
+    /** 权限集合同趟带出（ADR-0049 D11）：middleware 挂进 locals 供能力端点复用。 */
+    permissions: Set<string>;
+  }
   | {kind: "deviceRevoked"}
   | {kind: "forbidden"; attribution: ApiAttribution}
   | {kind: "notFound"}
@@ -148,5 +154,12 @@ export async function decideLoginCredentialApiRequest(
   // "Last used" means a call this credential actually got through, so it is
   // recorded only once authorization has passed.
   await markLoginCredentialUsed(database, verified.credentialId);
-  return {kind: "allow", attribution, isMember: access.isMember};
+  // 权限集合同趟带出（ADR-0049 D11）：middleware 挂进 locals，能力端点复用，
+  // 不再各自 resolveUserPermissions。
+  return {
+    kind: "allow",
+    attribution,
+    isMember: access.isMember,
+    permissions: access.permissions,
+  };
 }

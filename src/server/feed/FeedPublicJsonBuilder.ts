@@ -286,7 +286,11 @@ export default class FeedPublicJsonBuilder {
       // Counted from the body that is actually published, so the reader, the
       // shelf total and the dashboard all agree. Overrides whatever the pocket
       // declared — see `bookWordCount` for why the declaration cannot be used.
-      wordCount: chapterWordCount(item as unknown as Record<string, unknown>),
+      // 字数优先用 `content_text` 镜像列（写入时已派生成纯文本，ADR-0049 D12）：
+      // 免掉每请求对每条正文跑一遍 bodyToPlainText 渲染；镜像缺失时回退旧口径。
+      wordCount: typeof item.contentText === "string" && item.contentText
+        ? item.contentText.replace(/\s+/gu, "").length
+        : chapterWordCount(item as unknown as Record<string, unknown>),
       is_audio: mediaFile.isAudio,
       is_document: mediaFile.isDocument,
       is_external_url: mediaFile.isExternalUrl,

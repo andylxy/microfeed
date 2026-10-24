@@ -769,8 +769,24 @@ export default class FeedDb {
 
   async _purgePublicCacheTags(tags: string[]) {
     if (!this.publicCacheInvalidationEnabled) return;
+    // 无 purger（本地 dev / 无 ACCOUNT_ID / 非生产实例）时静默跳过会让
+    // 24h 边缘缓存失去失效通道——首次跳过打一次警告（ADR-0049 D12），
+    // 避免「以为清了其实没清」的排障陷阱。
+    if (!this.publicCachePurger) {
+      if (!FeedDb.warnedPurgerMissing) {
+        FeedDb.warnedPurgerMissing = true;
+        console.warn(
+          "FeedDb: public cache purge skipped — no purger configured " +
+            "(local dev or account-less instance). Edge-cached public pages " +
+            "may stay stale up to their TTL.",
+        );
+      }
+      return;
+    }
     await purgePublicCache(tags, this.publicCachePurger);
   }
+
+  private static warnedPurgerMissing = false;
 
   async purgePublicCacheTags(tags: string[]) {
     await this._purgePublicCacheTags(tags);

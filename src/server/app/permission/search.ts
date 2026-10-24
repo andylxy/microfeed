@@ -33,8 +33,14 @@ export type SearchPermissionOutcome = AppPermissionOutcome<{
 export async function resolveSearchPermission(
   db: D1Database,
   request: Request,
+  precomputed?: {permissions: Set<string>} | undefined,
 ): Promise<SearchPermissionOutcome> {
-  const set = await resolveAppPermissionSet(db, request, "app/search-permission");
+  const set = await resolveAppPermissionSet(
+    db,
+    request,
+    "app/search-permission",
+    precomputed,
+  );
   if (set.kind === "ok") {
     return {
       kind: "ok",

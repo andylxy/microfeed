@@ -167,7 +167,11 @@ export const createAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
 
   const body = readBody(await request.json().catch(() => null));
   const code = typeof body?.code === "string" ? body.code.trim().toLowerCase() : "";
-  const title = typeof body?.title === "string" ? body.title.trim() : "";
+  // 长度上限（ADR-0049 D7）：标题超长按无效输入拒绝，对齐 NAME_MAX 口径。
+  const title = typeof body?.title === "string" &&
+      body.title.trim().length <= 200
+    ? body.title.trim()
+    : "";
   const style = body ? readStylePatch(body) : null;
   if (!MARKER_CODE_PATTERN.test(code) || !title || !style) {
     return localizedError(request, "errors.annotationMarkers.invalidInput", 400);
@@ -216,7 +220,11 @@ export const updateAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
 
   const body = readBody(await request.json().catch(() => null));
   const code = typeof body?.code === "string" ? body.code.trim().toLowerCase() : "";
-  const title = typeof body?.title === "string" ? body.title.trim() : "";
+  // 长度上限（ADR-0049 D7），与 create 分支同口径。
+  const title = typeof body?.title === "string" &&
+      body.title.trim().length <= 200
+    ? body.title.trim()
+    : "";
   const style = body ? readStylePatch(body) : null;
   if (!code || !title || !style) {
     return localizedError(request, "errors.annotationMarkers.invalidInput", 400);

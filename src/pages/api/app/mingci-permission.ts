@@ -29,8 +29,12 @@ import {jsonResponse} from "@/server/http";
 
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};
 
-export const GET: APIRoute = async ({request}) => {
-  const outcome = await resolveMingCiPermission(env.FEED_DB, request);
+export const GET: APIRoute = async ({locals, request}) => {
+  const outcome = await resolveMingCiPermission(
+    env.FEED_DB,
+    request,
+    locals.appAuth,
+  );
 
   switch (outcome.kind) {
     case "ok":

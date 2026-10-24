@@ -388,7 +388,6 @@ interface DeliveryRow extends Record<string, unknown> {
   id: string;
   is_manual: number;
   is_test: number;
-  response_body: string | null;
   response_status: number | null;
   status: WebhookDeliveryStatus;
 }
@@ -407,7 +406,6 @@ function deliveryFromRow(row: DeliveryRow): WebhookDeliverySummary {
     id: String(row.id),
     isManual: Boolean(row.is_manual),
     isTest: Boolean(row.is_test),
-    ...(row.response_body ? {responseBody: String(row.response_body)} : {}),
     ...(row.response_status !== null
       ? {responseStatus: Number(row.response_status)}
       : {}),
@@ -415,8 +413,21 @@ function deliveryFromRow(row: DeliveryRow): WebhookDeliverySummary {
   };
 }
 
+// 显式列清单（ADR-0049 D9）：`SELECT *` 会把 response_body 一并拉回——
+// 列表 200 行 × 响应体可达数百 KB，而面板只在详情的 attempts 里渲染响应体。
 const DELIVERY_SELECT = `
-  SELECT webhook_deliveries.*,
+  SELECT webhook_deliveries.id,
+    webhook_deliveries.event_id,
+    webhook_deliveries.endpoint_id,
+    webhook_deliveries.endpoint_url,
+    webhook_deliveries.status,
+    webhook_deliveries.attempt_count,
+    webhook_deliveries.completed_at,
+    webhook_deliveries.created_at,
+    webhook_deliveries.error,
+    webhook_deliveries.is_manual,
+    webhook_deliveries.is_test,
+    webhook_deliveries.response_status,
     webhook_events.event_type AS event_type,
     webhook_endpoints.name AS endpoint_name
   FROM webhook_deliveries

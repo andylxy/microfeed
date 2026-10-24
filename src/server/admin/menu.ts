@@ -27,6 +27,7 @@ import {ADMIN_MENU_CODES} from "@/shared/Constants";
 import {
   PERMISSION_NODE_COLUMNS,
   toPermissionNodeRow,
+  type PermissionNodeRow,
   type PermissionNodeTableRow,
 } from "@/shared/PermissionTreeOps";
 
@@ -51,7 +52,20 @@ const NODE_ROWS = `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
  * @param activeCode The menu code of the page being rendered, or `null`.
  * @param onboardingOk When the site is not set up yet, everything but the
  *   dashboard home is shown but disabled — the pre-existing behaviour.
+ *
+ * 节点行集走 isolate 内 60s 缓存（ADR-0049 D13②）：行集与调用者无关（权限
+ * 过滤在内存做），每个后台页请求省 34 行读。版本键探测（MAX(updated_at_ms)）
+ * 需要无索引的 92 行扫描，比缓存命中的收益还贵，所以用纯 TTL——权限树保存
+ * 后侧栏最长 60s 显示旧分组，自愈；rbac 编辑页自己的节点查询不经此缓存，
+ * 编辑所见即时。
  */
+const MENU_NODES_TTL_MS = 60_000;
+
+let menuNodeCache: {
+  expiresAt: number;
+  rows: PermissionNodeRow[];
+} | null = null;
+
 export async function readAdminMenu(
   db: D1Database,
   locals: RbacLocals,
@@ -59,8 +73,15 @@ export async function readAdminMenu(
   activeCode: string | null,
   onboardingOk: boolean,
 ): Promise<AdminMenuItem[]> {
-  const result = await db.prepare(NODE_ROWS).all<PermissionNodeTableRow>();
-  const nodes = (result.results ?? []).map(toPermissionNodeRow);
+  const now = Date.now();
+  let nodes: PermissionNodeRow[];
+  if (menuNodeCache && menuNodeCache.expiresAt > now) {
+    nodes = menuNodeCache.rows;
+  } else {
+    const result = await db.prepare(NODE_ROWS).all<PermissionNodeTableRow>();
+    nodes = (result.results ?? []).map(toPermissionNodeRow);
+    menuNodeCache = {expiresAt: now + MENU_NODES_TTL_MS, rows: nodes};
+  }
   const {items} = buildSidebarItems(
     nodes,
     (entryCode) => rbacAllows(locals, entryCode),

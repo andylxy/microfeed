@@ -1,4 +1,4 @@
-import {cache, env} from "cloudflare:workers";
+import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import {jsonResponse, serviceError} from "@/server/http";
@@ -8,8 +8,7 @@ import {
   rejectChapterHandler,
 } from "@/server/admin/review-handlers";
 import type {AuditDb} from "@/server/feed/extContentAudit";
-import FeedDb from "@/server/feed/FeedDb";
-import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
+import {purgeWritebackCaches} from "@/server/feed/writeback-cache";
 import {requireRbac} from "@/server/rbac/guard";
 import {PERMISSION_CODES} from "@/shared/Constants";
 
@@ -72,14 +71,9 @@ export const POST: APIRoute = async ({locals, request}) => {
     // Confirming writes items.data directly, which bypasses the save path that
     // normally invalidates the public page cache. Without this the reader keeps
     // serving the pre-change content until some later edit happens to purge it —
-    // which looked like "the confirm did nothing".
-    const feedDb = new FeedDb(env, request, cache);
-    await feedDb.purgePublicCacheTags([
-      PUBLIC_CACHE_TAGS.PUBLIC,
-      PUBLIC_CACHE_TAGS.ITEMS,
-      PUBLIC_CACHE_TAGS.CHANNEL_PRIMARY,
-      PUBLIC_CACHE_TAGS.item(body.itemId),
-    ]);
+    // which looked like "the confirm did nothing". The helper also clears the
+    // App chapter-content bucket (ADR-0049 D3), which the CDN tags do not cover.
+    await purgeWritebackCaches(env, request, body.itemId);
 
     return jsonResponse(result);
   } catch (error) {

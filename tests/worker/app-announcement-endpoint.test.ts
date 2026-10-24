@@ -83,7 +83,10 @@ let bearer: string;
 async function callGet(secret: string | null = bearer): Promise<Response> {
   const headers: Record<string, string> = {};
   if (secret) headers.authorization = `Bearer ${secret}`;
-  return announcementsGet({request: new Request(URL_, {headers})} as never);
+  return announcementsGet({
+    locals: {},
+    request: new Request(URL_, {headers}),
+  } as never);
 }
 
 beforeEach(async () => {

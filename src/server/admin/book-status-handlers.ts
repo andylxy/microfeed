@@ -57,8 +57,15 @@ async function deleteStateConflict(
   const holder = rows.find((row) => row.adminListHidden);
   if (!holder || holder.code === code) return null;
   const counts = await countChannelsByStatus(db);
-  const inUse = counts.get(holder.code) ?? 0;
-  return inUse > 0 ? inUse : null;
+  // 转移影响两侧的书：旧持有行上的书会离开删除态（变回普通隐藏），新持有行
+  // （本次要认领的 `code`）上的书会**被静默改成删除态**——两侧任一挂书都拒绝
+  // （测试「refuses to move the flag off a code that still carries books」
+  // 钉的正是目标侧；实现此前只查了旧持有侧）。
+  const inUseOldHolder = counts.get(holder.code) ?? 0;
+  if (inUseOldHolder > 0) return inUseOldHolder;
+  const inUseTarget = code === null ? 0 : counts.get(code) ?? 0;
+  if (inUseTarget > 0) return inUseTarget;
+  return null;
 }
 
 export const BOOK_STATUS_ERRORS = {

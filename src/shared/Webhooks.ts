@@ -127,7 +127,8 @@ export interface WebhookDeliverySummary {
   id: string;
   isManual: boolean;
   isTest: boolean;
-  responseBody?: string;
+  // 投递级响应体已从列表/详情查询剔除（ADR-0049 D9）：响应体只在
+  // `WebhookAttemptSummary.responseBody`（attempts）里渲染。
   responseStatus?: number;
   status: WebhookDeliveryStatus;
 }

@@ -222,12 +222,20 @@ export async function verifyLoginCredentialToken(
  * Record that a credential was used. Called by the callers once the request it
  * authenticated has been authorized, so a rejected call does not refresh the
  * dashboard's "last used" column.
+ *
+ * 写节流（ADR-0049 D4）：本函数在每个已授权请求上跑，无条件 UPDATE 会让满额
+ * 凭证一天烧 1 万行写。改条件更新——只有距上次记录超过 60s 才写（≤1,440
+ * 写/日/凭证）；仪表盘的「最近使用」粒度是分钟级展示，60s 抖动不可见。
  */
+export const LAST_USED_THROTTLE_MS = 60_000;
+
 export async function markLoginCredentialUsed(
   database: D1Database,
   credentialId: string,
 ): Promise<void> {
+  const now = Date.now();
   await database.prepare(
-    "UPDATE ext_login_credentials SET last_used_at_ms = ? WHERE id = ?",
-  ).bind(Date.now(), credentialId).run();
+    "UPDATE ext_login_credentials SET last_used_at_ms = ? " +
+      "WHERE id = ? AND (last_used_at_ms IS NULL OR last_used_at_ms < ?)",
+  ).bind(now, credentialId, now - LAST_USED_THROTTLE_MS).run();
 }

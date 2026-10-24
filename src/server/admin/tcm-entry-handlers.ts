@@ -6,6 +6,8 @@ import {jsonResponse, localizedError, serviceError} from "@/server/http";
 import {requireRbac} from "@/server/rbac/guard";
 import {listTcmEntryBoard} from "@/server/feed/extTcmEntries";
 import {writeItemContent} from "@/server/feed/extContentReview";
+import {purgeAppYaoCache} from "@/server/cache/app-cache";
+import {purgeWritebackCaches} from "@/server/feed/writeback-cache";
 import type {AuditDb} from "@/server/feed/extContentAudit";
 import type {VolumeDb} from "@/server/feed/extVolume";
 import {PERMISSION_CODES, STATUSES} from "@/shared/Constants";
@@ -126,6 +128,15 @@ interface ParsedBody {
 
 const NAME_MAX = 200;
 const TEXT_MAX = 20_000;
+
+/**
+ * yao 写使 GetAllZhongYao（含经疏正文）与 GetAliaZhongYao（派生别名随
+ * bieMing 变化）两桶陈旧（ADR-0049 D2）；term 不进共享桶（GetAllMingCi
+ * 因权限相关性禁入缓存），无需清理。
+ */
+async function purgeYaoBucketsIfYao(kind: string): Promise<void> {
+  if (kind === "yao") await purgeAppYaoCache();
+}
 
 function parseBody(raw: unknown): ParsedBody {
   const body = (raw ?? {}) as Record<string, unknown>;
@@ -271,6 +282,7 @@ export function tcmEntryEndpoints(spec: EntrySpec) {
         spec.kind,
       )
       .run();
+    await purgeYaoBucketsIfYao(spec.kind);
     return respond(db, bookId, spec.kind, false);
   };
 
@@ -330,6 +342,10 @@ export function tcmEntryEndpoints(spec: EntrySpec) {
         .bind(nextStatus, id)
         .run();
     }
+    // raw-SQL 写回绕过保存路径的 CDN 失效（ADR-0049 D3）；yao/term 无 App 桶，
+    // helper 里的 kind 查询自然跳过。
+    await purgeWritebackCaches(env, request, id);
+    await purgeYaoBucketsIfYao(spec.kind);
     return respond(db, existing.book_id, spec.kind, false);
   };
 
@@ -367,6 +383,7 @@ export function tcmEntryEndpoints(spec: EntrySpec) {
       .prepare("UPDATE items SET status = ?, updated_at = ? WHERE id = ?")
       .bind(STATUSES.DELETED, new Date().toISOString(), id)
       .run();
+    await purgeYaoBucketsIfYao(spec.kind);
     return respond(db, existing.book_id, spec.kind, false);
   };
 
@@ -399,6 +416,7 @@ export function tcmEntryEndpoints(spec: EntrySpec) {
       .prepare("UPDATE items SET status = ?, updated_at = ? WHERE id = ?")
       .bind(restored, new Date().toISOString(), id)
       .run();
+    await purgeYaoBucketsIfYao(spec.kind);
     return respond(db, existing.book_id, spec.kind, true);
   };
 

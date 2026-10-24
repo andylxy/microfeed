@@ -34,11 +34,16 @@ export async function checkReplay(
   }
 
   const nowIso = new Date(now).toISOString();
-  // D1 has no TTL: prune expired nonces before inserting.
-  await db
-    .prepare("DELETE FROM ext_replay_nonces WHERE exp_at < ?")
-    .bind(nowIso)
-    .run();
+  // D1 has no TTL: prune expired nonces before inserting. 写节流（ADR-0049
+  // D4）：清理在每个带 nonce 的请求上都会跑（App 通道满额即 1 万次/日/凭证，
+  // 每次一写），改为 1% 采样——表上限 = 10 分钟窗口 × 请求速率，残留的过期行
+  // 不影响去重正确性（INSERT OR IGNORE 只比对 nonce 本身）。
+  if (Math.random() < 0.01) {
+    await db
+      .prepare("DELETE FROM ext_replay_nonces WHERE exp_at < ?")
+      .bind(nowIso)
+      .run();
+  }
 
   const expiry = new Date(timestamp + REPLAY_WINDOW_MS).toISOString();
   const inserted = await db

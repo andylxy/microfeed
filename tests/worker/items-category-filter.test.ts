@@ -10,6 +10,9 @@ const ITEM_IDS = ["catfilter-a", "catfilter-b", "catfilter-c"];
 
 async function seed() {
   // 一个分类、一本归在该分类下的书、三个篇章，其中只有两个属于这本书。
+  // 全表清空 items（ADR-0049 门禁修复）：迁移 0099/0101 的回填章行会混进
+  // 「全量条数」断言——本 describe 的列表语义只由三个 catfilter 种子定义。
+  await env.FEED_DB.prepare("DELETE FROM items").run();
   await env.FEED_DB.prepare("DELETE FROM ext_category WHERE id = ?")
     .bind(CATEGORY_ID).run();
   await env.FEED_DB.prepare(

@@ -307,6 +307,7 @@ describe("public /api/app/version endpoint", () => {
       updateLog: "Changelog",
     });
     const response = await appVersionGet({
+      locals: {},
       request: versionReq({headers: {"app-version": "1"}}),
     } as never);
     expect(response.status).toBe(200);
@@ -330,6 +331,7 @@ describe("public /api/app/version endpoint", () => {
       minVersionCode: 18,
     });
     const response = await appVersionGet({
+      locals: {},
       request: versionReq({headers: {"app-version": "19"}}),
     } as never);
     expect(response.status).toBe(200);
@@ -339,6 +341,7 @@ describe("public /api/app/version endpoint", () => {
   it("reports force=true when the caller sends no app-version at all", async () => {
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 18});
     const response = await appVersionGet({
+      locals: {},
       request: versionReq(),
     } as never);
     expect(await response.json()).toMatchObject({force: true});
@@ -351,12 +354,14 @@ describe("public /api/app/version endpoint", () => {
     await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 0});
 
     const withoutHeader = await appVersionGet({
+      locals: {},
       request: versionReq(),
     } as never);
     expect(await withoutHeader.json()).toMatchObject({minVersionCode: 0});
 
     // 同一地板下，低于某个"假想地板"的版本号同样不该被强制。
     const withHeader = await appVersionGet({
+      locals: {},
       request: versionReq({headers: {"app-version": "3"}}),
     } as never);
     expect(await withHeader.json()).toMatchObject({minVersionCode: 0});
@@ -531,6 +536,7 @@ describe("login log write point", () => {
   it("records one login per check, counting repeats", async () => {
     const check = () =>
       appVersionGet({
+        locals: {},
         request: versionReq({headers: {"x-device-id": "dev-login"}}),
       } as never);
 
@@ -551,11 +557,13 @@ describe("login log write point", () => {
     // 「凭证缺失 / 无效的启动」—— 那些请求随后会被 401 挡掉，但设备标识仍要留下，
     // 否则「找出启动过的 App」会漏掉它们。放在鉴权之后就等于把目标人群排除在外。
     const anonymous = await appVersionGet({
+      locals: {},
       request: new Request(VERSION_URL, {headers: {"x-device-id": "dev-anon"}}),
     } as never);
     expect(anonymous.status).toBe(401);
 
     const invalid = await appVersionGet({
+      locals: {},
       request: new Request(VERSION_URL, {
         headers: {"x-device-id": "dev-anon", authorization: "Bearer mflc_does_not_exist"},
       }),
@@ -569,7 +577,7 @@ describe("login log write point", () => {
   });
 
   it("records nothing without a device header", async () => {
-    await appVersionGet({request: versionReq()} as never);
+    await appVersionGet({locals: {}, request: versionReq()} as never);
     expect(await loginRows()).toEqual([]);
   });
 

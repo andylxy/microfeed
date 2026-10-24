@@ -39,7 +39,9 @@ import type {APIRoute} from "astro";
 import {
   compareVersionCode,
   parseAppVersionCode,
-  resolveMinVersionForRequest,
+  readVersionGateInputs,
+  resolveMinVersionFromInputs,
+  type VersionGateInputs,
 } from "@/server/app/version/resolve";
 import {deviceIdFromRequest, permissionsInclude} from "./resolve";
 import {checkReplay} from "./replay";
@@ -90,9 +92,14 @@ export interface RbacLocals {
 export async function requireAppVersion(
   db: D1Database,
   request: Request,
-  context: {userId?: string | null} = {},
+  context: {
+    userId?: string | null;
+    /** middleware stage1 已读回的输入：stage2 显式复用，免重复 2 行读（ADR-0049 D11）。 */
+    inputs?: VersionGateInputs;
+  } = {},
 ): Promise<Response | null> {
-  const {minVersionCode} = await resolveMinVersionForRequest(db, {
+  const inputs = context.inputs ?? await readVersionGateInputs(db);
+  const {minVersionCode} = resolveMinVersionFromInputs(inputs, {
     deviceId: deviceIdFromRequest(request),
     userId: context.userId ?? null,
   });
