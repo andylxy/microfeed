@@ -2,8 +2,12 @@
 //
 // 存储是专用表 `ext_app_about_info`（migration 0145）：name 主键即 App 端
 // AboutActivity 的分发枚举（about_thks / about_manual / about_bookname /
-// app_updata_log），text 为逐字字符串（App 自有 `$x{...}` 标记 + `|` 分行，
-// 非 Markdown），后台编辑器只作输入面板、内容原样存取（ADR-0029 存取约定）。
+// app_updata_log），text 为逐字字符串（App 自有 `$x{...}` 标记 + **真换行**
+// 分行，非 Markdown），后台编辑器只作输入面板、内容原样存取（ADR-0029 存取约定）。
+//
+// ⚠️ 分行符是**真换行（LF）**，不是旧后端的 `|`：migration 0146 把存量 `|`
+// 一次性转成 LF，App 端也同步去掉了 `split("|")`，实现「后端怎么存、App 就
+// 怎么显示」。别再把 `|` 当分行符写回来。
 //
 // 保存口径：**整表同步**——upsert 提交里的每一行，并删除提交里没有的行。
 // 槽位集合是封闭枚举（App 只认 4 个 name），整表同步让「删槽位」成为显式动作，

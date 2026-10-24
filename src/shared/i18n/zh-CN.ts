@@ -2259,7 +2259,7 @@ export const zhCN: TranslationKey = {
   },
   appAbout: {
     title: "关于页内容",
-    intro: "App「关于」页展示的内容。内容逐字存取、逐字下发——App 渲染的是它自己的标记语法（$x{…} 链接、| 表示换行），不是 Markdown。编辑器只是输入面板，你输入什么 App 就收到什么。",
+    intro: "App「关于」页展示的内容。内容逐字存取、逐字下发——App 渲染的是它自己的标记语法（$x{…} 链接），不是 Markdown。要换行就直接在编辑器里敲回车，不必再写 |；编辑器只是输入面板，你输入什么 App 就收到什么。",
     slotThks: "致谢",
     slotManual: "使用手册",
     slotBookname: "书名作者",

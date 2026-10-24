@@ -37,8 +37,9 @@ const SLOTS = [
  * 固定槽位，App 端 `AboutActivity` 按 `name` 分发渲染。
  *
  * ⚠️ 内容**逐字存取**（ADR-0029 存取约定，与条文注文同款）：App 渲染的是它
- * 自己的 `$x{…}` 标记 + `|` 分行语法，不是 Markdown —— 编辑器只是输入面板，
- * 保存时原文直存，服务端不做任何转换。
+ * 自己的 `$x{…}` 标记，**分行就是真换行**（敲回车即可，不是旧后端的 `|`，
+ * 存量 `|` 已由 migration 0146 转成 LF）——编辑器只是输入面板，保存时原文
+ * 直存，服务端不做任何转换。
  */
 export default function AppAboutApp({canManage = false}: Props) {
   const {t} = useTranslation();

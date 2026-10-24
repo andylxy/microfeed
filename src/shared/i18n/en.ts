@@ -2274,7 +2274,7 @@ export const en = {
   },
   appAbout: {
     title: "About page content",
-    intro: "What the mobile app's About screen shows. Content is stored and sent to the app verbatim — the app renders its own markup ($x{…} links, | as a line break), not Markdown. The editor is just an input surface; what you type is exactly what the app receives.",
+    intro: "What the mobile app's About screen shows. Content is stored and sent to the app verbatim — the app renders its own markup ($x{…} links), not Markdown. Press Enter for a line break; there is no need for the old | separator. The editor is just an input surface; what you type is exactly what the app receives.",
     slotThks: "Acknowledgements",
     slotManual: "User manual",
     slotBookname: "Book & author",
