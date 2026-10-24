@@ -164,6 +164,7 @@ export const en = {
       term: "Terms",
       devices: "Devices",
       app_versions: "App versions",
+      app_about: "About page content",
       login_logs: "Login log",
       announcements: "Announcements",
       cloud_usage: "Cloud usage",
@@ -2271,6 +2272,19 @@ export const en = {
     forceNo: "Optional",
     forceUnsupportedScope: '"Specific user" cannot be force-upgraded: the version check endpoint is anonymous and cannot resolve the user. Use "Specific device" to target it exactly.',
   },
+  appAbout: {
+    title: "About page content",
+    intro: "What the mobile app's About screen shows. Content is stored and sent to the app verbatim — the app renders its own markup ($x{…} links, | as a line break), not Markdown. The editor is just an input surface; what you type is exactly what the app receives.",
+    slotThks: "Acknowledgements",
+    slotManual: "User manual",
+    slotBookname: "Book & author",
+    slotUpdatelog: "Changelog",
+    slotHint: "Unknown slot names are dropped by the app. Built-in slots: about_thks, about_manual, about_bookname, app_updata_log.",
+    save: "Save",
+    saved: "Saved.",
+    loadFailed: "Could not load the about page content.",
+    saveFailed: "Could not save the about page content.",
+  },
   loginLogs: {
     title: "Login log",
     intro: "One row per device per day, recorded when the app starts. Use the start and end time to find which devices were active in that window — the device board only keeps a single \"last seen\" per device and cannot answer this.",
@@ -2457,6 +2471,7 @@ export const en = {
     term: "Terms",
     devices: "Devices",
     appVersions: "App versions",
+    appAbout: "About page content",
     announcements: "Announcements",
     loginLogs: "Login log",
     cloudUsage: "Cloud usage",
@@ -2570,6 +2585,7 @@ export const en = {
     devices: "Devices | microfeed.org",
     loginLogs: "Login log | microfeed.org",
     appVersions: "App versions | microfeed.org",
+    appAbout: "About page content | microfeed.org",
     announcements: "Announcements | microfeed.org",
     cloudUsage: "Cloud usage | microfeed.org",
   },
@@ -2714,6 +2730,9 @@ export const en = {
     appVersions: {
       invalidConfig: "Enter a version name and non-negative version codes.",
       invalidRule: "One of the rollout rules is invalid.",
+    },
+    appAbout: {
+      invalidEntry: "Every entry needs a slot name (at most 80 characters) and text content.",
     },
     cloudUsage: {
       invalidToken: "Paste a Cloudflare API token: non-empty, at most 200 characters, and no spaces inside.",

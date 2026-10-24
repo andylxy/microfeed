@@ -166,6 +166,7 @@ export const zhCN: TranslationKey = {
       term: "名词管理",
       devices: "设备管理",
       app_versions: "版本管理",
+      app_about: "关于页内容",
       login_logs: "登录日志",
       announcements: "公告管理",
       cloud_usage: "使用情况",
@@ -2256,6 +2257,19 @@ export const zhCN: TranslationKey = {
     forceNo: "可选",
     forceUnsupportedScope: "「指定用户」无法强制升级：版本检查接口是匿名的，拿不到用户身份。若要强制，请改用「指定设备」精确指定。",
   },
+  appAbout: {
+    title: "关于页内容",
+    intro: "App「关于」页展示的内容。内容逐字存取、逐字下发——App 渲染的是它自己的标记语法（$x{…} 链接、| 表示换行），不是 Markdown。编辑器只是输入面板，你输入什么 App 就收到什么。",
+    slotThks: "致谢",
+    slotManual: "使用手册",
+    slotBookname: "书名作者",
+    slotUpdatelog: "更新日志",
+    slotHint: "App 会丢弃未知槽位。内置槽位：about_thks、about_manual、about_bookname、app_updata_log。",
+    save: "保存",
+    saved: "已保存。",
+    loadFailed: "关于页内容加载失败。",
+    saveFailed: "关于页内容保存失败。",
+  },
   loginLogs: {
     title: "登录日志",
     intro: "每台设备每天记一条，App 启动时写入。按起止时间筛出某段时间内启动过的 App——设备管理只保留每台设备一条「最后活跃」，回答不了这个问题。",
@@ -2442,6 +2456,7 @@ export const zhCN: TranslationKey = {
     term: "名词管理",
     devices: "设备管理",
     appVersions: "版本管理",
+    appAbout: "关于页内容",
     announcements: "公告管理",
     loginLogs: "登录日志",
     cloudUsage: "使用情况",
@@ -2555,6 +2570,7 @@ export const zhCN: TranslationKey = {
     devices: "设备管理 | microfeed.org",
     loginLogs: "登录日志 | microfeed.org",
     appVersions: "版本管理 | microfeed.org",
+    appAbout: "关于页内容 | microfeed.org",
     announcements: "公告管理 | microfeed.org",
     cloudUsage: "使用情况 | microfeed.org",
   },
@@ -2699,6 +2715,9 @@ export const zhCN: TranslationKey = {
     appVersions: {
       invalidConfig: "请填写版本名，且版本码为非负整数。",
       invalidRule: "灰度规则中有一条不合法。",
+    },
+    appAbout: {
+      invalidEntry: "每条内容都需要槽位名（不超过 80 字符）和文本内容。",
     },
     cloudUsage: {
       invalidToken: "请粘贴 Cloudflare API Token：非空、不超过 200 个字符、中间不能有空格。",

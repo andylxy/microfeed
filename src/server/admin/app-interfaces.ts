@@ -6,8 +6,8 @@
  *   - 内容端点：`APP_BOOK_REQUEST_CONTENT_SUFFIXES`（要登录凭证，门码由
  *     `requiredApiPermission()` 现算——migration 0131 起按内容域逐端点分发，
  *     不再是单一 `app:mobile:access`）；
- *   - 匿名端点：`APP_BOOK_REQUEST_ANONYMOUS_ROUTES`（登录 / 换 token / 验证码 /
- *     项目与登录信息 / 关于页，不需要凭证也不需要码）；
+ *   - 匿名端点：`APP_BOOK_REQUEST_ANONYMOUS_ROUTES`（登录 / 验证码 / 关于页，
+ *     不需要凭证也不需要码）；
  *   - `/api/app/*` 四个：搜索权限、名词解释、版本升级、运营公告，门码同样
  *     `requiredApiPermission()` 现算（搜索权限是 `app:search:global` / book 的
  *     任一双码门）。
@@ -53,7 +53,7 @@ function credentialRow(path: string): AppInterfaceRow {
 }
 
 /**
- * 全部 App 接口（18 行 = 8 内容 + 6 匿名 + 4 个 `/api/app/*`）。
+ * 全部 App 接口（15 行 = 8 内容 + 3 匿名 + 4 个 `/api/app/*`）。
  * 顺序即展示顺序：先内容端点，再匿名端点，最后 `/api/app/*`。
  */
 export function listAppInterfaces(): AppInterfaceRow[] {

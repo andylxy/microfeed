@@ -120,6 +120,14 @@ export const SNAPSHOT_TABLES = {
     // deletes (status=4) for audit; the content itself is data, so a restore must keep
     // both published and retired rows.
     "ext_app_announcement",
+    // App about-page content (migration 0145). Operator-authored slot texts shown on
+    // the mobile app's About screen; like announcements above, the rows are content —
+    // a restored site must keep them or the About screen goes back to empty.
+    "ext_app_about_info",
+    // Book status designations (migrations 0142, 0143). Operator-curated status codes
+    // (name, color) that the books board and the App's status filter render; a
+    // restored site keeping items but not their statuses would mislabel every book.
+    "ext_book_status",
   ],
   ephemeral: [
     "item_create_idempotency",

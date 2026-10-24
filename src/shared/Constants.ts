@@ -206,6 +206,7 @@ export const ADMIN_MENU_CODES = {
   TERM: 'term',
   DEVICES: 'devices',
   APP_VERSIONS: 'app_versions',
+  APP_ABOUT: 'app_about',
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
   CLOUD_USAGE: 'cloud_usage',
@@ -293,6 +294,10 @@ export const PERMISSION_CODES = {
   // `:manage` 解锁增删改/过期。治理类，挂在 group_operations（0089 从 group_account 迁出）。
   SYSTEM_ANNOUNCEMENT_READ: 'system:announcement:read',
   SYSTEM_ANNOUNCEMENT_MANAGE: 'system:announcement:manage',
+  // App 关于页内容（migration 0145）。`:read` 打开管理页，`:manage` 解锁保存。
+  // 治理类，挂在 group_operations，与 app-version / announcement 同族。
+  SYSTEM_APP_ABOUT_READ: 'system:app-about:read',
+  SYSTEM_APP_ABOUT_MANAGE: 'system:app-about:manage',
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
   // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
   // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底

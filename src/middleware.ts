@@ -212,7 +212,7 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
   }
 
   // TCM app namespace (spec `.scratch/tcm-import/spec.md` §6). The app's
-  // pre-auth endpoints (login / replaceToken / captcha) and its config
+  // pre-auth endpoints (login / captcha) and its config
   // dictionaries stay anonymous, exactly as the legacy backend served them.
   if (pathname.startsWith("/api/AppBookRequest/")) {
     if (!isIntegrationApiPath(pathname)) {

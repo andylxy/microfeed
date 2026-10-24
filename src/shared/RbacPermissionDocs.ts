@@ -445,6 +445,28 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     gates: ["页面 /announcements（管理入口）", "接口 /ajax/announcements/save — 保存公告"],
     caveats: ["不默认授予 editor。"],
   },
+  "system:app-about:read": {
+    summary: "查看 App 关于页内容（ext_app_about_info 的 4 个固定槽位）。",
+    gates: ["页面 /app-about", "接口 /ajax/app-about（GET）— 槽位列表"],
+    caveats: ["不默认授予 editor。"],
+  },
+  "system:app-about:manage": {
+    summary: "App 关于页内容管理：编辑致谢 / 手册 / 书名作者 / 更新日志四个槽位。",
+    gates: ["页面 /app-about（管理入口）", "接口 /ajax/app-about/save — 整表保存"],
+    caveats: [
+      "不默认授予 editor。",
+      "保存是整表同步：提交里没有的槽位行会被删除。",
+      "内容逐字下发到 App（$x{…} 标记 + | 分行），编辑器不转换格式。",
+    ],
+  },
+  "content:book-status:manage": {
+    summary: "书籍状态管理（预留码）。",
+    gates: ["代码中暂无守卫引用"],
+    caveats: [
+      "目录已播种，但当前没有页面或端点校验它。",
+      "书籍状态的定义与配色走迁移种子（0142/0143），尚无运行时管理入口。",
+    ],
+  },
 
   // ── App 能力 · 搜索 / 名词 / 版本 / 公告 ────────────────────
   "app:search:global": {

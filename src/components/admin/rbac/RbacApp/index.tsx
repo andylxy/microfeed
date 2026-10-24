@@ -77,7 +77,7 @@ const ROLE_CODE_PATTERN = /^[a-z][a-z0-9_]*$/u;
 const CATEGORY_AUDIENCES: readonly PermissionAudience[] = ["desktop", "app"];
 
 /** App 匿名端点里「登录凭证」用途的三个路由；其余匿名端点一律归「应用信息」。 */
-const ANON_CREDENTIAL_SUFFIXES = new Set(["login", "replaceToken", "getPicCaptcha"]);
+const ANON_CREDENTIAL_SUFFIXES = new Set(["login", "getPicCaptcha"]);
 
 /**
  * 「开放访问」合成块的两个用途分组，从接口清单数据推导：

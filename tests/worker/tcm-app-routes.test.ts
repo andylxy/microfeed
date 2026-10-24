@@ -3,9 +3,9 @@
  *
  * 覆盖 code-review 暴露的真实缺口：7 个内容端点 + GetTipsStyleConfig 此前只在
  * `tests/unit/tcm-golden.test.ts` 里被比对，而该组在 CI 因 golden 快照不入 git
- * 整组跳过，等同零覆盖。本测试直接命中 14 个 `src/pages/api/AppBookRequest/*`
+ * 整组跳过，等同零覆盖。本测试直接命中 11 个 `src/pages/api/AppBookRequest/*`
  * 路由处理器，锁定：
- *   - 14 个端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）。
+ *   - 11 个端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）。
  *     2026-10-16（ADR-0028 D4）：GetTipsStyleConfig 此前是唯一例外（故意发裸 `{styles}`），
  *     已改为同形 —— App 的声明 `HttpCallback<HttpData<…>>` 要信封，裸包实测解析失败。
  *
@@ -19,14 +19,11 @@ import * as GetAllZhongYao from "@/pages/api/AppBookRequest/GetAllZhongYao";
 import * as GetBookChapter from "@/pages/api/AppBookRequest/GetBookChapter";
 import * as GetBookIdFang from "@/pages/api/AppBookRequest/GetBookIdFang";
 import * as GetChapterContent from "@/pages/api/AppBookRequest/GetChapterContent";
-import * as GetLoginInfo from "@/pages/api/AppBookRequest/GetLoginInfo";
 import * as GetNav from "@/pages/api/AppBookRequest/GetNav";
-import * as GetProjectInfo from "@/pages/api/AppBookRequest/GetProjectInfo";
 import * as GetTipsStyleConfig from "@/pages/api/AppBookRequest/GetTipsStyleConfig";
 import * as getAboutInfo from "@/pages/api/AppBookRequest/getAboutInfo";
 import * as getPicCaptcha from "@/pages/api/AppBookRequest/getPicCaptcha";
 import * as login from "@/pages/api/AppBookRequest/login";
-import * as replaceToken from "@/pages/api/AppBookRequest/replaceToken";
 
 const db = env.FEED_DB;
 const ORIGIN = "https://app.example.com";
@@ -287,8 +284,8 @@ describe("TCM app route wire contract", () => {
     expect(typeof body.data!.version).toBe("number");
   });
 
-  it("config endpoints (ProjectInfo/LoginInfo/AboutInfo/PicCaptcha) wrap the envelope", async () => {
-    for (const route of [GetProjectInfo, GetLoginInfo, getAboutInfo, getPicCaptcha]) {
+  it("config endpoints (AboutInfo/PicCaptcha) wrap the envelope", async () => {
+    for (const route of [getAboutInfo, getPicCaptcha]) {
       const body = await bodyOf(await route.GET(ctx("/api/AppBookRequest/x")));
       expect(body.code).toBe(200);
       expect(body.msg).toBe("请求成功");
@@ -308,15 +305,5 @@ describe("TCM app route wire contract", () => {
     );
     expect(body.code).toBe(200);
     expect(body.data).toBe("请检查账号密码");
-  });
-
-  it("replaceToken route wraps the envelope and rejects an unauthenticated call", async () => {
-    const body = await bodyOf(
-      await replaceToken.POST(
-        ctxReq("/api/AppBookRequest/replaceToken", {method: "POST"}),
-      ),
-    );
-    expect(body.code).toBe(200);
-    expect(body.data).toBe("请先登录");
   });
 });

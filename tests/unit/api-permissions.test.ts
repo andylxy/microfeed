@@ -115,10 +115,7 @@ describe("mobile app namespace (/api/AppBookRequest/…)", () => {
   ];
   const ANONYMOUS = [
     "login",
-    "replaceToken",
     "getPicCaptcha",
-    "GetProjectInfo",
-    "GetLoginInfo",
     "getAboutInfo",
   ];
 
@@ -156,9 +153,6 @@ describe("mobile app namespace (/api/AppBookRequest/…)", () => {
     // Pre-auth / config endpoints are not integration paths → no code required
     // (the middleware exempts them from auth rather than mapping a code).
     expect(requiredApiPermission("/api/AppBookRequest/login/", "POST")).toBeNull();
-    expect(
-      requiredApiPermission("/api/AppBookRequest/GetProjectInfo/", "GET"),
-    ).toBeNull();
   });
 
   it("leaves no content endpoint unmapped (fail-closed stays total)", () => {

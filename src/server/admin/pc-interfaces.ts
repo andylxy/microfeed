@@ -155,6 +155,9 @@ const C: readonly CatalogEntry[] = [
   // 运营公告板（system:announcement:*）
   ["GET", "/admin/ajax/announcements", "system:announcement:read"],
   ["POST", "/admin/ajax/announcements/save", "system:announcement:manage"],
+  // 关于页内容板（system:app-about:*）
+  ["GET", "/admin/ajax/app-about", "system:app-about:read"],
+  ["POST", "/admin/ajax/app-about/save", "system:app-about:manage"],
   // 登录日志 / 用量（system:login-log:read / system:cloud-usage:read）
   ["GET", "/admin/ajax/login-logs", "system:login-log:read"],
   ["GET", "/admin/ajax/cloud-usage", "system:cloud-usage:read"],

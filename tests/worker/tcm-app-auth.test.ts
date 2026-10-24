@@ -4,13 +4,11 @@ import {env} from "cloudflare:workers";
 import {createAdminRbacUser} from "@/server/admin/rbac-handlers";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
-import {appLogin, appReplaceToken} from "@/server/tcm/app-auth";
+import {appLogin} from "@/server/tcm/app-auth";
 import {POST as appLoginPost} from "@/pages/api/AppBookRequest/login";
 import {
   emptyPicCaptcha,
   getAppAboutInfo,
-  getAppLoginInfo,
-  getAppProjectInfo,
 } from "@/server/tcm/config";
 
 const db = env.FEED_DB;
@@ -81,14 +79,9 @@ afterEach(async () => {
     db.prepare("DELETE FROM ext_auth_throttle"),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
+    db.prepare("DELETE FROM ext_app_about_info"),
   ]);
 });
-
-async function seedPrimaryChannel(data: Record<string, unknown>): Promise<void> {
-  await db.prepare(
-    "INSERT OR REPLACE INTO channels (id, status, is_primary, data) VALUES (?, 1, 1, ?)",
-  ).bind(CHANNEL_ID, JSON.stringify(data)).run();
-}
 
 describe("App login (ticket 12)", () => {
   it("signs in by username and issues an mflc_ login credential", async () => {
@@ -159,31 +152,6 @@ describe("App login (ticket 12)", () => {
       UserName: "x",
     })).toBe("请检查账号密码");
   });
-
-  it("replaceToken echoes a valid Bearer key and rejects invalid ones", async () => {
-    await createAccount({account: "refresh", name: "Refresh", password: "secret1"});
-    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
-      UserName: "refresh",
-      Password: "secret1",
-    }) as Record<string, unknown>;
-    const token = payload.Token as string;
-
-    const refreshed = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: `Bearer ${token}`}},
-    )) as Record<string, unknown>;
-    expect(refreshed.Token).toBe(token);
-    expect(refreshed.Account).toBe("refresh");
-
-    const invalid = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: "Bearer not-a-real-key"}},
-    ));
-    expect(invalid).toBe("凭证无效或已过期");
-
-    const missing = await appReplaceToken(db, appRequest("/api/AppBookRequest/replaceToken"));
-    expect(missing).toBe("请先登录");
-  });
 });
 
 describe("App login throttle (ADR-0011 D1 / ticket 12 限流)", () => {
@@ -237,42 +205,17 @@ describe("App login throttle (ADR-0011 D1 / ticket 12 限流)", () => {
   });
 });
 
-describe("App site config (ticket 13)", () => {
-  it("maps project info from the primary channel", async () => {
-    await seedPrimaryChannel({
-      title: "中医典籍",
-      description: "典籍站点说明",
-      image: "https://media.example.com/logo.png",
-    });
-
-    const info = await getAppProjectInfo(db) as Record<string, unknown>;
-    expect(info.systemName).toBe("中医典籍");
-    expect(info.systemDescription).toBe("典籍站点说明");
-    expect(info.systemLogo).toBe("https://media.example.com/logo.png");
-    expect(info.systemVersion).toBe("");
-    // 旧后端列表类配置缺失时返回 string.Empty，保持一致。
-    expect(info.sysDefaultLinksIcon).toBe("");
-  });
-
-  it("degrades to empty strings without a primary channel", async () => {
-    const info = await getAppProjectInfo(db) as Record<string, unknown>;
-    expect(info.systemName).toBe("");
-    expect(info.systemLogo).toBe("");
-
-    const loginInfo = await getAppLoginInfo(db) as Record<string, unknown>;
-    expect(loginInfo.vierificationCode).toBe("false");
-    expect(loginInfo.systemName).toBe("");
-  });
-
-  it("getAboutInfo defaults to an empty array and reads configured entries", async () => {
+describe("App site config (ticket 13)", () => {  it("getAboutInfo reads the ext_app_about_info table verbatim", async () => {
+    await db.prepare("DELETE FROM ext_app_about_info").run();
     expect(await getAppAboutInfo(db)).toEqual([]);
 
     await db.prepare(
-      "INSERT OR REPLACE INTO settings (category, data) VALUES ('webGlobalSettings', ?)",
-    ).bind(JSON.stringify({
-      aboutInfo: [{text: "关于本站", name: "v1"}],
-    })).run();
-    expect(await getAppAboutInfo(db)).toEqual([{text: "关于本站", name: "v1"}]);
+      "INSERT INTO ext_app_about_info (name, text) VALUES (?, ?), (?, ?)",
+    ).bind("about_thks", "致谢内容", "app_updata_log", "更新日志|第二行").run();
+    expect(await getAppAboutInfo(db)).toEqual([
+      {name: "about_thks", text: "致谢内容"},
+      {name: "app_updata_log", text: "更新日志|第二行"},
+    ]);
   });
 
   it("pic captcha returns the legacy empty shape", () => {
@@ -284,68 +227,3 @@ describe("App site config (ticket 13)", () => {
   });
 });
 
-/** 取刚通过后台建出的用户 id（createAccount 派生 username / email）。 */
-async function createdUserId(account: string): Promise<string> {
-  const row = await db
-    .prepare('SELECT id FROM "auth_user" WHERE username = ? OR email = ?')
-    .bind(account.toLowerCase(), `${account.toLowerCase()}@example.com`)
-    .first<{id: string}>();
-  if (!row) throw new Error(`user not found: ${account}`);
-  return row.id;
-}
-
-describe("App replaceToken enforces ban/revoke (ADR-0011 D3)", () => {
-  async function loginAs(account: string, password: string): Promise<{token: string; userId: string}> {
-    await createAccount({account, name: account, password});
-    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
-      UserName: account,
-      Password: password,
-    }) as Record<string, unknown>;
-    return {token: payload.Token as string, userId: await createdUserId(account)};
-  }
-
-  it("refreshes a normal token (control)", async () => {
-    const {token} = await loginAs("d3normal", "secret1");
-    const refreshed = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: `Bearer ${token}`}},
-    )) as Record<string, unknown>;
-    expect(refreshed.Token).toBe(token);
-  });
-
-  it("rejects a banned account", async () => {
-    const {token, userId} = await loginAs("d3banned", "secret1");
-    await db.prepare('UPDATE "auth_user" SET banned = 1 WHERE id = ?').bind(userId).run();
-    const result = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: `Bearer ${token}`}},
-    ));
-    expect(result).toBe("账号已被封禁");
-  });
-
-  it("rejects a revoked device", async () => {
-    const {token, userId} = await loginAs("d3revoked", "secret1");
-    await db.prepare(
-      "INSERT INTO ext_user_devices (user_id, device_id, status, last_seen_at, created_at) " +
-        "VALUES (?, ?, 'revoked', '2024-01-01', '2024-01-01')",
-    ).bind(userId, "d3-device-1").run();
-    const result = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: `Bearer ${token}`, "x-device-id": "d3-device-1"}},
-    ));
-    expect(result).toBe("设备已被吊销");
-  });
-
-  it("lets a non-revoked device through", async () => {
-    const {token, userId} = await loginAs("d3active", "secret1");
-    await db.prepare(
-      "INSERT INTO ext_user_devices (user_id, device_id, status, last_seen_at, created_at) " +
-        "VALUES (?, ?, 'active', '2024-01-01', '2024-01-01')",
-    ).bind(userId, "d3-device-2").run();
-    const refreshed = await appReplaceToken(db, appRequest(
-      "/api/AppBookRequest/replaceToken",
-      {headers: {authorization: `Bearer ${token}`, "x-device-id": "d3-device-2"}},
-    )) as Record<string, unknown>;
-    expect(refreshed.Token).toBe(token);
-  });
-});

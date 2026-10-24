@@ -1,4 +1,4 @@
-// App 端登录与令牌刷新（工单 12，spec `.scratch/tcm-import/spec.md` §6.1）。
+// App 端登录（工单 12，spec `.scratch/tcm-import/spec.md` §6.1）。
 //
 // 适配决策（用户拍板：复用现有鉴权，不移植 AccessKey/HMAC 体系）：
 // - 口令校验复用 better-auth（账号可为邮箱或用户名，与后台登录同一规则）。
@@ -9,6 +9,8 @@
 //   `MAX_LOGIN_CREDENTIALS_PER_USER`（否则第 6 次登录会失败）。
 // - 防重放/会话沿用现状，零 schema 变更。
 // - 失败响应沿用旧后端的「HTTP 200 + JSON 字符串」形状，App 端解析逻辑不变。
+// - 旧后端的 `replaceToken` 已删除（App 零引用；`mflc_` 凭证无过期语义，
+//   刷新无意义）。
 //
 // 旧后端响应字段（LoginOutPut）名称保持不变；按拍板不再下发
 // AccessKeyId/AccessKeySecret，Token 字段承载 `mflc_` 凭证。
@@ -18,10 +20,8 @@ import {
   createLoginCredential,
   listLoginCredentialsForUser,
   LoginCredentialLimitError,
-  verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
 import type {LoginCredentialRecord} from "@/shared/LoginCredential";
-import {accountIsBlocked, isDeviceRevoked} from "@/server/rbac/resolve";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
 type MicrofeedRuntimeEnv = Parameters<typeof createMicrofeedAuth>[0];
@@ -48,17 +48,6 @@ async function findAuthUser(
   const row = await database.prepare(
     `SELECT id, email, name, username FROM "auth_user" WHERE ${column} = ? LIMIT 1`,
   ).bind(account.toLowerCase()).first<AuthUserRow>();
-  return row ?? null;
-}
-
-/** 用户 id → auth_user 行（`replaceToken` 用）。查不到返回 null。 */
-async function findAuthUserById(
-  database: D1Database,
-  id: string,
-): Promise<AuthUserRow | null> {
-  const row = await database.prepare(
-    'SELECT id, email, name, username FROM "auth_user" WHERE id = ? LIMIT 1',
-  ).bind(id).first<AuthUserRow>();
   return row ?? null;
 }
 
@@ -152,37 +141,4 @@ export async function appLogin(
     return "登录凭证数已达上限，请在后台清理后重试";
   }
   return loginPayload(credential.secret, account, user);
-}
-
-/**
- * 刷新令牌：校验 Bearer 的 `mflc_` 凭证后保形返回同一把 Token。
- * 凭证无过期语义，无需轮换——端点只为 App 的刷新调用保持可用。
- */
-export async function appReplaceToken(
-  database: D1Database,
-  request: Request,
-): Promise<unknown> {
-  const header = request.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (!match) {
-    return "请先登录";
-  }
-  const token = match[1] ?? "";
-  const verified = await verifyLoginCredentialToken(database, token);
-  if (!verified) {
-    return "凭证无效或已过期";
-  }
-  // ADR-0011 D3：刷新令牌必须复用封禁/吊销检查（与 credential-bearer.ts:94/112
-  // 一致）。内容端点虽已拦截封禁/吊销，但 replaceToken 此前是匿名直达的预认证通道，
-  // 会让吊销设备续发新 Token 继续读。命中返回错误字符串（App 端按 data 类型判定失败，
-  // 信封恒为 200，与 login 同形）。
-  if (await accountIsBlocked(database, verified.userId)) {
-    return "账号已被封禁";
-  }
-  if (await isDeviceRevoked(database, verified.userId, request)) {
-    return "设备已被吊销";
-  }
-  const user = await findAuthUserById(database, verified.userId);
-  const account = user?.username ?? user?.email ?? "";
-  return loginPayload(token, account, user);
 }

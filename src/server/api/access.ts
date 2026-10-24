@@ -38,7 +38,7 @@ const APP_BOOK_REQUEST_PREFIX = "/api/AppBookRequest/";
  * under the legacy `/api/` base — but they are a current integration surface,
  * not a deprecated one. Suffixes carry the trailing slash `canonicalPathname`
  * produces before the middleware dispatches. The app's pre-auth endpoints
- * (login, replaceToken, captcha) and its config dictionaries are deliberately
+ * (login, captcha) and its config dictionaries are deliberately
  * absent: they stay anonymous (see `src/middleware.ts`).
  */
 export const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
@@ -63,7 +63,7 @@ export const APP_BOOK_REQUEST_CONTENT_SUFFIXES = new Set([
  *    route names to their canonical casing before dispatch).
  * Every entry here must therefore be either a content route (present in the
  * suffix set) or an explicitly anonymous pre-auth / config route (login,
- * replaceToken, captcha, project/login/about info). The regression test in
+ * captcha, about info). The regression test in
  * `tests/unit/api-permissions.test.ts` enumerates the actual handler files under
  * `src/pages/api/AppBookRequest/` and fails CI if any route is neither a content
  * route nor explicitly anonymous — that silent gap is the fail-open risk. Kept
@@ -80,12 +80,9 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "GetAliaZhongYao",
   "GetAllMingCi",
   "GetTipsStyleConfig",
-  "GetProjectInfo",
-  "GetLoginInfo",
   "getAboutInfo",
   "getPicCaptcha",
   "login",
-  "replaceToken",
 ] as const;
 
 /**
@@ -100,10 +97,7 @@ export const APP_BOOK_REQUEST_ROUTES = [
  */
 export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   "login",
-  "replaceToken",
   "getPicCaptcha",
-  "GetProjectInfo",
-  "GetLoginInfo",
   "getAboutInfo",
 ] as const;
 
