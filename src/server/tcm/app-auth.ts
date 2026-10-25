@@ -24,6 +24,7 @@ import {
   LoginCredentialLimitError,
 } from "@/server/auth/login-credentials";
 import {accountIsBlocked} from "@/server/rbac/resolve";
+import {verifyCaptcha} from "@/server/tcm/captcha";
 import type {LoginCredentialRecord} from "@/shared/LoginCredential";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
@@ -132,6 +133,18 @@ export async function appLogin(
   const password = pickString(input, "password");
   if (!account || !password) {
     return "请检查账号密码";
+  }
+
+  // 图形验证码（策略 A：每次登录都要）。无状态验签、不读库；放在口令校验之前，
+  // 先挡脚本，也让机器人摸不到「口令校验」这一步的时序/枚举信息。
+  // App 发 `verificationCode` + `uUID`(=reqNo)，pickString 大小写不敏感。
+  const verificationCode = pickString(input, "verificationCode").trim();
+  const captchaReqNo = pickString(input, "uuid");
+  if (!verificationCode || !captchaReqNo) {
+    return "请输入图形验证码";
+  }
+  if (!await verifyCaptcha(runtimeEnv.BETTER_AUTH_SECRET, verificationCode, captchaReqNo)) {
+    return "验证码错误或已过期";
   }
 
   const user = await findAuthUser(database, account);

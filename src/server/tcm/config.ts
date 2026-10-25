@@ -25,12 +25,3 @@ export async function getAppAboutInfo(database: D1Database): Promise<unknown[]> 
     text: row.text,
   }));
 }
-
-/** 旧后端 getPicCaptcha 的形状（PicVierificationCode）；本项目无验证码能力。 */
-export function emptyPicCaptcha(): {
-  ValidCodeBase64: string;
-  ValidCodeReqNo: string;
-  IsCode: boolean;
-} {
-  return {ValidCodeBase64: "", ValidCodeReqNo: "", IsCode: false};
-}

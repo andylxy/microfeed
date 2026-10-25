@@ -9,10 +9,9 @@ import {
 } from "@/server/auth/login-credentials";
 import {appLogin} from "@/server/tcm/app-auth";
 import {POST as appLoginPost} from "@/pages/api/AppBookRequest/login";
-import {
-  emptyPicCaptcha,
-  getAppAboutInfo,
-} from "@/server/tcm/config";
+import {GET as getPicCaptchaGet} from "@/pages/api/AppBookRequest/getPicCaptcha";
+import {generateCaptcha} from "@/server/tcm/captcha";
+import {getAppAboutInfo} from "@/server/tcm/config";
 
 const db = env.FEED_DB;
 const ORIGIN = "https://feed.example.com";
@@ -60,6 +59,12 @@ function appRequest(url: string, init: RequestInit = {}): Request {
   return new Request(`${ORIGIN}${url}`, init);
 }
 
+/** 每次登录都带一张新签发的有效图形验证码（策略 A：强制验证码）。 */
+async function withCaptcha(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const {code, reqNo} = await generateCaptcha(env.BETTER_AUTH_SECRET);
+  return {...body, VerificationCode: code, UUID: reqNo};
+}
+
 beforeEach(async () => {
   await db.batch([
     db.prepare("DELETE FROM ext_login_credentials"),
@@ -90,10 +95,10 @@ describe("App login (ticket 12)", () => {
   it("signs in by username and issues an mflc_ login credential", async () => {
     await createAccount({account: "appuser", name: "App User", password: "secret1"});
 
-    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "appuser",
       Password: "secret1",
-    }) as Record<string, unknown>;
+    })) as Record<string, unknown>;
 
     expect(typeof payload.Token).toBe("string");
     // 签发的是绑定该用户的 mflc_ 登录凭证（用户 → 角色 → 权限 模型），
@@ -110,24 +115,24 @@ describe("App login (ticket 12)", () => {
 
   it("reuses the same credential across repeated logins", async () => {
     await createAccount({account: "reuse", name: "Reuse", password: "secret1"});
-    const first = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const first = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "reuse",
       Password: "secret1",
-    }) as Record<string, unknown>;
-    const second = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    })) as Record<string, unknown>;
+    const second = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "reuse",
       Password: "secret1",
-    }) as Record<string, unknown>;
+    })) as Record<string, unknown>;
     expect(second.Token).toBe(first.Token);
   });
 
   it("signs in by email address", async () => {
     await createAccount({account: "Mail@Example.com", name: "Mail", password: "secret1"});
 
-    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "mail@example.com",
       Password: "secret1",
-    }) as Record<string, unknown>;
+    })) as Record<string, unknown>;
 
     expect(typeof payload.Token).toBe("string");
     expect(payload.Account).toBe("mail@example.com");
@@ -135,16 +140,16 @@ describe("App login (ticket 12)", () => {
 
   it("rejects a wrong password without leaking account existence", async () => {
     await createAccount({account: "gooduser", name: "Good", password: "secret1"});
-    const wrong = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const wrong = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "gooduser",
       Password: "wrong-password",
-    });
+    }));
     expect(wrong).toBe("登录失败,请检查账号密码");
 
-    const unknown = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const unknown = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "nobody-here",
       Password: "whatever1",
-    });
+    }));
     expect(unknown).toBe("登录失败,请检查账号密码");
   });
 
@@ -165,10 +170,10 @@ describe("App login (ticket 12)", () => {
       'UPDATE "auth_user" SET banned = 1 WHERE id = ?',
     ).bind(bannedId).run();
 
-    const denied = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+    const denied = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
       UserName: "banneduser",
       Password: "secret1",
-    });
+    }));
     expect(denied).toBe("登录失败,请检查账号密码");
     expect(await listLoginCredentialsForUser(db, bannedId)).toHaveLength(0);
   });
@@ -238,12 +243,17 @@ describe("App site config (ticket 13)", () => {  it("getAboutInfo reads the ext_
     ]);
   });
 
-  it("pic captcha returns the legacy empty shape", () => {
-    expect(emptyPicCaptcha()).toEqual({
-      ValidCodeBase64: "",
-      ValidCodeReqNo: "",
-      IsCode: false,
-    });
+  it("pic captcha issues a signed PNG (IsCode=true)", async () => {
+    const res = await getPicCaptchaGet({} as never);
+    const body = (await res.json()) as {
+      code: number;
+      data: {ValidCodeBase64: string; ValidCodeReqNo: string; IsCode: boolean};
+    };
+    expect(body.code).toBe(200);
+    expect(body.data.IsCode).toBe(true);
+    // 纯 PNG base64（无 data URI 前缀），App 端 BitmapFactory 才能解。
+    expect(body.data.ValidCodeBase64.startsWith("iVBORw0KGgo")).toBe(true);
+    expect(body.data.ValidCodeReqNo).toMatch(/^\d+\.[A-Za-z0-9_-]+$/u);
   });
 });
 
