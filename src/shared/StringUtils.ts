@@ -538,6 +538,10 @@ export const ADMIN_URLS = {
   ajaxAppAbout: () => adminUrl("ajax/app-about", browserAdminPath()),
   ajaxAppAboutSave: () =>
     adminUrl("ajax/app-about/save", browserAdminPath()),
+  /** 登录管理（app_login_methods 配置）：读取与保存（ADR-0050）。 */
+  ajaxLoginMethods: () => adminUrl("ajax/login-methods", browserAdminPath()),
+  ajaxLoginMethodsSave: () =>
+    adminUrl("ajax/login-methods/save", browserAdminPath()),
   /** 登录时间日志：按起止时间读取（ADR-0023）。 */
   ajaxLoginLogs: () => adminUrl("ajax/login-logs", browserAdminPath()),
   /** 公告管理：按标签读取列表，以及新建/编辑/改状态。 */

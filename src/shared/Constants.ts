@@ -16,6 +16,7 @@ export const SETTINGS_CATEGORIES = {
   API_SETTINGS: 'apiSettings',
   CONTENT_REVIEW: 'contentReview',
   ITEM_EDITOR_SECTIONS: 'itemEditorSections',
+  APP_LOGIN_METHODS: 'app_login_methods',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -207,6 +208,7 @@ export const ADMIN_MENU_CODES = {
   DEVICES: 'devices',
   APP_VERSIONS: 'app_versions',
   APP_ABOUT: 'app_about',
+  APP_LOGIN_METHODS: 'login_methods',
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
   CLOUD_USAGE: 'cloud_usage',
@@ -298,6 +300,10 @@ export const PERMISSION_CODES = {
   // 治理类，挂在 group_operations，与 app-version / announcement 同族。
   SYSTEM_APP_ABOUT_READ: 'system:app-about:read',
   SYSTEM_APP_ABOUT_MANAGE: 'system:app-about:manage',
+  // App 登录管理（migration 0150，ADR-0050）。`:read` 打开管理页读配置，
+  // `:manage` 解锁保存。治理类，挂在 group_operations，与 app-about 同族。
+  SYSTEM_APP_LOGIN_METHODS_READ: 'system:app-login-methods:read',
+  SYSTEM_APP_LOGIN_METHODS_MANAGE: 'system:app-login-methods:manage',
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
   // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
   // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底

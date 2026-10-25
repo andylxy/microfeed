@@ -23,7 +23,9 @@ import {
   listLoginCredentialsForUser,
   LoginCredentialLimitError,
 } from "@/server/auth/login-credentials";
+import FeedDb from "@/server/feed/FeedDb";
 import {accountIsBlocked} from "@/server/rbac/resolve";
+import {readLoginMethodsConfigCached} from "@/server/app/login/config";
 import {verifyCaptcha} from "@/server/tcm/captcha";
 import type {LoginCredentialRecord} from "@/shared/LoginCredential";
 
@@ -127,6 +129,15 @@ export async function appLogin(
   input: unknown,
 ): Promise<unknown> {
   const database = runtimeEnv.FEED_DB;
+  // 登录功能总闸（ADR-0050 D7）：配置读取在最前，关闭时**不做任何检查**——
+  // 不看请求体、不验码、不查用户，直接返回功能开发中文案。
+  const loginMethods = await readLoginMethodsConfigCached(
+    new FeedDb(runtimeEnv, request),
+  );
+  if (!loginMethods.loginEnabled) {
+    return "登录功能开发中,敬请期待";
+  }
+
   // 字段名大小写不敏感：Android Gson 发 `userName` / `passWord`（注意 `passWord`
   // 的大写 W，与 `Password`/`password` 都不同），后台/旧后端可能发 `UserName`/`Password`。
   const account = pickString(input, "username").trim();
@@ -135,16 +146,24 @@ export async function appLogin(
     return "请检查账号密码";
   }
 
-  // 图形验证码（策略 A：每次登录都要）。无状态验签、不读库；放在口令校验之前，
-  // 先挡脚本，也让机器人摸不到「口令校验」这一步的时序/枚举信息。
-  // App 发 `verificationCode` + `uUID`(=reqNo)，pickString 大小写不敏感。
-  const verificationCode = pickString(input, "verificationCode").trim();
-  const captchaReqNo = pickString(input, "uuid");
-  if (!verificationCode || !captchaReqNo) {
-    return "请输入图形验证码";
+  // 先判方式再判验证码：停用的方式直接拒，连验证码都不看。
+  if (!loginMethods.accountPasswordEnabled) {
+    return "该登录方式已停用";
   }
-  if (!await verifyCaptcha(runtimeEnv.BETTER_AUTH_SECRET, verificationCode, captchaReqNo)) {
-    return "验证码错误或已过期";
+
+  // 图形验证码（策略 A：每次登录都要；登录管理可整体关闭，ADR-0050 D4）。
+  // 无状态验签、不读库；放在口令校验之前，先挡脚本，也让机器人摸不到
+  // 「口令校验」这一步的时序/枚举信息。
+  // App 发 `verificationCode` + `uUID`(=reqNo)，pickString 大小写不敏感。
+  if (loginMethods.captchaEnabled) {
+    const verificationCode = pickString(input, "verificationCode").trim();
+    const captchaReqNo = pickString(input, "uuid");
+    if (!verificationCode || !captchaReqNo) {
+      return "请输入图形验证码";
+    }
+    if (!await verifyCaptcha(runtimeEnv.BETTER_AUTH_SECRET, verificationCode, captchaReqNo)) {
+      return "验证码错误或已过期";
+    }
   }
 
   const user = await findAuthUser(database, account);

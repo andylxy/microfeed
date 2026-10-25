@@ -85,6 +85,7 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "GetTipsStyleConfig",
   "getAboutInfo",
   "getPicCaptcha",
+  "getLoginMethods",
   "login",
 ] as const;
 
@@ -102,6 +103,7 @@ export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   "login",
   "getPicCaptcha",
   "getAboutInfo",
+  "getLoginMethods",
 ] as const;
 
 export const APP_BOOK_REQUEST_CANONICAL = new Map(

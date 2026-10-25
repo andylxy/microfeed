@@ -49,6 +49,10 @@ export const APP_BOOK_FANG_CACHE = "book-fang-v1";
 export const APP_ZHONGYAO_CACHE = "zhongyao";
 /** 全库别名缓存名（GetAliaZhongYao；含派生别名，随中药 bieMing 与手工别名变化）。 */
 export const APP_YAO_ALIASES_CACHE = "yao-aliases";
+/** 登录方式配置缓存名（ADR-0050 D3；写缓存与保存清理共用这一个值）。 */
+export const APP_LOGIN_METHODS_CACHE = "login-methods";
+/** 登录方式配置缓存 TTL（7200s，ADR-0050 D3：保存后跨机房生效窗口的上界）。 */
+export const APP_LOGIN_METHODS_CACHE_TTL = 7200;
 
 /**
  * 缓存键 id 白名单：字母、数字、下划线、连字符，1-64 位。本机快照的 channel /
@@ -180,6 +184,59 @@ async function deleteCacheKeys(keys: URL[]): Promise<void> {
       // 删不掉不影响正确性：下一次未命中会重写。
     }
   }));
+}
+
+/**
+ * 通用 JSON read-through：命中返回缓存值；未命中或缓存条目不是合法 JSON 时
+ * `load()` 回源、把返回值 stringify 写回缓存（写失败静默退化为直读，下一次
+ * 未命中重写）。与 {@link cachedAppResponse} 的差异：对象进出，调用方自己
+ * 决定呈现形状；TTL 由调用方给（配置类短 TTL 与目录类 24h 共用同一套键拼法
+ * 与降级策略）。缓存条目可能由旧版本代码写入，返回值一律按未校验的
+ * `unknown` 交给调用方归一。
+ */
+export async function cachedJson<T>(
+  cacheName: string,
+  ttlSeconds: number,
+  load: () => Promise<T>,
+): Promise<T> {
+  const key = appCacheKey(cacheName);
+  const storage = appCacheOrNull();
+  let hitText: string | null = null;
+  if (storage) {
+    try {
+      const hit = await storage.match(key);
+      if (hit) hitText = await hit.text();
+    } catch {
+      hitText = null;
+    }
+  }
+  if (hitText !== null) {
+    try {
+      return JSON.parse(hitText) as T;
+    } catch {
+      // 坏条目按未命中处理，回源重写。
+    }
+  }
+  const value = await load();
+  if (storage) {
+    try {
+      await storage.put(key, new Response(JSON.stringify(value), {
+        headers: {"cache-control": `public, max-age=${ttlSeconds}`},
+      }));
+    } catch {
+      // 写失败退化为直读，下一次未命中重写。
+    }
+  }
+  return value;
+}
+
+/**
+ * 清掉一个 {@link cachedJson} 条目（写路径保存后调用）。删除是各 POP 本地
+ * 操作（ADR-0049 D13⑤）：处理保存的机房下次请求即回源新值，其余机房等
+ * TTL 自然过期——调用方必须接受这个跨机房生效窗口（ADR-0050 D3）。
+ */
+export async function deleteCachedJson(cacheName: string): Promise<void> {
+  await deleteCacheKeys([appCacheKey(cacheName)]);
 }
 
 /**

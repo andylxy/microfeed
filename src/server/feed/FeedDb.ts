@@ -649,6 +649,20 @@ export default class FeedDb {
   }
 
   /**
+   * Upsert one settings category row, the write counterpart of
+   * {@link getSettingsCategory}. `data` is the JSON text to store. The
+   * `updated_at` column is refreshed on conflict, but it is observational
+   * only: SQLite DEFAULT fires on INSERT alone, so callers that need an
+   * auditable timestamp carry it inside `data` itself.
+   */
+  async setSettingsCategory(category: string, data: string): Promise<void> {
+    await this.FEED_DB.prepare(
+      "INSERT INTO settings (category, data) VALUES (?, ?) " +
+        "ON CONFLICT(category) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP",
+    ).bind(category, data).run();
+  }
+
+  /**
    * 确认主频道行并返回它的 id：库里有 is_primary=1 的行就直接取；
    * 没有就按出厂默认数据建一行（is_primary=1、status=已发布）再取。
    * is_primary 带 UNIQUE 约束，INSERT OR IGNORE 包容并发首存，建后重新查

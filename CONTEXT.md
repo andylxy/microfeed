@@ -101,6 +101,18 @@ _Avoid_: 「App 匿名端点」—— version 与 announcements 在 2026-10-16 �
 App 命名空间的安全模型（实为 fail-open）：「未登记进集成清单即视为匿名」。名称「反向」仅指登记方向与常规白名单相反；其风险是新增敏感端点若漏登记会静默公开，以回归测试约束，不翻转为 fail-closed。
 _Avoid_: 白名单（方向相反）
 
+**登录方式**：
+App 用户完成身份认证的途径（账号密码 / 短信 / 微信 / QQ），由后台「登录管理」页逐一开关（[ADR-0050](docs/novel-cms/adr/0050-app-login-methods-config.md)）。短信 / 微信 / QQ 本期只控显隐，后端未接通。
+_Avoid_: 与正交的「账号闸门」（后台账号封禁 / 设备吊销）混淆
+
+**前端入口显隐 / 后端受理**：
+一个登录方式的两个独立可控面：显隐 = App 登录页是否渲染该入口（`getLoginMethods` 响应）；受理 = `appLogin` 是否接受该方式的提交（硬门，关时返回「该登录方式已停用」）。两者同源一份配置，各自独立生效。
+_Avoid_: 把显隐当安全边界——受理判定才是硬门
+
+**登录管理配置**：
+驱动上述开关的单一全局配置：`settings` 表 category=`app_login_methods` 的单行 JSON，经 `caches.default` 2h read-through 供读、保存路径本地清缓存（跨机房生效窗口 ≤2h，已接受）。
+_Avoid_: 登录设置（与 better-auth 自身配置混淆）
+
 **会员角色**：
 带 `is_member` 标记的角色（`ext_roles.is_member`，迁移 0144）。账号持任一会员角色即视为会员；它只决定 App 端内容档，不授予任何后台权限。
 _Avoid_: 用户状态、是否会员用户、会员账号

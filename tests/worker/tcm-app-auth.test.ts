@@ -7,11 +7,17 @@ import {
   listLoginCredentialsForUser,
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
+import FeedDb from "@/server/feed/FeedDb";
 import {appLogin} from "@/server/tcm/app-auth";
 import {POST as appLoginPost} from "@/pages/api/AppBookRequest/login";
 import {GET as getPicCaptchaGet} from "@/pages/api/AppBookRequest/getPicCaptcha";
 import {generateCaptcha} from "@/server/tcm/captcha";
 import {getAppAboutInfo} from "@/server/tcm/config";
+import {saveLoginMethodsConfig} from "@/server/app/login/config";
+import {
+  APP_LOGIN_METHODS_CACHE,
+  deleteCachedJson,
+} from "@/server/cache/app-cache";
 
 const db = env.FEED_DB;
 const ORIGIN = "https://feed.example.com";
@@ -87,8 +93,10 @@ afterEach(async () => {
     db.prepare("DELETE FROM ext_auth_throttle"),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
+    db.prepare("DELETE FROM settings WHERE category = 'app_login_methods'"),
     db.prepare("DELETE FROM ext_app_about_info"),
   ]);
+  await deleteCachedJson(APP_LOGIN_METHODS_CACHE);
 });
 
 describe("App login (ticket 12)", () => {
@@ -176,6 +184,74 @@ describe("App login (ticket 12)", () => {
     }));
     expect(denied).toBe("登录失败,请检查账号密码");
     expect(await listLoginCredentialsForUser(db, bannedId)).toHaveLength(0);
+  });
+});
+
+describe("App login methods config (ADR-0050)", () => {
+  async function save(
+    patch: Record<string, boolean>,
+  ): Promise<void> {
+    const result = await saveLoginMethodsConfig(
+      new FeedDb(env, appRequest("/api/AppBookRequest/login")),
+      patch,
+      "u_appauth_admin",
+    );
+    expect(result).toEqual({ok: true});
+  }
+
+  it("rejects everything without any checks when the master switch is off", async () => {
+    await save({loginEnabled: false});
+    // 空请求体也返回总闸文案——总闸判定先于一切检查（ADR-0050 D7）。
+    const empty = await appLogin(env, appRequest("/api/AppBookRequest/login"), {});
+    expect(empty).toBe("登录功能开发中,敬请期待");
+    // 带完整账号与有效验证码同样被总闸拦下，不进入后续链路。
+    const full = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
+      UserName: "anyone",
+      Password: "whatever",
+    }));
+    expect(full).toBe("登录功能开发中,敬请期待");
+  });
+
+  it("keeps requiring captcha when no config row exists (default)", async () => {
+    await createAccount({account: "defuser", name: "Def", password: "secret1"});
+    const noCaptcha = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "defuser",
+      Password: "secret1",
+    });
+    expect(noCaptcha).toBe("请输入图形验证码");
+  });
+
+  it("rejects the whole method before captcha when accountPassword is disabled", async () => {
+    await createAccount({account: "offuser", name: "Off", password: "secret1"});
+    await save({accountPasswordEnabled: false});
+    // 不带验证码提交：返回停用文案而非「请输入图形验证码」，证明方式判定在前。
+    const disabled = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "offuser",
+      Password: "secret1",
+    });
+    expect(disabled).toBe("该登录方式已停用");
+  });
+
+  it("skips the captcha step entirely when captcha is disabled", async () => {
+    await createAccount({account: "nocap", name: "NoCap", password: "secret1"});
+    await save({captchaEnabled: false});
+    const payload = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "nocap",
+      Password: "secret1",
+    }) as Record<string, unknown>;
+    expect(typeof payload.Token).toBe("string");
+    expect(payload.Token as string).toMatch(/^mflc_/u);
+  });
+
+  it("returns to the default behaviour after re-enabling both switches", async () => {
+    await createAccount({account: "reuser", name: "Re", password: "secret1"});
+    await save({captchaEnabled: false});
+    await save({captchaEnabled: true});
+    const needCaptcha = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "reuser",
+      Password: "secret1",
+    });
+    expect(needCaptcha).toBe("请输入图形验证码");
   });
 });
 

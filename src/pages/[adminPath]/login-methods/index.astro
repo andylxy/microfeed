@@ -1,0 +1,45 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import LoginMethodsApp from "@/components/admin/login-methods/LoginMethodsApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {hasPermission} from "@/server/rbac/guard";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// Guarded with the same code its menu row binds (`system:app-login-methods:read`,
+// migration 0150); saving needs `system:app-login-methods:manage`
+// (endpoint-enforced, surfaced here so a read-only account does not see a save
+// button that would 403).
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_APP_LOGIN_METHODS_READ,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+const canManage = hasPermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_APP_LOGIN_METHODS_MANAGE,
+);
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.APP_LOGIN_METHODS}
+  documentTitle={translate("pageDocumentTitle.appLoginMethods", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.appLoginMethods", adminLanguage)}
+>
+  <LoginMethodsApp canManage={canManage} client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </LoginMethodsApp>
+</AdminShell>
