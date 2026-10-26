@@ -9,15 +9,6 @@ import type {
   ThemeDraft,
 } from "@/shared/themes/ThemeContract";
 import {themeRssPreviewDocument} from "@/shared/themes/RssPreview";
-import {
-  publicSearchHtml,
-  type PublicSearchResult,
-} from "@/shared/PublicSearch";
-import {publicSearchStrings} from "@/shared/PublicSearchI18n";
-import {
-  manifestSearchItemDestination,
-  resolveThemeSearchItemUrl,
-} from "@/shared/themes/ThemeSearch";
 import type {PublicFeed} from "@/types";
 
 type PreviewTheme = StoredThemeVersion | ThemeDraft;
@@ -76,10 +67,10 @@ export async function themePreviewResponse(
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
   const view = requestUrl.searchParams.get("view") ?? "feed";
-  const supportsPagesAndSearch = previewTheme.manifest.formatVersion === 2;
+  const supportsPages = previewTheme.manifest.formatVersion === 2;
   if (
-    !["feed", "item", "rss", "rss-stylesheet", "page", "search"].includes(view) ||
-    (!supportsPagesAndSearch && (view === "page" || view === "search"))
+    !["feed", "item", "rss", "rss-stylesheet", "page"].includes(view) ||
+    (!supportsPages && view === "page")
   ) {
     return new Response(
       translate(
@@ -165,63 +156,6 @@ export async function themePreviewResponse(
     },
   ];
   const extraContext = {navigation_pages: navigationPages};
-  const searchItemDestination = manifestSearchItemDestination(
-    storedTheme.manifest,
-  );
-  const previewSearchResults: PublicSearchResult[] = publicFeed.items
-    .slice(0, 5)
-    .map((item, index) => {
-      const microfeed = item._microfeed as Record<string, unknown> | undefined;
-      const attachmentValue = Array.isArray(item.attachments)
-        ? item.attachments[0]
-        : undefined;
-      const attachment = attachmentValue && typeof attachmentValue === "object"
-        ? attachmentValue as Record<string, unknown>
-        : undefined;
-      const webUrl = typeof microfeed?.web_url === "string"
-        ? microfeed.web_url
-        : new URL(`/i/preview-item-${index + 1}/`, request.url).toString();
-      return {
-        content_text: String(item.content_text ?? "Published item preview"),
-        date_published: typeof item.date_published === "string"
-          ? item.date_published
-          : previewPublishedAt,
-        id: typeof item.id === "string" ? item.id : `preview-item-${index + 1}`,
-        title: typeof item.title === "string" && item.title.trim()
-          ? item.title
-          : `Preview item ${index + 1}`,
-        type: "item" as const,
-        url: resolveThemeSearchItemUrl(searchItemDestination, {
-          attachmentUrl: typeof attachment?.url === "string"
-            ? attachment.url
-            : undefined,
-          itemUrl: typeof item.url === "string" ? item.url : undefined,
-          webUrl,
-        }),
-      };
-    });
-  if (previewSearchResults.length === 0) {
-    previewSearchResults.push({
-      content_text: "This representative item shows how a search result is styled.",
-      date_published: previewPublishedAt,
-      id: "preview-item",
-      title: "Preview item",
-      type: "item",
-      url: new URL("/i/preview-item/", request.url).toString(),
-    });
-  }
-  for (const navigationPage of navigationPages) {
-    previewSearchResults.push({
-      content_text: navigationPage.id === page.id
-        ? page.content_text
-        : `Representative content for the ${navigationPage.title} Page.`,
-      date_published: previewPublishedAt,
-      id: navigationPage.id,
-      title: navigationPage.title,
-      type: "page",
-      url: navigationPage.url,
-    });
-  }
   const theme = new Theme(
     publicFeed,
     loaded.content.settings,
@@ -265,18 +199,9 @@ export async function themePreviewResponse(
     ? theme.getWebItem(item).html
     : view === "page"
     ? theme.getWebPage(page, navigationPages).html
-    : view === "search"
-    ? theme.getWebSearch("", previewSearchResults).html
     : theme.getWebFeed().html;
-  const publicSearch = supportsPagesAndSearch
-    ? publicSearchHtml({
-        previewResults: previewSearchResults,
-        // B23: the admin preview renders the dialog in the viewer's language.
-        strings: publicSearchStrings(adminLanguageFromRequest(request)),
-      })
-    : "";
   return new Response(
-    `<!doctype html><html lang="${String(publicFeed.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${shared.getWebHeader().html}${theme.getWebHeader().html}</head><body>${shared.getWebBodyStart().html}${theme.getWebBodyStart().html}${body}${shared.getWebBodyEnd().html}${theme.getWebBodyEnd().html}${publicSearch}</body></html>`,
+    `<!doctype html><html lang="${String(publicFeed.language ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${shared.getWebHeader().html}${theme.getWebHeader().html}</head><body>${shared.getWebBodyStart().html}${theme.getWebBodyStart().html}${body}${shared.getWebBodyEnd().html}${theme.getWebBodyEnd().html}</body></html>`,
     {headers: previewHeaders(request.url)},
   );
 }

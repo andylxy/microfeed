@@ -406,10 +406,9 @@ export type PurgeBookResult =
  * 物理删除：把作品连它的章节一起从库里清掉，不可恢复。
  *
  * 四张表都靠 `book_id` 挂书且没有外键（本地实测无 `REFERENCES channels`），
- * 所以逐张显式删：`items`（章节，其 DELETE 触发器会自行清理 site_search_*
- * 影子行）、`ext_book_stats`（物化字数）、`ext_marker_citations` 与
- * `ext_marker_citation_state`（懒建引用索引，迁移 0111）。站点主频道拒绝
- * 物理删除——它是站点自己的 feed。
+ * 所以逐张显式删：`items`（章节）、`ext_book_stats`（物化字数）、
+ * `ext_marker_citations` 与 `ext_marker_citation_state`（懒建引用索引，
+ * 迁移 0111）。站点主频道拒绝物理删除——它是站点自己的 feed。
  *
  * 只接受已经处于删除态的作品：物理删除是软删除之后的第二步，端点自带这道闸，
  * 避免一次请求直接销毁还在展示的书（页面按钮也只在已删除行上出现）。

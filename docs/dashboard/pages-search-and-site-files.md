@@ -49,37 +49,33 @@ The `/404/` path, Published visibility, navigation exclusion, and Page itself
 are protected, so they cannot be changed or deleted. The 404 Page is also
 omitted from public search, generated `llms.txt`, and generated `sitemap.xml`.
 
-## Use public search
+## Public search (retired)
 
-Format v2 themes can expose a search control on every public HTML page and a
-complete results page at `/search/`. Visitors can also press
-<kbd>Command</kbd>+<kbd>K</kbd> on macOS or <kbd>Ctrl</kbd>+<kbd>K</kbd>
-elsewhere to open microfeed's accessible search dialog.
+Public site search is gone as of ADR-0051 / migration 0151: the `/search/` page,
+the typeahead route, and the `site_search_*` storage layer were removed in one
+release. There is no search control on public pages and no `/search/?q=...`
+endpoint to submit to; visiting `/search/` now falls through to the themed 404.
 
-Public search includes Published items and Published Pages. It excludes item
-drafts, Unlisted and Draft Pages, and the protected 404 Page. The typeahead
-route returns safe highlighted segments and is never cached. Submitting the
-search form opens `/search/?q=...` for complete results.
-
-microfeed supplies the search dialog, keyboard behavior, request cancellation,
-and safe result rendering. The active theme supplies a button that opens the
-dialog and the surrounding Search page layout. Theme authors can follow the
-[theme contract and rendering guide](/themes/contract/#connect-public-search)
-for the stable hooks and render context.
+Admin list search did not go away with it — it runs on a direct `items` query
+(`src/server/admin/item-search.ts`) and is unaffected by the theme contract.
+Themes may still ship a `webSearch` template; it is accepted and validated but
+never rendered (see [theme contract](/themes/contract/)).
 
 ## Theme compatibility
 
 Format v1 themes remain valid and continue rendering feed and item pages
-unchanged. They do not expose Pages or public search. Admin allows Page drafts
-under a v1 theme but requires an active format v2 theme before a Page can be
-Published or Unlisted.
+unchanged. They do not expose Pages. Admin allows Page drafts under a v1 theme
+but requires an active format v2 theme before a Page can be Published or
+Unlisted.
 
-Format v2 adds two required slots:
+Format v2 adds the required `webPage` slot:
 
 | Slot | Context | Responsibility |
 | --- | --- | --- |
 | `webPage` | `page` and `navigation_pages` | Render one standalone Page, including the editable default 404 Page. `page.content_html` is trusted owner-authored rich text. |
-| `webSearch` | `search` and `navigation_pages` | Render the dedicated `/search/` page and its search input/results container. |
+
+The optional `webSearch` slot is still accepted from older theme packages but
+has no renderer since public search was retired.
 
 The 404 uses the ordinary `webPage` slot, so existing format v2 themes work
 without another template file. A theme can check `page.is_not_found_page` when

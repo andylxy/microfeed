@@ -32,7 +32,7 @@ if (!draft) Astro.response.status = 404;
 
 let themeEditorLinks: ThemeEditorLinks | undefined;
 if (draft) {
-  const [exampleFeedContent, supportsPagesAndSearch] = await Promise.all([
+  const [exampleFeedContent, supportsPages] = await Promise.all([
     feedDb.getContent(getFetchItemsParams(
       Astro.request,
       {status: STATUSES.PUBLISHED},
@@ -43,7 +43,7 @@ if (draft) {
   const publicFeed = await feedDb.getPublicJsonData(
     exampleFeedContent,
   ) as PublicFeed;
-  const publishedPages = supportsPagesAndSearch
+  const publishedPages = supportsPages
     ? await listPages(feedDb, Astro.request, {
         limit: 100,
         statuses: ["published"],
@@ -52,7 +52,7 @@ if (draft) {
   const exampleItemUrl = publicFeed.items[0]?._microfeed?.web_url;
   const examplePageUrl = publishedPages?.items.find(
     (page) => !page.is_not_found_page,
-  )?.url ?? (supportsPagesAndSearch
+  )?.url ?? (supportsPages
     ? new URL("/404/", Astro.url).toString()
     : undefined);
   themeEditorLinks = {
@@ -65,9 +65,6 @@ if (draft) {
       ? {webItemUrl: exampleItemUrl}
       : {}),
     ...(examplePageUrl ? {webPageUrl: examplePageUrl} : {}),
-    ...(supportsPagesAndSearch
-      ? {webSearchUrl: new URL("/search/", Astro.url).toString()}
-      : {}),
   };
 }
 ---

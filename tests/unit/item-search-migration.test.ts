@@ -7,8 +7,10 @@ import {describe, expect, it} from "vitest";
 
 import {
   normalizeItemSearchContent,
+  rebuildItemSearchIndexes,
   withItemSearchIndexesSuspended,
 } from "../../manage-cli/lib/item-search";
+import {ADMIN_TYPEAHEAD_TABLE} from "@/shared/ItemSearchSql";
 import type {CloudflareClient} from "../../manage-cli/lib/cloudflare";
 import type {MicrofeedConfig} from "../../manage-cli/types";
 
@@ -37,50 +39,9 @@ function testCloudflare(database: DatabaseSync): CloudflareClient {
 
 const config = {} as MicrofeedConfig;
 
-describe("item search migration and normalization", () => {
-  it("backfills stored plain text and marks search ready", async () => {
-    const database = new DatabaseSync(":memory:");
-    database.exec(await migration("0001_initial.sql"));
-    database.prepare(
-      "INSERT INTO items (id, status, data, updated_at) VALUES (?, 1, ?, ?)",
-    ).run(
-      "legacy-item",
-      JSON.stringify({
-        description: "<p>Hello&nbsp;<strong>world</strong></p>",
-        title: "Legacy title",
-      }),
-      "2026-08-01T00:00:00.000Z",
-    );
-    database.exec(await migration("0009_item_search.sql"));
-    database.exec(await migration("0013_pages_search_site_files.sql"));
-    database.exec(await migration("0014_default_not_found_page.sql"));
-    expect(database.prepare(
-      "SELECT ready FROM site_search_metadata WHERE id = 1",
-    ).get()).toEqual({ready: 0});
-
-    expect(await normalizeItemSearchContent(
-      testCloudflare(database),
-      config,
-    )).toBe(1);
-    expect(database.prepare(
-      "SELECT content_text, content_text_revision, " +
-        "content_text_updated_at, updated_at FROM items",
-    ).get()).toEqual({
-      content_text: "Hello world",
-      content_text_revision: 1,
-      content_text_updated_at: "2026-08-01T00:00:00.000Z",
-      updated_at: "2026-08-01T00:00:00.000Z",
-    });
-    expect(database.prepare(
-      "SELECT ready, normalized_at IS NOT NULL AS normalized " +
-        "FROM site_search_metadata WHERE id = 1",
-    ).get()).toEqual({normalized: 1, ready: 1});
-    expect(database.prepare(
-      "SELECT content_id FROM site_search_exact " +
-        "WHERE site_search_exact MATCH 'world'",
-    ).all()).toEqual([{content_id: "legacy-item"}]);
-  });
-
+// 全文搜索表族（site_search_*）随迁移 0151 退役后，这里只保留仍在跑的两件事：
+// items.content_text 列的归一化，以及后台 typeahead 索引的挂起与重建。
+describe("item content normalization and typeahead index", () => {
   it("reconciles old-writer updates and outdated normalization revisions", async () => {
     const database = new DatabaseSync(":memory:");
     database.exec(await migration("0001_initial.sql"));
@@ -120,156 +81,34 @@ describe("item search migration and normalization", () => {
     ).get()).toEqual({content_text: "After switch", content_text_revision: 1});
   });
 
-  it("temporarily removes virtual tables for export and rebuilds them", async () => {
+  it("drops the typeahead index for an export and rebuilds it afterwards", async () => {
     const database = new DatabaseSync(":memory:");
     database.exec(await migration("0001_initial.sql"));
+    database.prepare(
+      "INSERT INTO items (id, status, data, updated_at) VALUES (?, 1, ?, ?)",
+    ).run(
+      "typeahead-item",
+      JSON.stringify({title: "黄芪 overview"}),
+      "2026-08-01T00:00:00.000Z",
+    );
     database.exec(await migration("0009_item_search.sql"));
     database.exec(await migration("0013_pages_search_site_files.sql"));
     database.exec(await migration("0014_default_not_found_page.sql"));
     const cloudflare = testCloudflare(database);
-    const result = await withItemSearchIndexesSuspended(
+    await rebuildItemSearchIndexes(cloudflare, config);
+
+    const countRows = () => database.prepare(
+      "SELECT COUNT(*) AS count FROM " +
+        `${ADMIN_TYPEAHEAD_TABLE} WHERE content_id = 'typeahead-item'`,
+    ).get() as {count: number};
+    expect(countRows()).toEqual({count: 1});
+
+    const suspended = await withItemSearchIndexesSuspended(
       cloudflare,
       config,
-      async () => database.prepare(
-        "SELECT COUNT(*) AS count FROM sqlite_schema " +
-          "WHERE name LIKE 'site_search_%' AND type = 'table'",
-      ).get() as {count: number},
+      async () => countRows(),
     );
-    expect(result).toEqual({count: 2});
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM sqlite_schema " +
-        "WHERE name IN ('site_search_exact', 'site_search_title_trigram')",
-    ).get()).toEqual({count: 2});
-    expect(database.prepare(
-      "SELECT ready FROM site_search_metadata WHERE id = 1",
-    ).get()).toEqual({ready: 1});
-  });
-
-  it("creates an editable 404 Page outside the public search corpus", async () => {
-    const database = new DatabaseSync(":memory:");
-    database.exec(await migration("0001_initial.sql"));
-    database.exec(await migration("0009_item_search.sql"));
-    database.exec(await migration("0013_pages_search_site_files.sql"));
-    database.exec(await migration("0014_default_not_found_page.sql"));
-
-    expect(database.prepare(
-      "SELECT id, slug, title, status, show_in_navigation " +
-        "FROM pages WHERE slug = '404'",
-    ).get()).toEqual({
-      id: "system-404",
-      show_in_navigation: 0,
-      slug: "404",
-      status: 1,
-      title: "Page not found",
-    });
-    expect(database.prepare(
-      "SELECT content_id FROM site_search_exact " +
-        "WHERE site_search_exact MATCH 'page not found'",
-    ).all()).toEqual([]);
-
-    database.prepare(
-      "UPDATE pages SET title = 'Nothing here', " +
-        "content_text = 'A friendlier missing page' WHERE slug = '404'",
-    ).run();
-    expect(database.prepare(
-      "SELECT content_id FROM site_search_exact " +
-        "WHERE site_search_exact MATCH 'friendlier'",
-    ).all()).toEqual([]);
-  });
-
-  it("preserves an existing current /404/ Page during migration", async () => {
-    const database = new DatabaseSync(":memory:");
-    database.exec(await migration("0001_initial.sql"));
-    database.exec(await migration("0009_item_search.sql"));
-    database.exec(await migration("0013_pages_search_site_files.sql"));
-    database.prepare(
-      "INSERT INTO pages (id, slug, title, status, show_in_navigation) " +
-        "VALUES ('custom-404', '404', 'Custom missing', 2, 1)",
-    ).run();
-    database.prepare(
-      "INSERT INTO page_paths (slug, page_id, is_current) " +
-        "VALUES ('404', 'custom-404', 1)",
-    ).run();
-
-    database.exec(await migration("0014_default_not_found_page.sql"));
-
-    expect(database.prepare(
-      "SELECT id, title, status, show_in_navigation " +
-        "FROM pages WHERE slug = '404'",
-    ).get()).toEqual({
-      id: "custom-404",
-      show_in_navigation: 0,
-      status: 1,
-      title: "Custom missing",
-    });
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM pages WHERE id = 'system-404'",
-    ).get()).toEqual({count: 0});
-  });
-
-  it("skips FTS rewrites when an item update leaves search columns unchanged", async () => {
-    const database = new DatabaseSync(":memory:");
-    database.exec(await migration("0001_initial.sql"));
-    database.exec(await migration("0009_item_search.sql"));
-    database.exec(await migration("0013_pages_search_site_files.sql"));
-    database.exec(await migration("0014_default_not_found_page.sql"));
-    database.exec(await migration("0090_search_trigger_skip_unchanged_fts.sql"));
-
-    database.prepare(
-      "INSERT INTO items (id, status, data, content_text, pub_date, updated_at) " +
-        "VALUES (?, 1, ?, ?, ?, ?)",
-    ).run(
-      "search-item",
-      JSON.stringify({title: "Alpha", image: "cover.png"}),
-      "plain body",
-      "2026-01-01T00:00:00.000Z",
-      "2026-01-01T00:00:00.000Z",
-    );
-
-    // 只改 data 里与标题无关的字段（卷标签）以及 updated_at：FTS 语料
-    // （title/content_text）没动，但搜索文档的元数据（updated_at）必须照常刷新。
-    database.prepare(
-      "UPDATE items SET data = json_set(data, '$._microfeed.volume', ?), " +
-        "updated_at = ? WHERE id = ?",
-    ).run("volume-1", "2026-02-02T00:00:00.000Z", "search-item");
-    expect(database.prepare(
-      "SELECT content_id FROM site_search_exact WHERE site_search_exact MATCH ?",
-    ).all("Alpha")).toEqual([{content_id: "search-item"}]);
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM site_search_exact",
-    ).get()).toEqual({count: 1});
-    expect(database.prepare(
-      "SELECT title, updated_at FROM site_search_documents " +
-        "WHERE content_type = 'item' AND content_id = 'search-item'",
-    ).get()).toEqual({
-      title: "Alpha",
-      updated_at: "2026-02-02T00:00:00.000Z",
-    });
-
-    // 改标题：FTS 语料必须重建。
-    database.prepare(
-      "UPDATE items SET data = json_set(data, '$.title', ?), updated_at = ? " +
-        "WHERE id = ?",
-    ).run("Beta", "2026-03-03T00:00:00.000Z", "search-item");
-    expect(database.prepare(
-      "SELECT content_id FROM site_search_exact WHERE site_search_exact MATCH ?",
-    ).all("Beta")).toEqual([{content_id: "search-item"}]);
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM site_search_exact WHERE site_search_exact MATCH ?",
-    ).all("Alpha")[0]).toEqual({count: 0});
-
-    // 软删会移除 FTS 行；复活会重新加回。
-    database.prepare(
-      "UPDATE items SET status = 3, updated_at = ? WHERE id = ?",
-    ).run("2026-04-04T00:00:00.000Z", "search-item");
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM site_search_exact",
-    ).get()).toEqual({count: 0});
-    database.prepare(
-      "UPDATE items SET status = 1, updated_at = ? WHERE id = ?",
-    ).run("2026-05-05T00:00:00.000Z", "search-item");
-    expect(database.prepare(
-      "SELECT COUNT(*) AS count FROM site_search_exact",
-    ).get()).toEqual({count: 1});
+    expect(suspended).toEqual({count: 0});
+    expect(countRows()).toEqual({count: 1});
   });
 });

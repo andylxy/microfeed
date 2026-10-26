@@ -28,7 +28,9 @@ describe("Admin versioned themes", () => {
     expect(preview).toContain('"themes.dataSourceDemo"');
     expect(preview).toContain('"themes.dataSourceSite"');
     expect(preview).toContain('hasPreviewFixture ? "fixture" : "site"');
-    expect(preview).toContain('t("themes.liveSearchUnavailable")');
+    // 公开搜索页 /search/ 随 ADR-0051 下线后，预览器只剩 feed/item/page/rss 四种视图；
+    // 保留一个 view=search 的按钮只会打到服务端拿 400 unknownPreviewView。
+    expect(preview).not.toContain("themes.viewSearch");
   });
 
   it("keeps installation separate from activation", async () => {
@@ -253,7 +255,7 @@ describe("Admin versioned themes", () => {
     expect(draftRoute).toContain("publicFeed.feed_url");
     expect(draftRoute).toContain("webItemUrl");
     expect(draftRoute).toContain("webPageUrl");
-    expect(draftRoute).toContain("webSearchUrl");
+    expect(draftRoute).not.toContain("webSearchUrl");
     expect(draftRoute).toContain("activeThemeSupportsPages");
   });
 

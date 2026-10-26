@@ -19,7 +19,7 @@ import {htmlToPlainText, randomShortUUID} from "@/shared/StringUtils";
 import {storedThemeFromRow} from "@/shared/themes/ThemeRows";
 import type FeedDb from "@/server/feed/FeedDb";
 import {PUBLIC_CACHE_TAGS} from "@/server/cache/public-cache";
-import {themeSupportsPagesAndSearch} from "@/server/themes/Theme";
+import {themeSupportsPages} from "@/server/themes/Theme";
 import {
   commitDatabaseMutation,
   type DatabaseMutationCommit,
@@ -175,12 +175,12 @@ export async function activeThemeSupportsPages(
     LIMIT 1
   `).first<Record<string, unknown>>();
   if (!row?.requested_active_theme_id || !row.id) {
-    return themeSupportsPagesAndSearch(null);
+    return themeSupportsPages(null);
   }
   try {
-    return themeSupportsPagesAndSearch(storedThemeFromRow(row));
+    return themeSupportsPages(storedThemeFromRow(row));
   } catch {
-    return themeSupportsPagesAndSearch(null);
+    return themeSupportsPages(null);
   }
 }
 

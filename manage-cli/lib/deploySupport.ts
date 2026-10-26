@@ -76,7 +76,6 @@ import {
 } from "../lib/snapshot";
 import {
   prepareItemSearch,
-  setItemSearchReady,
 } from "../lib/item-search";
 export function flagString(flags: Flags, name: string): string | undefined {
   const value = flags[name];
@@ -347,7 +346,6 @@ export async function deployConfiguredProject(
     await prepareInitialAdminSetup(context, config);
   }
   await runChecks(context.runner, config);
-  await setItemSearchReady(context.cloudflare, config, false);
 
   const needsAuthSecret = adminAuthMode(config) === "built-in" &&
     !config.completedSteps.includes("better-auth-secret-created");

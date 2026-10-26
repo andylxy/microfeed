@@ -3,7 +3,6 @@ import type {
   StoredThemeVersion,
   ThemeBundleV1,
   ThemeFileKey,
-  ThemeSearchItemDestination,
 } from "@/shared/themes/ThemeContract";
 import {
   renderThemeTemplate,
@@ -12,7 +11,6 @@ import {
 } from "@/shared/themes/ThemeRenderer";
 import {validateStoredThemePackage} from "@/shared/themes/ThemeValidation";
 import {MICROFEED_VERSION} from "@/shared/Version";
-import {manifestSearchItemDestination} from "@/shared/themes/ThemeSearch";
 import {
   BUNDLED_DEFAULT_THEME_BUNDLE,
   BUNDLED_DEFAULT_THEME_MANIFEST,
@@ -20,7 +18,7 @@ import {
 
 type Settings = Record<string, any> | null;
 
-export function themeSupportsPagesAndSearch(
+export function themeSupportsPages(
   installedTheme: StoredThemeVersion | null | undefined,
 ): boolean {
   if (!installedTheme) {
@@ -37,30 +35,11 @@ export function themeSupportsPagesAndSearch(
   }
 }
 
-export function activeThemeSearchItemDestination(
-  installedTheme: StoredThemeVersion | null | undefined,
-): ThemeSearchItemDestination {
-  const fallback = manifestSearchItemDestination(
-    BUNDLED_DEFAULT_THEME_MANIFEST,
-  );
-  if (!installedTheme) return fallback;
-  try {
-    return manifestSearchItemDestination(validateStoredThemePackage(
-      installedTheme.manifest,
-      installedTheme.bundle,
-      MICROFEED_VERSION,
-    ).manifest);
-  } catch {
-    return fallback;
-  }
-}
-
 export default class Theme {
   private readonly context: Record<string, unknown>;
   private readonly settings: Settings;
   private readonly theme: string;
   private readonly themeBundle: ThemeBundleV1 | Record<string, string> | null;
-  private readonly formatVersion: number;
 
   constructor(
     jsonData: Record<string, unknown>,
@@ -71,7 +50,6 @@ export default class Theme {
     extraContext: Record<string, unknown> = {},
   ) {
     this.settings = settings;
-    this.formatVersion = themeSupportsPagesAndSearch(installedTheme) ? 2 : 1;
     let metadata: ThemeRuntimeMetadata = {
       assetBaseUrl: "",
       packageId: BUNDLED_DEFAULT_THEME_MANIFEST.packageId,
@@ -148,13 +126,6 @@ export default class Theme {
       : typeof fallback === "string" ? fallback : "";
   }
 
-  supportsPagesAndSearch(): boolean {
-    const bundle = this.themeBundle ?? BUNDLED_DEFAULT_THEME_BUNDLE;
-    return this.formatVersion >= 2 &&
-      typeof bundle.webPage === "string" &&
-      typeof bundle.webSearch === "string";
-  }
-
   getWebHeader(): {html: string} {
     return {html: renderThemeTemplate(this.getWebHeaderTmpl(), this.context)};
   }
@@ -226,22 +197,6 @@ export default class Theme {
 
   getWebPageTmpl(): string {
     return this.template("webPage");
-  }
-
-  getWebSearch(
-    query = "",
-    results: Array<Record<string, unknown>> = [],
-  ): {html: string} {
-    return {
-      html: renderThemeTemplate(this.getWebSearchTmpl(), {
-        ...this.context,
-        search: {query, results},
-      }),
-    };
-  }
-
-  getWebSearchTmpl(): string {
-    return this.template("webSearch");
   }
 
   /** Whether the active theme ships a genre/category page template. */

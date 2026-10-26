@@ -19,8 +19,6 @@ import {
   apiPageListResponseSchema,
   apiPageOutputSchema,
   apiPaginationQuerySchema,
-  apiSearchQuerySchema,
-  apiSearchResponseSchema,
   apiSiteFileCreateResponseSchema,
   apiSiteFileInputSchema,
   apiSiteFileListResponseSchema,
@@ -239,7 +237,6 @@ export const OPENAPI_DOCUMENT = createDocument({
     {name: "Items", description: "Create and manage feed items."},
     {name: "Pages", description: "Create and manage standalone public Pages."},
     {name: "Site Files", description: "Manage editable root-level text files."},
-    {name: "Search", description: "Find items and Pages by title or plain-text content."},
     {name: "Channel", description: "Update the primary channel."},
     {name: "Media", description: "Prepare same-origin media uploads."},
     {name: "Content", description: "Read published novel content by category, book and chapter."},
@@ -724,28 +721,6 @@ export const OPENAPI_DOCUMENT = createDocument({
           "403": error("The credential's account lacks the content:site_file:manage permission."),
           "429": error("The credential's account is rate limited."),
           "404": error("The Site File does not exist."),
-        },
-      },
-    },
-    "/search/": {
-      get: {
-        security: readSecurity,
-        operationId: "searchContent",
-        summary: "Search items and Pages",
-        description:
-          "Searches D1 for non-deleted items and Pages. The types query defaults " +
-          "to items for backward compatibility. Unquoted terms use AND semantics; " +
-          "single- and double-quoted clauses require an exact phrase. Exact " +
-          "matches rank before typo-tolerant title matches. Each result is an " +
-          "content record with safe title and content highlight segments.",
-        tags: ["Search"],
-        requestParams: {query: apiSearchQuerySchema},
-        responses: {
-          "200": success(apiSearchResponseSchema),
-          "400": error("The search query, filters, or cursor are invalid."),
-          "401": error("The Bearer credential is missing or invalid."),
-          "403": error("The credential does not have read access."),
-          "503": error("Search normalization or indexing is not ready."),
         },
       },
     },

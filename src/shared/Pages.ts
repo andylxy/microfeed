@@ -6,6 +6,8 @@ export const PAGE_META_DESCRIPTION_MAX_LENGTH = 155;
 export const DEFAULT_NOT_FOUND_PAGE_ID = "system-404";
 export const DEFAULT_NOT_FOUND_PAGE_SLUG = "404";
 
+// `search` 仍占位：公开搜索页已下线（ADR-0051），但站外存量链接仍然指向 `/search/`。
+// 把这个 slug 放给普通 Page，那些链接就会突然显示一篇无关内容。
 const RESERVED_PAGE_SLUGS = new Set([
   ".well-known",
   "_astro",

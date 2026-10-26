@@ -2,7 +2,7 @@ import {CODE_TYPES} from "@/shared/Constants";
 import {DEFAULT_NOT_FOUND_PAGE_SLUG} from "@/shared/Pages";
 import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
 import {loadSiteNav} from "@/server/feed/siteNav";
-import Theme, {themeSupportsPagesAndSearch} from "@/server/themes/Theme";
+import Theme, {themeSupportsPages} from "@/server/themes/Theme";
 import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
 import {
   resolvePagePath,
@@ -23,7 +23,6 @@ interface PublicPageLayoutData {
   headHtml: string;
   language?: string;
   publicBucketUrl?: string;
-  searchEnabled: boolean;
   sharedBodyEnd: string;
   sharedBodyStart: string;
   sharedHeadHtml: string;
@@ -49,7 +48,7 @@ export async function loadPublicPageRoute(
     : null;
   if (
     shouldHidePublicWeb(loaded.content) ||
-    !themeSupportsPagesAndSearch(loaded.content.activeTheme)
+    !themeSupportsPages(loaded.content.activeTheme)
   ) {
     return {kind: "not-found"};
   }
@@ -104,7 +103,6 @@ export async function loadPublicPageRoute(
       headHtml: theme.getWebHeader().html,
       language: loaded.publicFeed.language,
       publicBucketUrl: webSettings.publicBucketUrl,
-      searchEnabled: true,
       sharedBodyEnd: sharedTheme.getWebBodyEnd().html,
       sharedBodyStart: sharedTheme.getWebBodyStart().html,
       sharedHeadHtml: sharedTheme.getWebHeader().html,

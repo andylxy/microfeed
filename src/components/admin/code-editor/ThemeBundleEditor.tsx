@@ -40,13 +40,12 @@ export interface ThemeEditorLinks {
   webFeedUrl: string;
   webItemUrl?: string;
   webPageUrl?: string;
-  webSearchUrl?: string;
 }
 
 interface ThemeFileHelp {
   description: string;
   exampleLabel: string;
-  exampleUrlKey: Exclude<keyof ThemeEditorLinks, "jsonFeedUrl">;
+  exampleUrlKey?: Exclude<keyof ThemeEditorLinks, "jsonFeedUrl">;
 }
 
 export const THEME_FILE_HELP: Record<ThemeFileKey, ThemeFileHelp> = {
@@ -93,7 +92,7 @@ export const THEME_FILE_HELP: Record<ThemeFileKey, ThemeFileHelp> = {
   webSearch: {
     description: i18n.t("codeEditor.help.webSearchDesc"),
     exampleLabel: i18n.t("codeEditor.help.webSearchLabel"),
-    exampleUrlKey: "webSearchUrl",
+    // 公开搜索页已下线，没有可指的真实地址；此处留空，编辑器就不渲染示例链接。
   },
   webHome: {
     description: i18n.t("codeEditor.help.webHomeDesc"),
@@ -119,7 +118,7 @@ export default function ThemeBundleEditor({bundle, links, onChange}: Props) {
     : fileKeys[0] ?? "webFeed";
   const [file, setFile] = useState<ThemeFileKey>(initial);
   const help = THEME_FILE_HELP[file];
-  const exampleUrl = links[help.exampleUrlKey];
+  const exampleUrl = help.exampleUrlKey ? links[help.exampleUrlKey] : undefined;
   return (
     <div className="grid min-w-0 gap-4 md:grid-cols-[12rem_minmax(0,1fr)] md:items-start">
       <nav

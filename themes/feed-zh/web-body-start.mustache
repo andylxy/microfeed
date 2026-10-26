@@ -27,9 +27,9 @@
     </div>
 
     {{! 搜索、登录 / 注册入口按站点要求从头顶移除（2026-10-13）：本站是纯只读的
-        公开阅读站，读者不需要它们，而它们会把头部挤成两行。搜索页 /search/ 仍
-        可通过直接 URL 访问；后台 /admin/ 也不缺入口。剩下的 `fq-header-right`
-        只有颜色主题切换。 }}
+        公开阅读站，读者不需要它们，而它们会把头部挤成两行。搜索页 /search/
+        随迁移 0151 一并下线（ADR-0051），直接访问也返回 404；后台 /admin/
+        另有搜索框。剩下的 `fq-header-right` 只有颜色主题切换。 }}
     <div class="fq-header-right">
       <div class="mf-theme-menu" data-microfeed-theme-menu>
         <button

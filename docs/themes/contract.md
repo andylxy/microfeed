@@ -1,6 +1,6 @@
 ---
 title: Theme contract and rendering
-description: Understand the manifest, eight render slots, Mustache context, Pages, navigation, search hooks, schemas, fixtures, and package limits.
+description: Understand the manifest, render slots, Mustache context, Pages, navigation, retired search compatibility, schemas, fixtures, and package limits.
 ---
 
 The generated schemas in each theme repository are the exact contract for its
@@ -10,22 +10,23 @@ theme code.
 ## Format versions and slots
 
 Format v1 themes have six slots and remain compatible with feed and item
-pages. Format v2 adds standalone Pages and public Search, for eight slots total:
+pages. Format v2 adds standalone Pages for a seventh renderable slot;
+`webSearch` is still accepted from existing packages but has no renderer since
+public search was retired (ADR-0051, migration 0151):
 
 | Slot | Purpose |
 | --- | --- |
 | `webFeed` | Render the public feed home page. |
 | `webItem` | Render one item page. |
 | `webPage` | Render a standalone Page, including the editable default 404 Page. |
-| `webSearch` | Render the complete `/search/` results page. |
+| `webSearch` | Accepted and validated for backward compatibility; never rendered. |
 | `webHeader` | Insert markup before `</head>`. |
 | `webBodyStart` | Insert markup immediately after `<body>`. |
 | `webBodyEnd` | Insert markup immediately before `</body>`. |
 | `rssStylesheet` | Provide the complete RSS XSL stylesheet. |
 
 An active format v1 theme prevents a Page from becoming Published or Unlisted.
-It does not block Page drafts. Use format v2 for Pages, navigation, and public
-search.
+It does not block Page drafts. Use format v2 for Pages and navigation.
 
 ## Manifest and render context
 
@@ -45,8 +46,10 @@ survives installation, Admin-derived drafts, publication, `theme init`, and
 `theme export`. Admin drafts inherit it but cannot edit it. Themes without a
 declared fixture continue previewing current-site data.
 
-A format v2 manifest may also declare `searchItemDestination` to control where
-item results open in both the popup and `/search/`:
+A format v2 manifest may also declare `searchItemDestination`, kept for
+backward compatibility with packages written while public search existed. The
+live site no longer has a search surface to consume it; `theme-kit` preview and
+the theme editor still read it, so the field stays valid:
 
 | Value | Item destination and feed field |
 | --- | --- |
@@ -64,9 +67,12 @@ The render context begins with the public JSON Feed and adds:
 - `_theme.package_id`;
 - `_theme.version`;
 - `_theme.asset_base_url`;
-- `navigation_pages` on public HTML views;
-- `page` on the Page slot; and
-- `search` on the Search slot.
+- `navigation_pages` on public HTML views; and
+- `page` on the Page slot.
+
+`search` is preview-only. `theme-kit` still builds it from the fixture so a
+package's `webSearch` template can be rendered offline, but no live route ever
+produces it.
 
 On item pages, use `items.0`. The `item` alias remains available only for
 compatibility with older themes.
@@ -83,7 +89,7 @@ setting is enabled, in the order selected in Admin. Draft, Unlisted, and the
 special 404 Page are excluded. Navigation is website-only and never adds a
 Page to RSS or JSON Feed.
 
-Render the same navigation in feed, item, Page, and Search templates:
+Render the same navigation in feed, item, and Page templates:
 
 ```html
 <nav aria-label="Site navigation">
@@ -97,84 +103,27 @@ The `webPage` slot also renders the protected default 404 Page. Check
 `page.is_not_found_page` only when the theme needs distinct 404 styling; the
 ordinary Page structure should otherwise work unchanged.
 
-## Connect public search
+## Public search was retired
 
-microfeed injects one accessible search dialog into every public HTML page and
-owns its keyboard handling, request cancellation, safe result rendering, and
-typeahead behavior. Do not copy that dialog or script into the theme. Add
-`data-microfeed-search-open` to a theme control that should open it:
+Site-wide public search is gone (ADR-0051, migration 0151). There is no
+`/search/` route and no `/search.json`: requests to those paths land on the 404
+Page. Admin search is unaffected and does not involve themes.
 
-```html
-<button
-  type="button"
-  aria-haspopup="dialog"
-  aria-controls="microfeed-search-dialog"
-  data-microfeed-search-open
->
-  Search
-</button>
-```
+Two pieces of the theme contract survive only as compatibility surface:
 
-The `webSearch` slot owns the surrounding layout for `/search/`. Use
-`search.query` and the stable input and results hooks:
+- `webSearch` in `theme.json` is still accepted and validated so that packages
+  written while public search existed keep installing. The slot has no renderer
+  and its template is never executed.
+- `searchItemDestination` in a format v2 manifest is still read by `theme-kit`
+  preview and the theme editor, so the field stays valid, but no live surface
+  consumes it.
 
-```html
-<form action="/search/" method="get" role="search">
-  <label for="site-search">Search this site</label>
-  <input
-    id="site-search"
-    name="q"
-    type="search"
-    value="{{search.query}}"
-    data-microfeed-search-input
-  >
-  <button type="submit">Search</button>
-  <div
-    aria-live="polite"
-    data-microfeed-search-results
-    data-microfeed-search-details
-  ></div>
-</form>
-```
+A theme should therefore not ship a search form, a `data-microfeed-search-open`
+control, or any `mf-public-search*` styling. The `data-microfeed-search-*`
+hooks and `--mf-search-result-domain-display` token are inert.
 
-The optional details hook adds a short date and excerpt to each result. The
-dialog and results use stable `data-microfeed-search-*` hooks and
-`mf-public-search*` classes for targeted styling.
-
-Every rendered result exposes title, type, destination hostname, and optional
-details elements. The hostname comes from the resolved link destination and is
-hidden by default. Enable it for Item results and customize the two result
-surfaces independently in the Web header:
-
-```css
-[data-microfeed-search-result-type="item"] {
-  --mf-search-result-domain-display: inline;
-}
-
-[data-microfeed-search-results-context="popup"] .mf-public-search-result {
-  padding: 0.6rem;
-}
-
-[data-microfeed-search-results-context="page"] .mf-public-search-result {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.mf-public-search-result__domain {
-  color: var(--mf-muted);
-}
-```
-
-Use `.mf-public-search-result__title`, `__type`, `__domain`, and `__details`
-for individual parts. The result link also has
-`data-microfeed-search-result-type="item|page"`; its container has
-`data-microfeed-search-results-context="popup|page"`. Keep the supplied link
-and text nodes instead of reconstructing untrusted result HTML.
-
-Define `--mf-accent`, `--mf-background`, `--mf-surface`, `--mf-text`,
-`--mf-muted`, and `--mf-border` color tokens so the injected dialog follows the
-theme. Search preview uses representative results because live search is not
-available inside the isolated preview.
+Styles and scripts that reference those hooks are harmless but dead; new themes
+should omit them entirely.
 
 ## Schemas, fixtures, and package limits
 

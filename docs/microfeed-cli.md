@@ -26,7 +26,6 @@ the command you need.
 - [`instances`](#npx-microfeedcli-instances)
 - [`item`](#npx-microfeedcli-item)
 - [`item list`](#npx-microfeedcli-item-list)
-- [`item search`](#npx-microfeedcli-item-search)
 - [`item get`](#npx-microfeedcli-item-get)
 - [`item create`](#npx-microfeedcli-item-create)
 - [`item update`](#npx-microfeedcli-item-update)
@@ -172,7 +171,6 @@ For every authenticated REST request, the CLI:
 | `instances use <name>` | Select the default saved instance. | Changes only the local current-instance pointer. |
 | `instances remove <name>` | Remove a saved instance locally without contacting the site. | Changes only the local instance store. |
 | `item list` | Read a page of the feed. | Read-only. |
-| `item search <query>` | Search item and Page titles or stored plain-text content. | Read-only. |
 | `item get <item-id>` | Read one item. | Read-only. |
 | `item create` | Create an item from flags or JSON. | Creates remote content. |
 | `item update <item-id>` | Update an item from flags or JSON. | Changes remote content. |
@@ -324,15 +322,15 @@ cleanup or recovery when the keychain entry is unavailable.
 
 ## `npx @microfeed/cli item`
 
-List, search, read, create, update, or delete content items. An `<item-id>` is
-the stable ID returned by `item list`, `item search`, or `item get`, such as
+List, read, create, update, or delete content items. An `<item-id>` is
+the stable ID returned by `item list` or `item get`, such as
 `0HGJLSML3P1`.
 Create and update accept either common flags or one JSON object from `--input`;
 they reject mixed input forms. Delete is permanent and requires an exact
 item-ID confirmation.
 
 ```console
-npx @microfeed/cli item <list|search|get|create|update|delete> [arguments] [options]
+npx @microfeed/cli item <list|get|create|update|delete> [arguments] [options]
 ```
 
 ## `npx @microfeed/cli item list`
@@ -371,61 +369,6 @@ Allowed projected fields are `id`, `title`, `status`, `date_published`,
 `--summary`. Compact output normalizes `status` from either the top-level item
 field or `_microfeed.status`; it omits channel metadata and unrequested item
 content while retaining pagination.
-
-## `npx @microfeed/cli item search`
-
-**Purpose:** Search items and Pages through `GET /api/v1/search/`.
-
-**Changes:** None.
-
-```console
-npx @microfeed/cli item search <query> [options]
-```
-
-The query contains 1–200 characters. Unquoted terms use implicit AND matching,
-and the final unquoted term supports prefix matching. Put matching single or
-double quotes inside the query for an exact phrase. Exact matches rank before
-typo-tolerant title matches; quoted phrases and content are never fuzzy
-matched.
-
-| Option | Meaning |
-| --- | --- |
-| `--types <types>` | Search `items`, `pages`, or `items,pages`. The default remains `items` for compatibility. |
-| `--fields <fields>` | Search `title`, `content`, or `title,content`. The default searches both. |
-| `--status <statuses>` | Filter by a comma-separated list of `published`, `unlisted`, or `unpublished`. The default includes all three. |
-| `--date-published-ms-gt <milliseconds>` | Return items published strictly after this Unix timestamp in milliseconds. |
-| `--date-published-ms-lt <milliseconds>` | Return items published strictly before this Unix timestamp in milliseconds. |
-| `--limit <1-100>` | Maximum matches to return; defaults to 20. |
-| `--next-cursor <cursor>` | Continue forward using a cursor returned for the same query and filters. |
-
-Search only titles for `hello`:
-
-```console
-# Replace <instance-name> with a saved instance name.
-npx @microfeed/cli item search hello --fields title --instance <instance-name> --json
-```
-
-Search both items and Pages:
-
-```console
-# Replace <instance-name> with a saved instance name.
-npx @microfeed/cli item search hello --types items,pages --instance <instance-name> --json
-```
-
-Keep the shell's outer quotes separate from the exact phrase quotes that the
-search API receives:
-
-```console
-npx @microfeed/cli item search '"season finale"' \
-  --fields title,content \
-  --status published,unlisted \
-  --json
-```
-
-Without `--json`, the response body is formatted on standard output. With
-`--json`, the normal CLI API envelope contains the search response under
-`body`, including `items`, safe highlight segments, and an optional
-`next_cursor`.
 
 ## `npx @microfeed/cli item get`
 

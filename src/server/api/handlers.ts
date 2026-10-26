@@ -9,7 +9,6 @@ import {
   apiPageInputSchema,
   pageInputErrorMessage,
   pageInputErrorParams,
-  apiSearchQuerySchema,
   apiSiteFileInputSchema,
   apiSiteFilePreviewInputSchema,
   apiUploadInputSchema,
@@ -39,16 +38,6 @@ import {
   mediaStorageUnavailableResponse,
 } from "@/server/media/storage";
 import {createSignedUpload} from "@/server/media/uploads";
-import {
-  ItemSearchRequestError,
-  type ContentSearchResponse,
-  ItemSearchUnavailableError,
-  searchContent,
-} from "@/server/items/search";
-import type {
-  ItemSearchField,
-  ItemSearchStatus,
-} from "@/shared/ItemSearch";
 import {validatePageSlug} from "@/shared/Pages";
 import {
   siteFileMediaTypeForName,
@@ -88,88 +77,6 @@ export const getApiFeed: APIRoute = ({request}) =>
   jsonFeedResponse(request, false, undefined, undefined, false);
 
 export const headApiFeed: APIRoute = () => publicFeedHead();
-
-function publicSearchResponse(response: ContentSearchResponse) {
-  return {
-    items: response.items.map((item) => item.type === "page"
-      ? {
-          content_text: item.content_text,
-          date_modified: item.date_modified,
-          ...(item.date_published
-            ? {date_published: item.date_published}
-            : {}),
-          highlights: item.highlights,
-          id: item.id,
-          is_not_found_page: item.is_not_found_page,
-          ...(item.meta_description
-            ? {meta_description: item.meta_description}
-            : {}),
-          navigation_label: item.navigation_label,
-          navigation_order: item.navigation_order,
-          show_in_navigation: item.show_in_navigation,
-          slug: item.slug,
-          status: item.status,
-          title: item.title,
-          type: "page" as const,
-          url: item.web_url,
-        }
-      : {
-          content_text: item.content_text,
-          date_modified: item.date_modified,
-          date_published: item.date_published,
-          date_published_ms: item.date_published_ms,
-          highlights: item.highlights,
-          id: item.id,
-          ...(item.image ? {image: item.image} : {}),
-          status: item.status,
-          title: item.title,
-          type: "item" as const,
-          url: item.web_url,
-        }),
-    ...(response.next_cursor ? {next_cursor: response.next_cursor} : {}),
-  };
-}
-
-export const searchApiItems: APIRoute = async ({locals, request}) => {
-  if (!locals.feedDb) {
-    return publicLocalizedTextError(request, "errors.general.feedContextUnavailable", 500);
-  }
-  const parsed = apiSearchQuerySchema.safeParse(
-    Object.fromEntries(new URL(request.url).searchParams),
-  );
-  if (!parsed.success) {
-    return publicLocalizedError(request, "errors.api.invalidSearchQuery", 400);
-  }
-  try {
-    const fields = [...new Set(parsed.data.fields.split(","))] as ItemSearchField[];
-    const statuses = [...new Set(parsed.data.status.split(","))] as ItemSearchStatus[];
-    const types = [...new Set(parsed.data.types.split(","))].map((type) =>
-      type === "pages" ? "page" as const : "item" as const
-    );
-    const response = await searchContent(locals.feedDb.FEED_DB, request, {
-      datePublishedMsGt: parsed.data.date_published_ms_gt,
-      datePublishedMsLt: parsed.data.date_published_ms_lt,
-      fields,
-      limit: parsed.data.limit,
-      nextCursor: parsed.data.next_cursor,
-      publicBucketUrl: locals.publicBucketUrl,
-      query: parsed.data.q,
-      statuses,
-      types,
-    });
-    return jsonResponse(publicSearchResponse(response), {
-      headers: {"cache-control": "private, no-store"},
-    });
-  } catch (error) {
-    if (error instanceof ItemSearchRequestError) {
-      return jsonResponse({error: error.message}, {status: 400});
-    }
-    if (error instanceof ItemSearchUnavailableError) {
-      return jsonResponse({error: error.message}, {status: 503});
-    }
-    throw error;
-  }
-};
 
 function pageServiceError(error: unknown): Response | undefined {
   if (error instanceof PageRequestError) {

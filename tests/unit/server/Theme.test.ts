@@ -175,7 +175,7 @@ describe("production theme selection", () => {
     const theme = new Theme(feed, settings);
     expect(theme.getWebFeedTmpl()).toBe(BUNDLED_DEFAULT_THEME_BUNDLE.webFeed);
     expect(theme.name()).toBe("default");
-    expect(theme.supportsPagesAndSearch()).toBe(true);
+    expect(theme.getWebPageTmpl()).toBe(BUNDLED_DEFAULT_THEME_BUNDLE.webPage);
   });
 
   it("falls back safely when the active row is malformed or incompatible", () => {

@@ -114,11 +114,12 @@ function validateThemePackageWithSchema(
   for (const key of fileKeys) {
     const template = bundle[key];
     if (typeof template !== "string") {
-      // webCategory and webHome are optional: themes published before the
+      // webCategory / webHome are optional: themes published before the
       // novel-cms work do not ship a genre page or a home page, and they must
-      // keep validating unchanged. Both are .optional() in the manifest and
-      // bundle schemas above.
-      if (key !== "webCategory" && key !== "webHome") {
+      // keep validating unchanged. webSearch is optional since public search
+      // was retired (ADR-0051); themes that still ship the template keep
+      // validating unchanged too.
+      if (key !== "webCategory" && key !== "webHome" && key !== "webSearch") {
         diagnostics.push(`bundle.${key}: A format v2 theme must provide this template.`);
       }
       continue;

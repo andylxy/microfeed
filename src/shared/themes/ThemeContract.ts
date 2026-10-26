@@ -137,7 +137,8 @@ export const themeManifestV2Schema = themeManifestBaseSchema.extend({
     webCategory: themePathSchema.optional(),
     webHome: themePathSchema.optional(),
     webPage: themePathSchema,
-    webSearch: themePathSchema,
+    // 公开搜索已退役（ADR-0051）：模板可选，不带的新主题与带旧模板的主题都通过。
+    webSearch: themePathSchema.optional(),
   }),
   formatVersion: z.literal(THEME_FORMAT_VERSION_V2),
   searchItemDestination: z.enum(THEME_SEARCH_ITEM_DESTINATIONS).optional().meta({
@@ -155,7 +156,8 @@ const storedThemeManifestV2Schema = storedThemeManifestBaseSchema.extend({
     webCategory: themePathSchema.optional(),
     webHome: themePathSchema.optional(),
     webPage: themePathSchema,
-    webSearch: themePathSchema,
+    // 同 themeManifestV2Schema：webSearch 可选（ADR-0051）。
+    webSearch: themePathSchema.optional(),
   }),
   formatVersion: z.literal(THEME_FORMAT_VERSION_V2),
   searchItemDestination: z.enum(THEME_SEARCH_ITEM_DESTINATIONS).optional().meta({
@@ -363,13 +365,13 @@ export const themeContextSchema = z.object({
   page: themePageSchema.optional(),
   search: z.object({
     query: z.string().meta({
-      description: "The q query parameter used to render the dedicated Search page.",
+      description: "Representative query string used by theme-kit preview.",
     }),
     results: z.array(themeSearchResultSchema).meta({
-      description: "Representative results in previews. Live public Search results are safely rendered by microfeed into the documented data-microfeed-search-* hooks.",
+      description: "Representative results built from the preview fixture.",
     }),
   }).loose().optional().meta({
-    description: "Dedicated Search-page state. The theme owns page structure and styling; microfeed owns the public endpoint, popup dialog, keyboard behavior, typeahead, cancellation, highlighting, and safe result hydration.",
+    description: "Preview-only Search state. The live site has no Search slot since public search was retired (ADR-0051, migration 0151); theme-kit preview still builds this object so a package's webSearch template can be rendered offline.",
   }),
   language: z.string().optional(),
   next_url: z.string().optional(),

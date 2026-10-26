@@ -38,7 +38,7 @@ interface Preview {
   description?: string;
   hasPreviewFixture: boolean;
   label: string;
-  supportsPagesAndSearch: boolean;
+  supportsPages: boolean;
   url: string;
 }
 
@@ -417,7 +417,7 @@ export default function ThemesApp({
     description: theme.manifest.description,
     hasPreviewFixture: Boolean(theme.manifest.previewFixture),
     label: `${theme.name} ${theme.version}`,
-    supportsPagesAndSearch: theme.manifest.formatVersion === 2,
+    supportsPages: theme.manifest.formatVersion === 2,
     url: ADMIN_URLS.ajaxThemePreview(theme.id),
   });
   const openTab = (next: ThemeAdminTab) => {
@@ -654,7 +654,7 @@ export default function ThemesApp({
           onOpenChange={(open) => {if (!open) setPreview(null);}}
           open
           previewUrl={preview.url}
-          supportsPagesAndSearch={preview.supportsPagesAndSearch}
+          supportsPages={preview.supportsPages}
         />
       )}
 

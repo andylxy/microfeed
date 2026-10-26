@@ -41,7 +41,6 @@ import {
   } from "../../../manage-cli/lib/snapshot";
 import {
   ADMIN_TYPEAHEAD_TRIGGER_PREFIX,
-  CREATE_SITE_SEARCH_INDEX_SQL,
   ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES,
 } from "../../../src/shared/ItemSearchSql";
 import {repositoryRoot} from "../../../manage-cli/lib/process";
@@ -134,15 +133,13 @@ describe("snapshot migration history", () => {
       "channels",
       "d1_kv",
       "d1_migrations",
-      "site_search_exact",
-      "site_search_exact_data",
-      "site_search_title_trigram_idx",
+      "ext_admin_typeahead",
+      "ext_admin_typeahead_data",
+      "ext_admin_typeahead_idx",
       "sqlite_sequence",
     ])).toEqual(["channels"]);
     expect(SNAPSHOT_TABLES.internal).toContain("d1_kv");
     expect(SNAPSHOT_TABLES.ephemeral).toContain("item_create_idempotency");
-    expect(SNAPSHOT_TABLES.ephemeral).toContain("item_search_metadata");
-    expect(SNAPSHOT_TABLES.ephemeral).toContain("site_search_documents");
     expect(SNAPSHOT_TABLES.ephemeral).toContain("webhook_endpoints");
     expect(SNAPSHOT_TABLES.ephemeral).toContain("webhook_deliveries");
     expect(SNAPSHOT_TABLES.ephemeral).toContain("webhook_settings");
@@ -156,24 +153,13 @@ describe("snapshot migration history", () => {
     // on the other side: every CREATE TABLE in the checked-in migrations must
     // already be classified, so a future ext_ table cannot ship unclassified
     // and only blow up at snapshot time on a live deployment.
-    const migrationsDirectory = path.join(repositoryRoot, "migrations");
-    const filenames = (await readdir(migrationsDirectory))
-      .filter((filename) => filename.endsWith(".sql"));
-    expect(filenames.length).toBeGreaterThan(0);
-    const tables = new Set<string>();
-    for (const filename of filenames) {
-      const sql = await readFile(path.join(migrationsDirectory, filename), "utf8");
-      // Strip line comments so a documented-out CREATE TABLE never counts.
-      const code = sql.replace(/^\s*--.*$/gmu, "");
-      for (const match of code.matchAll(
-        /CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`\[\]]?([A-Za-z0-9_]+)/giu,
-      )) {
-        tables.add(match[1] ?? "");
-      }
-    }
+    //
+    // 已退役的表（建过、又被后续迁移 DROP 掉）不参与分类：快照里不会有它们，
+    // 要求给它们登记分类只会让每次退役都要在 SNAPSHOT_TABLES 里留一行死条目。
+    const {alive} = await migrationTableLifecycle();
     // FTS5 virtual tables and their shadow tables are filtered by prefix in
     // production (applicationTablesFromSqlite); mirror that here.
-    const application = [...tables].filter((table) =>
+    const application = alive.filter((table) =>
       table &&
       !ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES.some((prefix) =>
         table === prefix || table.startsWith(`${prefix}_`)
@@ -366,16 +352,20 @@ function snapshotSql(
       name === prefix || name.startsWith(`${prefix}_`)
     )
   );
+  // 数据只导出「schema 里真的建出来」的表：schemaRows 会剔掉派生 FTS / 触发器影子表，
+  // 若数据侧仍按 exportedTables 全量导出，恢复时就会 INSERT 到一张没有 CREATE 的表上。
+  const schemaTables = schemaRows
+    .filter(({type}) => type === "table")
+    .map(({name}) => name);
   const data: string[] = [];
-  for (const name of exportedTables) {
+  for (const name of schemaTables) {
     if (new Set<string>([
       ...SNAPSHOT_TABLES.ephemeral,
       ...SNAPSHOT_TABLES.targetSpecific,
     ]).has(name)) {
       continue;
     }
-    const rows = database.prepare(`SELECT * FROM "${name}" ORDER BY rowid`)
-      .all() as Array<Record<string, unknown>>;
+    const rows = database.prepare(`SELECT * FROM "${name}"`) .all() as Array<Record<string, unknown>>;
     for (const row of rows) {
       const columns = Object.keys(row).map((column) => `"${column}"`).join(", ");
       data.push(
@@ -390,6 +380,73 @@ function snapshotSql(
   };
 }
 
+/** `CREATE INDEX ... ON <table>` 里的表名；取不到时返回空串。 */
+function indexOwnerTable(sql: string): string {
+  return /\bON\s+[^A-Za-z0-9_]*([A-Za-z0-9_]+)/iu.exec(sql)?.[1] ?? "";
+}
+
+/** 派生 FTS 表及其影子表：快照导出不收录，索引也就不该重建。 */
+function isDerivedTable(name: string): boolean {
+  return ITEM_SEARCH_VIRTUAL_TABLE_PREFIXES.some((prefix) =>
+    name === prefix || name.startsWith(`${prefix}_`)
+  );
+}
+
+/**
+ * 迁移目录里每张表的终态：按文件名顺序逐条语句回放「建表 / 删表」，
+ * 回放结束仍在 `alive` 里的才是活表。
+ *
+ * 必须按语句顺序而不是按集合判断：`api_keys`、`ext_api_access_log`、
+ * `ext_user_permissions` 这几张都经历过「删表重建」（0148、0131 等），
+ * 只把所有 DROP 收进一个集合会把它们当成已退役，索引期望集跟着被剔空。
+ */
+async function migrationTableLifecycle(): Promise<{
+  alive: string[];
+  retired: Set<string>;
+}> {
+  const migrationsDirectory = path.join(repositoryRoot, "migrations");
+  const filenames = (await readdir(migrationsDirectory))
+    .filter((filename) => filename.endsWith(".sql"))
+    .sort();
+  expect(filenames.length).toBeGreaterThan(0);
+  const alive = new Set<string>();
+  const seen = new Set<string>();
+  for (const filename of filenames) {
+    const sql = await readFile(path.join(migrationsDirectory, filename), "utf8");
+    // 剥掉行注释，注释里写过的 CREATE / DROP 不算数。
+    const code = sql.replace(/^\s*--.*$/gmu, "");
+    for (const match of code.matchAll(
+      /(CREATE\s+(?:VIRTUAL\s+)?TABLE|DROP\s+TABLE|ALTER\s+TABLE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?[^A-Za-z0-9_]*([A-Za-z0-9_]+)([^;]*)/giu,
+    )) {
+      const action = (match[1] ?? "").toUpperCase();
+      const table = match[2] ?? "";
+      if (!table) continue;
+      if (action.startsWith("CREATE")) {
+        alive.add(table);
+        seen.add(table);
+        continue;
+      }
+      if (action.startsWith("DROP")) {
+        alive.delete(table);
+        continue;
+      }
+      // 「建新表 → 拷数据 → 删旧表 → RENAME」是仓库里的重建写法（0038、0148）。
+      // 旧名删掉后必须把新名放回活表集，否则重建过的表会被误判成已退役。
+      // 不带 RENAME 的 ALTER（ADD COLUMN 之类）不动表的存在性。
+      const renamed = /RENAME\s+TO\s+[^A-Za-z0-9_]*([A-Za-z0-9_]+)/iu.exec(
+        match[3] ?? "",
+      )?.[1];
+      if (renamed) {
+        alive.delete(table);
+        alive.add(renamed);
+        seen.add(renamed);
+      }
+    }
+  }
+  const retired = new Set([...seen].filter((table) => !alive.has(table)));
+  return {alive: [...alive], retired};
+}
+
 describe("migration upgrades from historical snapshot positions", () => {
   it("upgrades both a normal database and a schema/data snapshot from every released head", async () => {
     const migrations = await repositoryMigrations();
@@ -402,15 +459,24 @@ describe("migration upgrades from historical snapshot positions", () => {
     ));
     // 最终索引集：按迁移顺序重放每一条 create/drop，扣除像 0091 那样被后续 DROP 掉的
     // 冗余索引，同时保留 0102/0022 那种「先删后建」重建出来的索引——只看语句顺序才分得清。
+    // 表被 DROP 时它的索引随表一起消失（SQLite 语义），迁移里没有对应的 DROP INDEX，
+    // 所以还要按「索引所属表已退役」再剔一遍，否则 0151 这类整表退役会漏算。
+    const {retired} = await migrationTableLifecycle();
     const expectedIndexes: string[] = (() => {
-      const names = new Set<string>();
+      const names = new Map<string, string>();
       for (const operations of migrationIndexOps) {
         for (const operation of operations) {
-          if (operation.kind === "create") names.add(operation.name);
-          else names.delete(operation.name);
+          if (operation.kind === "create") {
+            names.set(operation.name, indexOwnerTable(operation.sql));
+          } else {
+            names.delete(operation.name);
+          }
         }
       }
-      return [...names].sort();
+      return [...names]
+        .filter(([, owner]) => !retired.has(owner) && !isDerivedTable(owner))
+        .map(([name]) => name)
+        .sort();
     })();
     for (let position = 1; position <= migrations.length; position += 1) {
       const normal = new DatabaseSync(":memory:");
@@ -433,6 +499,10 @@ describe("migration upgrades from historical snapshot positions", () => {
       for (const operations of migrationIndexOps.slice(0, position)) {
         for (const operation of operations) {
           if (operation.kind === "create") {
+            const owner = indexOwnerTable(operation.sql);
+            // 快照里没有的表（已退役 / 派生 FTS）不能重建索引，否则恢复时
+            // 会对着不存在的表执行 CREATE INDEX。
+            if (retired.has(owner) || isDerivedTable(owner)) continue;
             repairedIndexes.set(operation.name, operation.sql);
           } else {
             // 撤销在 position 之前已被后续迁移删除的索引，避免把 0091 删掉的冗余索引
@@ -442,16 +512,30 @@ describe("migration upgrades from historical snapshot positions", () => {
         }
       }
       restored.exec([...repairedIndexes.values()].join("\n"));
-      // 快照 schema 会剔除派生的 site_search FTS 虚拟表（导出时 byItemSearchIndexesSuspended
-      // 挂起了它们）。当 released head 落在建 FTS 的 0013 之后、重建触发器的 0090 之前时，
-      // 重放的 0090 会 CREATE TRIGGER 引用不存在的 site_search_exact 而报错。生产在恢复后
-      // 用 prepareItemSearch 补建这份派生索引；这里同步补建，测试才能继续校验账本/索引/分类不变量。
-      // 仅在 pages 已存在（0013 已在 position 之前应用）时补建，否则 FTS 与触发器由重放的
+      // 快照 schema 会剔除派生的 FTS 虚拟表。当 released head 位于 0013（建 site_search
+      // 表）之后、0090（重建触发器）之前时，重放的 0090 会 CREATE TRIGGER 引用不存在的
+      // site_search 表而报错；0151 随后把这些表整体退役（ADR-0051），所以这里只补
+      // 「让 0090 能重放」的最小表结构，0151 重放时 DROP 干净，最终态与全量路径一致。
+      // 仅在 pages 已存在（0013 已在 position 之前应用）时补建，否则表由重放的
       // 0013 正常创建，低水位无需补建（此时 pages 尚不存在，补建会引用缺表）。
       if (restored.prepare(
         "SELECT 1 AS present FROM sqlite_schema WHERE type = 'table' AND name = 'pages'",
       ).get()) {
-        restored.exec(CREATE_SITE_SEARCH_INDEX_SQL);
+        restored.exec(`
+          CREATE TABLE IF NOT EXISTS site_search_documents (
+            id INTEGER PRIMARY KEY, content_type TEXT, content_id TEXT,
+            status INTEGER, title TEXT, content_text TEXT,
+            published_at TEXT, updated_at TEXT, image TEXT,
+            UNIQUE(content_type, content_id)
+          );
+          CREATE VIRTUAL TABLE IF NOT EXISTS site_search_exact USING fts5(
+            content_type UNINDEXED, content_id UNINDEXED, title, content_text,
+            tokenize = 'unicode61 remove_diacritics 2'
+          );
+          CREATE VIRTUAL TABLE IF NOT EXISTS site_search_title_trigram USING fts5(
+            content_type UNINDEXED, content_id UNINDEXED, title, tokenize = 'trigram'
+          );
+        `);
       }
       await applyMigrationRange(restored, migrations, position, migrations.length);
 
@@ -493,8 +577,11 @@ describe("migration upgrades from historical snapshot positions", () => {
         const tables = database.prepare(
           "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
         ).all() as Array<{name: string}>;
+        // 历史位置上仍然存在的「后来被 DROP 的表」不参与分类：终态里没有它们，
+        // 真机快照也不会碰到（0151 退役 site_search_* 就是这一类）。
         expect(() => assertClassifiedTables(
-          applicationTablesFromSqlite(tables.map(({name}) => name)),
+          applicationTablesFromSqlite(tables.map(({name}) => name))
+            .filter((name) => !retired.has(name)),
         )).not.toThrow();
         if (position >= 2) {
           expect(database.prepare(

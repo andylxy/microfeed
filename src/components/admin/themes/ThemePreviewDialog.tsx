@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type PreviewView = "feed" | "item" | "page" | "search" | "rss";
+type PreviewView = "feed" | "item" | "page" | "rss";
 type PreviewViewport = "mobile" | "desktop";
 type PreviewDataSource = "fixture" | "site";
 
@@ -19,7 +19,6 @@ const VIEW_KEYS: Record<PreviewView, string> = {
   feed: "themes.viewFeed",
   item: "themes.viewItem",
   page: "themes.viewPage",
-  search: "themes.viewSearch",
   rss: "themes.viewRss",
 };
 
@@ -36,7 +35,7 @@ interface Props {
   open: boolean;
   previewUrl: string;
   revision?: number;
-  supportsPagesAndSearch?: boolean;
+  supportsPages?: boolean;
 }
 
 export default function ThemePreviewDialog({
@@ -47,7 +46,7 @@ export default function ThemePreviewDialog({
   open,
   previewUrl,
   revision = 0,
-  supportsPagesAndSearch = false,
+  supportsPages = false,
 }: Props) {
   const {t} = useTranslation();
   const [view, setView] = useState<PreviewView>("feed");
@@ -92,14 +91,9 @@ export default function ThemePreviewDialog({
             <p className="truncate text-xs text-muted-foreground">
               {label}{description ? ` · ${description}` : ""}
             </p>
-            {view === "search" && supportsPagesAndSearch && (
-              <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                {t("themes.liveSearchUnavailable")}
-              </p>
-            )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {(["feed", "item", ...(supportsPagesAndSearch ? ["page", "search"] as const : []), "rss"] as PreviewView[]).map((candidate) => (
+            {(["feed", "item", ...(supportsPages ? ["page"] as const : []), "rss"] as PreviewView[]).map((candidate) => (
               <Button
                 key={candidate}
                 onClick={() => setView(candidate)}

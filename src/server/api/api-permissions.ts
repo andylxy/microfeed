@@ -72,11 +72,6 @@ const DOMAIN_RULES: DomainRule[] = [
   // 405 further down; requiring the read code keeps the rule total without
   // inventing a write code nobody can hold.
   {prefix: "feed", read: "content:chapter:read", write: "content:chapter:read"},
-  {
-    prefix: "search",
-    read: "content:chapter:read",
-    write: "content:chapter:read",
-  },
   // The primary channel is managed as a whole, so one code covers every method.
   {
     prefix: "channels",

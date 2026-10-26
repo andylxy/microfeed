@@ -282,7 +282,7 @@ export default function ThemeDraftEditorApp({
       open={previewOpen}
       previewUrl={ADMIN_URLS.ajaxThemeDraftPreview(draft.id)}
       revision={previewKey}
-      supportsPagesAndSearch={draft.manifest.formatVersion === 2}
+      supportsPages={draft.manifest.formatVersion === 2}
     />
     <AdminDialog
       onOpenChange={(open) => {if (!open) setHelpField(null);}}

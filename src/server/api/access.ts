@@ -145,7 +145,6 @@ function integrationSuffix(suffix: string, legacy: boolean): boolean {
       /^content\/categories\/[^/]+\/books\/$/u.test(suffix) ||
       /^content\/books\/[^/]+\/chapters\/$/u.test(suffix) ||
       /^content\/chapters\/[^/]+\/$/u.test(suffix) ||
-      suffix === "search/" ||
       suffix === "pages/" ||
       suffix === "pages/validate/" ||
       /^pages\/[^/]+\/$/u.test(suffix) ||

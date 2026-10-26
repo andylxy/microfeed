@@ -204,7 +204,6 @@ describe("generated API reference", () => {
       "/site-files/{siteFileId}/",
       "/site-files/{siteFileId}/publish/",
       "/site-files/{siteFileId}/reset/",
-      "/search/",
       "/channels/{channelId}/",
       "/media_files/presigned_urls/",
     ]);
@@ -328,23 +327,6 @@ describe("generated API reference", () => {
     expect(specification).toContain("{{current_year}}");
     expect(specification).toContain("current UTC year");
     expect(specification).toContain("Rendered channel copyright");
-  });
-
-  it("defines search items as Item plus highlights", () => {
-    const searchItem = OPENAPI_DOCUMENT.components?.schemas?.SearchItem as {
-      allOf?: unknown[];
-    };
-    expect(searchItem.allOf?.[0]).toEqual({
-      $ref: "#/components/schemas/Item",
-    });
-    expect(searchItem.allOf?.[1]).toMatchObject({
-      properties: {
-        highlights: {
-          required: ["content_text", "title"],
-        },
-      },
-      required: ["type", "highlights"],
-    });
   });
 
   it("translates the explorer copy without touching the published spec", () => {

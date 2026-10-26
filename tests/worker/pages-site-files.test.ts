@@ -20,7 +20,6 @@ import {
   updatePage,
 } from "@/server/pages/service";
 import {loadPublicPageRoute} from "@/server/pages/public";
-import {searchContent} from "@/server/items/search";
 import {
   createSiteFile,
   getSiteFileById,
@@ -32,7 +31,6 @@ import {
 import {publicSiteFileResponse} from "@/server/site-files/public";
 import {renderSiteFileForRequest} from "@/server/site-files/templates";
 import ThemeStore from "@/server/themes/ThemeStore";
-import {GET as searchJson} from "@/pages/search.json";
 import {
   createApiPage,
   createApiSiteFile,
@@ -53,10 +51,6 @@ import {
 import {DEFAULT_NOT_FOUND_PAGE_ID} from "@/shared/Pages";
 import {STATUSES} from "@/shared/Constants";
 import {SITE_FILE_TEMPLATE_COLLECTION_LIMIT} from "@/shared/SiteFiles";
-import {
-  buildAudioUrlWithTracking,
-  PUBLIC_URLS,
-} from "@/shared/StringUtils";
 import type {
   ThemeBundleV1,
   ThemeManifestV1,
@@ -199,9 +193,6 @@ beforeEach(async () => {
         "enabled = 1 WHERE generator IS NOT NULL",
     ),
     env.FEED_DB.prepare(
-      "UPDATE site_search_metadata SET ready = 1 WHERE id = 1",
-    ),
-    env.FEED_DB.prepare(
       "DELETE FROM items WHERE id LIKE 'search-destination%'",
     ),
     env.FEED_DB.prepare(
@@ -281,14 +272,6 @@ describe("public Pages", () => {
       .rejects.toBeInstanceOf(PageRequestError);
     expect(await navigationPages(env.FEED_DB, request)).toEqual([]);
 
-    const search = await searchContent(env.FEED_DB, request, {
-      fields: ["title", "content"],
-      limit: 10,
-      query: "friendlier missing",
-      statuses: ["published"],
-      types: ["page"],
-    });
-    expect(search.items).toEqual([]);
     expect(await (await publicSiteFileResponse(
       env,
       new Request(`${ORIGIN}/llms.txt`),
@@ -355,165 +338,8 @@ describe("public Pages", () => {
       expect.objectContaining({id: draft.id, navigation_label: "About us"}),
     ]);
 
-    const search = await searchContent(env.FEED_DB, request, {
-      fields: ["title", "content"],
-      limit: 10,
-      query: "draft body",
-      statuses: ["published"],
-      types: ["page"],
-    });
-    expect(search.items).toEqual([
-      expect.objectContaining({id: draft.id, slug: "about-us", type: "page"}),
-    ]);
     expect(await deletePage(db, draft.id)).toBe(true);
     expect(await resolvePagePath(env.FEED_DB, request, "about-us")).toBeNull();
-  });
-
-  it("serves dates and highlighted excerpts to the public search interface", async () => {
-    await activateV2();
-    const request = new Request(`${ORIGIN}/search-result-page/`);
-    const db = await database("/search-result-page/");
-    const page = await createPage(db, request, {
-      content_html: "<p>An introduction with a searchable needle inside.</p>",
-      navigation_label: "Search result",
-      slug: "search-result-page",
-      status: "published",
-      title: "Public search result",
-    });
-
-    const response = await apiContext(
-      searchJson,
-      db,
-      new Request(`${ORIGIN}/search.json?q=needle`),
-    );
-    expect(response.status).toBe(200);
-    const data = await response.json() as {
-      items: Array<{
-        date_published?: string;
-        highlights?: {content_text?: Array<{matched: boolean}>};
-        id: string;
-      }>;
-    };
-    const result = data.items.find(({id}) => id === page.id);
-    expect(result?.date_published).toEqual(expect.any(String));
-    expect(result?.highlights?.content_text?.some(({matched}) => matched))
-      .toBe(true);
-  });
-
-  it("exports plain-text title/excerpt and drops highlights for marked results", async () => {
-    await activateV2();
-    const request = new Request(`${ORIGIN}/marked-search-page/`);
-    const db = await database("/marked-search-page/");
-    const page = await createPage(db, request, {
-      content_html: "<p>桂枝$f{桂枝汤}主之。needle</p>",
-      navigation_label: "Marked search",
-      slug: "marked-search-page",
-      status: "published",
-      title: "桂枝$f{桂枝汤}",
-    });
-
-    const response = await apiContext(
-      searchJson,
-      db,
-      new Request(`${ORIGIN}/search.json?q=needle`),
-    );
-    expect(response.status).toBe(200);
-    const data = await response.json() as {
-      items: Array<{
-        content_text?: string;
-        highlights?: unknown;
-        id: string;
-        title?: string;
-      }>;
-    };
-    const result = data.items.find(({id}) => id === page.id);
-    // 标题与摘要走纯文本出口：$x{} 外壳剥掉、不留字面量（票07）
-    expect(result?.title).not.toContain("$f{");
-    expect(result?.title).toContain("桂枝汤");
-    expect(result?.content_text).not.toContain("$f{");
-    expect(result?.content_text).toContain("桂枝汤");
-    // 带标记的条目弃用高亮切片（按原始文本切分会把外壳切碎）
-    expect(result?.highlights).toBeUndefined();
-  });
-
-  it("uses the active v2 theme destination for public item search links", async () => {
-    const request = new Request(`${ORIGIN}/search-destination-page/`);
-    const db = await database("/search-destination-page/");
-    const trackingUrls = ["https://analytics.example/redirect/"];
-    await db.putContent({
-      item: {
-        description: "A destination needle with custom links.",
-        id: "search-destination",
-        link: "https://publisher.example/custom-item",
-        mediaFile: {url: "production/media/search-destination.mp3"},
-        pubDateMs: Date.parse("2026-08-18T10:00:00.000Z"),
-        status: STATUSES.PUBLISHED,
-        title: "Destination needle item",
-      },
-      settings: {analytics: {urls: trackingUrls}},
-    });
-    await db.putContent({
-      item: {
-        description: "A destination needle without optional links.",
-        id: "search-destination-fallback",
-        pubDateMs: Date.parse("2026-08-17T10:00:00.000Z"),
-        status: STATUSES.PUBLISHED,
-        title: "Destination needle fallback",
-      },
-    });
-    const page = await createPage(db, request, {
-      content_html: "<p>A destination needle Page.</p>",
-      navigation_label: "Search destination",
-      slug: "search-destination-page",
-      status: "published",
-      title: "Destination needle Page",
-    });
-    const getResults = async () => {
-      const response = await apiContext(
-        searchJson,
-        db,
-        new Request(`${ORIGIN}/search.json?q=destination+needle`),
-      );
-      expect(response.status).toBe(200);
-      return (await response.json() as {
-        items: Array<{id: string; type: "item" | "page"; url: string}>;
-      }).items;
-    };
-    const expectedWebUrl = PUBLIC_URLS.webItem(
-      "search-destination",
-      "Destination needle item",
-      ORIGIN,
-    );
-    const expectedFallbackUrl = PUBLIC_URLS.webItem(
-      "search-destination-fallback",
-      "Destination needle fallback",
-      ORIGIN,
-    );
-
-    await activateV2("web", "destination-web");
-    let results = await getResults();
-    expect(results.find(({id}) => id === "search-destination")?.url)
-      .toBe(expectedWebUrl);
-
-    await activateV2("url", "destination-url");
-    results = await getResults();
-    expect(results.find(({id}) => id === "search-destination")?.url)
-      .toBe("https://publisher.example/custom-item");
-    expect(results.find(({id}) => id === "search-destination-fallback")?.url)
-      .toBe(expectedFallbackUrl);
-
-    await activateV2("attachment", "destination-attachment");
-    results = await getResults();
-    expect(results.find(({id}) => id === "search-destination")?.url).toBe(
-      buildAudioUrlWithTracking(
-        "/media/production/media/search-destination.mp3",
-        trackingUrls,
-      ),
-    );
-    expect(results.find(({id}) => id === "search-destination-fallback")?.url)
-      .toBe(expectedFallbackUrl);
-    expect(results.find(({id}) => id === page.id)?.url)
-      .toBe(`${ORIGIN}/search-destination-page/`);
   });
 
   it("keeps Unlisted Pages public only at their direct URL", async () => {
@@ -535,13 +361,6 @@ describe("public Pages", () => {
     expect(await resolvePagePath(env.FEED_DB, request, "private-link"))
       .toMatchObject({page: {id: unlisted.id}, redirect: false});
     expect(await navigationPages(env.FEED_DB, request)).toEqual([]);
-    expect((await searchContent(env.FEED_DB, request, {
-      fields: ["title", "content"],
-      limit: 10,
-      query: "shared direct link",
-      statuses: ["published"],
-      types: ["page"],
-    })).items).toEqual([]);
 
     const published = await updatePage(db, request, unlisted.id, {
       status: "published",
