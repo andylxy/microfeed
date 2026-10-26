@@ -137,9 +137,8 @@ export const SNAPSHOT_TABLES = {
   ],
   ephemeral: [
     "item_create_idempotency",
-    "item_search_metadata",
-    "site_search_documents",
-    "site_search_metadata",
+    // site_search_* / item_search_metadata 已随全文搜索退役（ADR-0051，迁移 0151），
+    // 库中不再存在；旧快照恢复时 0151 的重放会 DROP 导入的残留行。
     // Materialised per-book chapter/word counts (migration 0103). Purely derived from
     // items: the read path recomputes any missing or stale row lazily, so nothing here
     // is worth carrying across a snapshot boundary.

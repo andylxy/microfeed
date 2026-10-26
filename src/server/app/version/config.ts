@@ -22,6 +22,7 @@ import {
   type AppRolloutScope,
   type AppVersionConfig,
 } from "@/shared/AppDeviceVersion";
+import {purgeVersionGateCache} from "./gate-cache";
 
 export type ConfigWriteResult =
   | {ok: true}
@@ -146,6 +147,8 @@ export async function saveAppVersionConfig(
       updateLog || null,
     )
     .run();
+  // 版本门输入进共享缓存（方案 4.5），保存后清条目。
+  await purgeVersionGateCache();
   return {ok: true};
 }
 
@@ -236,5 +239,7 @@ export async function saveRolloutRules(
     batches.push([db.prepare("DELETE FROM ext_app_rollout")]);
   }
   for (const batch of batches) await db.batch(batch);
+  // 灰度规则与全局地板同属版本门输入（方案 4.5），保存后清条目。
+  await purgeVersionGateCache();
   return {ok: true};
 }

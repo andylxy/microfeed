@@ -24,7 +24,7 @@ import {
   recordLoginFailure,
 } from "@/server/auth/login-throttle";
 import {jsonResponse, publicLocalizedError} from "@/server/http";
-import {accountIsBlocked, userMayEnterAdmin} from "@/server/rbac/resolve";
+import {userMayEnterAdmin} from "@/server/rbac/resolve";
 import {adminLoginDeniedResponse} from "@/server/auth/admin-signin";
 import {adminUrl} from "@/shared/AdminPath";
 
@@ -83,11 +83,9 @@ export async function handleCredentialLogin(
     return publicLocalizedError(request, "errors.loginCredential.tooManyAttempts", 429);
   }
 
+  // 封禁标记随验票同一趟 LEFT JOIN 取回（方案 4.4），不再单独查一次 `auth_user`。
   const verified = await verifyLoginCredentialToken(env.FEED_DB, token);
-  const blocked = verified
-    ? await accountIsBlocked(env.FEED_DB, verified.userId)
-    : false;
-  if (!verified || blocked) {
+  if (!verified || verified.banned) {
     if (throttleKey) await recordLoginFailure(env.FEED_DB, throttleKey);
     return publicLocalizedError(request, "errors.loginCredential.invalid", 401);
   }

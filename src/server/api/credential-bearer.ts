@@ -19,21 +19,24 @@
  */
 
 import {
-  markLoginCredentialUsed,
-  verifyLoginCredentialToken,
+  loginCredentialVerifyStatement,
+  verifiedLoginCredentialFromRow,
+  type LoginCredentialLookupRow,
 } from "@/server/auth/login-credentials";
 import {clientAddress} from "@/server/auth/client-address";
 import {
-  loginThrottleAllows,
+  loginThrottleRowAllows,
+  loginThrottleSelectStatement,
   recordLoginFailure,
+  type LoginThrottleRow,
 } from "@/server/auth/login-throttle";
 import {
-  accountIsBlocked,
-  isDeviceRevoked,
+  deviceRevocationStatement,
+  deviceRevokedFromRow,
   permissionsInclude,
-  registerUserDevice,
-  resolveUserAccess,
 } from "@/server/rbac/resolve";
+import type {AppRequestQuotaRow} from "@/server/rbac/app-quota";
+import {cachedUserAccess} from "@/server/cache/identity-cache";
 import {LOGIN_CREDENTIAL_PREFIX} from "@/shared/LoginCredential";
 import {apiPathDetails, type ApiAttribution} from "./access";
 import {requiredApiPermission} from "./api-permissions";
@@ -48,6 +51,11 @@ export type CredentialBearerDecision =
     isMember: boolean;
     /** 权限集合同趟带出（ADR-0049 D11）：middleware 挂进 locals 供能力端点复用。 */
     permissions: Set<string>;
+    /**
+     * 批次二取回的配额计数行（方案 6）：只在调用方要求计数时出现。
+     * `row` 为 null 表示该凭证还没有计数行；UPSERT 仍由调用方在版本门后单独执行。
+     */
+    quota?: {credentialId: string; row: AppRequestQuotaRow | null};
   }
   | {kind: "deviceRevoked"}
   | {kind: "forbidden"; attribution: ApiAttribution}
@@ -55,6 +63,20 @@ export type CredentialBearerDecision =
   | {kind: "reference"}
   | {kind: "throttled"}
   | {kind: "unauthorized"};
+
+export interface CredentialBearerOptions {
+  /**
+   * 批次二与设备吊销同批执行的配额 SELECT。返回 null 表示本路径不计数。
+   * 只取行，不写库——拒绝路径的写入必须为零。
+   */
+  quotaSelect?: (credentialId: string) => D1PreparedStatement | null;
+}
+
+/** `db.batch` 的结果里取第一行。 */
+function rowOf<T>(result: D1Result | undefined): T | null {
+  const row = result?.results?.[0];
+  return row === undefined ? null : row as T;
+}
 
 /** The presented `mflc_…` bearer token, if any (other bearers are left alone). */
 export function providedLoginCredential(request: Request): string | null {
@@ -69,6 +91,7 @@ export async function decideLoginCredentialApiRequest(
   database: D1Database,
   request: Request,
   pathname: string,
+  options: CredentialBearerOptions = {},
 ): Promise<CredentialBearerDecision> {
   const details = apiPathDetails(pathname);
   if (!details) return {kind: "notFound"};
@@ -79,32 +102,50 @@ export async function decideLoginCredentialApiRequest(
   const token = providedLoginCredential(request);
   if (!token) return {kind: "unauthorized"};
 
-  // Throttle before the lookup runs: the token is a bearer secret, so this path
-  // is guessable material in exactly the way the sign-in endpoint already is.
-  // B13: with no client address, skip the IP dimension instead of falling back
-  // to a shared "unknown" bucket that would lock out every addressless caller.
+  // The token is a bearer secret, so this path is guessable material in exactly
+  // the way the sign-in endpoint already is. B13: with no client address, skip
+  // the IP dimension instead of falling back to a shared "unknown" bucket that
+  // would lock out every addressless caller.
   const ip = clientAddress(request);
   const throttleKey = ip ? `${ip}${THROTTLE_KEY_SUFFIX}` : null;
-  if (throttleKey && !await loginThrottleAllows(database, throttleKey)) {
+
+  // 批次一（方案 6）：限流桶按 IP、凭证 JOIN 按 token，互不依赖，一次往返取回。
+  const credentialStatement = await loginCredentialVerifyStatement(database, token);
+  if (!credentialStatement) return {kind: "unauthorized"};
+  const throttleStatement = throttleKey
+    ? loginThrottleSelectStatement(database, throttleKey)
+    : null;
+  const preludeStatements = throttleStatement
+    ? [throttleStatement, credentialStatement]
+    : [credentialStatement];
+  const prelude = await database.batch(preludeStatements);
+  const throttleRow = throttleStatement
+    ? rowOf<LoginThrottleRow>(prelude[0])
+    : null;
+  if (throttleStatement && !loginThrottleRowAllows(throttleRow)) {
     return {kind: "throttled"};
   }
 
-  const verified = await verifyLoginCredentialToken(database, token);
+  const verified = verifiedLoginCredentialFromRow(
+    rowOf<LoginCredentialLookupRow>(prelude[throttleStatement ? 1 : 0]),
+  );
   if (!verified) {
     if (throttleKey) await recordLoginFailure(database, throttleKey);
     return {kind: "unauthorized"};
   }
 
-  // Only an unresolvable token counts as a brute-force failure; a valid token
-  // whose permissions fall short is an authorization outcome, not a guess.
-  if (await accountIsBlocked(database, verified.userId)) {
+  // 封禁标记与验票同一趟 LEFT JOIN 取回（方案 4.4）。Only an unresolvable
+  // token counts as a brute-force failure; a valid token whose permissions fall
+  // short is an authorization outcome, not a guess.
+  if (verified.banned) {
     return {kind: "unauthorized"};
   }
 
-  // Device registration + revocation for login-credential API calls (ADR-0006).
-  // This path never called `resolveRbacContext`, so without these two calls an
-  // App device never reached the admin board, and a revoked device kept reading
-  // data.
+  // 批次二（方案 6）：设备吊销与配额 SELECT 都依赖批次一的结果，二者同批执行。
+  // The upsert that records the device heartbeat lives in the middleware now
+  // (scheduled through `waitUntil` once the call is authorized), so it stays off
+  // the critical path; the revocation *check* stays here because its result
+  // decides the response.
   //
   // Scope note: this is deliberately **not** narrowed to `/api/AppBookRequest/*`.
   // Revocation is a property of the calling *device*, so applying it on every
@@ -113,12 +154,35 @@ export async function decideLoginCredentialApiRequest(
   // the same credential. The admin branch already behaves this way for every
   // admin request (`resolveRbacContext`). Callers that send no `x-device-id`
   // (everyone today except the App) are unaffected.
-  //
-  // Revocation is checked before the upsert so a revoked row stays revoked.
-  if (await isDeviceRevoked(database, verified.userId, request)) {
+  const deviceStatement = deviceRevocationStatement(database, verified.userId, request);
+  const quotaStatement = options.quotaSelect?.(verified.credentialId) ?? null;
+  const postAuthStatements: D1PreparedStatement[] = [];
+  let deviceIndex = -1;
+  if (deviceStatement) {
+    deviceIndex = postAuthStatements.length;
+    postAuthStatements.push(deviceStatement);
+  }
+  let quotaIndex = -1;
+  if (quotaStatement) {
+    quotaIndex = postAuthStatements.length;
+    postAuthStatements.push(quotaStatement);
+  }
+  let deviceRevoked = false;
+  let quotaRow: AppRequestQuotaRow | null = null;
+  if (postAuthStatements.length > 0) {
+    const postAuth = await database.batch(postAuthStatements);
+    if (deviceIndex >= 0) {
+      deviceRevoked = deviceRevokedFromRow(
+        rowOf<{status: string}>(postAuth[deviceIndex]),
+      );
+    }
+    if (quotaIndex >= 0) {
+      quotaRow = rowOf<AppRequestQuotaRow>(postAuth[quotaIndex]);
+    }
+  }
+  if (deviceRevoked) {
     return {kind: "deviceRevoked"};
   }
-  await registerUserDevice(database, verified.userId, request);
 
   // Account gates on this path are banned + device-revoked (above). The fourth
   // gate — `must_change_password` -> 428 — is deliberately **not** applied: a
@@ -137,8 +201,9 @@ export async function decideLoginCredentialApiRequest(
     ? []
     : typeof required === "string" ? [required] : required;
   // 权限码与会员标记同一趟查询取回：会员标记由鉴权结果下发给内容端点，
-  // 端点不必再查一次角色。
-  const access = await resolveUserAccess(database, verified.userId);
+  // 端点不必再查一次角色。角色对象按 userId 缓存 24h（方案 4.3），
+  // RBAC 写路径按用户清。
+  const access = await cachedUserAccess(database, verified.userId);
   const grantedCode = requiredCodes.find(
     (code) => permissionsInclude(access.permissions, code),
   );
@@ -151,9 +216,9 @@ export async function decideLoginCredentialApiRequest(
   if (!grantedCode) {
     return {kind: "forbidden", attribution};
   }
-  // "Last used" means a call this credential actually got through, so it is
-  // recorded only once authorization has passed.
-  await markLoginCredentialUsed(database, verified.credentialId);
+  // "Last used" is recorded by the middleware through `waitUntil` once this
+  // decision comes back as `allow` — it still only fires for calls that got
+  // through authorization, but no longer costs a round trip on the way out.
   // 权限集合同趟带出（ADR-0049 D11）：middleware 挂进 locals，能力端点复用，
   // 不再各自 resolveUserPermissions。
   return {
@@ -161,5 +226,8 @@ export async function decideLoginCredentialApiRequest(
     attribution,
     isMember: access.isMember,
     permissions: access.permissions,
+    ...(quotaStatement
+      ? {quota: {credentialId: verified.credentialId, row: quotaRow}}
+      : {}),
   };
 }

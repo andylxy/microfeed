@@ -1,5 +1,6 @@
 import {sha256Hex} from "@/shared/crypto";
 import type {AppRequestQuotaUsage} from "@/shared/LoginCredential";
+import {workerCacheKey, workerCacheOrNull} from "@/server/cache/worker-cache";
 
 /**
  * App 内容端点按凭证限流（ADR-0048 / F3）。
@@ -32,17 +33,6 @@ const QUOTA_MARKER_ORIGIN = "https://app-quota.microfeed.internal";
 /** Cache API 写入的最小 TTL（秒）：更短的标记没有意义，跳过写入。 */
 const MARKER_MIN_TTL_SECONDS = 2;
 
-/** Workers 运行时 Cache Storage 的最小接口（与 app-cache.ts 同款结构）。 */
-interface WorkerCache {
-  match(request: URL | Request): Promise<Response | undefined>;
-  put(request: URL | Request, response: Response): Promise<void>;
-}
-
-function quotaCacheOrNull(): WorkerCache | null {
-  const storage = (globalThis as {caches?: {default?: WorkerCache}}).caches;
-  return storage?.default ?? null;
-}
-
 export interface AppRequestQuotaDecision {
   allowed: boolean;
   /** 仅在被拒时有意义：距窗口重置的秒数，用于 `Retry-After`。 */
@@ -51,7 +41,7 @@ export interface AppRequestQuotaDecision {
 
 async function markerKey(token: string): Promise<URL> {
   const tokenHash = await sha256Hex(token);
-  return new URL(`/quota/${tokenHash}`, QUOTA_MARKER_ORIGIN);
+  return workerCacheKey(QUOTA_MARKER_ORIGIN, `/quota/${tokenHash}`);
 }
 
 /**
@@ -62,7 +52,7 @@ export async function appQuotaExhaustedMarker(
   token: string,
   now = Date.now(),
 ): Promise<number | null> {
-  const cache = quotaCacheOrNull();
+  const cache = workerCacheOrNull();
   if (!cache) return null;
   try {
     const hit = await cache.match(await markerKey(token));
@@ -81,7 +71,7 @@ export async function markQuotaExhausted(
   resetAtMs: number,
   now = Date.now(),
 ): Promise<void> {
-  const cache = quotaCacheOrNull();
+  const cache = workerCacheOrNull();
   if (!cache) return;
   const ttl = Math.ceil((resetAtMs - now) / 1000);
   if (ttl < MARKER_MIN_TTL_SECONDS) return;
@@ -97,29 +87,30 @@ export async function markQuotaExhausted(
   }
 }
 
-/**
- * 鉴权成功后的计数消费（middleware 在版本门之后调用）。credentialId 来自
- * 鉴权结果——无效 token 到不了这里，表不会被随机 token 灌垃圾行。
- */
-export async function consumeAppRequestQuota(
+export interface AppRequestQuotaRow {
+  count: number;
+  reset_at_ms: number;
+}
+
+/** 批次二用的 SELECT：middleware 把它与设备吊销同批执行（方案 6）。 */
+export function quotaSelectStatement(
   db: D1Database,
   credentialId: string,
-  options: {now?: number} = {},
-): Promise<AppRequestQuotaDecision> {
-  const now = options.now ?? Date.now();
-  const row = await db.prepare(
+): D1PreparedStatement {
+  return db.prepare(
     "SELECT count, reset_at_ms FROM ext_app_request_quota " +
       "WHERE credential_id = ? LIMIT 1",
-  ).bind(credentialId).first<{count: number; reset_at_ms: number}>();
-  if (row && Number(row.reset_at_ms) > now &&
-      Number(row.count) >= APP_REQUEST_QUOTA_MAX) {
-    return {
-      allowed: false,
-      retryAfterSeconds: Math.ceil((Number(row.reset_at_ms) - now) / 1000),
-    };
-  }
+  ).bind(credentialId);
+}
+
+/** 计数语句：窗口翻转时原地重置，否则原子递增。 */
+export function quotaUpsertStatement(
+  db: D1Database,
+  credentialId: string,
+  now = Date.now(),
+): D1PreparedStatement {
   const nextReset = now + APP_REQUEST_QUOTA_WINDOW_MS;
-  const counted = await db.prepare(
+  return db.prepare(
     "INSERT INTO ext_app_request_quota (credential_id, count, reset_at_ms) " +
       "VALUES (?, 1, ?) ON CONFLICT(credential_id) DO UPDATE SET " +
       "count = CASE WHEN ext_app_request_quota.reset_at_ms <= ? " +
@@ -127,10 +118,44 @@ export async function consumeAppRequestQuota(
       "reset_at_ms = CASE WHEN ext_app_request_quota.reset_at_ms <= ? " +
       "THEN ? ELSE ext_app_request_quota.reset_at_ms END " +
       "RETURNING count, reset_at_ms",
-  ).bind(credentialId, nextReset, now, now, nextReset)
-    .first<{count: number; reset_at_ms: number}>();
+  ).bind(credentialId, nextReset, now, now, nextReset);
+}
+
+/**
+ * 由已取回的计数行给出决定；`null` 表示未达上限、需要执行 UPSERT。
+ * 达上限时**不写库**——拒绝路径的 D1 写代价必须为零。
+ */
+function exhaustedFromRow(
+  row: AppRequestQuotaRow | null | undefined,
+  now: number,
+): AppRequestQuotaDecision | null {
+  if (row && Number(row.reset_at_ms) > now &&
+      Number(row.count) >= APP_REQUEST_QUOTA_MAX) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil((Number(row.reset_at_ms) - now) / 1000),
+    };
+  }
+  return null;
+}
+
+/**
+ * 用批次二已经取回的计数行做判定与计数（middleware 在版本门之后调用）。
+ * 达上限直接拒绝、不执行 UPSERT；否则单条 UPSERT 原子递增。
+ */
+export async function consumeAppRequestQuotaFromRow(
+  db: D1Database,
+  credentialId: string,
+  row: AppRequestQuotaRow | null | undefined,
+  options: {now?: number} = {},
+): Promise<AppRequestQuotaDecision> {
+  const now = options.now ?? Date.now();
+  const exhausted = exhaustedFromRow(row, now);
+  if (exhausted) return exhausted;
+  const counted = await quotaUpsertStatement(db, credentialId, now)
+    .first<AppRequestQuotaRow>();
   const count = Number(counted?.count ?? 1);
-  const resetAtMs = Number(counted?.reset_at_ms ?? nextReset);
+  const resetAtMs = Number(counted?.reset_at_ms ?? now + APP_REQUEST_QUOTA_WINDOW_MS);
   if (count > APP_REQUEST_QUOTA_MAX) {
     return {
       allowed: false,
@@ -138,6 +163,21 @@ export async function consumeAppRequestQuota(
     };
   }
   return {allowed: true, retryAfterSeconds: 0};
+}
+
+/**
+ * 鉴权成功后的计数消费（单条调用入口）。credentialId 来自鉴权结果——无效
+ * token 到不了这里，表不会被随机 token 灌垃圾行。
+ */
+export async function consumeAppRequestQuota(
+  db: D1Database,
+  credentialId: string,
+  options: {now?: number} = {},
+): Promise<AppRequestQuotaDecision> {
+  const now = options.now ?? Date.now();
+  const row = await quotaSelectStatement(db, credentialId)
+    .first<AppRequestQuotaRow>();
+  return consumeAppRequestQuotaFromRow(db, credentialId, row, {now});
 }
 
 /**

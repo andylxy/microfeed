@@ -158,6 +158,13 @@ const C: readonly CatalogEntry[] = [
   // 关于页内容板（system:app-about:*）
   ["GET", "/admin/ajax/app-about", "system:app-about:read"],
   ["POST", "/admin/ajax/app-about/save", "system:app-about:manage"],
+  // 登录方式管理板（system:app-login-methods:*）
+  ["GET", "/admin/ajax/login-methods", "system:app-login-methods:read"],
+  ["POST", "/admin/ajax/login-methods/save", "system:app-login-methods:manage"],
+  // App 缓存控制面（system:cache:manage）
+  ["GET", "/admin/ajax/cache", "system:cache:manage"],
+  ["POST", "/admin/ajax/cache/save", "system:cache:manage"],
+  ["POST", "/admin/ajax/cache/purge", "system:cache:manage"],
   // 登录日志 / 用量（system:login-log:read / system:cloud-usage:read）
   ["GET", "/admin/ajax/login-logs", "system:login-log:read"],
   ["GET", "/admin/ajax/cloud-usage", "system:cloud-usage:read"],

@@ -177,20 +177,35 @@ export function deviceIdFromRequest(request: Request): string | null {
  * `resolveRbacContext`, which left "revoked" devices still reading data
  * (ADR-0006).
  */
+export function deviceRevocationStatement(
+  db: D1Database,
+  userId: string,
+  request: Request,
+): D1PreparedStatement | null {
+  const deviceId = deviceIdFromRequest(request);
+  if (!deviceId) return null;
+  return db
+    .prepare(
+      "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
+    )
+    .bind(userId, deviceId);
+}
+
+/** 行判定：没有该设备行视为未吊销。 */
+export function deviceRevokedFromRow(
+  row: {status: string} | null | undefined,
+): boolean {
+  return Boolean(row && row.status === "revoked");
+}
+
 export async function isDeviceRevoked(
   db: D1Database,
   userId: string,
   request: Request,
 ): Promise<boolean> {
-  const deviceId = deviceIdFromRequest(request);
-  if (!deviceId) return false;
-  const device = await db
-    .prepare(
-      "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
-    )
-    .bind(userId, deviceId)
-    .first<{status: string}>();
-  return Boolean(device && device.status === "revoked");
+  const statement = deviceRevocationStatement(db, userId, request);
+  if (!statement) return false;
+  return deviceRevokedFromRow(await statement.first<{status: string}>());
 }
 
 /**

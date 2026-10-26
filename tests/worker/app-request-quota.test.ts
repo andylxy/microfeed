@@ -6,8 +6,11 @@ import {
   appQuotaExhaustedMarker,
   appRequestQuotaResponse,
   consumeAppRequestQuota,
+  consumeAppRequestQuotaFromRow,
   markQuotaExhausted,
+  quotaSelectStatement,
   readAppRequestQuotaRows,
+  type AppRequestQuotaRow,
 } from "@/server/rbac/app-quota";
 
 /**
@@ -54,6 +57,29 @@ describe("app request quota", () => {
     expect(decision.allowed).toBe(false);
     expect(decision.retryAfterSeconds).toBeGreaterThan(0);
     expect(decision.retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
+  it("rejects from a prefetched row without writing a row", async () => {
+    // 合批后（方案 6）中间的 SELECT 由批次二取回，UPSERT 仍单独执行。达上限时
+    // 必须直接拒绝且不写库——拒绝路径的 D1 写代价为零是模块的头号约束。
+    const now = Date.now();
+    const resetAtMs = now + 60_000;
+    await seedQuotaRow(CREDENTIAL_ID, APP_REQUEST_QUOTA_MAX, resetAtMs);
+    const row = await quotaSelectStatement(env.FEED_DB, CREDENTIAL_ID)
+      .first<AppRequestQuotaRow>();
+    expect(row).not.toBeNull();
+    const decision = await consumeAppRequestQuotaFromRow(
+      env.FEED_DB,
+      CREDENTIAL_ID,
+      row,
+      {now},
+    );
+    expect(decision).toMatchObject({allowed: false});
+    const rows = await readAppRequestQuotaRows(env.FEED_DB, [CREDENTIAL_ID]);
+    expect(rows.get(CREDENTIAL_ID)).toEqual({
+      count: APP_REQUEST_QUOTA_MAX,
+      resetAtMs,
+    });
   });
 
   it("restarts the counter when the previous window lapsed", async () => {

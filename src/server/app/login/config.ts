@@ -24,7 +24,6 @@ import {
 } from "@/shared/AppLoginMethods";
 import {
   APP_LOGIN_METHODS_CACHE,
-  APP_LOGIN_METHODS_CACHE_TTL,
   cachedJson,
   deleteCachedJson,
 } from "@/server/cache/app-cache";
@@ -50,8 +49,8 @@ export async function readLoginMethodsConfigCached(
 ): Promise<LoginMethodsConfig> {
   const raw = await cachedJson<unknown>(
     APP_LOGIN_METHODS_CACHE,
-    APP_LOGIN_METHODS_CACHE_TTL,
     () => readLoginMethodsConfig(db),
+    "login-methods",
   );
   return parseLoginMethodsConfig(raw);
 }

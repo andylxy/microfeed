@@ -1,8 +1,7 @@
 import type {APIRoute} from "astro";
 import {env} from "cloudflare:workers";
 
-import {jsonResponse} from "@/server/http";
-import {appEnvelope} from "@/server/tcm/envelope";
+import {APP_STYLE_CONFIG_CACHE, cachedAppResponse} from "@/server/cache/app-cache";
 import {getAppStyleConfig} from "@/server/tcm/reads";
 
 /**
@@ -16,17 +15,21 @@ import {getAppStyleConfig} from "@/server/tcm/reads";
  * `MAX(updated_at_ms)` 走 `ix_ext_annotation_markers_updated_at`（migrations/0121）
  * 索引 seek，读 1 个索引页。两者 `Promise.all` 并行。
  *
+ * 走共享桶 `style-config`（方案 4.6）：返回不随调用者身份变化，TTL 由控制项的
+ * `config` 档给出。三个标记写端点保存后清这只桶。
+ *
  * 注意：请求参数里的 `version` 不是这个 —— 那是 App 本地自增计数器，服务端不读它。
  */
-export const GET: APIRoute = async () => {
-  const [styles, versionRow] = await Promise.all([
-    getAppStyleConfig(env.FEED_DB),
-    env.FEED_DB
-      .prepare("SELECT MAX(updated_at_ms) AS version FROM ext_annotation_markers")
-      .first<{version: number | null}>(),
-  ]);
-  return jsonResponse(appEnvelope({
-    styles,
-    version: Number(versionRow?.version ?? 0),
-  }));
-};
+export const GET: APIRoute = async () =>
+  cachedAppResponse(APP_STYLE_CONFIG_CACHE, async () => {
+    const [styles, versionRow] = await Promise.all([
+      getAppStyleConfig(env.FEED_DB),
+      env.FEED_DB
+        .prepare("SELECT MAX(updated_at_ms) AS version FROM ext_annotation_markers")
+        .first<{version: number | null}>(),
+    ]);
+    return {
+      styles,
+      version: Number(versionRow?.version ?? 0),
+    };
+  });

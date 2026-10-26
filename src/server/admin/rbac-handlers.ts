@@ -38,6 +38,10 @@ import {permissionId, roleId} from "@/server/rbac/seed";
 import {readAppRequestQuotaRows} from "@/server/rbac/app-quota";
 import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {
+  purgeUserAccess,
+  purgeUsersAccess,
+} from "@/server/cache/identity-cache";
+import {
   adminAccountKind,
   adminUsernameEmail,
   isReservedAdminEmailDomain,
@@ -284,7 +288,20 @@ export async function replaceRolePermissions(
     // Same batch: the grants and the record of who changed them are atomic.
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
+  await purgeRoleMembersAccess(db, role.id);
   return {ok: true};
+}
+
+/** 清掉持有该角色的全部账号的角色对象缓存（方案 4.3）。 */
+async function purgeRoleMembersAccess(
+  db: D1Database,
+  roleId: string,
+): Promise<void> {
+  const members = await db
+    .prepare("SELECT user_id FROM ext_user_roles WHERE role_id = ?")
+    .bind(roleId)
+    .all<{user_id: string}>();
+  await purgeUsersAccess((members.results ?? []).map((row) => row.user_id));
 }
 
 /** Accounts, the roles granted to them, and the roles available to grant. */
@@ -559,6 +576,7 @@ export async function replaceUserRoles(
     // atomic: either both land or neither does.
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
+  await purgeUserAccess(userId);
   return {ok: true};
 }
 
@@ -715,6 +733,7 @@ export async function setRbacRoleMember(
     // 同一批：开关与「谁改的」一起提交。
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
+  await purgeRoleMembersAccess(db, role.id);
   return {ok: true};
 }
 

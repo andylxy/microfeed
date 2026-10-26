@@ -79,11 +79,15 @@ async function seedTerm(): Promise<void> {
     .run();
 }
 
-async function callGetAllMingCi(secret: string | null): Promise<Response> {
+async function callGetAllMingCi(
+  secret: string | null,
+  appAuth?: {userId: string; credentialId: string; permissions: Set<string>},
+): Promise<Response> {
   const headers: Record<string, string> = {};
   if (secret) headers.authorization = `Bearer ${secret}`;
   return GetAllMingCi.GET({
     request: new Request(`${ORIGIN}/api/AppBookRequest/GetAllMingCi`, {headers}),
+    locals: {appAuth},
   } as never);
 }
 
@@ -133,6 +137,32 @@ describe("GET /api/AppBookRequest/GetAllMingCi (server-side defense)", () => {
   it("fails closed (empty + no-store) when no bearer is presented", async () => {
     const res = await callGetAllMingCi(null);
     expect(res.status).toBe(200);
+    const body = (await res.json()) as {code: number; data: unknown[]};
+    expect(body.data).toEqual([]);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("uses the precomputed permission set from locals instead of re-resolving", async () => {
+    // ADR-0049 D11：中间件已解析过凭证与权限，挂在 `locals.appAuth`。走这条通道时
+    // 端点不再看请求头——所以无 Bearer 也能拿到满数组，证明它没有回源解析。
+    const res = await callGetAllMingCi(null, {
+      userId: "u_precomputed",
+      credentialId: "cred_precomputed",
+      permissions: new Set(["app:mingci:view"]),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {code: number; data: unknown[]};
+    expect(body.code).toBe(200);
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    expect(res.headers.get("cache-control")).toContain("max-age=300");
+  });
+
+  it("still fails closed when the precomputed set lacks the code", async () => {
+    const res = await callGetAllMingCi(null, {
+      userId: "u_precomputed",
+      credentialId: "cred_precomputed",
+      permissions: new Set(["app:nav:read"]),
+    });
     const body = (await res.json()) as {code: number; data: unknown[]};
     expect(body.data).toEqual([]);
     expect(res.headers.get("cache-control")).toBe("no-store");

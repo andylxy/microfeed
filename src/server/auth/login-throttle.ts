@@ -21,17 +21,39 @@
 export const LOGIN_THROTTLE_MAX_ATTEMPTS = 10;
 export const LOGIN_THROTTLE_WINDOW_MS = 60_000;
 
+export interface LoginThrottleRow {
+  count: number;
+  reset_at_ms: number;
+}
+
+/** 批次一用的 SELECT（middleware 把它与凭证校验同批执行，方案 6）。 */
+export function loginThrottleSelectStatement(
+  database: D1Database,
+  key: string,
+): D1PreparedStatement {
+  return database.prepare(
+    "SELECT count, reset_at_ms FROM ext_login_credential_attempts " +
+      "WHERE key = ? LIMIT 1",
+  ).bind(key);
+}
+
+/** 行判定：没有行、窗口已过期、或次数未满都允许。 */
+export function loginThrottleRowAllows(
+  row: LoginThrottleRow | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!row || Number(row.reset_at_ms) <= now) return true;
+  return Number(row.count) < LOGIN_THROTTLE_MAX_ATTEMPTS;
+}
+
 /** `false` once the caller has exhausted its attempts for the current window. */
 export async function loginThrottleAllows(
   database: D1Database,
   key: string,
 ): Promise<boolean> {
-  const row = await database.prepare(
-    "SELECT count, reset_at_ms FROM ext_login_credential_attempts " +
-      "WHERE key = ? LIMIT 1",
-  ).bind(key).first<{count: number; reset_at_ms: number}>();
-  if (!row || Number(row.reset_at_ms) <= Date.now()) return true;
-  return Number(row.count) < LOGIN_THROTTLE_MAX_ATTEMPTS;
+  const row = await loginThrottleSelectStatement(database, key)
+    .first<LoginThrottleRow>();
+  return loginThrottleRowAllows(row);
 }
 
 /** Increment the window counter, restarting it when the previous one lapsed. */

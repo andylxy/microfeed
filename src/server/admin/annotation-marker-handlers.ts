@@ -27,6 +27,7 @@ import type {AnnotationMarker} from "@/shared/AnnotationMarker";
 import {jsonResponse, localizedError} from "@/server/http";
 import {PERMISSION_CODES} from "@/shared/Constants";
 import {DEFAULT_SMALL_FONT_SCALE, MARKER_CODE_PATTERN} from "@/shared/TcmMarkers";
+import {purgeAppStyleConfigCache} from "@/server/cache/app-cache";
 import {requireRbac} from "@/server/rbac/guard";
 
 /** One 0–255 colour channel. */
@@ -206,6 +207,9 @@ export const createAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
       now,
     )
     .run();
+  // 样式目录进了共享桶（方案 4.6）：增删改都让 APP_STYLE_CONFIG_CACHE 的
+  // `version` 变化，保存后清桶，下一个请求回源新值。
+  await purgeAppStyleConfigCache();
   return jsonResponse({markers: await listAnnotationMarkers(env.FEED_DB)});
 };
 
@@ -264,6 +268,9 @@ export const updateAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
     .prepare(`UPDATE ext_annotation_markers SET ${assignments.join(", ")} WHERE code = ?`)
     .bind(...binds)
     .run();
+  // 样式目录进了共享桶（方案 4.6）：增删改都让 APP_STYLE_CONFIG_CACHE 的
+  // `version` 变化，保存后清桶，下一个请求回源新值。
+  await purgeAppStyleConfigCache();
   return jsonResponse({markers: await listAnnotationMarkers(env.FEED_DB)});
 };
 
@@ -294,5 +301,8 @@ export const deleteAnnotationMarkerEndpoint: APIRoute = async ({locals, request}
     .prepare("DELETE FROM ext_annotation_markers WHERE code = ?")
     .bind(code)
     .run();
+  // 样式目录进了共享桶（方案 4.6）：增删改都让 APP_STYLE_CONFIG_CACHE 的
+  // `version` 变化，保存后清桶，下一个请求回源新值。
+  await purgeAppStyleConfigCache();
   return jsonResponse({markers: await listAnnotationMarkers(env.FEED_DB)});
 };

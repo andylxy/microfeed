@@ -5,6 +5,7 @@ import {STATUSES} from "@/shared/Constants";
 import {BETTER_AUTH_ADMIN_ROLE, DEFAULT_USER_ROLE} from "@/shared/Rbac";
 import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
 
+import {purgeVersionGateCache} from "@/server/app/version/gate-cache";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {handleAdminBootstrap} from "@/server/auth/bootstrap";
 import {
@@ -250,6 +251,9 @@ describe("requireAppVersion", () => {
         "UPDATE ext_app_version SET min_version_code = 10 WHERE id = 1",
       ),
     ]);
+    // 版本门输入走共享缓存（方案 4.5）；这里绕开保存函数直接改表，必须清条目，
+    // 否则本条会读到别的用例写下的地板。
+    await purgeVersionGateCache();
   });
 
   it("returns 426 when the app-version header is missing", async () => {

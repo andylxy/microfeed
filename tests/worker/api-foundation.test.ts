@@ -27,7 +27,6 @@ import * as versionedItem from "@/pages/api/v1/items/[itemId]/index";
 import * as versionedItems from "@/pages/api/v1/items/index";
 import * as versionedItemValidation from "@/pages/api/v1/items/validate/index";
 import * as versionedMedia from "@/pages/api/v1/media_files/presigned_urls/index";
-import * as versionedSearch from "@/pages/api/v1/search/index";
 import {
   ApiKeyNameConflictError,
   apiKeyExists,
@@ -391,7 +390,6 @@ describe("API route version aliases", () => {
     expect(legacyItem.DELETE).toBe(versionedItem.DELETE);
     expect(legacyChannel.PUT).toBe(versionedChannel.PUT);
     expect(legacyMedia.POST).toBe(versionedMedia.POST);
-    expect(versionedSearch.GET).toBeTypeOf("function");
     expect(versionedItemValidation.POST).toBeTypeOf("function");
     expect("POST" in legacyItem).toBe(false);
   });

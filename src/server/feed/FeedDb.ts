@@ -28,6 +28,7 @@ import {
 import type {FeedContent, ImageMetadataTarget} from "@/types";
 import {storedThemeFromRow} from "@/shared/themes/ThemeRows";
 import {DEFAULT_CHANNEL_COPYRIGHT} from "@/shared/TemplateVariables";
+import {readSettingsCategory, writeSettingsCategory} from "./settings-store";
 
 /**
  * support url query parameters:
@@ -635,17 +636,13 @@ export default class FeedDb {
    * One settings category, read straight from the `settings` table. `getContent`
    * assembles the whole feed for a read this small; callers that only need a
    * single flag (like the content-review switch) take this cheaper path.
+   *
+   * SQL lives in `settings-store.ts` so callers without a `FeedDb` instance
+   * (the cache-control module, which must not pull in media/theme code) can
+   * read one row without duplicating the statement.
    */
   async getSettingsCategory<T>(category: string): Promise<T | null> {
-    const row = await this.FEED_DB.prepare(
-      "SELECT data FROM settings WHERE category = ? LIMIT 1",
-    ).bind(category).first() as Record<string, unknown> | null;
-    if (!row) return null;
-    try {
-      return JSON.parse(String(row["data"] ?? "")) as T;
-    } catch {
-      return null;
-    }
+    return readSettingsCategory<T>(this.FEED_DB, category);
   }
 
   /**
@@ -656,10 +653,7 @@ export default class FeedDb {
    * auditable timestamp carry it inside `data` itself.
    */
   async setSettingsCategory(category: string, data: string): Promise<void> {
-    await this.FEED_DB.prepare(
-      "INSERT INTO settings (category, data) VALUES (?, ?) " +
-        "ON CONFLICT(category) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP",
-    ).bind(category, data).run();
+    await writeSettingsCategory(this.FEED_DB, category, data);
   }
 
   /**

@@ -20,6 +20,23 @@
 - 本机 safe-delete 闸的行为：删除请求一旦**超过 50 个文件**就被拦下（报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 或 `SAFE_DELETE_FAIL_CLOSED`）。前置条件：`export CODEBUDDY_SAFE_DELETE_ENABLED=0`。单文件 `rm -f` 不受影响；删目录用 `CODEBUDDY_SAFE_DELETE_ENABLED=0` + `rm -rf`。
 - 一次性产物同样用完即删：`.vite-old-<ts>`、`.vite-stale-<ts>`、`.vite-broken-<ts>-*`、`node_modules/.vite` 的搬移副本、`.scratch/chrome-cdp-tmp` 等，不得留在仓库里。
 
+## 本地 Worker 缓存目录（`caches.default`）
+
+- `caches.default` 在 miniflare 下持久化到 `.microfeed/instances/<实例>/local-state/v3/cache/`，重启 dev server 不清空。
+- 直接改本地 D1（绕过写函数）不会触发 `purgeApp*Cache`，App 内容端点会继续返回旧响应，最长到该桶 TTL 结束（nav 1 小时，内容与配置 24 小时）。核对接口返回与库内数据不一致时，先清这个目录。
+- 本地 miniflare 不支持 `cache.purge`，后台缓存页的「清空」在本地不会清掉条目；本地调试用下面的命令。
+- 该目录常有上百个缓存文件，一次删除超过 50 个文件会撞上 safe-delete 闸，命令必须带前缀：
+
+```bash
+CODEBUDDY_SAFE_DELETE_ENABLED=0 find .microfeed/instances/<实例>/local-state/v3/cache -type f -delete
+```
+
+也可以走仓库入口（同样要带前缀）：
+
+```bash
+CODEBUDDY_SAFE_DELETE_ENABLED=0 ./node_modules/.bin/yarn cache:clear <实例>
+```
+
 ## Vite 依赖缓存目录（`.vite*`）管理
 
 `node_modules/.vite` 及其变体是 vite 的**依赖预构建缓存**，可随时安全删除重建。以下目录名一律视为一次性产物，**任务结束前必须清理干净**（单个约 20–160MB，残留数个就会占用数百 MB）：`node_modules/.vite`（当前活跃缓存，dev server 运行期间**不可删**）、`node_modules/.vite-temp`（优化器临时目录，优化中断会留下垃圾）、`node_modules/.vite-old-<ts>`（手工搬移的旧缓存备份）、`node_modules/.vite-stale-<ts>`（历次故障排查留下的旧缓存）、`node_modules/.vite-broken-<ts>-*`（排障时 `mv` 出来的坏缓存）。

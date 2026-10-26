@@ -24,6 +24,7 @@ import * as GetTipsStyleConfig from "@/pages/api/AppBookRequest/GetTipsStyleConf
 import * as getAboutInfo from "@/pages/api/AppBookRequest/getAboutInfo";
 import * as getPicCaptcha from "@/pages/api/AppBookRequest/getPicCaptcha";
 import * as login from "@/pages/api/AppBookRequest/login";
+import {workerCache} from "@/server/cache/worker-cache";
 
 const db = env.FEED_DB;
 const ORIGIN = "https://app.example.com";
@@ -282,6 +283,34 @@ describe("TCM app route wire contract", () => {
     expect(body.data!.styles!.length).toBeGreaterThanOrEqual(13);
     // 版本号 = MAX(updated_at_ms)，App 靠它判断手里的缓存是否最新（ADR-0028 D3）。
     expect(typeof body.data!.version).toBe("number");
+  });
+
+  it("GetTipsStyleConfig fails loudly instead of caching an empty catalogue", async () => {
+    // 失败降级成空数组会被共享桶当成成功响应写进去（方案 4.6）：一次瞬时故障
+    // 就让整只桶在整个 TTL 内持续吐空目录。这里把表改名制造真实 D1 错误。
+    const key = new URL(
+      "/app/style-config",
+      "https://app-cache.microfeed.internal",
+    );
+    // 上一个用例已经写过桶；先删掉，才能确认失败路径没有回写。
+    await workerCache().delete(key);
+    await db
+      .prepare(
+        "ALTER TABLE ext_annotation_markers RENAME TO ext_annotation_markers_hidden",
+      )
+      .run();
+    try {
+      await expect(
+        GetTipsStyleConfig.GET(ctx("/api/AppBookRequest/GetTipsStyleConfig")),
+      ).rejects.toThrow(/no such table/u);
+    } finally {
+      await db
+        .prepare(
+          "ALTER TABLE ext_annotation_markers_hidden RENAME TO ext_annotation_markers",
+        )
+        .run();
+    }
+    expect(await workerCache().match(key)).toBeUndefined();
   });
 
   it("config endpoints (AboutInfo/PicCaptcha) wrap the envelope", async () => {

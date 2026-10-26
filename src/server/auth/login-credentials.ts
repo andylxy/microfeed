@@ -186,8 +186,58 @@ export async function revokeLoginCredential(
 }
 
 export interface VerifiedLoginCredential {
+  /** 账号缺失或 `auth_user.banned = 1`；调用方按未授权处理。 */
+  banned: boolean;
   credentialId: string;
   userId: string;
+}
+
+export interface LoginCredentialLookupRow {
+  account_id: string | null;
+  banned: number | null;
+  expires_at_ms: number | null;
+  id: string;
+  revoked: number | null;
+  user_id: string;
+}
+
+/**
+ * 凭证校验语句，供 middleware 批次一与限流桶同批执行（方案 6）。
+ *
+ * 封禁标记与凭证同一趟取回（LEFT JOIN `auth_user` 主键）：原来 `accountIsBlocked`
+ * 再查一次，每次凭证调用多一趟往返。`auth_user` 缺行（凭证指向已删账号）与
+ * `banned = 1` 同为封禁——`accountIsBlocked` 对缺行也是这么判的。
+ * 走 `ext_login_credentials_secret_hash` 索引，`auth_user` 按主键最多 1 行。
+ * 非 `mflc_` 前缀返回 null：不是本模块的凭证，不必查库。
+ */
+export async function loginCredentialVerifyStatement(
+  database: D1Database,
+  token: string,
+): Promise<D1PreparedStatement | null> {
+  const trimmed = token.trim();
+  if (!trimmed.startsWith(LOGIN_CREDENTIAL_PREFIX)) return null;
+  return database.prepare(
+    "SELECT c.id, c.user_id, c.revoked, c.expires_at_ms, u.id AS account_id, u.banned " +
+      "FROM ext_login_credentials c LEFT JOIN auth_user u ON u.id = c.user_id " +
+      "WHERE c.secret_hash = ? LIMIT 1",
+  ).bind(await sha256Hex(trimmed));
+}
+
+/** 行判定：未知、已撤销、已过期都返回 null。 */
+export function verifiedLoginCredentialFromRow(
+  row: LoginCredentialLookupRow | null | undefined,
+  now = Date.now(),
+): VerifiedLoginCredential | null {
+  if (!row) return null;
+  if (Number(row.revoked) === 1) return null;
+  if (row.expires_at_ms !== null && Number(row.expires_at_ms) <= now) {
+    return null;
+  }
+  return {
+    banned: row.account_id === null || Number(row.banned) === 1,
+    credentialId: row.id,
+    userId: row.user_id,
+  };
 }
 
 /**
@@ -199,23 +249,11 @@ export async function verifyLoginCredentialToken(
   database: D1Database,
   token: string,
 ): Promise<VerifiedLoginCredential | null> {
-  const trimmed = token.trim();
-  if (!trimmed.startsWith(LOGIN_CREDENTIAL_PREFIX)) return null;
-  const row = await database.prepare(
-    "SELECT id, user_id, revoked, expires_at_ms FROM ext_login_credentials " +
-      "WHERE secret_hash = ? LIMIT 1",
-  ).bind(await sha256Hex(trimmed)).first<{
-    expires_at_ms: number | null;
-    id: string;
-    revoked: number | null;
-    user_id: string;
-  }>();
-  if (!row) return null;
-  if (Number(row.revoked) === 1) return null;
-  if (row.expires_at_ms !== null && Number(row.expires_at_ms) <= Date.now()) {
-    return null;
-  }
-  return {credentialId: row.id, userId: row.user_id};
+  const statement = await loginCredentialVerifyStatement(database, token);
+  if (!statement) return null;
+  return verifiedLoginCredentialFromRow(
+    await statement.first<LoginCredentialLookupRow>(),
+  );
 }
 
 /**

@@ -65,9 +65,6 @@ describe("requiredApiPermission mapping", () => {
     expect(requiredApiPermission("/api/v1/feed/", "GET")).toBe(
       "content:chapter:read",
     );
-    expect(requiredApiPermission("/api/v1/search/", "GET")).toBe(
-      "content:chapter:read",
-    );
   });
 
   it("maps the channel domain to the channel manage code", () => {

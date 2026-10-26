@@ -308,6 +308,10 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.CLOUD_USAGE,
       // 0145 seeded the app about-page content board after cloud usage.
       ADMIN_MENU_CODES.APP_ABOUT,
+      // 0150 seeded the login-methods board after the about page.
+      ADMIN_MENU_CODES.APP_LOGIN_METHODS,
+      // 0152 seeded the cache control board last.
+      ADMIN_MENU_CODES.APP_CACHE,
     ]);
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});

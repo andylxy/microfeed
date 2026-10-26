@@ -102,6 +102,10 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:app-login-methods:read", name: "登录方式查看"},
   {code: "system:app-login-methods:manage", name: "登录方式管理"},
+  // App 缓存控制面（migration 0152）。一个码管读控制项、保存与清空；治理类，
+  // 只授 super_admin（走 `*`），不进 EDITOR_PERMISSIONS。Mirror of
+  // PERMISSION_CODES in src/shared/Constants.ts.
+  {code: "system:cache:manage", name: "缓存管理"},
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
   // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
   // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底

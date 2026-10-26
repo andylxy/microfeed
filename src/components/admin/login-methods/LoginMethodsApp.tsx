@@ -154,7 +154,6 @@ export default function LoginMethodsApp({canManage = false}: Props) {
       ) : null}
       <p className="text-xs text-muted-foreground">
         {t("appLoginMethods.lastSaved")}
-        {"："}
         {config.updatedAtMs > 0
           ? formatAdminDateTime(config.updatedAtMs)
           : t("appLoginMethods.neverSaved")}

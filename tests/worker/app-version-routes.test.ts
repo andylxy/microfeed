@@ -10,7 +10,11 @@ import {
   saveAppVersionConfig,
   saveRolloutRules,
 } from "@/server/app/version/config";
-import {resolveMinVersionForRequest} from "@/server/app/version/resolve";
+import {purgeVersionGateCache} from "@/server/app/version/gate-cache";
+import {
+  readVersionGateInputs,
+  resolveMinVersionForRequest,
+} from "@/server/app/version/resolve";
 import {createLoginCredential} from "@/server/auth/login-credentials";
 import {requireAccountAccess, requireAppVersion} from "@/server/rbac/guard";
 import {permissionId} from "@/server/rbac/seed";
@@ -49,6 +53,8 @@ async function reset(): Promise<void> {
     db.prepare("DELETE FROM ext_login_credentials"),
     db.prepare('DELETE FROM "auth_user"'),
   ]);
+  // 版本门输入走共享缓存（方案 4.5）：reset 直接改表，必须清条目。
+  await purgeVersionGateCache();
 }
 
 async function seedUser(id: string): Promise<void> {
@@ -191,6 +197,35 @@ describe("app version configuration", () => {
         {force: true, minVersionCode: 25, scope, target: scope === "all" ? null : "50"},
       ])).toEqual({ok: true});
     }
+  });
+
+  it("caches the gate inputs and clears them from both save entry points", async () => {
+    await saveAppVersionConfig(db, {latestVersionName: "2.0", minVersionCode: 7});
+    await saveRolloutRules(db, [
+      {force: true, minVersionCode: 50, scope: "all", target: null},
+    ]);
+    const first = await readVersionGateInputs(db);
+    expect(first.config.minVersionCode).toBe(7);
+    expect(first.rules).toHaveLength(1);
+
+    // 绕开保存函数直接改表：缓存仍在，读到的是旧值。
+    await db
+      .prepare("UPDATE ext_app_version SET min_version_code = 99 WHERE id = 1")
+      .run();
+    await db.prepare("DELETE FROM ext_app_rollout").run();
+    const cached = await readVersionGateInputs(db);
+    expect(cached.config.minVersionCode).toBe(7);
+    expect(cached.rules).toHaveLength(1);
+
+    // 规则保存清条目：新的地板与空规则集立刻可见。
+    await saveRolloutRules(db, []);
+    const afterRulesSave = await readVersionGateInputs(db);
+    expect(afterRulesSave.config.minVersionCode).toBe(99);
+    expect(afterRulesSave.rules).toHaveLength(0);
+
+    // 配置保存也清条目（这里把地板改回去，确认不是碰巧命中另一份）。
+    await saveAppVersionConfig(db, {minVersionCode: 7});
+    expect((await readVersionGateInputs(db)).config.minVersionCode).toBe(7);
   });
 });
 

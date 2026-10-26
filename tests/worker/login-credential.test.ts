@@ -23,6 +23,7 @@ import {
 } from "@/server/auth/login-credentials";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
 import {LOGIN_THROTTLE_MAX_ATTEMPTS} from "@/server/auth/login-throttle";
+import {quotaSelectStatement} from "@/server/rbac/app-quota";
 import {permissionId} from "@/server/rbac/seed";
 import {registerUserDevice} from "@/server/rbac/resolve";
 import {MAX_LOGIN_CREDENTIALS_PER_USER} from "@/shared/LoginCredential";
@@ -87,6 +88,7 @@ beforeEach(async () => {
   await env.FEED_DB.batch([
     env.FEED_DB.prepare("DELETE FROM ext_api_access_log"),
     env.FEED_DB.prepare("DELETE FROM ext_login_credential_attempts"),
+    env.FEED_DB.prepare("DELETE FROM ext_app_request_quota"),
     env.FEED_DB.prepare("DELETE FROM ext_login_credentials"),
     env.FEED_DB.prepare("DELETE FROM ext_user_roles"),
     env.FEED_DB.prepare("DELETE FROM ext_replay_nonces"),
@@ -119,7 +121,7 @@ describe("login credential storage", () => {
       userId: "u1",
     });
     await expect(verifyLoginCredentialToken(env.FEED_DB, live.secret))
-      .resolves.toEqual({credentialId: live.id, userId: "u1"});
+      .resolves.toEqual({banned: false, credentialId: live.id, userId: "u1"});
 
     const revoked = await createLoginCredential(env.FEED_DB, {
       name: "revoked",
@@ -142,6 +144,31 @@ describe("login credential storage", () => {
     // A plain API key is not a login credential.
     await expect(verifyLoginCredentialToken(env.FEED_DB, "mf_abc"))
       .resolves.toBeNull();
+  });
+
+  it("reports the ban flag from the same lookup", async () => {
+    await seedUser("u_live_ban");
+    const live = await createLoginCredential(env.FEED_DB, {
+      name: "live",
+      userId: "u_live_ban",
+    });
+    const before = await verifyLoginCredentialToken(env.FEED_DB, live.secret);
+    expect(before?.banned).toBe(false);
+
+    await seedUser("u_flagged", "user", 1);
+    const flagged = await createLoginCredential(env.FEED_DB, {
+      name: "flagged",
+      userId: "u_flagged",
+    });
+    const after = await verifyLoginCredentialToken(env.FEED_DB, flagged.secret);
+    expect(after?.banned).toBe(true);
+
+    // 凭证指向已删除账号：`auth_user` 缺行按封禁处理，与 `accountIsBlocked` 同口径。
+    await env.FEED_DB.prepare('DELETE FROM "auth_user" WHERE id = ?')
+      .bind("u_live_ban")
+      .run();
+    const orphan = await verifyLoginCredentialToken(env.FEED_DB, live.secret);
+    expect(orphan?.banned).toBe(true);
   });
 
   it("caps a user at the configured maximum and frees a slot on revoke", async () => {
@@ -405,6 +432,61 @@ describe("sessionless API bearer", () => {
       "/api/v1/items/",
     );
     expect(result.kind).toBe("allow");
+  });
+
+  it("returns the quota row the caller prefetched in the second batch", async () => {
+    await seedUser("u_quota_prefetch");
+    await grantRole("u_quota_prefetch", "r_editor");
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_quota_prefetch",
+    });
+    const resetAtMs = Date.now() + 60_000;
+    await env.FEED_DB.prepare(
+      "INSERT OR REPLACE INTO ext_app_request_quota " +
+        "(credential_id, count, reset_at_ms) VALUES (?, 3, ?)",
+    ).bind(credential.id, resetAtMs).run();
+
+    const result = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/items/`, {
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/items/",
+      {quotaSelect: (id) => quotaSelectStatement(env.FEED_DB, id)},
+    );
+    expect(result.kind).toBe("allow");
+    expect(result.kind === "allow" ? result.quota : undefined).toEqual({
+      credentialId: credential.id,
+      row: {count: 3, reset_at_ms: resetAtMs},
+    });
+
+    // 没要求计数的路径不带配额结果，也就不执行那次 SELECT。
+    const plain = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/items/`, {
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/items/",
+    );
+    expect(plain.kind === "allow" ? plain.quota : "missing").toBeUndefined();
+  });
+
+  it("rejects a banned account without a second account lookup", async () => {
+    await seedUser("u_bearer_ban", "user", 1);
+    await grantRole("u_bearer_ban", "r_editor");
+    const credential = await createLoginCredential(env.FEED_DB, {
+      name: "api",
+      userId: "u_bearer_ban",
+    });
+    const result = await decideLoginCredentialApiRequest(
+      env.FEED_DB,
+      new Request(`${ORIGIN}/api/v1/items/`, {
+        headers: {authorization: `Bearer ${credential.secret}`},
+      }),
+      "/api/v1/items/",
+    );
+    expect(result.kind).toBe("unauthorized");
   });
 
   it("forbids a write the account's role withholds", async () => {

@@ -17,6 +17,7 @@ export const SETTINGS_CATEGORIES = {
   CONTENT_REVIEW: 'contentReview',
   ITEM_EDITOR_SECTIONS: 'itemEditorSections',
   APP_LOGIN_METHODS: 'app_login_methods',
+  APP_CACHE_CONTROL: 'app_cache_control',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -209,6 +210,7 @@ export const ADMIN_MENU_CODES = {
   APP_VERSIONS: 'app_versions',
   APP_ABOUT: 'app_about',
   APP_LOGIN_METHODS: 'login_methods',
+  APP_CACHE: 'app_cache',
   LOGIN_LOGS: 'login_logs',
   ANNOUNCEMENTS: 'announcements',
   CLOUD_USAGE: 'cloud_usage',
@@ -304,6 +306,9 @@ export const PERMISSION_CODES = {
   // `:manage` 解锁保存。治理类，挂在 group_operations，与 app-about 同族。
   SYSTEM_APP_LOGIN_METHODS_READ: 'system:app-login-methods:read',
   SYSTEM_APP_LOGIN_METHODS_MANAGE: 'system:app-login-methods:manage',
+  // App 缓存控制面（migration 0152，方案第 5 节）。一个码管读控制项、保存与
+  // 清空；治理类，挂在 group_operations，与 app-about / login-methods 同族。
+  SYSTEM_CACHE_MANAGE: 'system:cache:manage',
   // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
   // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
   // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底

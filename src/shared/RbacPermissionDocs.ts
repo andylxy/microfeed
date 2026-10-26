@@ -459,6 +459,32 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
       "内容逐字下发到 App（$x{…} 标记 + | 分行），编辑器不转换格式。",
     ],
   },
+  "system:app-login-methods:read": {
+    summary: "查看 App 登录方式管理配置（登录方式开关矩阵与图形验证码总闸）。",
+    gates: ["页面 /login-methods", "接口 /ajax/login-methods（GET）— 登录配置"],
+    caveats: ["不默认授予 editor。"],
+  },
+  "system:app-login-methods:manage": {
+    summary: "App 登录方式管理：编辑登录方式开关矩阵与图形验证码总闸。",
+    gates: ["页面 /login-methods（管理入口）", "接口 /ajax/login-methods/save — 保存登录配置"],
+    caveats: [
+      "不默认授予 editor。",
+      "保存后清除 getLoginMethods 的缓存条目。",
+    ],
+  },
+  "system:cache:manage": {
+    summary: "App 缓存控制面：总开关、十个分桶开关、TTL 分档、条目体积上限与清空。",
+    gates: [
+      "页面 /cache",
+      "接口 /ajax/cache（GET）— 读控制项",
+      "接口 /ajax/cache/save — 保存控制项",
+      "接口 /ajax/cache/purge — 清空缓存",
+    ],
+    caveats: [
+      "不默认授予 editor。",
+      "清空间隔至少 10 秒、每日上限 30 次；清空后首次请求回源约 22,013 行读。",
+    ],
+  },
   "content:book-status:manage": {
     summary: "书籍状态管理（预留码）。",
     gates: ["代码中暂无守卫引用"],

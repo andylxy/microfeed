@@ -1,4 +1,4 @@
-import {cache, env} from "cloudflare:workers";
+import {cache, env, waitUntil} from "cloudflare:workers";
 import {defineMiddleware} from "astro:middleware";
 
 import {builtInAdminAuthEnabled} from "@/shared/AdminAuth";
@@ -54,10 +54,17 @@ import {
 import {
   appQuotaExhaustedMarker,
   appRequestQuotaResponse,
-  consumeAppRequestQuota,
+  consumeAppRequestQuotaFromRow,
   markQuotaExhausted,
+  quotaSelectStatement,
 } from "@/server/rbac/app-quota";
-import {resolveRbacContext, RBAC_WILDCARD, userMayEnterAdmin} from "@/server/rbac/resolve";
+import {
+  registerUserDevice,
+  resolveRbacContext,
+  RBAC_WILDCARD,
+  userMayEnterAdmin,
+} from "@/server/rbac/resolve";
+import {markLoginCredentialUsed} from "@/server/auth/login-credentials";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {readVersionGateInputs, type VersionGateInputs} from "@/server/app/version/resolve";
 import {checkReplay} from "@/server/rbac/replay";
@@ -241,7 +248,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
     // 内容端点：先防重放（App 带 `X-Timestamp` / `X-Nonce`，在
     // `ext_replay_nonces` 里去重），再过版本门，最后由下面的 API 鉴权段按调用方
     // 登录凭证（`mflc_…`）校验该端点要求的 RBAC 码（`api-permissions.ts` 分发）。
-    const replay = await checkReplay(env.FEED_DB, context.request);
+    //
+    // 防重放只对非安全方法生效：GET 与 HEAD 幂等、不产生状态变更，重放同一个
+    // nonce 不会改变任何数据，去重没有可保护的对象。收窄后每个内容 GET 少一次
+    // `ext_replay_nonces` 插入（1 行写）。
+    const replay = isUnsafeMethod(context.request.method)
+      ? await checkReplay(env.FEED_DB, context.request)
+      : null;
     if (replay) return replay;
     // Version gate, stage 1 (ADR-0020): before authentication only the global
     // floor and `all` rules are known. A missing / non-integer `app-version`
@@ -272,6 +285,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         db,
         context.request,
         pathname,
+        {
+          // 只有内容端点计数。配额 SELECT 与设备吊销同批执行（方案 6），
+          // 达上限的拒绝路径仍然 0 行写：这里只取行，UPSERT 在版本门之后单条执行。
+          quotaSelect: pathname.startsWith("/api/AppBookRequest/")
+            ? (credentialId) => quotaSelectStatement(db, credentialId)
+            : undefined,
+        },
       );
       if (result.kind === "reference") {
         return addLegacyApiDeprecationHeaders(await next(), context.url, pathname);
@@ -314,14 +334,14 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         );
       }
       if (result.kind === "forbidden") {
-        await writeApiAccessLog(
+        waitUntil(writeApiAccessLog(
           db,
           result.attribution,
           context.request.method,
           pathname,
           false,
           403,
-        );
+        ));
         return addLegacyApiDeprecationHeaders(
           apiInsufficientScopeResponse(),
           context.url,
@@ -339,6 +359,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         credentialId: result.attribution.credentialId ?? "",
         permissions: result.permissions,
       };
+      // 设备心跳与「最近使用」两个旁路写改由 `waitUntil` 在响应发出后写库
+      // （ADR-0049 D4 的两个写节流仍在，这里只是移出关键路径）。判定用的
+      // `isDeviceRevoked` 留在 `decideLoginCredentialApiRequest` 里同步执行。
+      waitUntil(registerUserDevice(db, attribution.userId, context.request));
+      if (attribution.credentialId) {
+        waitUntil(markLoginCredentialUsed(db, attribution.credentialId));
+      }
       // Version gate, stage 2 (ADR-0020): the caller is now identified, so the
       // grayscale device/user/percent rules layer on top of the global floor.
       if (pathname.startsWith("/api/AppBookRequest/")) {
@@ -348,13 +375,15 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
         });
         if (postAuthGate) return postAuthGate;
         // 配额消费（ADR-0048）：凭证有效且版本门通过才计数；无效 token 到不了
-        // 这里，表不会被随机 token 灌垃圾行。被拒（达上限）不计数，只补一次
-        // Cache 标记让后续请求在鉴权前就被拦下。
+        // 这里，表不会被随机 token 灌垃圾行。计数行已在批次二取回（方案 6），
+        // 这里只做判定与单条 UPSERT；达上限不写库，只补一次 Cache 标记让后续
+        // 请求在鉴权前就被拦下。
         const token = providedLoginCredential(context.request);
-        if (token && attribution.credentialId) {
-          const quota = await consumeAppRequestQuota(
+        if (token && attribution.credentialId && result.quota) {
+          const quota = await consumeAppRequestQuotaFromRow(
             db,
             attribution.credentialId,
+            result.quota.row,
           );
           if (!quota.allowed) {
             await markQuotaExhausted(
@@ -411,14 +440,14 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       }
       if (decision === "insufficient-scope") {
         if (legacyAttribution) {
-          await writeApiAccessLog(
+          waitUntil(writeApiAccessLog(
             db,
             legacyAttribution,
             context.request.method,
             pathname,
             false,
             403,
-          );
+          ));
         }
         return addLegacyApiDeprecationHeaders(
           apiInsufficientScopeResponse(),
@@ -444,34 +473,45 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       }
     }
 
-    const loaded = await loadFeed(env, context.request, undefined, cache);
-    const webGlobalSettings = loaded.content.settings?.webGlobalSettings ?? {};
-    context.locals.feedDb = loaded.database;
-    context.locals.feedContent = loaded.content;
-    context.locals.feedCrud = createFeedCrud(
-      loaded.content,
-      loaded.database,
-      context.request,
-    );
-    context.locals.publicBucketUrl = resolvePublicBucketUrl(
-      webGlobalSettings.publicBucketUrl,
-      context.url.hostname,
-    );
+    // App 命名空间（内容端点与 `/api/app/*` 能力端点）不读 `locals.feedDb` /
+    // `feedContent` / `feedCrud`，`loadFeed` 对它们是纯开销：一次 batch 往返，
+    // 外加 `channels` 1 行与 `settings` 的 7 行裸 SCAN。使用者只有 `/api/v1` 的
+    // handlers / content-read 与后台页面，所以只跳过这两个前缀。
+    const appNamespace = pathname.startsWith("/api/AppBookRequest/") ||
+      pathname.startsWith("/api/app/");
+    if (!appNamespace) {
+      const loaded = await loadFeed(env, context.request, undefined, cache);
+      const webGlobalSettings = loaded.content.settings?.webGlobalSettings ?? {};
+      context.locals.feedDb = loaded.database;
+      context.locals.feedContent = loaded.content;
+      context.locals.feedCrud = createFeedCrud(
+        loaded.content,
+        loaded.database,
+        context.request,
+      );
+      context.locals.publicBucketUrl = resolvePublicBucketUrl(
+        webGlobalSettings.publicBucketUrl,
+        context.url.hostname,
+      );
+    }
 
     const response = await next(appCanonicalUrl ?? undefined);
 
     // B21: the access log used to be written before the route ran with a fixed
     // status=200, so an authenticated call that failed was still recorded as a
     // success. Log after `next()` with the real response status instead.
+    //
+    // 审计行改由 `waitUntil` 在响应发出后写入：写入行数不变（D1 写额度按行计），
+    // 但不再占关键路径的一次往返。
     if (attribution) {
-      await writeApiAccessLog(
+      waitUntil(writeApiAccessLog(
         db,
         attribution,
         context.request.method,
         pathname,
         true,
         response.status,
-      );
+      ));
     }
 
     return addLegacyApiDeprecationHeaders(

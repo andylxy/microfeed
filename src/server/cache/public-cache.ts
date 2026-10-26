@@ -67,7 +67,6 @@ const PUBLIC_PAGE_PATHS = new Set([
   "/sitemap.xml",
   "/robots.txt",
   "/llms.txt",
-  "/search/",
 ]);
 const PAGINATION_PARAMETERS = new Set([
   "next_cursor",
@@ -131,8 +130,7 @@ function isCategoryPath(pathname: string): boolean {
 
 function isStandalonePagePath(pathname: string): boolean {
   return /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/u.test(pathname) &&
-    pathname !== "/json/" && pathname !== "/rss/" &&
-    pathname !== "/search/";
+    pathname !== "/json/" && pathname !== "/rss/";
 }
 
 function isSiteFilePath(pathname: string): boolean {
@@ -159,14 +157,14 @@ function itemIdForPath(pathname: string): string | undefined {
 
 function isFeedContentPath(pathname: string): boolean {
   return FEED_CONTENT_PATHS.has(pathname) || isItemPath(pathname) ||
-    isStandalonePagePath(pathname) || pathname === "/search/" ||
+    isStandalonePagePath(pathname) ||
     pathname === "/robots.txt" || pathname === "/llms.txt";
 }
 
 function isThemePath(pathname: string): boolean {
   return pathname === "/" || pathname === "/rss/stylesheet/" ||
     /^\/i\/[^/]+\/$/u.test(pathname) ||
-    isStandalonePagePath(pathname) || pathname === "/search/";
+    isStandalonePagePath(pathname);
 }
 
 function validPaginationQuery(url: URL): boolean {
@@ -259,7 +257,7 @@ export function publicCacheTagsForPath(pathname: string): string[] {
   }
   if (
     pathname === "/" || /^\/i\/[^/]+\/$/u.test(pathname) ||
-    isStandalonePagePath(pathname) || pathname === "/search/" ||
+    isStandalonePagePath(pathname) ||
     pathname === "/llms.txt" || pathname === "/sitemap.xml" || siteFilePath
   ) {
     tags.add(PUBLIC_CACHE_TAGS.PAGES);

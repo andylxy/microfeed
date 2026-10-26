@@ -8,6 +8,7 @@ import {
   updateAnnotationMarkerEndpoint,
 } from "@/server/admin/annotation-marker-handlers";
 import {PERMISSION_CODES} from "@/shared/Constants";
+import {workerCache} from "@/server/cache/worker-cache";
 import type {RbacLocals} from "@/server/rbac/guard";
 
 // The catalogue migrations 0071 / 0115 seed (source app defaults, spec §4.2):
@@ -263,6 +264,46 @@ describe("annotation marker handlers", () => {
       request: post({code: "z", title: "针灸", color: "rgba(0, 128, 255, 0.90)"}),
     } as any);
     expect(accepted.status).toBe(200);
+  });
+
+  it("clears the shared style-config bucket on create, update and delete", async () => {
+    // 样式目录走共享桶（方案 4.6）：三个写入口保存后都必须清条目，否则 App 最长
+    // 一个 TTL 都拿不到新配置。
+    const key = new URL(
+      "/app/style-config",
+      "https://app-cache.microfeed.internal",
+    );
+    const storage = workerCache();
+    const seedStale = () =>
+      storage.put(
+        key,
+        new Response('{"stale":true}', {
+          headers: {"cache-control": "public, max-age=86400"},
+        }),
+      );
+    const canManage = () =>
+      locals(new Set([PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE]));
+
+    await seedStale();
+    await createAnnotationMarkerEndpoint({
+      locals: canManage(),
+      request: post({code: "z", title: "针灸"}),
+    } as any);
+    expect(await storage.match(key)).toBeUndefined();
+
+    await seedStale();
+    await updateAnnotationMarkerEndpoint({
+      locals: canManage(),
+      request: post({code: "z", title: "针灸科"}),
+    } as any);
+    expect(await storage.match(key)).toBeUndefined();
+
+    await seedStale();
+    await deleteAnnotationMarkerEndpoint({
+      locals: canManage(),
+      request: post({code: "z"}),
+    } as any);
+    expect(await storage.match(key)).toBeUndefined();
   });
 
   it("refuses mutations to an account without the manage permission", async () => {

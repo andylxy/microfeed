@@ -1,5 +1,7 @@
 /**
- * Replay defense for sensitive APP-originated writes (DESIGN.md L2).
+ * Replay defense for APP-originated requests: a captured request body cannot be
+ * re-submitted successfully because its nonce is single-use inside the replay
+ * window.
  *
  * Enforced only when the request carries the `X-Nonce` / `X-Timestamp` pair
  * (the APP backend sends these). The web admin never sends them, so browser

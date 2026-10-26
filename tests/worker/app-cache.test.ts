@@ -3,6 +3,7 @@ import {describe, expect, it} from "vitest";
 import {
   APP_BOOK_FANG_CACHE,
   APP_CHAPTER_CONTENT_CACHE,
+  APP_STYLE_CONFIG_CACHE,
   APP_YAO_ALIASES_CACHE,
   APP_ZHONGYAO_CACHE,
   bookFangKeySuffix,
@@ -10,9 +11,11 @@ import {
   chapterContentKeySuffix,
   purgeAppBookFangCache,
   purgeAppChapterContentCache,
+  purgeAppStyleConfigCache,
   purgeAppYaoAliasesCache,
   purgeAppYaoCache,
 } from "@/server/cache/app-cache";
+import {APP_CACHE_TAG} from "@/server/cache/cache-control";
 
 /**
  * App 章节正文 / 方剂缓存桶（ADR-0048 D2）的键形、命中回源与清桶。
@@ -149,5 +152,31 @@ describe("app chapter-content / book-fang cache buckets", () => {
       return [];
     });
     expect(zhongyaoLoads).toBe(2);
+  });
+
+  it("caches the style config, tags it with its bucket, and purges one key", async () => {
+    let loads = 0;
+    const load = async () => {
+      loads += 1;
+      return {version: loads, tips: []};
+    };
+    const first = await cachedAppResponse(APP_STYLE_CONFIG_CACHE, load);
+    await expect(first.clone().json()).resolves.toEqual({
+      code: 200,
+      data: {version: 1, tips: []},
+      msg: "请求成功",
+    });
+    // style 桶属 config 档，默认 86400 秒。
+    expect(first.headers.get("cache-control")).toBe("public, max-age=86400");
+    expect(first.headers.get("cache-tag")).toBe(
+      `${APP_CACHE_TAG}, ${APP_CACHE_TAG}:style`,
+    );
+
+    await cachedAppResponse(APP_STYLE_CONFIG_CACHE, load);
+    expect(loads).toBe(1);
+
+    await purgeAppStyleConfigCache();
+    await cachedAppResponse(APP_STYLE_CONFIG_CACHE, load);
+    expect(loads).toBe(2);
   });
 });

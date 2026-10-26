@@ -20,9 +20,9 @@
 
 ### D3｜缓存 = caches.default 单键 2h read-through + 保存本地 delete
 
-- 读：`readLoginMethodsConfigCached` 走通用 `cachedJson`（`app-cache.ts`），键 `/app/login-methods`，TTL 7200s。`appLogin` 与 `getLoginMethods` 共用同一副本；常态 0 D1 行读，回源上限 = 86400/7200 = 12 次/日/机房 × P=3 ≈ ≤36 行读/日（0.0007% 日额度）。
+- 读：`readLoginMethodsConfigCached` 走通用 `cachedJson`（`app-cache.ts`），键 `/app/login-methods`，TTL 取控制项 `login-methods` 桶所属的 `rule` 档（默认 7200s，后台可下调到 300s）。`appLogin` 与 `getLoginMethods` 共用同一副本；常态 0 D1 行读，按默认档回源上限 = 86400/7200 = 12 次/日/机房 × P=3 ≈ ≤36 行读/日（0.0007% 日额度）。
 - 写：`saveLoginMethodsConfig` 在 D1 upsert 后 `deleteCachedJson` 清键——保存机房下次请求即新值，其余机房 ≤2h 自然过期。**跨机房生效窗口 ≤2h 是已接受的取舍**（运营改登录方式的频率远低于 2h；窗口内两个方向：开验证码在其他机房延迟生效 ≤2h；App 拉配置与提交登录落不同机房时，显示旧值 + 判定新值的一侧可能让用户遇到「要求验证码但无输入行」，最长 2h，反向无害）。
-- 不用 KV（项目零 KV 基础设施，引入需改 wrangler template + manage-cli 生成器，为每天几十行读不值得）；不用 `cache.purge`（2026-10 版 Cloudflare 文档：`caches.default` 与运行时 purge 分属两个独立存储，purge 清不到 `cache.put` 写入的条目）。
+- 不用 KV（项目零 KV 基础设施，引入需改 wrangler template + manage-cli 生成器，为每天几十行读不值得）。`cache.purge` 按 URL 清对 Worker 自定义键无效（这些条目不是按该 URL 抓取的资源）；Purge Everything 与 Cache Tag 能清到 `cache.put` 写入的条目。登录方式条目已带 `mf:app-cache:login-methods` 分桶标签，后台缓存控制面按标签清空可跨机房立即失效（本地 miniflare 不支持 `cache.purge`，运行时行为在支持 purge 的环境验证）；未手动清空时，其余机房仍由 ≤2h 过期兜底。
 - enforcement（`appLogin`）与显示（`getLoginMethods`）走同一缓存而非分级：安全判定与显示读同一份值，同一机房内两者不可能互相矛盾。
 
 ### D4｜验证码信号源划分

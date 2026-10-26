@@ -10,7 +10,7 @@ import {resolveMingCiPermission} from "@/server/app/permission/mingci";
 const PUBLIC_CACHE: ResponseInit["headers"] = {"cache-control": "public, max-age=300"};
 const NO_STORE: ResponseInit["headers"] = {"cache-control": "no-store"};
 
-export const GET: APIRoute = async ({request}) => {
+export const GET: APIRoute = async ({locals, request}) => {
   // 纵深防御（R1 两者都做之一）：名词列表又称「本地名词缓存底表」，决定 $g{} 能否展开。
   // 即使客户端越权、缓存逃逸或跑旧版本，服务端也绝不吐名词数据。
   // 这里**复用** `resolveMingCiPermission`（与 /api/app/mingci-permission 同一事实来源），
@@ -18,7 +18,11 @@ export const GET: APIRoute = async ({request}) => {
   // 读不到「确定有码」的任何情况（缺码 / 无凭证 / DB 故障）都 fail-closed 返回空数组 + no-store；
   // 这跟独立端点的 401/500 不同：本路是「内容端点」，fail-closed 必须**静默空数据**而非报错，
   // 否则客户端没法区分「服务端炸了」与「没权限」，且会破坏既有信封约定（始终 200 + 数组）。
-  const outcome = await resolveMingCiPermission(env.FEED_DB, request);
+  // 中间件已对本请求做过凭证校验与权限解析并挂在 `locals.appAuth`（ADR-0049
+  // D11），这里透传进去直接采用——不传会白跑一次凭证校验加一次权限解析
+  // （约 25 行读、2 次往返）。`/api/app/` 的 search-permission、mingci-permission、
+  // version、announcements 四个端点都走这条通道。
+  const outcome = await resolveMingCiPermission(env.FEED_DB, request, locals.appAuth);
   const allowed = outcome.kind === "ok" && outcome.allowed;
   if (!allowed) {
     return jsonResponse(appEnvelope([]), {headers: NO_STORE});

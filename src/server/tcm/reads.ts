@@ -943,7 +943,9 @@ export async function getAppAllTerms(db: D1Database): Promise<AppMingCi[]> {
 export async function getAppStyleConfig(
   db: D1Database,
 ): Promise<Array<AppStyleItem>> {
-  return withEmpty("getAppStyleConfig", async () => {
+  // 走共享桶（方案 4.6）：失败降级成空数组会被写进桶，一次瞬时故障让 App
+  // 最长一个 TTL 都拿不到样式目录。失败就地抛出，端点交还 500、不写桶。
+  return withRethrow("getAppStyleConfig", async () => {
     const {results} = await db
       .prepare(
         // `title` 刻意不选：它只是后台表格与编辑器工具栏的 UI 标签，

@@ -1,0 +1,38 @@
+---
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import AppCacheApp from "@/components/admin/app-cache/AppCacheApp";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+// 与本菜单行绑定的同一个权限码（`system:cache:manage`，migration 0152）：能进
+// 这个页面就能保存与清空，没有只读形态。
+const denied = requirePagePermission(
+  Astro.locals,
+  PERMISSION_CODES.SYSTEM_CACHE_MANAGE,
+  adminLanguage,
+);
+if (denied) {
+  return denied;
+}
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.APP_CACHE}
+  documentTitle={translate("pageDocumentTitle.appCache", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.appCache", adminLanguage)}
+>
+  <AppCacheApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="form" />
+  </AppCacheApp>
+</AdminShell>

@@ -19,6 +19,7 @@
  */
 
 import {readAppVersionConfig, readRolloutRules} from "./config";
+import {cachedVersionGateInputs} from "./gate-cache";
 
 /** 整数比较，归一化到 -1 / 0 / 1（ADR-0019：不做点分号式比较）。 */
 export function compareVersionCode(a: number, b: number): number {
@@ -83,15 +84,22 @@ export interface VersionGateInputs {
   rules: Awaited<ReturnType<typeof readRolloutRules>>;
 }
 
-/** 版本门的两个输入一次读回（中间件 stage1 调用，stage2 显式复用，ADR-0049 D11）。 */
+/**
+ * 版本门的两个输入一次读回（中间件 stage1 调用，stage2 显式复用，ADR-0049 D11）。
+ *
+ * 输入整体进共享缓存（方案 4.5）：表只在后台保存时变化，两个保存入口清条目。
+ * 回源失败就地抛出，不写缓存。
+ */
 export async function readVersionGateInputs(
   db: D1Database,
 ): Promise<VersionGateInputs> {
-  const [config, rules] = await Promise.all([
-    readAppVersionConfig(db),
-    readRolloutRules(db),
-  ]);
-  return {config, rules};
+  return cachedVersionGateInputs(async () => {
+    const [config, rules] = await Promise.all([
+      readAppVersionConfig(db),
+      readRolloutRules(db),
+    ]);
+    return {config, rules};
+  });
 }
 
 export async function resolveMinVersionForRequest(
