@@ -10,6 +10,12 @@ Issues and specs (you may know a spec as a PRD) for this repo live as markdown f
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
+## Status 词表
+
+阶段值、写法与聚合方式统一由 `feature-log.md` 定义，本节不复述。功能清单在 `feature-registry.md`。
+
+`/wayfinder` 用的 `claimed` / `resolved` 是票据认领状态，与阶段词分属两套，不要混用。
+
 ## When a skill says "publish to the issue tracker"
 
 Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
