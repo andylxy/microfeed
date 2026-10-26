@@ -103,12 +103,21 @@ describe("item content normalization and typeahead index", () => {
     ).get() as {count: number};
     expect(countRows()).toEqual({count: 1});
 
+    // 挂起期间索引表整张被 DROP（连带 5 张 FTS5 影子表），所以断言只能查
+    // sqlite_schema：对被删掉的表发 SELECT 报的是 no such table，不是 0 行。
+    const countIndexObjects = () => database.prepare(
+      "SELECT COUNT(*) AS count FROM sqlite_schema " +
+        "WHERE type = 'table' AND name LIKE 'ext_admin_typeahead%'",
+    ).get() as {count: number};
+    expect(countIndexObjects()).toEqual({count: 6});
+
     const suspended = await withItemSearchIndexesSuspended(
       cloudflare,
       config,
-      async () => countRows(),
+      async () => countIndexObjects(),
     );
     expect(suspended).toEqual({count: 0});
+    expect(countIndexObjects()).toEqual({count: 6});
     expect(countRows()).toEqual({count: 1});
   });
 });

@@ -51,7 +51,8 @@
 ## 最高指令：主题写库必须用绑定参数
 
 - 一切向 `themes` / `theme_drafts` 写行的路径——Worker `src/server/themes/ThemeStore.ts`、管理 CLI `manage-cli/theme.ts`、安装 / 发布 / 草稿 / 迁移、`.scratch` 下的同步脚本、D1 REST 批量接口——SQL 里只写 `?` 占位，值经 `.bind(...)` / `queryD1WithParameters(...)` / REST `{sql, params}` 传。严禁把 `bundle_json` 等大列用模板插值拼进 SQL 字面量。
-- 量化依据：D1 单条 SQL 语句的字面量长度上限实测约 100KB（75KB 通过、135KB 报 `SQLITE_TOOBIG`）。中文主题 `feed-zh` 的 `bundle_json` 本地实测最大 **121,180 字节**（全表 9 行未删除合计 512,664 字节），按字面量拼必失败；绑定参数不计入语句文本长度，一条 INSERT 即可入库。
+- 量化依据：D1 单条 SQL 语句的字面量长度上限实测约 100KB（75KB 通过、135KB 报 `SQLITE_TOOBIG`）。中文主题 `feed-zh` 的 `bundle_json` 按 2026-10-26 本地实测：未删除 9 行最大 **119,974 字节**（激活行 `local.feed-zh@0.1.54`）、合计 513,506 字节；含 3 行墓碑的全表 12 行最大 121,180 字节、合计 816,400 字节。按字面量拼必失败；绑定参数不计入语句文本长度，一条 INSERT 即可入库。
+- **安装 / 发布 / 草稿上线 / 跨环境同步主题前的三项确认（每次都做）**：① 写库 SQL 文本里只有 `?` 占位、没有大列字面量；② `bundle_json` 与 `preview_fixture_json` 全部经绑定参数传入；③ 判据：整行 `bundle_json` 由一条 INSERT 写入，没有出现为绕过 100KB 文本上限而做的分块 UPDATE。任一条不满足，先改造通道再执行。
 - 守护测试 `tests/unit/theme-install-bound-params.test.ts`：INSERT SQL 中不得出现 `${` 插值。
 - 完整条文、安装前确认清单、同步额度纪律：`docs/agents/d1-sync.md` 末节。
 

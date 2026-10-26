@@ -52,3 +52,13 @@ yarn manage theme delete <theme-id> --instance ctwh-881019-xyz --confirm <theme-
 - 软删除（`theme delete` 与管理后台的「归档」）写 `deleted_at`，行仍留在表里，继续占 `UNIQUE(package_id, version)`——重装同版本会报 `versionReusedAfterDeletion`，墓碑行只能靠「清理旧版本」或单行「永久删除」释放重装位。
 - ⛔ **不要**用 `wrangler d1 execute … "DELETE FROM themes …"` 绕过。管理后台的「永久删除」（purge 端点）是唯一合法物理删除路径：拒绝内置与当前激活行、删行后清理该版本在 R2 的资产、修正 `theme_state`。裸 SQL 三条都做不到——留下孤儿 R2 对象、`theme_state` 悬空指向、不可恢复。
 - 内置主题（`microfeed.*`）不参与清理：CLI 与管理后台都拒绝删除它们，也不占 Custom 配额。每个环境上限：100 个未删除 Custom 版本、20 个草稿。
+
+## 安装 / 发布 / 草稿上线前的绑定参数确认（强制）
+
+每一次 `yarn manage theme install`（带 `--local` 与不带的都算）、后台主题安装、草稿发布，动手前都要确认写 `themes` / `theme_drafts` 的通道用的是绑定参数，下面三条全部满足才算通过：
+
+1. 写库 SQL 文本里只有 `?` 占位，`bundle_json`、`preview_fixture_json`、`manifest_json` 都没有按字面量拼进 SQL；
+2. 全部值经 `.bind(...)` / `queryD1WithParameters(...)` / D1 REST 的 `{sql, params}` 传入；
+3. 结果判据：整行 `bundle_json` 由一条 INSERT 写入，没有出现为绕过 D1 单语句 100KB 文本上限而做的分块 UPDATE。
+
+量化依据（2026-10-26 本地 D1 实测）：`themes` 未删除 9 行的 `bundle_json` 最大 119,974 字节（激活行 `local.feed-zh@0.1.54`）、合计 513,506 字节；含 3 行墓碑的 12 行最大 121,180 字节、合计 816,400 字节。任一条不满足（例如拿到的是字面量 SQL 文件），先改造通道再执行安装，不要在不合格通道上重试。完整条文与跨环境同步的额度纪律：`docs/agents/d1-sync.md` 末节；常驻结论：`AGENTS.md`「主题写库必须用绑定参数」。
