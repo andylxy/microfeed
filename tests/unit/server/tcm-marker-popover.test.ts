@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {DatabaseSync} from "node:sqlite";
 
+import {makeD1} from "./helpers/d1";
 import {
   buildTcmMarkerLayer,
   mapStyles,
@@ -36,45 +37,8 @@ interface SectionRow {
   kind?: string;
 }
 
-// D1-shaped adapter over an in-memory node:sqlite database. It runs the REAL SQL
-// the production code issues (json_extract / substr / instr), so the test exercises
-// the actual query contract instead of faking it. No mocks (AGENTS.md:685).
-function makeD1(database: DatabaseSync): D1Database {
-  function statement(sql: string, values: unknown[]) {
-    return {
-      bind(...v: unknown[]) { return statement(sql, v); },
-      async all() {
-        return {
-          results: database.prepare(sql).all(...(values as any[])) as Record<string, unknown>[],
-        };
-      },
-      async first() {
-        const rows = database.prepare(sql).all(...(values as any[])) as Record<string, unknown>[];
-        return rows[0] ?? null;
-      },
-      async run() {
-        database.prepare(sql).run(...(values as any[]));
-        return {success: true} as any;
-      },
-    };
-  }
-  return {
-    prepare(sql: string) { return statement(sql, []); },
-    // D1 的 batch 是单事务全成或全回滚。这里用显式事务复刻，好让断言能看到
-    // 「中途失败 ⇒ 时间戳仍是 0」这一 `ensureMarkerCitations` 依赖的性质。
-    async batch(list: any[]) {
-      database.exec("BEGIN");
-      try {
-        const out = list.map((s) => s.run());
-        database.exec("COMMIT");
-        return out;
-      } catch (error) {
-        database.exec("ROLLBACK");
-        throw error;
-      }
-    },
-  } as unknown as D1Database;
-}
+// D1 适配层在 helpers/d1.ts：真实 SQLite 上跑 production 原样语句。
+// 下面各用例只关心数据与查询口径，不伪造引擎行为（AGENTS.md 禁止 mock）。
 
 // Build a real, in-memory D1-backed database: an `items` table (fang/yao/section)
 // plus `ext_annotation_markers`. Rows are inserted as the JSON strings the
