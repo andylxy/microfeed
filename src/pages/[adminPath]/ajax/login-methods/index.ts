@@ -6,7 +6,7 @@
  * Reads go straight to D1: the admin board is the authoritative view and
  * must not be subject to the app-side 2h cache (ADR-0050 D3).
  */
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import FeedDb from "@/server/feed/FeedDb";
@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({locals, request}) => {
   );
   if (guard) return guard;
   return jsonResponse(
-    {config: await readLoginMethodsConfig(new FeedDb(env, request))},
+    {config: await readLoginMethodsConfig(new FeedDb(env, request, cache))},
     {headers: {"cache-control": "private, no-store"}},
   );
 };

@@ -8,7 +8,7 @@
  * a clean 400 (discriminated result, no throw). All switches may be turned
  * off (ADR-0050 D5).
  */
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
 
 import FeedDb from "@/server/feed/FeedDb";
@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({locals, request}) => {
     | {patch?: unknown}
     | null;
   const result = await saveLoginMethodsConfig(
-    new FeedDb(env, request),
+    new FeedDb(env, request, cache),
     (body?.patch ?? {}) as Record<string, unknown>,
     userId,
   );
