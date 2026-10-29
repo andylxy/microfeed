@@ -6,7 +6,10 @@
  * 本模块只放无运行时依赖的部分：类型、默认值、字段归一。
  */
 
-/** 六个开关键。`loginEnabled` 是总闸（关掉 = App 登录功能整体停用）；登录方式是开放集：加一种 = 加一个键，零迁移（ADR-0050 D1）。 */
+/** 七个开关键。`loginEnabled` 是总闸；登录方式是开放集：加一种 = 加一个键，零迁移（ADR-0050 D1）。
+ * `emailRegisterEnabled` / `smsRegisterEnabled` 例外于「登录方式」语义——它们是**注册**
+ * 开关（邮箱 + 验证码注册 / 手机号注册），复用同一份配置通道与后台开关 UI，
+ * 避免为一个布尔再起一套 settings 类目。 */
 export const LOGIN_METHOD_TOGGLE_KEYS = [
   "loginEnabled",
   "accountPasswordEnabled",
@@ -14,6 +17,8 @@ export const LOGIN_METHOD_TOGGLE_KEYS = [
   "wechatEnabled",
   "qqEnabled",
   "captchaEnabled",
+  "emailRegisterEnabled",
+  "smsRegisterEnabled",
 ] as const;
 
 export type LoginMethodToggleKey = (typeof LOGIN_METHOD_TOGGLE_KEYS)[number];
@@ -26,6 +31,21 @@ export interface LoginMethodsConfig {
   wechatEnabled: boolean;
   qqEnabled: boolean;
   captchaEnabled: boolean;
+  /**
+   * 邮箱注册开关（默认 false）：false 时 `code/get`（发码）与 `register`（建号）
+   * 直接返回「邮箱注册暂未开放」，不发码、不建号。关掉它是停机手段，不是权限手段——
+   * 已注册账号的登录不受影响。
+   */
+  emailRegisterEnabled: boolean;
+  /**
+   * 手机号注册开关（默认 true）：false 时 App 注册页不露手机号入口。
+   *
+   * <p>手机号注册是注册页的默认（原始）流程，默认放开；与 {@link emailRegisterEnabled}
+   * 一样复用「登录方式」的配置通道与后台开关 UI。手机号注册的硬门在 App 端
+   * （microfeed 尚未实现 `code/get` + `user/register` 的短信链路，提交会 404），
+   * 后台此开关目前只控**显隐**，不控服务端行为。
+   */
+  smsRegisterEnabled: boolean;
   /** 服务端保存时刻；`settings.updated_at` 列只在 INSERT 触发，不可信。 */
   updatedAtMs: number;
   updatedBy: string | null;
@@ -36,6 +56,8 @@ export interface LoginMethodsConfig {
  * 「从未保存过」，App 端只作可观测字段，不参与逻辑。缺行兜底 = 当前既有行为
  * （登录可用、要验证码、受理账号密码）——与「未配置实例静默不验码」的安全回退
  * 方向相反（ADR-0050 D2）。
+ *
+ * `emailRegisterEnabled: false`：新功能默认关闭，需后台显式开启后 App 才放出行入口。
  */
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   loginEnabled: true,
@@ -44,6 +66,8 @@ export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   wechatEnabled: false,
   qqEnabled: false,
   captchaEnabled: true,
+  emailRegisterEnabled: false,
+  smsRegisterEnabled: true,
   updatedAtMs: 0,
   updatedBy: null,
 };
@@ -71,6 +95,8 @@ export function parseLoginMethodsConfig(raw: unknown): LoginMethodsConfig {
     wechatEnabled: boolField(source, "wechatEnabled"),
     qqEnabled: boolField(source, "qqEnabled"),
     captchaEnabled: boolField(source, "captchaEnabled"),
+    emailRegisterEnabled: boolField(source, "emailRegisterEnabled"),
+    smsRegisterEnabled: boolField(source, "smsRegisterEnabled"),
     updatedAtMs: DEFAULT_LOGIN_METHODS.updatedAtMs,
     updatedBy: DEFAULT_LOGIN_METHODS.updatedBy,
   };

@@ -289,12 +289,14 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** 生成一张验证码：返回码（仅调试用，勿下发）、签名 reqNo、PNG 的纯 base64。 */
+/** 生成一张验证码：返回码（仅调试用，勿下发）、签名 reqNo、PNG 的纯 base64。
+ *  `codeOverride` 仅供本地联调旁路（`MAIL_DEV_ECHO=1` 时固定码），生产不传。 */
 export async function generateCaptcha(
   secret: string,
+  codeOverride?: string,
 ): Promise<{code: string; reqNo: string; pngBase64: string}> {
   if (!secret) throw new Error("captcha: missing signing secret");
-  const code = randomCode();
+  const code = codeOverride ?? randomCode();
   const expAt = Date.now() + TTL_MS;
   const reqNo = `${expAt}.${await signCode(secret, code, expAt)}`;
   const png = await encodePng(renderPixels(code), CANVAS_W, CANVAS_H);

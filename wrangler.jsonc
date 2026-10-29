@@ -21,7 +21,22 @@
     "binding": "CF_VERSION_METADATA"
   },
   "secrets": {
-    "required": ["UPLOAD_SIGNING_KEY", "BETTER_AUTH_SECRET", "WEBHOOK_SECRET_KEY"]
+    "required": ["UPLOAD_SIGNING_KEY", "BETTER_AUTH_SECRET", "WEBHOOK_SECRET_KEY", "RESEND_API_KEY"]
+  },
+  // 发信相关的两个**非 secret** 文本变量。
+  //
+  // 为什么必须在 `vars` 里登记空默认值：`env`（`cloudflare:workers`）只暴露
+  // **已声明**的绑定——`.dev.vars` 里没在 `vars` / `secrets.required` 登过名的键
+  // 不会出现在 `env` 上（实测：只登了 RESEND_API_KEY 时，`env.RESEND_FROM`
+  // 与 `env.MAIL_DEV_ECHO` 都是 undefined）。本地要用真实值，就在 `.dev.vars`
+  // 里覆盖——`.dev.vars` 优先于 `vars`。
+  //
+  // 生产留空即关闭：RESEND_FROM 空串回落"后台邮件设置里的发信地址"，两者都空时
+  // 发信会明确报错；MAIL_DEV_ECHO 空串不等于 "1"，旁路不生效（旁路只是本地
+  // 联调手段，绝不能在线上开出"只打日志不发信"的口子）。
+  "vars": {
+    "RESEND_FROM": "",
+    "MAIL_DEV_ECHO": ""
   },
   "d1_databases": [
     {

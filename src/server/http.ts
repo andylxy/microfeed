@@ -17,6 +17,22 @@ export function jsonResponse(
 }
 
 /**
+ * 从请求体里按大小写不敏感的方式取字符串字段。
+ *
+ * App 沿用的是旧后端客户端，字段名大小写并不统一（`Email` / `email` 混用），
+ * 所以取值一律走这个函数。以前每个端点各写一份同样的遍历，改口径要在多处同步。
+ * 非字符串、字段缺失、请求体不是对象都归空串，由调用方决定空串意味着什么。
+ */
+export function readStringField(input: unknown, key: string): string {
+  if (!input || typeof input !== "object") return "";
+  const lower = key.toLowerCase();
+  for (const [name, value] of Object.entries(input)) {
+    if (name.toLowerCase() === lower && typeof value === "string") return value;
+  }
+  return "";
+}
+
+/**
  * Localized JSON error response for admin AJAX endpoints. Resolves the admin
  * language from the request (explicit preference cookie first, then
  * Accept-Language — same mechanism the Astro admin pages use) and translates

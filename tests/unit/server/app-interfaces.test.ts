@@ -9,23 +9,23 @@ import {
 /**
  * App 接口清单（ADR-0039 D6，migration 0131 起按内容域逐端点分发门码）。
  *
- * 清单不另立登记表，16 行全部从现有代码推导，所以这里断言的是「推导结果」：
+ * 清单不另立登记表，19 行全部从现有代码推导，所以这里断言的是「推导结果」：
  * 数字对得上、每个端点的门码与 `DOMAIN_RULES` 的逐端点分发一致。清单哪天
  * 漏了新端点或挂了错码，这几条会先红。
  */
 describe("listAppInterfaces", () => {
   const rows = listAppInterfaces();
 
-  it("holds exactly the 16 App interfaces", () => {
-    // 8 内容 + 4 匿名 + 4 个 /api/app/*。
-    expect(rows).toHaveLength(16);
+  it("holds exactly the 19 App interfaces", () => {
+    // 8 内容 + 7 匿名（4 原有 + 3 邮箱注册）+ 4 个 /api/app/*。
+    expect(rows).toHaveLength(19);
     expect(APP_BOOK_REQUEST_CONTENT_SUFFIXES.size).toBe(8);
-    expect(APP_BOOK_REQUEST_ANONYMOUS_ROUTES).toHaveLength(4);
+    expect(APP_BOOK_REQUEST_ANONYMOUS_ROUTES).toHaveLength(7);
   });
 
   it("lists the anonymous pre-auth routes without a permission code", () => {
     const anonymous = rows.filter((row) => row.auth === "anonymous");
-    expect(anonymous).toHaveLength(4);
+    expect(anonymous).toHaveLength(7);
     expect(anonymous.map((row) => row.path).sort()).toEqual(
       APP_BOOK_REQUEST_ANONYMOUS_ROUTES
         .map((route) => `/api/AppBookRequest/${route}`)

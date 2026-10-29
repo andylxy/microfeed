@@ -44,7 +44,13 @@
     "MICROFEED_WEBHOOK_QUEUE_ID": "__WEBHOOK_QUEUE_ID__",
     "MICROFEED_WEBHOOK_QUEUE_NAME": "__WEBHOOK_QUEUE_NAME__",
     "MICROFEED_WEBHOOK_STATE": "__WEBHOOK_STATE__",
-    "MICROFEED_WORKER_NAME": "__WORKER_NAME__"
+    "MICROFEED_WORKER_NAME": "__WORKER_NAME__",
+    // 发信相关的两个**非 secret** 文本变量（与项目根 wrangler.jsonc 对齐）。
+    // `env`（cloudflare:workers）只暴露**已声明**的绑定——`.dev.vars` 里没在
+    // `vars` / `secrets.required` 登过名的键不会出现在 `env` 上。本地联调要用
+    // 真实值（如 MAIL_DEV_ECHO=1），就在 `.dev.vars` 里覆盖（`.dev.vars` 优先）。
+    "RESEND_FROM": "",
+    "MAIL_DEV_ECHO": ""
   },
   "routes": __ROUTES__
 }

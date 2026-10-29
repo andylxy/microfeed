@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useState} from "react";
 
 import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Switch} from "@/components/ui/switch";
 import {useTranslation} from "@/client/i18n";
 import {formatAdminDateTime} from "@/client/admin-date-format";
@@ -25,11 +26,11 @@ interface Props {
 }
 
 /**
- * 行清单：顺序即页面展示顺序（账号密码 / 验证码 / 短信 / 微信 / QQ，方案 §1）。
+ * 登录方式行清单：顺序即页面展示顺序（账号密码 / 验证码 / 短信 / 微信 / QQ，方案 §1）。
  * `reserved` 的三行本期只控显隐、后端未接通（ADR-0050），渲染为禁用态 + 角标，
  * 不虚标能登录。
  */
-const ROWS: Array<{
+const LOGIN_ROWS: Array<{
   key: LoginMethodToggleKey;
   labelKey: string;
   reserved: boolean;
@@ -40,6 +41,24 @@ const ROWS: Array<{
   {key: "smsEnabled", labelKey: "appLoginMethods.labelSms", reserved: true},
   {key: "wechatEnabled", labelKey: "appLoginMethods.labelWechat", reserved: true},
   {key: "qqEnabled", labelKey: "appLoginMethods.labelQq", reserved: true},
+];
+
+/**
+ * 注册方式行清单：`emailRegisterEnabled` 是邮箱注册开关、`smsRegisterEnabled` 是
+ * 手机号注册开关（默认开）。两者都读 `getLoginMethods`，App 注册页按各自开关
+ * 逐个显隐入口。手机号注册是注册页默认（原始）流程，microfeed 尚未实现短信
+ * 链路（提交 404），后台开关目前只控**显隐**——服务端行为未接通。
+ *
+ * 邮箱注册是硬门在服务端（发码 / 校验 / 建号三端点读 `emailRegisterEnabled`，
+ * 关掉即「邮箱注册暂未开放」），默认 false，须后台显式打开。
+ */
+const REGISTER_ROWS: Array<{
+  key?: LoginMethodToggleKey;
+  labelKey: string;
+  reserved: boolean;
+}> = [
+  {key: "smsRegisterEnabled", labelKey: "appLoginMethods.labelPhoneRegister", reserved: false},
+  {key: "emailRegisterEnabled", labelKey: "appLoginMethods.labelEmailRegister", reserved: false},
 ];
 
 /**
@@ -118,31 +137,52 @@ export default function LoginMethodsApp({canManage = false}: Props) {
 
   const dirtyCount = Object.keys(dirty).length;
 
+  const renderRows = (
+    rows: Array<{key?: LoginMethodToggleKey; labelKey: string; reserved: boolean}>,
+  ) => (
+    <div className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <label className="flex items-center gap-2 text-sm" key={row.labelKey}>
+          <Switch
+            checked={row.key ? (dirty[row.key] ?? config[row.key]) : false}
+            disabled={row.reserved || !row.key}
+            onCheckedChange={(checked) => {
+              if (!row.key || row.reserved) return;
+              // 闭包内 `row.key` 的窄化不保留（回调可延迟到 row 已变），
+              // 先提到不可变局部再进 setDirty 的 computed key。
+              const key = row.key;
+              setDirty((current) => ({...current, [key]: checked}));
+              setSaved(false);
+              setSaveError(null);
+            }}
+          />
+          <span>{t(row.labelKey)}</span>
+          {row.reserved ? (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {t("appLoginMethods.reservedBadge")}
+            </span>
+          ) : null}
+        </label>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">{t("appLoginMethods.intro")}</p>
-      <div className="flex flex-col gap-2">
-        {ROWS.map((row) => (
-          <label className="flex items-center gap-2 text-sm" key={row.key}>
-            <Switch
-              checked={dirty[row.key] ?? config[row.key]}
-              disabled={row.reserved}
-              onCheckedChange={(checked) => {
-                if (row.reserved) return;
-                setDirty((current) => ({...current, [row.key]: checked}));
-                setSaved(false);
-                setSaveError(null);
-              }}
-            />
-            <span>{t(row.labelKey)}</span>
-            {row.reserved ? (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {t("appLoginMethods.reservedBadge")}
-              </span>
-            ) : null}
-          </label>
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("appLoginMethods.loginTitle")}</CardTitle>
+          <CardDescription>{t("appLoginMethods.intro")}</CardDescription>
+        </CardHeader>
+        <CardContent>{renderRows(LOGIN_ROWS)}</CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("appLoginMethods.registerTitle")}</CardTitle>
+          <CardDescription>{t("appLoginMethods.registerIntro")}</CardDescription>
+        </CardHeader>
+        <CardContent>{renderRows(REGISTER_ROWS)}</CardContent>
+      </Card>
       {canManage ? (
         <div className="flex items-center gap-3">
           <Button disabled={busy || dirtyCount === 0} onClick={() => void save()} type="button">

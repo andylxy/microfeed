@@ -118,7 +118,7 @@ describe("listPcInterfaces matches the real admin ajax routes", () => {
     // 规模钉成具体数字：增删任何一行都要在这里改数字，顺手逼一次「这是有意的」。
     // 自建账号端点（account/*、auth/credential-login 等）只要求活跃账号、不绑
     // 权限码，不在授权树里出现，因此不进这份清单。
-    expect(rows).toHaveLength(137);
+    expect(rows).toHaveLength(139);
   });
 
   it("keeps every path unique per method", () => {

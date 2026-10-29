@@ -15,6 +15,7 @@
 // 旧后端响应字段（LoginOutPut）名称保持不变；按拍板不再下发
 // AccessKeyId/AccessKeySecret，Token 字段承载 `mflc_` 凭证。
 
+import {cache} from "cloudflare:workers";
 import {verifyPassword} from "better-auth/crypto";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
@@ -24,6 +25,7 @@ import {
   LoginCredentialLimitError,
 } from "@/server/auth/login-credentials";
 import FeedDb from "@/server/feed/FeedDb";
+import {readStringField} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
 import {readLoginMethodsConfigCached} from "@/server/app/login/config";
 import {verifyCaptcha} from "@/server/tcm/captcha";
@@ -92,7 +94,12 @@ async function ensureAppLoginCredential(
   }
 }
 
-/** 登录成功/失败共用的旧后端形状（缺省字段与 LoginOutPut 对齐）。 */
+/**
+ * 登录成功/失败共用的旧后端形状（缺省字段与 LoginOutPut 对齐）。
+ *
+ * `Email` 是本次新增的一项：App 的 `UserInfo` 有 email 列，登录响应不带它的话，
+ * 邮箱注册出来的账号在「我的 → 个人资料」里永远显示不出邮箱。
+ */
 function loginPayload(
   token: string,
   account: string,
@@ -101,22 +108,13 @@ function loginPayload(
   return {
     Token: token,
     Account: account,
+    Email: user?.email ?? "",
     Name: user?.name ?? "",
     Img: "",
     UserName: user?.username ?? account,
     DefaultModule: null,
     ModuleList: null,
   };
-}
-
-/** 在请求体里按大小写不敏感的方式取字符串字段。 */
-function pickString(input: unknown, key: string): string {
-  if (!input || typeof input !== "object") return "";
-  const lower = key.toLowerCase();
-  for (const [name, value] of Object.entries(input)) {
-    if (name.toLowerCase() === lower && typeof value === "string") return value;
-  }
-  return "";
 }
 
 /**
@@ -132,7 +130,10 @@ export async function appLogin(
   // 登录功能总闸（ADR-0050 D7）：配置读取在最前，关闭时**不做任何检查**——
   // 不看请求体、不验码、不查用户，直接返回功能开发中文案。
   const loginMethods = await readLoginMethodsConfigCached(
-    new FeedDb(runtimeEnv, request),
+    // 第三个参数只为满足「每个 FeedDb 都显式声明公共缓存清理口径」这条棘轮
+    // （tests/unit/source-architecture.test.ts）：本路径只读配置、不写库，
+    // 清理器不会被动到。少传一个参数是隐式声明，回归时看不出意图。
+    new FeedDb(runtimeEnv, request, cache),
   );
   if (!loginMethods.loginEnabled) {
     return "登录功能开发中,敬请期待";
@@ -140,8 +141,8 @@ export async function appLogin(
 
   // 字段名大小写不敏感：Android Gson 发 `userName` / `passWord`（注意 `passWord`
   // 的大写 W，与 `Password`/`password` 都不同），后台/旧后端可能发 `UserName`/`Password`。
-  const account = pickString(input, "username").trim();
-  const password = pickString(input, "password");
+  const account = readStringField(input, "username").trim();
+  const password = readStringField(input, "password");
   if (!account || !password) {
     return "请检查账号密码";
   }
@@ -154,10 +155,10 @@ export async function appLogin(
   // 图形验证码（策略 A：每次登录都要；登录管理可整体关闭，ADR-0050 D4）。
   // 无状态验签、不读库；放在口令校验之前，先挡脚本，也让机器人摸不到
   // 「口令校验」这一步的时序/枚举信息。
-  // App 发 `verificationCode` + `uUID`(=reqNo)，pickString 大小写不敏感。
+  // App 发 `verificationCode` + `uUID`(=reqNo)，readStringField 大小写不敏感。
   if (loginMethods.captchaEnabled) {
-    const verificationCode = pickString(input, "verificationCode").trim();
-    const captchaReqNo = pickString(input, "uuid");
+    const verificationCode = readStringField(input, "verificationCode").trim();
+    const captchaReqNo = readStringField(input, "uuid");
     if (!verificationCode || !captchaReqNo) {
       return "请输入图形验证码";
     }

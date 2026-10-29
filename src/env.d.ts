@@ -36,6 +36,23 @@ declare global {
     MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION?: string;
     TEST_MIGRATIONS?: D1Migration[];
     UPLOAD_SIGNING_KEY: string;
+    /**
+     * Resend 事务邮件 API Key（邮箱验证码发信）。Workers secret：
+     * 不进 UI、不进 DB、不进版本库；本地经 `.dev.vars` 注入。
+     */
+    RESEND_API_KEY?: string;
+    /**
+     * 缺省发信地址：后台「邮件设置」（`mail_settings`）未配置时回落。
+     * 在 `wrangler.jsonc` 的 `vars` 里登了空默认值——`env` 只暴露已声明的绑定，
+     * 没登名的 `.dev.vars` 键在 `astro dev` 下根本读不到。
+     */
+    RESEND_FROM?: string;
+    /**
+     * 本地联调旁路：`"1"` 时发码端点不真发信，把验证码打到服务端 console。
+     * `wrangler.jsonc` 里登了空串默认值（= 关闭），本地由 `.dev.vars` 覆盖成
+     * `"1"`；生产保持空串，因此旁路在线上开不出来。
+     */
+    MAIL_DEV_ECHO?: string;
   }
 
   namespace Cloudflare {
@@ -58,6 +75,23 @@ declare global {
       MICROFEED_SETUP_ADMIN_PASSWORD_CONFIRMATION?: string;
       TEST_MIGRATIONS?: D1Migration[];
       UPLOAD_SIGNING_KEY: string;
+      /**
+       * Resend 事务邮件 API Key（邮箱验证码发信）。Workers secret：
+       * 不进 UI、不进 DB、不进版本库；本地经 `.dev.vars` 注入。
+       */
+      RESEND_API_KEY?: string;
+      /**
+     * 缺省发信地址：后台「邮件设置」（`mail_settings`）未配置时回落。
+     * 在 `wrangler.jsonc` 的 `vars` 里登了空默认值——`env` 只暴露已声明的绑定，
+     * 没登名的 `.dev.vars` 键在 `astro dev` 下根本读不到。
+     */
+      RESEND_FROM?: string;
+      /**
+       * 本地联调旁路：`"1"` 时发码端点不真发信，把验证码打到服务端 console。
+       * `wrangler.jsonc` 里登了空串默认值（= 关闭），本地由 `.dev.vars` 覆盖成
+       * `"1"`；生产保持空串，因此旁路在线上开不出来。
+       */
+      MAIL_DEV_ECHO?: string;
     }
   }
 

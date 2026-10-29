@@ -28,6 +28,35 @@ export function createMicrofeedAuth(
   runtimeEnv: Env,
   request: Request,
 ) {
+  return buildAuth(runtimeEnv, request, false);
+}
+
+/**
+ * 放开公开注册原语的实例，**只允许邮箱注册链路调用**。
+ *
+ * 为什么需要它：邮箱注册端点是匿名的，而 admin 插件的 `createUser` 要求管理员
+ * 会话（匿名调用直接 401），所以匿名建号只能走公开原语 `signUpEmail`——全站
+ * `disableSignUp: true` 把它关掉了，只有这里临时打开。
+ *
+ * 安全边界没有移动：实例是按请求新建的，只有拿到它的调用方才受影响。公开路由
+ * `/api/auth/sign-up/email` 由 `[...all].ts` 用默认实例服务，注册保持关闭。
+ * 调用前置条件是「刚刚校验通过一条邮箱验证码」，验证码本身就是建号授权。
+ *
+ * 本函数仅供 `src/server/auth/email-signup.ts` 使用；端点不直接接触它，避免
+ * 「临时放开注册」这件事扩散到别处。
+ */
+export function createSignUpEnabledAuth(
+  runtimeEnv: Env,
+  request: Request,
+) {
+  return buildAuth(runtimeEnv, request, true);
+}
+
+function buildAuth(
+  runtimeEnv: Env,
+  request: Request,
+  allowSignUp: boolean,
+) {
   const origin = new URL(request.url).origin;
   const adminPath = normalizeAdminPath(runtimeEnv.MICROFEED_ADMIN_PATH);
   return betterAuth({
@@ -51,21 +80,19 @@ export function createMicrofeedAuth(
       "/oauth2/client/rotate-secret",
     ],
     emailAndPassword: {
-      disableSignUp: true,
+      disableSignUp: !allowSignUp,
       enabled: true,
-      // Length gate only — better-auth has no hook for the composition rule,
-      // which our own validators enforce. Both sides take the bounds from
-      // `@/shared/AdminCredentials` so they cannot drift apart.
+      // 只做长度门：口令的组合规则 better-auth 没有钩子，由我们自己的校验器
+      // 负责。两边都从 `@/shared/AdminCredentials` 取上下限，不会各写一套。
       maxPasswordLength: MAX_ADMIN_PASSWORD_LENGTH,
       minPasswordLength: MIN_ADMIN_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,
     },
     plugins: [
-      // The admin plugin gates its own endpoints (set-role, ban-user,
-      // remove-user, impersonate-user, …) on `auth_user.role`, not on RBAC.
-      // Left implicit it defaults to ["admin"] silently — exactly the second
-      // authorization source the RBAC work is closing. Name it, and treat the
-      // field as a derived mirror of the RBAC `super_admin` role.
+      // admin 插件用它自己的端点（set-role、ban-user、remove-user、
+      // impersonate-user 等），这些端点的判据是 `auth_user.role`，不走 RBAC。
+      // 不显式声明时它默认只认 ["admin"]，等于又开了一个授权来源——正是 RBAC
+      // 要收敛掉的那种。这里写出来，并与 RBAC 的 `super_admin` 角色对齐。
       admin({adminRoles: [BETTER_AUTH_ADMIN_ROLE]}),
       passkey({
         origin,

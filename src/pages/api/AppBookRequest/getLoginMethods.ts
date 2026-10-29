@@ -1,5 +1,5 @@
 import type {APIRoute} from "astro";
-import {env} from "cloudflare:workers";
+import {cache, env} from "cloudflare:workers";
 
 import FeedDb from "@/server/feed/FeedDb";
 import {readLoginMethodsConfigCached} from "@/server/app/login/config";
@@ -11,7 +11,7 @@ import {appEnvelope} from "@/server/tcm/envelope";
 // read-through 缓存（ADR-0050 D3）：常态 0 D1 行读，后台保存路径清缓存。
 // `updatedBy` 不出端点：操作者身份是后台审计信息，App 无需知晓。
 export const GET: APIRoute = async ({request}) => {
-  const config = await readLoginMethodsConfigCached(new FeedDb(env, request));
+  const config = await readLoginMethodsConfigCached(new FeedDb(env, request, cache));
   return jsonResponse(appEnvelope({
     loginEnabled: config.loginEnabled,
     accountPasswordEnabled: config.accountPasswordEnabled,
@@ -19,6 +19,8 @@ export const GET: APIRoute = async ({request}) => {
     wechatEnabled: config.wechatEnabled,
     qqEnabled: config.qqEnabled,
     captchaEnabled: config.captchaEnabled,
+    emailRegisterEnabled: config.emailRegisterEnabled,
+    smsRegisterEnabled: config.smsRegisterEnabled,
     updatedAtMs: config.updatedAtMs,
   }));
 };

@@ -206,6 +206,7 @@ export const en = {
       leaf: "Leaf",
       list: "List",
       "list-checks": "Checklist",
+      mail: "Mail",
       pencil: "Pencil",
       pill: "Pill",
       rss: "RSS",
@@ -308,6 +309,37 @@ export const en = {
     cloudflareTokenSaveFailed: "Could not save the token.",
     subscribeMethods: "Subscribe methods",
     mediaFileStorage: "Media file storage",
+    // Mail settings — the sending side of App email + code registration
+    // (`mail_settings`).
+    mailSettings: "Mail settings",
+    mailSettingsDescription:
+      "Sender address, sender name and templates for the App email verification code. Changes apply immediately, no restart.",
+    mailSettingsIntro:
+      "Leave all four empty to use the factory defaults: the address falls back to the environment variable, subject and body fall back to the built-in template. Clearing one field and saving means \"use the default for this field\".",
+    mailSettingsFromAddress: "Sender address",
+    mailSettingsFromName: "Sender name",
+    mailSettingsFromNamePlaceholder: "e.g. Zhongyi Wiki (optional)",
+    mailSettingsSubjectTemplate: "Subject template",
+    mailSettingsBodyTemplate: "Body template (HTML)",
+    mailSettingsTemplateHint:
+      "Placeholders: {{code}} the code, {{expireMinutes}} minutes until it expires. Leave empty to use the built-in subject.",
+    mailSettingsBodyHint:
+      "The body is HTML and accepts the same {{code}} and {{expireMinutes}} placeholders. Substitution is literal — do not put scripts or external stylesheets in the template.",
+    mailSettingsPreview: "Delivery preview",
+    mailSettingsPreviewSubject: "Subject: {{subject}}",
+    mailSettingsPreviewHint:
+      "The preview uses the sample code 123456 and a 10-minute lifetime; real emails carry the actual code.",
+    mailSettingsDeliveryReady:
+      "Delivery is ready (Resend API key configured). An empty sender address falls back to {{from}}.",
+    mailSettingsDeliveryMissing:
+      "Delivery is not configured: the Workers secret RESEND_API_KEY is missing, so verification emails cannot be sent. Run wrangler secret put RESEND_API_KEY on the server first.",
+    mailSettingsNoFallback: "RESEND_FROM (also unset)",
+    mailSettingsSavedAt: "Last saved {{time}} by {{user}}.",
+    mailSettingsNeverSaved:
+      "Never saved from the dashboard — everything is using the factory defaults.",
+    mailSettingsSaved: "Mail settings saved.",
+    mailSettingsSaveFailed: "Failed to save mail settings.",
+    mailSettingsLoadFailed: "Failed to load mail settings.",
     itemsSettings: "Items settings",
     // Item editor sections
     itemEditorSections: "Item editor sections",
@@ -2291,9 +2323,14 @@ export const en = {
   appLoginMethods: {
     title: "Login methods",
     intro: "Control which login methods the app's sign-in page shows and whether the image captcha is required. The first toggle is the master switch: with login off, the app sign-in endpoint answers \"under development\" without any checks. SMS / WeChat / QQ only toggle visibility for now — their backends are not connected yet. After saving, changes reach every region within 2 hours.",
+    loginTitle: "Login methods",
+    registerTitle: "Registration methods",
+    registerIntro: "Control which registration methods the app's sign-up page offers. \"Email code registration\" is the registration master switch: with it off, the send / verify / register endpoints all answer \"email registration is not open yet\". \"Phone number registration\" backend is not connected yet — reserved. After saving, changes reach every region within 2 hours.",
     labelLogin: "Login feature (master switch)",
     labelAccount: "Account & password",
     labelCaptcha: "Image captcha",
+    labelPhoneRegister: "Phone number registration",
+    labelEmailRegister: "Email code registration",
     labelSms: "SMS (phone number)",
     labelWechat: "WeChat",
     labelQq: "QQ",
@@ -2811,6 +2848,10 @@ export const en = {
     },
     appLoginMethods: {
       invalidConfig: "Every toggle must be a boolean.",
+    },
+    mailSettings: {
+      invalidConfig:
+        "Mail settings only accept text values for the sender address, sender name and the two templates.",
     },
     cache: {
       invalidControl: "Invalid cache config: cache times and the size cap must be inside their ranges.",

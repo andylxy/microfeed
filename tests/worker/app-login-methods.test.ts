@@ -78,6 +78,8 @@ describe("getLoginMethods endpoint (ADR-0050)", () => {
       wechatEnabled: false,
       qqEnabled: false,
       captchaEnabled: true,
+      emailRegisterEnabled: false,
+      smsRegisterEnabled: true,
       updatedAtMs: 0,
     });
   });
@@ -117,6 +119,8 @@ describe("admin ajax login-methods (ADR-0050)", () => {
       wechatEnabled: false,
       qqEnabled: false,
       captchaEnabled: true,
+      emailRegisterEnabled: false,
+      smsRegisterEnabled: true,
       updatedAtMs: 0,
       updatedBy: null,
     });
@@ -163,6 +167,8 @@ describe("admin ajax login-methods (ADR-0050)", () => {
       wechatEnabled: false,
       qqEnabled: false,
       captchaEnabled: true,
+      emailRegisterEnabled: false,
+      smsRegisterEnabled: true,
       updatedAtMs: 0,
       updatedBy: null,
     });
