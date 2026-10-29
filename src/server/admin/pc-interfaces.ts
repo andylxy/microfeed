@@ -161,6 +161,9 @@ const C: readonly CatalogEntry[] = [
   // 登录方式管理板（system:app-login-methods:*）
   ["GET", "/admin/ajax/login-methods", "system:app-login-methods:read"],
   ["POST", "/admin/ajax/login-methods/save", "system:app-login-methods:manage"],
+  // 邮件设置（system:mail-settings:*）
+  ["GET", "/admin/ajax/mail-settings", "system:mail-settings:read"],
+  ["POST", "/admin/ajax/mail-settings/save", "system:mail-settings:manage"],
   // App 缓存控制面（system:cache:manage）
   ["GET", "/admin/ajax/cache", "system:cache:manage"],
   ["POST", "/admin/ajax/cache/save", "system:cache:manage"],

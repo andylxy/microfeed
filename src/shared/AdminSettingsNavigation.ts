@@ -37,6 +37,11 @@ export const ADMIN_SETTINGS_SECTIONS = [
     nameKey: "settings.mediaFileStorage",
   },
   {
+    icon: "mail",
+    id: "mail-settings",
+    nameKey: "settings.mailSettings",
+  },
+  {
     icon: "list",
     id: "items-settings",
     nameKey: "settings.itemsSettings",

@@ -18,6 +18,11 @@ export const SETTINGS_CATEGORIES = {
   ITEM_EDITOR_SECTIONS: 'itemEditorSections',
   APP_LOGIN_METHODS: 'app_login_methods',
   APP_CACHE_CONTROL: 'app_cache_control',
+  /**
+   * 邮件发信配置：发信地址 / 发信名称 / 主题模板 / 正文模板。
+   * 只放非 secret 项——Resend API Key 走 Workers secret，永不进 DB。
+   */
+  MAIL_SETTINGS: 'mail_settings',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -306,6 +311,10 @@ export const PERMISSION_CODES = {
   // `:manage` 解锁保存。治理类，挂在 group_operations，与 app-about 同族。
   SYSTEM_APP_LOGIN_METHODS_READ: 'system:app-login-methods:read',
   SYSTEM_APP_LOGIN_METHODS_MANAGE: 'system:app-login-methods:manage',
+  // 邮件设置（mail_settings，迁移 0154）。`:read` 打开「邮件设置」页读配置，
+  // `:manage` 解锁保存。治理类，挂在 group_operations，与 app-about / login-methods 同族。
+  SYSTEM_MAIL_SETTINGS_READ: 'system:mail-settings:read',
+  SYSTEM_MAIL_SETTINGS_MANAGE: 'system:mail-settings:manage',
   // App 缓存控制面（migration 0152，方案第 5 节）。一个码管读控制项、保存与
   // 清空；治理类，挂在 group_operations，与 app-about / login-methods 同族。
   SYSTEM_CACHE_MANAGE: 'system:cache:manage',

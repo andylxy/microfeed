@@ -87,6 +87,11 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "getPicCaptcha",
   "getLoginMethods",
   "login",
+  // 邮箱注册链路（三个端点都是 pre-auth 匿名）。命名扁平：登记表按
+  // `AppBookRequest/<route>.ts` 反查文件（ENDPOINT-006），嵌套目录无法登记。
+  "emailCodeGet",
+  "emailCodeCheckout",
+  "emailRegister",
 ] as const;
 
 /**
@@ -104,6 +109,11 @@ export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   "getPicCaptcha",
   "getAboutInfo",
   "getLoginMethods",
+  // 邮箱注册三端点：发码 / 校验 / 建号都在拿到登录凭证之前，必然匿名开放；
+  // 防刷靠图形验证码 + 限流（`email-otp.ts`），不靠鉴权。
+  "emailCodeGet",
+  "emailCodeCheckout",
+  "emailRegister",
 ] as const;
 
 export const APP_BOOK_REQUEST_CANONICAL = new Map(

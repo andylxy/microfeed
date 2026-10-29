@@ -102,6 +102,11 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:app-login-methods:read", name: "登录方式查看"},
   {code: "system:app-login-methods:manage", name: "登录方式管理"},
+  // 邮件设置（migration 0154：发信地址/名称/主题与正文模板）。Mirror of
+  // PERMISSION_CODES in src/shared/Constants.ts — admin-endpoint-guards and
+  // rbac.test.ts keep the two in lockstep.
+  {code: "system:mail-settings:read", name: "邮件设置查看"},
+  {code: "system:mail-settings:manage", name: "邮件设置管理"},
   // App 缓存控制面（migration 0152）。一个码管读控制项、保存与清空；治理类，
   // 只授 super_admin（走 `*`），不进 EDITOR_PERMISSIONS。Mirror of
   // PERMISSION_CODES in src/shared/Constants.ts.

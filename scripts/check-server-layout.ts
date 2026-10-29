@@ -39,6 +39,9 @@ const WHITELIST = new Set([
   "cloud-usage",
   "feed",
   "items",
+  // 邮件：发信通道（Resend 调用）、邮件模板渲染与 `mail_settings` 配置读写。
+  // 2026-10-29 新增（邮箱 + 验证码注册），与 `cloud-usage` 先例同为特性目录。
+  "mail",
   "media",
   "openapi",
   "pages",

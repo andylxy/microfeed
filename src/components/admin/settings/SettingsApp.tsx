@@ -19,6 +19,7 @@ import ItemsSettingsApp, {
 import MediaFileStorageSettingsApp, {
   MEDIA_FILE_STORAGE_SUBMIT_KEY,
 } from "./MediaFileStorageSettingsApp";
+import MailSettingsApp from "./MailSettingsApp";
 import Requests from "@/client/requests";
 import i18n from "@/client/i18n";
 import {ADMIN_URLS} from "@/shared/StringUtils";
@@ -265,6 +266,9 @@ export default class SettingsApp extends React.Component<Props, any> {
             onSubmit={this.onSubmit}
             setChanged={() => this.setChanged(MEDIA_FILE_STORAGE_SUBMIT_KEY)}
           />
+        </section>
+        <section className={sectionClass("mail-settings")} id="mail-settings">
+          <MailSettingsApp />
         </section>
         <section className={sectionClass("items-settings")} id="items-settings">
           <ItemsSettingsApp

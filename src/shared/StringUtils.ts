@@ -542,6 +542,10 @@ export const ADMIN_URLS = {
   ajaxLoginMethods: () => adminUrl("ajax/login-methods", browserAdminPath()),
   ajaxLoginMethodsSave: () =>
     adminUrl("ajax/login-methods/save", browserAdminPath()),
+  /** 邮件设置（mail_settings 配置）：读取发信地址与模板、保存。 */
+  ajaxMailSettings: () => adminUrl("ajax/mail-settings", browserAdminPath()),
+  ajaxMailSettingsSave: () =>
+    adminUrl("ajax/mail-settings/save", browserAdminPath()),
   /** App 缓存控制面：读取控制项、保存、清空（全部或单桶）。 */
   ajaxCache: () => adminUrl("ajax/cache", browserAdminPath()),
   ajaxCacheSave: () => adminUrl("ajax/cache/save", browserAdminPath()),

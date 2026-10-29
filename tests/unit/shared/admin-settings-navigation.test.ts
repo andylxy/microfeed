@@ -23,6 +23,7 @@ describe("admin settings navigation", () => {
       ["cloudflare-token", "settings.cloudflareToken", "cloud"],
       ["subscribe-methods", "settings.subscribeMethods", "rss"],
       ["media-file-storage", "settings.mediaFileStorage", "storage"],
+      ["mail-settings", "settings.mailSettings", "mail"],
       ["items-settings", "settings.itemsSettings", "list"],
       ["item-editor-sections", "settings.itemEditorSections", "eye"],
       ["favicon", "settings.favicon", "image"],

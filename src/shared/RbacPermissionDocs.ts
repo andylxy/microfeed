@@ -472,6 +472,23 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
       "保存后清除 getLoginMethods 的缓存条目。",
     ],
   },
+  "system:mail-settings:read": {
+    summary: "查看邮件设置（App 邮箱验证码注册的发信地址、发信人名称与邮件模板）。",
+    gates: ["页面 /settings#mail-settings（设置分区卡片）", "接口 /ajax/mail-settings（GET）— 读配置与发信通道状态"],
+    caveats: [
+      "不默认授予 editor。",
+      "Resend API Key 不在这一码的范围里：它走 Workers secret，后台只显示「已配置 / 未配置」。",
+    ],
+  },
+  "system:mail-settings:manage": {
+    summary: "邮件设置管理：编辑发信地址、发信人名称、邮件主题与正文模板。",
+    gates: ["接口 /ajax/mail-settings/save — 保存配置"],
+    caveats: [
+      "不默认授予 editor。",
+      "四项留空即使用出厂默认（地址回落 env.RESEND_FROM，模板回落内置模板）。",
+      "不做缓存失效：该路径无 read-through 缓存，保存即生效。",
+    ],
+  },
   "system:cache:manage": {
     summary: "App 缓存控制面：总开关、十个分桶开关、TTL 分档、条目体积上限与清空。",
     gates: [

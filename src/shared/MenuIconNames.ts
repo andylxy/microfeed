@@ -29,6 +29,7 @@ export const MENU_ICON_NAMES = [
   "leaf",
   "list",
   "list-checks",
+  "mail",
   "pencil",
   "pill",
   "rss",
