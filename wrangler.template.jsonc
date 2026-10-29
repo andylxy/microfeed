@@ -49,7 +49,10 @@
     // `env`（cloudflare:workers）只暴露**已声明**的绑定——`.dev.vars` 里没在
     // `vars` / `secrets.required` 登过名的键不会出现在 `env` 上。本地联调要用
     // 真实值（如 MAIL_DEV_ECHO=1），就在 `.dev.vars` 里覆盖（`.dev.vars` 优先）。
+    // `RESEND_API_KEY` 走 secret（`secrets.required`），这里只登记空串占位，
+    // 让 `env.RESEND_API_KEY` 在本地与线上都存在该键；真实值只从 secret 来。
     "RESEND_FROM": "",
+    "RESEND_API_KEY": "",
     "MAIL_DEV_ECHO": ""
   },
   "routes": __ROUTES__

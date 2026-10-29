@@ -5,6 +5,7 @@ import FeedDb from "@/server/feed/FeedDb";
 import {jsonResponse, readStringField} from "@/server/http";
 import {appEnvelope} from "@/server/tcm/envelope";
 import {emailRegisterGate} from "@/server/app/email-register/gate";
+import {emailAlreadyRegistered} from "@/server/app/email-register/existing";
 import {
   EMAIL_PATTERN,
   normalizeEmail,
@@ -50,6 +51,11 @@ export const POST: APIRoute = async ({request}) => {
   );
   if (!result.ok) {
     return jsonResponse(appEnvelope(otpFailureMessage(result.reason)));
+  }
+
+  // 已注册邮箱：输码后立即告知，不必等到提交建号才被拒。
+  if (await emailAlreadyRegistered(env.FEED_DB, email)) {
+    return jsonResponse(appEnvelope("该邮箱已注册"));
   }
 
   return jsonResponse(appEnvelope({ok: true}));

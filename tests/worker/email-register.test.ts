@@ -3,7 +3,9 @@ import {env} from "cloudflare:workers";
 
 import FeedDb from "@/server/feed/FeedDb";
 import {POST as emailCodeCheckout} from "@/pages/api/AppBookRequest/emailCodeCheckout";
+import {POST as emailCodeGet} from "@/pages/api/AppBookRequest/emailCodeGet";
 import {POST as emailRegister} from "@/pages/api/AppBookRequest/emailRegister";
+import {POST as checkEmailRegistered} from "@/pages/api/AppBookRequest/checkEmailRegistered";
 import {saveLoginMethodsConfig} from "@/server/app/login/config";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {appLogin} from "@/server/tcm/app-auth";
@@ -105,6 +107,68 @@ describe("开关关闭时三个端点一致拒绝", () => {
       {email: "reader@example.com", code: "123456", password: PASSWORD},
     );
     expect((await register.json() as {data: unknown}).data).toBe("邮箱注册暂未开放");
+  });
+});
+
+describe("发码端点对已注册邮箱早期拒绝", () => {
+  beforeEach(async () => {
+    await setRegisterEnabled(true);
+  });
+
+  it("已注册邮箱发码即回「该邮箱已注册」，且不落 OTP 行", async () => {
+    // 先建一个真实账号（走 emailRegister，用种子验证码）
+    const email = "existing-early@example.com";
+    const code = await seedOtp(email);
+    const created = await post(emailRegister, `${ORIGIN}/api/AppBookRequest/emailRegister`, {
+      email,
+      code,
+      password: PASSWORD,
+    });
+    expect((await created.json() as {data: unknown}).data).toEqual({});
+
+    // 再次对同一邮箱发码：早期检查应在生成/发送前拒绝，不发码。
+    const response = await post(
+      emailCodeGet,
+      `${ORIGIN}/api/AppBookRequest/emailCodeGet`,
+      {email, purpose: "register"},
+    );
+    expect((await response.json() as {data: unknown}).data).toBe("该邮箱已注册");
+
+    // 该邮箱没有新增 OTP 行（早期检查在 storeOtp 之前）。
+    expect(await countOtp(email)).toBe(0);
+  });
+
+  it("已注册邮箱校验（checkout）也回「该邮箱已注册」", async () => {
+    const email = "existing-checkout@example.com";
+    const code = await seedOtp(email);
+    await post(emailRegister, `${ORIGIN}/api/AppBookRequest/emailRegister`, {
+      email,
+      code,
+      password: PASSWORD,
+    });
+
+    // 该邮箱此时没有有效验证码（已被 register 消费），但早期检查应先命中：
+    // 需要先补一条 OTP 才能走到「已注册」判断。
+    const second = await seedOtp(email);
+    const response = await post(
+      emailCodeCheckout,
+      `${ORIGIN}/api/AppBookRequest/emailCodeCheckout`,
+      {email, code: second},
+    );
+    expect((await response.json() as {data: unknown}).data).toBe("该邮箱已注册");
+  });
+
+  it("未注册邮箱发码不受「已注册」误判", async () => {
+    const email = "fresh-early@example.com";
+    const response = await post(
+      emailCodeGet,
+      `${ORIGIN}/api/AppBookRequest/emailCodeGet`,
+      {email, purpose: "register"},
+    );
+    const data = (await response.json() as {data: unknown}).data;
+    // 未注册邮箱走正常链路：生成 OTP → 尝试发信（测试环境无 Resend 密钥，回发送失败）。
+    // 关键断言是它不被误判成「该邮箱已注册」。
+    expect(data).not.toBe("该邮箱已注册");
   });
 });
 
@@ -304,6 +368,67 @@ describe("register 建号", () => {
       password: PASSWORD,
     });
     expect((await response.json() as {data: unknown}).data).toBe("邮箱格式不正确");
+  });
+});
+
+describe("checkEmailRegistered 失焦检查端点", () => {
+  beforeEach(async () => {
+    await setRegisterEnabled(true);
+  });
+
+  it("已注册邮箱回「该邮箱已注册」", async () => {
+    const email = "check-existing@example.com";
+    const code = await seedOtp(email);
+    const created = await post(emailRegister, `${ORIGIN}/api/AppBookRequest/emailRegister`, {
+      email,
+      code,
+      password: PASSWORD,
+    });
+    expect((await created.json() as {data: unknown}).data).toEqual({});
+
+    const response = await post(
+      checkEmailRegistered,
+      `${ORIGIN}/api/AppBookRequest/checkEmailRegistered`,
+      {email},
+    );
+    expect((await response.json() as {data: unknown}).data).toBe("该邮箱已注册");
+  });
+
+  it("未注册邮箱回空 Bean（成功形态，App 静默）", async () => {
+    const response = await post(
+      checkEmailRegistered,
+      `${ORIGIN}/api/AppBookRequest/checkEmailRegistered`,
+      {email: "check-fresh@example.com"},
+    );
+    expect((await response.json() as {data: unknown}).data).toEqual({});
+  });
+
+  it("邮箱形态不合法时回「邮箱格式不正确」", async () => {
+    const response = await post(
+      checkEmailRegistered,
+      `${ORIGIN}/api/AppBookRequest/checkEmailRegistered`,
+      {email: "not-an-email"},
+    );
+    expect((await response.json() as {data: unknown}).data).toBe("邮箱格式不正确");
+  });
+
+  it("开关关闭时回「邮箱注册暂未开放」（不泄露注册状态）", async () => {
+    await setRegisterEnabled(false);
+    // 即使该邮箱已注册，关闭时也不能回答「已注册」——kill-switch 语义优先。
+    const email = "check-gated@example.com";
+    const code = await seedOtp(email);
+    await post(emailRegister, `${ORIGIN}/api/AppBookRequest/emailRegister`, {
+      email,
+      code,
+      password: PASSWORD,
+    });
+
+    const response = await post(
+      checkEmailRegistered,
+      `${ORIGIN}/api/AppBookRequest/checkEmailRegistered`,
+      {email},
+    );
+    expect((await response.json() as {data: unknown}).data).toBe("邮箱注册暂未开放");
   });
 });
 

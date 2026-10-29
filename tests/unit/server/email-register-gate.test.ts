@@ -109,11 +109,12 @@ describe("emailRegisterGate 开关门", () => {
   });
 });
 
-describe("三个邮箱端点各自调用开关门", () => {
+describe("四个邮箱端点各自调用开关门", () => {
   const endpoints = [
     "src/pages/api/AppBookRequest/emailCodeGet.ts",
     "src/pages/api/AppBookRequest/emailCodeCheckout.ts",
     "src/pages/api/AppBookRequest/emailRegister.ts",
+    "src/pages/api/AppBookRequest/checkEmailRegistered.ts",
   ];
 
   for (const relative of endpoints) {

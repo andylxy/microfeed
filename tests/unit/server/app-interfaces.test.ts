@@ -16,16 +16,16 @@ import {
 describe("listAppInterfaces", () => {
   const rows = listAppInterfaces();
 
-  it("holds exactly the 19 App interfaces", () => {
-    // 8 内容 + 7 匿名（4 原有 + 3 邮箱注册）+ 4 个 /api/app/*。
-    expect(rows).toHaveLength(19);
+  it("holds exactly the 20 App interfaces", () => {
+    // 8 内容 + 8 匿名（4 原有 + 4 邮箱注册）+ 4 个 /api/app/*。
+    expect(rows).toHaveLength(20);
     expect(APP_BOOK_REQUEST_CONTENT_SUFFIXES.size).toBe(8);
-    expect(APP_BOOK_REQUEST_ANONYMOUS_ROUTES).toHaveLength(7);
+    expect(APP_BOOK_REQUEST_ANONYMOUS_ROUTES).toHaveLength(8);
   });
 
   it("lists the anonymous pre-auth routes without a permission code", () => {
     const anonymous = rows.filter((row) => row.auth === "anonymous");
-    expect(anonymous).toHaveLength(7);
+    expect(anonymous).toHaveLength(8);
     expect(anonymous.map((row) => row.path).sort()).toEqual(
       APP_BOOK_REQUEST_ANONYMOUS_ROUTES
         .map((route) => `/api/AppBookRequest/${route}`)

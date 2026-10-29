@@ -7,6 +7,7 @@ import {appEnvelope} from "@/server/tcm/envelope";
 import {createVerifiedEmailUser} from "@/server/auth/email-signup";
 import {MIN_ADMIN_PASSWORD_LENGTH} from "@/shared/AdminCredentials";
 import {emailRegisterGate} from "@/server/app/email-register/gate";
+import {emailAlreadyRegistered} from "@/server/app/email-register/existing";
 import {
   DEFAULT_OTP_PURPOSE,
   EMAIL_PATTERN,
@@ -67,10 +68,7 @@ export const POST: APIRoute = async ({request}) => {
   }
 
   // 3. 邮箱唯一性（验证码仍然有效）
-  const existing = await env.FEED_DB.prepare(
-    "SELECT id FROM auth_user WHERE email = ?",
-  ).bind(email).first<{id: string}>();
-  if (existing) {
+  if (await emailAlreadyRegistered(env.FEED_DB, email)) {
     return jsonResponse(appEnvelope("该邮箱已注册"));
   }
 

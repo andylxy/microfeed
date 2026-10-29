@@ -45,6 +45,20 @@ const PATCH_KEYS = [
   "bodyTemplate",
 ] as const;
 
+/**
+ * 清洗发信人名称里会破坏 `Name <addr>` 拼接的字符。
+ *
+ * `resolveFromAddress` 用纯字符串拼 `Name <addr>`，所以名称一旦含 `<`、`>` 或
+ * `"`，就会拼出 `中医百科 <x@y.com> <no-reply@a.com>` 这种非法形态，Resend 回
+ * 422、且从后台界面完全看不出原因。清洗放在**写入点**而非拼接点：值只脏一次，
+ * 读、渲染、发信三处都不必各自防；转义放在拼接点则同一个值被读两次就转两次。
+ *
+ * 只删这三个字符，不删空格——名称里的空格是合法的（`Zhang San`），Resend 接受。
+ */
+function sanitizeFromName(raw: string): string {
+  return raw.replace(/[<>"]/gu, "").trim();
+}
+
 function strField(source: Record<string, unknown>, key: string): string {
   const value = source[key];
   if (typeof value !== "string") return "";
@@ -58,7 +72,9 @@ export function parseMailSettingsConfig(raw: unknown): MailSettingsConfig {
     : {}) as Record<string, unknown>;
   const config: MailSettingsConfig = {
     fromAddress: strField(source, "fromAddress"),
-    fromName: strField(source, "fromName"),
+    // 读路径也清洗：DB 里可能已有保存函数上线前写入的脏值（迁移 / 手工 SQL），
+    // 清洗是幂等的，脏值在读出来时就已被修正。
+    fromName: sanitizeFromName(strField(source, "fromName")),
     subjectTemplate: strField(source, "subjectTemplate"),
     bodyTemplate: strField(source, "bodyTemplate"),
     updatedAtMs: DEFAULT_MAIL_SETTINGS.updatedAtMs,
@@ -101,7 +117,13 @@ export async function saveMailSettingsConfig(
   const next: MailSettingsConfig = {...current};
   for (const key of PATCH_KEYS) {
     if (typeof patch[key] === "string") {
-      next[key] = (patch[key] as string).trim();
+      // `fromName` 单独清洗：它会被拼进 `Name <addr>`，含尖括号/引号会产出
+      // Resend 拒收的非法形态（详见 sanitizeFromName）。其余三项是地址与模板，
+      // 原样保留——模板里的 HTML 尖括号必须留着。
+      next[key] =
+        key === "fromName"
+          ? sanitizeFromName(patch[key] as string)
+          : (patch[key] as string).trim();
     }
   }
   next.updatedAtMs = Date.now();
@@ -116,6 +138,9 @@ export async function saveMailSettingsConfig(
 /**
  * 解析实际发信地址：后台配置优先，未配置回落 `env.RESEND_FROM`。
  * 带显示名时拼成 `Name <addr>`（RFC 5322 显示名形态，Resend 接受）。
+ *
+ * `fromName` 已经在保存时清洗过（见 {@link sanitizeFromName}），这里仍再洗一次：
+ * 走 API 直接写库的路径（迁移 / 手工 SQL）绕不过保存函数，拼接点是最后一道。
  */
 export function resolveFromAddress(
   config: MailSettingsConfig,
@@ -123,6 +148,7 @@ export function resolveFromAddress(
 ): string {
   const address = config.fromAddress || (fallback ?? "");
   if (!address) return "";
-  if (!config.fromName) return address;
-  return `${config.fromName} <${address}>`;
+  const name = sanitizeFromName(config.fromName ?? "");
+  if (!name) return address;
+  return `${name} <${address}>`;
 }
