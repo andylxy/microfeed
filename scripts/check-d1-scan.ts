@@ -474,6 +474,9 @@ function main(): void {
           continue;
         }
         if (trace) console.error(`D1SCAN-TRACE: ${blob.file}:${blob.line} ${stmt}`);
+        // 不捕获 prepare 的错误：解析不了说明这条语句静态分析给不出计划，必须让
+        // 人看到并决定是改语句还是显式写 `// d1scan:ignore <原因>` 豁免。静默记成
+        // 「跳过」会让门禁永远绿，等于把判据关掉。
         const plan = db.prepare(`EXPLAIN QUERY PLAN ${stmt}`).all() as {detail: string}[];
         statementsExamined++;
         const details = plan.map((r) => r.detail);

@@ -303,12 +303,14 @@ export async function listAdminItems(
         // 那一组数字（单本 2,964 行、分类内 4,127 行）。
         const branches = chunk
           .map(() =>
+            // d1scan:ignore 分片数由书引用数量决定，SELECT 列、条件、排序都按片拼接；静态分析把插值换成占位符后得到 `? INDEXED BY …`，不是合法 SQL，取不到计划。片内计划已人工核对，见上方 INDEXED BY 那段说明。
             `SELECT * FROM (${selectColumns} ` +
             `INDEXED BY ix_items_book_ref_updated WHERE ${branchWhere} ` +
             `${orderBy} LIMIT ?)`
           )
           .join(" UNION ALL ");
         const chunkResult = await database.prepare(
+          // d1scan:ignore 外层 UNION 只把上面各片合并再排序，片内计划由上一段决定；插值换成占位符后外层语句同样不是合法 SQL。
           `SELECT * FROM (${branches}) ${orderBy} LIMIT ?`,
         ).bind(
           ...chunk.flatMap((bookId) => [
