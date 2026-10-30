@@ -23,7 +23,7 @@ import {
 import FeedDb from "@/server/feed/FeedDb";
 import {readStringField} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
-import {readLoginMethodsConfigCached} from "@/server/app/login/config";
+import {enforceLoginMethodsGates, readLoginMethodsConfigCached} from "@/server/app/login/config";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
 type MicrofeedRuntimeEnv = Parameters<typeof createMicrofeedAuth>[0];
@@ -109,8 +109,11 @@ async function fetchQqUserInfo(
   appId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<{avatar: string; nickname: string}> {
+  // ADR-0013 §5.2 D：get_user_info 必须带 &format=json，腾讯才返回规范的 JSON 形态
+  // （否则默认 callback(...) 包裹，resp.json() 可能抛错、昵称/头像静默丢）。
   const url = `https://graph.qq.com/user/get_user_info?access_token=${encodeURIComponent(accessToken)}` +
-    `&oauth_consumer_key=${encodeURIComponent(appId)}&openid=${encodeURIComponent(openid)}`;
+    `&oauth_consumer_key=${encodeURIComponent(appId)}&openid=${encodeURIComponent(openid)}` +
+    `&format=json`;
   try {
     const resp = await fetcher(url);
     if (!resp.ok) {
@@ -305,8 +308,9 @@ export async function appThirdPartyLogin(
   const loginMethods = await readLoginMethodsConfigCached(
     new FeedDb(runtimeEnv, request, cache),
   );
-  if (!loginMethods.loginEnabled) return "登录功能开发中,敬请期待";
-  if (!loginMethods.qqEnabled) return "该登录方式已停用";
+  // 方式闸用 qqEnabled（QQ 登录这条路径）。两端共用 enforceLoginMethodsGates。
+  const gate = enforceLoginMethodsGates(loginMethods, loginMethods.qqEnabled);
+  if (gate) return gate;
   // 密钥缺失 fail-closed：绝不带空密钥去调腾讯（ADR-0013 §5.2 C.3）。
   // dev-mock 同样要求密钥位非空——本地 `.dev.vars` 放占位值即可，线上缺密钥一律拒绝。
   if (!runtimeEnv.QQ_APP_ID || !runtimeEnv.QQ_APP_SECRET) return "QQ 校验失败";

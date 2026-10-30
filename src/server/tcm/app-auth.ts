@@ -26,7 +26,7 @@ import {
 import FeedDb from "@/server/feed/FeedDb";
 import {readStringField} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
-import {readLoginMethodsConfigCached} from "@/server/app/login/config";
+import {enforceLoginMethodsGates, readLoginMethodsConfigCached} from "@/server/app/login/config";
 import {verifyCaptcha} from "@/server/tcm/captcha";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
@@ -99,9 +99,10 @@ export async function appLogin(
     // 清理器不会被动到。少传一个参数是隐式声明，回归时看不出意图。
     new FeedDb(runtimeEnv, request, cache),
   );
-  if (!loginMethods.loginEnabled) {
-    return "登录功能开发中,敬请期待";
-  }
+  // 总闸（ADR-0050 D7）：关闭时不做任何检查，直接返回功能开发中文案；
+  // 方式闸用 accountPasswordEnabled（账号密码登录这条路径）。两端共用 enforceLoginMethodsGates。
+  const gate = enforceLoginMethodsGates(loginMethods, loginMethods.accountPasswordEnabled);
+  if (gate) return gate;
 
   // 字段名大小写不敏感：Android Gson 发 `userName` / `passWord`（注意 `passWord`
   // 的大写 W，与 `Password`/`password` 都不同），后台/旧后端可能发 `UserName`/`Password`。
@@ -109,11 +110,6 @@ export async function appLogin(
   const password = readStringField(input, "password");
   if (!account || !password) {
     return "请检查账号密码";
-  }
-
-  // 先判方式再判验证码：停用的方式直接拒，连验证码都不看。
-  if (!loginMethods.accountPasswordEnabled) {
-    return "该登录方式已停用";
   }
 
   // 图形验证码（策略 A：每次登录都要；登录管理可整体关闭，ADR-0050 D4）。

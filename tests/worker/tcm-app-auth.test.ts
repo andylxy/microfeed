@@ -232,6 +232,17 @@ describe("App login methods config (ADR-0050)", () => {
     expect(disabled).toBe("该登录方式已停用");
   });
 
+  it("rejects a disabled method before field validation (fail-fast ordering)", async () => {
+    await save({accountPasswordEnabled: false});
+    // 方式闸经 enforceLoginMethodsGates 前移到字段校验之前：方式停用 + 空字段 → 停用文案
+    // （旧行为是「请检查账号密码」；ADR 注释「停用的方式直接拒」即此语义，本用例把新顺序固定下来）。
+    const empty = await appLogin(env, appRequest("/api/AppBookRequest/login"), {
+      UserName: "",
+      Password: "",
+    });
+    expect(empty).toBe("该登录方式已停用");
+  });
+
   it("skips the captcha step entirely when captcha is disabled", async () => {
     await createAccount({account: "nocap", name: "NoCap", password: "secret1"});
     await save({captchaEnabled: false});

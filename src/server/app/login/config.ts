@@ -86,3 +86,22 @@ export async function saveLoginMethodsConfig(
   await deleteCachedJson(APP_LOGIN_METHODS_CACHE);
   return {ok: true};
 }
+
+/**
+ * 统一的登录方式业务闸（账号密码登录 app-auth 与第三方登录 app-third-party 共用）。
+ *
+ * 返回旧后端风格失败文案；返回 null 表示闸门通过。两端的总闸文案、方式闸文案
+ * 只有这一处来源，不会分叉（此前两个文件各自写了一遍「登录功能开发中,敬请期待」/
+ * 「该登录方式已停用」，改一处忘另一处就会不一致）。
+ *
+ * @param loginMethods   已读取的配置
+ * @param methodEnabled  当前登录方式开关（账号密码传 accountPasswordEnabled，QQ 传 qqEnabled）
+ */
+export function enforceLoginMethodsGates(
+  loginMethods: LoginMethodsConfig,
+  methodEnabled: boolean,
+): string | null {
+  if (!loginMethods.loginEnabled) return "登录功能开发中,敬请期待";
+  if (!methodEnabled) return "该登录方式已停用";
+  return null;
+}
