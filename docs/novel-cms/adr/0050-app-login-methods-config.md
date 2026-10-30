@@ -55,7 +55,7 @@
     "qqEnabled": false, "captchaEnabled": true, "updatedAtMs": 0 }
   ```
   外层为 App 通道标准信封 `{code, data, msg}`；`updatedAtMs` 仅作观测。
-- `accountPasswordEnabled=false`：隐藏账号密码入口；`captchaEnabled=false`：隐藏验证码行且不调 `getPicCaptcha`；短信 / 微信 / QQ 开关只控显隐（后端未接通，开了也登不进去，后台界面标注「预留·未接通」）。
+- `accountPasswordEnabled=false`：隐藏账号密码入口；`captchaEnabled=false`：隐藏验证码行且不调 `getPicCaptcha`；短信 / 微信 / QQ 开关只控显隐（后端未接通，开了也登不进去，后台界面标注「预留·未接通」）。**注：QQ 已于 2026-10-30 接通，见文末「修订」；本句对 QQ 不再成立，短信 / 微信仍有效。**
 - 五项全 false：登录页渲染「登录暂未开放」空态，不阻断 App 其他功能。
 - 不做客户端 TTL 轮询、不强制本地缓存；每次进登录页拉一次即可。
 - 关闭的登录方式提交登录时，服务端返回旧后端风格的失败文案「该登录方式已停用」。
@@ -64,3 +64,16 @@
 
 - 完整 diff 审计表（`ext_app_login_audit`）：`updatedBy` + `updatedAtMs` 已答「谁何时改」，审计表 +1 迁移留作后续。
 - captcha 关闭不留痕：不加日志。
+
+## 修订（2026-10-30）：QQ 已接通，`reserved` 收窄为「短信 / 微信」
+
+**变更**：QQ 第三方登录服务端已实现（`POST /api/AppBookRequest/thirdPartyLogin`，`src/server/tcm/app-third-party.ts` 的 `verifyQqToken` 真实调腾讯 `oauth2.0/me` + `get_user_info`，`QQ_APP_ID` 为逗号分隔多 AppID 允许清单），故：
+
+- 后台行表 `qqEnabled` 由 `reserved: true` 改 `false`——开关恢复可翻、去掉「预留·未接通」角标。开关置 `true` 后 App 登录页出现 QQ 入口，点进去能完成真实登录。
+- `smsEnabled`（无短信登录端点）与 `wechatEnabled`（无微信登录端点）仍 `reserved: true`，行为不变。
+- i18n `appLoginMethods.intro`（zh-CN / en）由「短信 / 微信 / QQ 只控显隐」改为「短信 / 微信只控显隐；QQ 已接通」。
+- `reservedBadge` 文案保留（短信 / 微信仍在用）。
+
+**不变**：配置模型、存储、`getLoginMethods` 契约、缓存、权限码、`save.ts` 的 key 校验清单——`qqEnabled` 本就在可保存清单内，本次是纯前端展示层 + 文案修正。
+
+**未解决的平台侧卡点**：真机实测腾讯对 AppID `1906152522` 返回 `110401 请求的应用不存在`（SDK 发出的 `appId` 与包名均正确，`BuildConfig.QQ_ID` 已核对）。这是 QQ 互联后台的应用类型 / 审核状态 / 包名 + 签名登记问题，与本 ADR 及代码无关。

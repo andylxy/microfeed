@@ -36,7 +36,10 @@
   // 联调手段，绝不能在线上开出"只打日志不发信"的口子）。
   "vars": {
     "RESEND_FROM": "",
-    "MAIL_DEV_ECHO": ""
+    "MAIL_DEV_ECHO": "",
+    "QQ_APP_ID": "",
+    "QQ_APP_SECRET": "",
+    "QQ_OAUTH_DEV_MOCK": ""
   },
   "d1_databases": [
     {

@@ -20,21 +20,17 @@ import {verifyPassword} from "better-auth/crypto";
 
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {
-  createLoginCredential,
-  listLoginCredentialsForUser,
-  LoginCredentialLimitError,
+  ensureAppLoginCredential,
+  type AuthUserRow,
 } from "@/server/auth/login-credentials";
 import FeedDb from "@/server/feed/FeedDb";
 import {readStringField} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
 import {readLoginMethodsConfigCached} from "@/server/app/login/config";
 import {verifyCaptcha} from "@/server/tcm/captcha";
-import type {LoginCredentialRecord} from "@/shared/LoginCredential";
 
 /** createMicrofeedAuth 的运行时环境形状（与 Worker Env 一致）。 */
 type MicrofeedRuntimeEnv = Parameters<typeof createMicrofeedAuth>[0];
-
-const APP_LOGIN_CREDENTIAL_PREFIX = "app-login:";
 
 /**
  * 时序抹平（ADR-0047 D5）：固定随机口令的一次性 scrypt 哈希（预生成嵌入，
@@ -45,13 +41,6 @@ const DUMMY_PASSWORD_HASH =
   "5c640d716513bbe3db95f6233f032d80:c3bcd962d04963b9f8054b479fe0d49d1c8" +
   "1c46e93745856726528ad812ff996e9c0bde4e86de564ef0f9c74046d1502701b4e8" +
   "efa96ff7991537eab01feae3e";
-
-interface AuthUserRow {
-  email: string;
-  id: string;
-  name: string;
-  username: string | null;
-}
 
 function looksLikeEmail(account: string): boolean {
   return account.includes("@");
@@ -67,31 +56,6 @@ async function findAuthUser(
     `SELECT id, email, name, username FROM "auth_user" WHERE ${column} = ? LIMIT 1`,
   ).bind(account.toLowerCase()).first<AuthUserRow>();
   return row ?? null;
-}
-
-/** App 登录凭证的稳定名（≤80，`normalizeLoginCredentialName` 上限）。 */
-function appLoginCredentialName(user: AuthUserRow): string {
-  return `${APP_LOGIN_CREDENTIAL_PREFIX}${user.username ?? user.email}`.slice(0, 80);
-}
-
-/**
- * 复用该账号尚未撤销的 App 登录凭证；没有则签发一把。
- * 触顶（该用户已有 5 把未撤销凭证）时返回 null，由调用方给出可读文案。
- */
-async function ensureAppLoginCredential(
-  database: D1Database,
-  user: AuthUserRow,
-): Promise<LoginCredentialRecord | null> {
-  const name = appLoginCredentialName(user);
-  const existing = (await listLoginCredentialsForUser(database, user.id))
-    .find((record) => !record.revoked && record.name === name);
-  if (existing) return existing;
-  try {
-    return await createLoginCredential(database, {userId: user.id, name});
-  } catch (error) {
-    if (error instanceof LoginCredentialLimitError) return null;
-    throw error;
-  }
 }
 
 /**

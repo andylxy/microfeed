@@ -134,6 +134,12 @@ export const SNAPSHOT_TABLES = {
     // (name, color) that the books board and the App's status filter render; a
     // restored site keeping items but not their statuses would mislabel every book.
     "ext_book_status",
+    // Third-party (QQ) login bindings (migration 0155). `(provider, openid) → user_id`
+    // is credential identity, the same nature as `ext_login_credentials` and
+    // `ext_api_key_owners` above: a restore that dropped these rows would leave
+    // every existing QQ user unlinked, and the next login would look like a first
+    // sign-in for an account they already own.
+    "ext_user_oauth",
   ],
   ephemeral: [
     "item_create_idempotency",
@@ -186,6 +192,11 @@ export const SNAPSHOT_TABLES = {
     // key nature as the webhook secrets above. Operators re-save the token on the
     // restored site.
     "ext_cloud_usage_token",
+    // Email OTPs (migration 0153). Every row carries `expires_at_ms` and is consumed
+    // on first successful check, and only the newest unexpired row per
+    // `(email, purpose)` is ever honoured — nothing here is worth carrying across a
+    // snapshot boundary (a restored site simply issues a fresh code).
+    "ext_email_otp",
   ],
   internal: ["_cf_KV", "d1_kv"],
   targetSpecific: ["microfeed_installation"],

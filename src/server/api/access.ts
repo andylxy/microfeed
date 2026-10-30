@@ -87,6 +87,9 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "getPicCaptcha",
   "getLoginMethods",
   "login",
+  // 第三方登录换票：拿 QQ 的 openid/accessToken 换本应用登录凭证，
+  // 调用时客户端还没有凭证，因此必然匿名（同 login）。
+  "thirdPartyLogin",
   // 邮箱注册链路（四个端点都是 pre-auth 匿名）。命名扁平：登记表按
   // `AppBookRequest/<route>.ts` 反查文件（ENDPOINT-006），嵌套目录无法登记。
   // `checkEmailRegistered` 是注册页失焦检查的轻量只读查询，不发码不发信。
@@ -108,6 +111,9 @@ export const APP_BOOK_REQUEST_ROUTES = [
  */
 export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   "login",
+  // 第三方登录：换票前没有任何登录凭证，只能匿名开放；防刷靠限流
+  // （`auth-endpoint-throttle.ts` 已登记该路径），没有图形验证码。
+  "thirdPartyLogin",
   "getPicCaptcha",
   "getAboutInfo",
   "getLoginMethods",

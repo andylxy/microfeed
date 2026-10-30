@@ -53,6 +53,19 @@ declare global {
      * `"1"`；生产保持空串，因此旁路在线上开不出来。
      */
     MAIL_DEV_ECHO?: string;
+    /**
+     * QQ 开放平台登录（ADR-0013，见 AndroidProject-old 仓
+     * `docs/adr/0013-qq-third-party-login.md`）。Workers 变量：本地经 `.dev.vars`
+     * 注入、生产经 Cloudflare 远程变量。`wrangler.jsonc` 的 `vars` 里必须登空默认
+     * 值，否则 `env` 只暴露已声明绑定、此处读不到（见 wrangler.jsonc 注释）。
+     * `QQ_OAUTH_DEV_MOCK` 是本地模拟腾讯校验的旁路开关，**除 `=== "1"` 外还要求
+     * 请求 host 命中本机/局域网白名单**（见 `app-third-party.ts` 的
+     * `isDevMockEnabled`），因此线上即使误置该变量也开不出旁路。
+     */
+    /** 逗号分隔的 AppID 允许清单（release/debug/preview 各一个），任一命中即视为本应用颁发。 */
+    QQ_APP_ID?: string;
+    QQ_APP_SECRET?: string;
+    QQ_OAUTH_DEV_MOCK?: string;
   }
 
   namespace Cloudflare {
@@ -87,11 +100,19 @@ declare global {
      */
       RESEND_FROM?: string;
       /**
-       * 本地联调旁路：`"1"` 时发码端点不真发信，把验证码打到服务端 console。
-       * `wrangler.jsonc` 里登了空串默认值（= 关闭），本地由 `.dev.vars` 覆盖成
-       * `"1"`；生产保持空串，因此旁路在线上开不出来。
-       */
+     * 本地联调旁路：`"1"` 时发码端点不真发信，把验证码打到服务端 console。
+     * `wrangler.jsonc` 里登了空串默认值（= 关闭），本地由 `.dev.vars` 覆盖成
+     * `"1"`；生产保持空串，因此旁路在线上开不出来。
+     */
       MAIL_DEV_ECHO?: string;
+      /**
+       * QQ 开放平台登录（ADR-0013）。见全局 `Env` 同名键注释；`wrangler.jsonc` 的
+       * `vars` 必须登空默认值，`env` 才暴露本绑定。
+       * 值为逗号分隔的 AppID 允许清单（release/debug/preview 各一个），任一命中即视为本应用颁发。
+       */
+      QQ_APP_ID?: string;
+      QQ_APP_SECRET?: string;
+      QQ_OAUTH_DEV_MOCK?: string;
     }
   }
 

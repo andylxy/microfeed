@@ -27,8 +27,10 @@ interface Props {
 
 /**
  * 登录方式行清单：顺序即页面展示顺序（账号密码 / 验证码 / 短信 / 微信 / QQ，方案 §1）。
- * `reserved` 的三行本期只控显隐、后端未接通（ADR-0050），渲染为禁用态 + 角标，
- * 不虚标能登录。
+ * `reserved` 的两行（短信 / 微信）只控显隐、后端未接通，渲染为禁用态 + 角标，
+ * 不虚标能登录。QQ 已接通服务端（`/api/AppBookRequest/thirdPartyLogin` +
+ * `verifyQqToken` 真实校验腾讯 accessToken），故 `reserved: false`——开关可翻，
+ * 翻到 `true` 后 App 登录页即出现 QQ 入口，点进去能真正完成登录。
  */
 const LOGIN_ROWS: Array<{
   key: LoginMethodToggleKey;
@@ -40,7 +42,7 @@ const LOGIN_ROWS: Array<{
   {key: "captchaEnabled", labelKey: "appLoginMethods.labelCaptcha", reserved: false},
   {key: "smsEnabled", labelKey: "appLoginMethods.labelSms", reserved: true},
   {key: "wechatEnabled", labelKey: "appLoginMethods.labelWechat", reserved: true},
-  {key: "qqEnabled", labelKey: "appLoginMethods.labelQq", reserved: true},
+  {key: "qqEnabled", labelKey: "appLoginMethods.labelQq", reserved: false},
 ];
 
 /**

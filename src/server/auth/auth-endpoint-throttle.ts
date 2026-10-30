@@ -33,6 +33,9 @@ const THROTTLED_AUTH_PATHS = new Set([
   "/api/auth/change-password",
   // App 登录端点（工单 12）——与后台登录共用同一限流窗口策略。
   "/api/AppBookRequest/login",
+  // 第三方登录端点（ADR-0013，见 AndroidProject-old 仓 docs/adr/0013-qq-third-party-login.md）
+  // ——同款暴力破解防护。
+  "/api/AppBookRequest/thirdPartyLogin",
 ]);
 
 export async function enforceAuthEndpointThrottle(

@@ -581,6 +581,22 @@ export function requiredSecrets(config: MicrofeedConfig): string[] {
       ? ["BETTER_AUTH_SECRET"]
       : []),
     ...(webhookProvisioned(config) ? ["WEBHOOK_SECRET_KEY"] : []),
+    // 邮箱验证码发信密钥：以 secret 声明（绑定到 env.RESEND_API_KEY），
+    // 生产真实值来自 Workers 远程 secret，本地来自 .dev.vars。
+    // 必须走 secret 而非 vars——否则 `--strict` 部署会因「var 声明 vs 远程 secret」
+    // 同名冲突而中止。
+    "RESEND_API_KEY",
+    // QQ 第三方登录（ADR-0013）：
+    // 部署用的是本函数渲染出的 per-instance `wrangler.jsonc`，模板的 `vars` 里没有
+    // QQ 键——不在这里声明，生产 `env.QQ_APP_ID` 恒为 undefined，端点会一路
+    // fail-closed 报「QQ 校验失败」（本地 dev 读项目根 `wrangler.jsonc`，所以本地
+    // 测不出来，属于只在线上暴露的缺口）。
+    // 与 RESEND_API_KEY 同路：生产真实值只来自 Workers 远程 secret，本地由
+    // 根 `.dev.vars` 覆盖。
+    // `QQ_OAUTH_DEV_MOCK` 刻意**不**声明：生产不登记即 undefined，本地模拟旁路
+    // 在线上不存在，安全性不再依赖人工约定。
+    "QQ_APP_ID",
+    "QQ_APP_SECRET",
   ];
 }
 

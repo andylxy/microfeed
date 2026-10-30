@@ -167,6 +167,45 @@ export async function createLoginCredential(
   return record;
 }
 
+/** 账号登录凭证的命名前缀（与 app-auth 历史一致）。 */
+const APP_LOGIN_CREDENTIAL_PREFIX = "app-login:";
+
+/** 共享的 auth_user 行形状（登录凭证签发需要 id / email / username）。 */
+export interface AuthUserRow {
+  email: string;
+  id: string;
+  name: string;
+  username: string | null;
+  image?: string | null;
+}
+
+/** App 登录凭证的稳定名（≤80，`normalizeLoginCredentialName` 上限）。 */
+function appLoginCredentialName(user: AuthUserRow): string {
+  return `${APP_LOGIN_CREDENTIAL_PREFIX}${user.username ?? user.email}`.slice(0, 80);
+}
+
+/**
+ * 复用该账号尚未撤销的 App 登录凭证；没有则签发一把。
+ * 触顶（该用户已有 5 把未撤销凭证）时返回 null，由调用方给出可读文案。
+ * 抽出到登录凭证模块，供账号登录（app-auth）与第三方登录（app-third-party）共用
+ * （ADR-0013，见 AndroidProject-old 仓 docs/adr/0013-qq-third-party-login.md）。
+ */
+export async function ensureAppLoginCredential(
+  database: D1Database,
+  user: AuthUserRow,
+): Promise<LoginCredentialRecord | null> {
+  const name = appLoginCredentialName(user);
+  const existing = (await listLoginCredentialsForUser(database, user.id))
+    .find((record) => !record.revoked && record.name === name);
+  if (existing) return existing;
+  try {
+    return await createLoginCredential(database, {userId: user.id, name});
+  } catch (error) {
+    if (error instanceof LoginCredentialLimitError) return null;
+    throw error;
+  }
+}
+
 export async function revokeLoginCredential(
   database: D1Database,
   userId: string,

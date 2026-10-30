@@ -3,9 +3,9 @@
  *
  * 覆盖 code-review 暴露的真实缺口：7 个内容端点 + GetTipsStyleConfig 此前只在
  * `tests/unit/tcm-golden.test.ts` 里被比对，而该组在 CI 因 golden 快照不入 git
- * 整组跳过，等同零覆盖。本测试直接命中 11 个 `src/pages/api/AppBookRequest/*`
- * 路由处理器，锁定：
- *   - 11 个端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）。
+ * 整组跳过，等同零覆盖。本测试直接命中 `src/pages/api/AppBookRequest/*`
+ * 路由处理器（含新增的 `thirdPartyLogin`），锁定：
+ *   - 各端点一律走 `{code:200, data, msg:"请求成功"}` 信封（与旧后端逐字节同形）。
  *     2026-10-16（ADR-0028 D4）：GetTipsStyleConfig 此前是唯一例外（故意发裸 `{styles}`），
  *     已改为同形 —— App 的声明 `HttpCallback<HttpData<…>>` 要信封，裸包实测解析失败。
  *
