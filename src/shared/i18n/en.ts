@@ -2322,7 +2322,7 @@ export const en = {
   },
   appLoginMethods: {
     title: "Login methods",
-    intro: "Control which login methods the app's sign-in page shows and whether the image captcha is required. The first toggle is the master switch: with login off, the app sign-in endpoint answers \"under development\" without any checks. SMS / WeChat only toggle visibility for now — their backends are not connected yet. QQ is connected (the server verifies the access token with Tencent), so turning it on lets the app sign in with QQ. After saving, changes reach every region within 2 hours.",
+    intro: "Control which login methods the app's sign-in page shows and whether the image captcha is required. The first toggle is the master switch: with login off, the app sign-in endpoint answers \"under development\" without any checks. SMS / WeChat switches can now be turned on manually, but their backends are not connected yet — turning one on shows the entry in the app but cannot complete sign-in. QQ is connected (the server verifies the access token with Tencent), so turning it on lets the app sign in with QQ. After saving, changes reach every region within 2 hours.",
     loginTitle: "Login methods",
     registerTitle: "Registration methods",
     registerIntro: "Control which registration methods the app's sign-up page offers. \"Email code registration\" is the registration master switch: with it off, the send / verify / register endpoints all answer \"email registration is not open yet\". \"Phone number registration\" backend is not connected yet — reserved. After saving, changes reach every region within 2 hours.",
@@ -2334,7 +2334,6 @@ export const en = {
     labelSms: "SMS (phone number)",
     labelWechat: "WeChat",
     labelQq: "QQ",
-    reservedBadge: "Reserved · not connected",
     save: "Save",
     saved: "Saved.",
     lastSaved: "Last saved:",

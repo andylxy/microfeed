@@ -77,3 +77,11 @@
 **不变**：配置模型、存储、`getLoginMethods` 契约、缓存、权限码、`save.ts` 的 key 校验清单——`qqEnabled` 本就在可保存清单内，本次是纯前端展示层 + 文案修正。
 
 **未解决的平台侧卡点**：真机实测腾讯对 AppID `1906152522` 返回 `110401 请求的应用不存在`（SDK 发出的 `appId` 与包名均正确，`BuildConfig.QQ_ID` 已核对）。这是 QQ 互联后台的应用类型 / 审核状态 / 包名 + 签名登记问题，与本 ADR 及代码无关。
+
+## 修订（2026-10-30 二次）：短信 / 微信 移除「预留·未接通」角标，开关开放手动拨动
+
+**变更**：`LoginMethodsApp.tsx` 的 `LOGIN_ROWS` 中 `smsEnabled` / `wechatEnabled` 由 `reserved: true` 改普通行——`reserved` 概念整体移除：行类型去掉 `reserved` 字段、渲染不再 `disabled`、不再渲染 `reservedBadge` 角标。i18n `appLoginMethods.reservedBadge`（zh-CN / en）一并删除。
+
+**行为**：短信 / 微信 两行变为可手动拨动的开关。保存路径 `saveLoginMethodsConfig` 本就按 `LOGIN_METHOD_TOGGLE_KEYS` 接受这两个键，`getLoginMethods` 本就返回它们，Android 端本就按这两键显隐入口——故纯前端改动即可让管理员开 / 关其登录入口的显隐。后端对应登录端点仍未接通：打开开关后 App 展示入口、实际登录由服务端返回「该登录方式已停用」，管理员已知此限制。
+
+**不变**：配置模型、存储、`getLoginMethods` 契约、缓存、权限码、`save.ts` 的 key 校验清单——均零改动。注册方式区「手机号注册」后端未接通的事实与文案（`registerIntro`「预留中」）不在本次范围，保持原样。

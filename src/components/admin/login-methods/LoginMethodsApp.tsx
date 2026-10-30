@@ -27,22 +27,21 @@ interface Props {
 
 /**
  * 登录方式行清单：顺序即页面展示顺序（账号密码 / 验证码 / 短信 / 微信 / QQ，方案 §1）。
- * `reserved` 的两行（短信 / 微信）只控显隐、后端未接通，渲染为禁用态 + 角标，
- * 不虚标能登录。QQ 已接通服务端（`/api/AppBookRequest/thirdPartyLogin` +
- * `verifyQqToken` 真实校验腾讯 accessToken），故 `reserved: false`——开关可翻，
- * 翻到 `true` 后 App 登录页即出现 QQ 入口，点进去能真正完成登录。
+ * 短信 / 微信 两行后端尚未接通，但开关现已可手动拨动——打开后 App 登录页即展示对应入口，
+ * 实际登录失败由服务端返回「该登录方式已停用」（管理员已知后端未接通）。QQ 已接通服务端
+ * （`/api/AppBookRequest/thirdPartyLogin` + `verifyQqToken` 真实校验腾讯 accessToken），
+ * 开关置 `true` 后 App 登录页出现 QQ 入口，点进去能真正完成登录。
  */
 const LOGIN_ROWS: Array<{
   key: LoginMethodToggleKey;
   labelKey: string;
-  reserved: boolean;
 }> = [
-  {key: "loginEnabled", labelKey: "appLoginMethods.labelLogin", reserved: false},
-  {key: "accountPasswordEnabled", labelKey: "appLoginMethods.labelAccount", reserved: false},
-  {key: "captchaEnabled", labelKey: "appLoginMethods.labelCaptcha", reserved: false},
-  {key: "smsEnabled", labelKey: "appLoginMethods.labelSms", reserved: true},
-  {key: "wechatEnabled", labelKey: "appLoginMethods.labelWechat", reserved: true},
-  {key: "qqEnabled", labelKey: "appLoginMethods.labelQq", reserved: false},
+  {key: "loginEnabled", labelKey: "appLoginMethods.labelLogin"},
+  {key: "accountPasswordEnabled", labelKey: "appLoginMethods.labelAccount"},
+  {key: "captchaEnabled", labelKey: "appLoginMethods.labelCaptcha"},
+  {key: "smsEnabled", labelKey: "appLoginMethods.labelSms"},
+  {key: "wechatEnabled", labelKey: "appLoginMethods.labelWechat"},
+  {key: "qqEnabled", labelKey: "appLoginMethods.labelQq"},
 ];
 
 /**
@@ -57,10 +56,9 @@ const LOGIN_ROWS: Array<{
 const REGISTER_ROWS: Array<{
   key?: LoginMethodToggleKey;
   labelKey: string;
-  reserved: boolean;
 }> = [
-  {key: "smsRegisterEnabled", labelKey: "appLoginMethods.labelPhoneRegister", reserved: false},
-  {key: "emailRegisterEnabled", labelKey: "appLoginMethods.labelEmailRegister", reserved: false},
+  {key: "smsRegisterEnabled", labelKey: "appLoginMethods.labelPhoneRegister"},
+  {key: "emailRegisterEnabled", labelKey: "appLoginMethods.labelEmailRegister"},
 ];
 
 /**
@@ -140,16 +138,16 @@ export default function LoginMethodsApp({canManage = false}: Props) {
   const dirtyCount = Object.keys(dirty).length;
 
   const renderRows = (
-    rows: Array<{key?: LoginMethodToggleKey; labelKey: string; reserved: boolean}>,
+    rows: Array<{key?: LoginMethodToggleKey; labelKey: string}>,
   ) => (
     <div className="flex flex-col gap-2">
       {rows.map((row) => (
         <label className="flex items-center gap-2 text-sm" key={row.labelKey}>
           <Switch
             checked={row.key ? (dirty[row.key] ?? config[row.key]) : false}
-            disabled={row.reserved || !row.key}
+            disabled={!row.key}
             onCheckedChange={(checked) => {
-              if (!row.key || row.reserved) return;
+              if (!row.key) return;
               // 闭包内 `row.key` 的窄化不保留（回调可延迟到 row 已变），
               // 先提到不可变局部再进 setDirty 的 computed key。
               const key = row.key;
@@ -159,11 +157,6 @@ export default function LoginMethodsApp({canManage = false}: Props) {
             }}
           />
           <span>{t(row.labelKey)}</span>
-          {row.reserved ? (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-              {t("appLoginMethods.reservedBadge")}
-            </span>
-          ) : null}
         </label>
       ))}
     </div>

@@ -42,10 +42,10 @@ describe("login methods board rows", () => {
     const labels = [...source.matchAll(/labelKey:\s*"([^"]+)"/gu)].map(
       (match) => match[1],
     );
-    // 所有行（含无配置键的「预留·未接通」行）都必须走 i18n，禁止写死文案。
+    // 所有行都必须走 i18n，禁止写死文案。
     expect(labels.every((key) => key?.startsWith("appLoginMethods."))).toBe(true);
-    // 绑了真实配置键的行数必须等于保存路径接受的键数：预留行（`key: undefined`，
-    // 如「手机号注册」后端未接通）不写 dirty、不进保存，不占用键位。
+    // 绑了真实配置键的行数必须等于保存路径接受的键数：每条行都绑定一个可保存键，
+    // 不再有「预留·未接通」的不可拨动行。
     const keyedRows = [...source.matchAll(/key:\s*"([^"]+)"/gu)];
     expect(keyedRows.length).toBe(LOGIN_METHOD_TOGGLE_KEYS.length);
   });

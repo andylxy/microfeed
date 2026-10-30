@@ -2298,7 +2298,7 @@ export const zhCN: TranslationKey = {
   },
   appLoginMethods: {
     title: "登录管理",
-    intro: "控制 App 登录页展示哪些登录方式、图形验证码是否强制。第一项是登录功能总闸：关闭后 App 登录接口不做任何处理、直接提示功能开发中。短信 / 微信目前只控制显隐，后端尚未接通；QQ 已接通（服务端会向腾讯校验 accessToken），打开开关后 App 即可用 QQ 登录。保存后改动在 2 小时内覆盖全部机房。",
+    intro: "控制 App 登录页展示哪些登录方式、图形验证码是否强制。第一项是登录功能总闸：关闭后 App 登录接口不做任何处理、直接提示功能开发中。短信（手机号）/ 微信 开关现已可手动开启，但其服务端尚未接通，开启后 App 会展示入口、暂不能完成登录；QQ 已接通（服务端会向腾讯校验 accessToken），打开开关后 App 即可用 QQ 登录。保存后改动在 2 小时内覆盖全部机房。",
     loginTitle: "登录方式",
     registerTitle: "注册方式",
     registerIntro: "控制 App 注册页的注册方式。「邮箱验证码注册」是注册总闸：关闭后发码 / 校验 / 注册三个接口一律回「邮箱注册暂未开放」。「手机号注册」后端尚未接通，预留中。保存后改动在 2 小时内覆盖全部机房。",
@@ -2310,7 +2310,6 @@ export const zhCN: TranslationKey = {
     labelSms: "短信（手机号）",
     labelWechat: "微信",
     labelQq: "QQ",
-    reservedBadge: "预留·未接通",
     save: "保存",
     saved: "已保存。",
     lastSaved: "上次保存：",
