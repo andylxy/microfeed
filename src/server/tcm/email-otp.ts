@@ -7,6 +7,8 @@
  * - **重发即失效**：保留历史行（供当日上限计数），校验只认「未过期的最后一条」
  *   （`ORDER BY last_sent_at_ms DESC LIMIT 1`），所以重新发码后旧码自动作废，
  *   不需要额外的清理任务。
+ * - **过期行清理**：写入前删 24 小时前的过期行（{@link OTP_RETENTION_MS}），
+ *   不依赖定时任务；否则从未被校验的行会永久留存（ADR-0015 D16）。
  * - **一次性消费**：改为两步——{@link verifyOtp} 只校验不改行，{@link consumeOtp}
  *   才删行。端点可以「先校验、再做后续检查、最后消费」，这样「邮箱已被占用」
  *   之类的失败不会把用户的验证码白白烧掉。
@@ -23,6 +25,8 @@ export const OTP_RESEND_INTERVAL_MS = 60 * 1000;
 export const OTP_DAILY_SEND_LIMIT = 10;
 /** 单邮箱单用途校验尝试上限，超过则该码作废。 */
 export const OTP_MAX_ATTEMPTS = 5;
+/** 过期行的保留时长（毫秒）：写入时顺带删更早的行，避免表无界增长（ADR-0015 D16）。 */
+export const OTP_RETENTION_MS = 24 * 60 * 60 * 1000;
 /** IP 维度窗口（秒）与窗口内上限。 */
 export const OTP_IP_WINDOW_SECONDS = 60;
 export const OTP_IP_WINDOW_MAX = 20;
@@ -98,6 +102,10 @@ function startOfTodayMs(nowMs: number): number {
 /**
  * 写入一条验证码记录。
  * 历史行保留（不删），用于「当日发码上限」计数；旧码因校验只取最新一条而自然失效。
+ *
+ * 写入前顺带删掉 24 小时前的过期行（ADR-0015 D16）：原来只有「校验命中过期行」
+ * 才删那一行，从未被校验的行会永久留存，表随发码次数无界增长。DELETE 与 INSERT
+ * 放进同一个 batch（事务），清理失败不会留下"删了没插"的中间态。
  */
 export async function storeOtp(
   database: D1Database,
@@ -106,22 +114,26 @@ export async function storeOtp(
   codeHash: string,
 ): Promise<void> {
   const now = Date.now();
-  await database
-    .prepare(
-      "INSERT INTO ext_email_otp " +
-        "(id, email, purpose, code_hash, expires_at_ms, attempts, last_sent_at_ms, created_at_ms) " +
-        "VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
-    )
-    .bind(
-      crypto.randomUUID(),
-      email,
-      purpose,
-      codeHash,
-      now + OTP_TTL_MS,
-      now,
-      now,
-    )
-    .run();
+  await database.batch([
+    database
+      .prepare("DELETE FROM ext_email_otp WHERE expires_at_ms < ?")
+      .bind(now - OTP_RETENTION_MS),
+    database
+      .prepare(
+        "INSERT INTO ext_email_otp " +
+          "(id, email, purpose, code_hash, expires_at_ms, attempts, last_sent_at_ms, created_at_ms) " +
+          "VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+      )
+      .bind(
+        crypto.randomUUID(),
+        email,
+        purpose,
+        codeHash,
+        now + OTP_TTL_MS,
+        now,
+        now,
+      ),
+  ]);
 }
 
 /**

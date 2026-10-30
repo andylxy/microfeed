@@ -97,6 +97,15 @@ export const APP_BOOK_REQUEST_ROUTES = [
   "emailCodeCheckout",
   "emailRegister",
   "checkEmailRegistered",
+  // 忘记密码三端点（ADR-0015）：匿名——此时用户正是因为登不上才来重置。
+  // 防刷靠「一次性图形验证码 + 每邮箱/IP 限流」，不靠鉴权。
+  "emailPwdResetSend",
+  "emailPwdResetCheckout",
+  "emailPwdResetCommit",
+  // 补充邮箱两端点：**已登录态**，由端点自己用 `mflc_` 令牌鉴权并做再认证
+  // （`requireAppUser` + `verifyReauth`），所以不登记进匿名集合。
+  "bindEmailSend",
+  "bindEmailCommit",
 ] as const;
 
 /**
@@ -123,6 +132,16 @@ export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   "emailCodeCheckout",
   "emailRegister",
   "checkEmailRegistered",
+  // 找回密码三端点：与注册同理，都在拿到登录凭证之前，必然匿名。
+  "emailPwdResetSend",
+  "emailPwdResetCheckout",
+  "emailPwdResetCommit",
+  // 补充邮箱两端点（ADR-0015 D21）：**必须登记为匿名**。
+  // 登记成 content 会继承"内容路由"的权限模型（r_member/r_editor + 设备登记），
+  // 普通 QQ 用户（role=user）会直接 403——联调实测 `insufficient_scope`。
+  // 鉴权由端点自己负责：`requireAppUser`（mflc_ 令牌）+ `verifyReauth`（再认证）。
+  "bindEmailSend",
+  "bindEmailCommit",
 ] as const;
 
 export const APP_BOOK_REQUEST_CANONICAL = new Map(

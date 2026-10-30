@@ -192,8 +192,8 @@ async function createQqUser(
     // 代价：email / username 各有一条 UNIQUE 索引，SQLite 的 OR 优化会把两个索引的
     // 结果并起来，各至多 1 行；即使退化也只在 auth_user 上走一遍，可接受。
     const existing = await database.prepare(
-      'SELECT id, email FROM "auth_user" WHERE email = ? OR username = ? LIMIT 1',
-    ).bind(email, username).first<{id: string; email: string}>();
+      'SELECT id, email, username FROM "auth_user" WHERE email = ? OR username = ? LIMIT 1',
+    ).bind(email, username).first<{id: string; email: string; username: string | null}>();
     if (!existing) {
       // 两条唯一键都查不到 → INSERT 被别的原因忽略（不是并发、也不是重名）。
       // 这里必须失败退出：继续 bindOpenid 会写出一条指向不存在用户的绑定。
@@ -204,9 +204,16 @@ async function createQqUser(
     // username 是全局命名空间，真人账号可能恰好占用 `qq_<openid>` 这个名字。命中的行
     // 必须是同一 openid 派生出来的账号，否则会把这张 QQ 的登录态签到别人账上。
     // 按小写比较，覆盖「同一 openid 换头大小写」这种情况。
-    if (existing.email.toLowerCase() !== email.toLowerCase()) {
+    // email 与 username **都要**对得上（ADR-0015 F28 L2）。
+    // 只比 email 时，占位地址一旦被抢占（别人把 `qq_<victim>@oauth.local` 绑到自己
+    // 名下），受害者首登就会命中这一行、判等通过，随后 `bindOpenid` 把受害者
+    // openid 绑到抢占者的 userId——顶号。合法行的 username 必定是
+    // `qq_<openid 小写>`（上面生成规则），对不上就说明这行不是本 openid 的。
+    // 此时宁可让本次登录失败并告警，也绝不把 openid 绑给别人的账号。
+    if (existing.email.toLowerCase() !== email.toLowerCase() ||
+        (existing.username ?? "").toLowerCase() !== username.toLowerCase()) {
       throw new Error(
-        `QQ 建号失败：username=${username} 已被非本 openid 的账号占用 (existing=${existing.email})`,
+        `QQ 建号失败：占位标识被非本 openid 的行占用 (existing=${existing.email}/${existing.username})`,
       );
     }
     await refreshProfile(database, existing.id, nickname, avatar);
@@ -285,7 +292,7 @@ function isPrivateIpv4(hostname: string): boolean {
  * 第 2 条是关键——生产域名命中不了白名单，所以**即使线上把该变量误置成 "1"**，
  * 旁路也开不出来。这样旁路的安全性不再依赖「线上别去设它」这种人工约定。
  */
-function isDevMockEnabled(runtimeEnv: MicrofeedRuntimeEnv, request: Request): boolean {
+export function isDevMockEnabled(runtimeEnv: MicrofeedRuntimeEnv, request: Request): boolean {
   if (runtimeEnv.QQ_OAUTH_DEV_MOCK !== "1") return false;
   const hostname = new URL(request.url).hostname;
   return DEV_MOCK_HOSTNAMES.has(hostname) || isPrivateIpv4(hostname);

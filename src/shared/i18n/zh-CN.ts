@@ -2309,6 +2309,8 @@ export const zhCN: TranslationKey = {
     labelEmailRegister: "邮箱验证码注册",
     labelSms: "短信（手机号）",
     labelWechat: "微信",
+    labelPasswordReset: "找回密码",
+    labelBindEmail: "补充邮箱",
     labelQq: "QQ",
     save: "保存",
     saved: "已保存。",

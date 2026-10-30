@@ -8,6 +8,7 @@ import {emailRegisterGate} from "@/server/app/email-register/gate";
 import {emailAlreadyRegistered} from "@/server/app/email-register/existing";
 import {clientAddress} from "@/server/auth/client-address";
 import {
+  DEFAULT_OTP_PURPOSE,
   EMAIL_PATTERN,
   normalizeEmail,
   otpPurpose,
@@ -86,6 +87,13 @@ export const POST: APIRoute = async ({request}) => {
     return jsonResponse(appEnvelope("邮箱格式不正确"));
   }
   const purpose = otpPurpose(body);
+  // purpose 白名单（ADR-0015 D14）：本端点族只服务注册。
+  // 不设白名单时「当日 10 次/邮箱」是按 (email, purpose) 计数的，客户端换个
+  // purpose 就是一份新配额 → 10×N 封/日、N 无上限；同时别人可以用本端点给
+  // password_reset / bind_email 种码，干扰另外两条链路。
+  if (purpose !== DEFAULT_OTP_PURPOSE) {
+    return jsonResponse(appEnvelope("参数不正确"));
+  }
 
   // 3. 邮箱已注册（早期反馈）：不发码，避免用户走完「发码 → 校验 → 提交」全程
   // 最后才被告知「该邮箱已注册」。放在限流之前：已注册是确定状态，不该占发码额度。

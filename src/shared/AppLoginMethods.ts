@@ -6,7 +6,7 @@
  * 本模块只放无运行时依赖的部分：类型、默认值、字段归一。
  */
 
-/** 七个开关键。`loginEnabled` 是总闸；登录方式是开放集：加一种 = 加一个键，零迁移（ADR-0050 D1）。
+/** 开关键。`loginEnabled` 是总闸；登录方式是开放集：加一种 = 加一个键，零迁移（ADR-0050 D1）。
  * `emailRegisterEnabled` / `smsRegisterEnabled` 例外于「登录方式」语义——它们是**注册**
  * 开关（邮箱 + 验证码注册 / 手机号注册），复用同一份配置通道与后台开关 UI，
  * 避免为一个布尔再起一套 settings 类目。 */
@@ -19,6 +19,8 @@ export const LOGIN_METHOD_TOGGLE_KEYS = [
   "captchaEnabled",
   "emailRegisterEnabled",
   "smsRegisterEnabled",
+  "passwordResetEnabled",
+  "bindEmailEnabled",
 ] as const;
 
 export type LoginMethodToggleKey = (typeof LOGIN_METHOD_TOGGLE_KEYS)[number];
@@ -46,6 +48,17 @@ export interface LoginMethodsConfig {
    * 后台此开关目前只控**显隐**，不控服务端行为。
    */
   smsRegisterEnabled: boolean;
+  /**
+   * 找回密码开关（默认 true）：false 时三个 `emailPwdReset*` 端点一律回
+   * 「找回密码暂未开放」。与 `emailRegisterEnabled` 独立——注册是"建号"，
+   * 找回是"改已有账号的口令"，关注册不该连带关找回（ADR-0015 D6/F33）。
+   */
+  passwordResetEnabled: boolean;
+  /**
+   * 补充邮箱开关（默认 true）：false 时 `bindEmail*` 端点一律回「邮箱绑定暂未开放」。
+   * 单独一个键，避免"关注册"这种停机手段对绑定链路无效（ADR-0015 F33）。
+   */
+  bindEmailEnabled: boolean;
   /** 服务端保存时刻；`settings.updated_at` 列只在 INSERT 触发，不可信。 */
   updatedAtMs: number;
   updatedBy: string | null;
@@ -68,6 +81,8 @@ export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   captchaEnabled: true,
   emailRegisterEnabled: false,
   smsRegisterEnabled: true,
+  passwordResetEnabled: true,
+  bindEmailEnabled: true,
   updatedAtMs: 0,
   updatedBy: null,
 };
@@ -97,6 +112,8 @@ export function parseLoginMethodsConfig(raw: unknown): LoginMethodsConfig {
     captchaEnabled: boolField(source, "captchaEnabled"),
     emailRegisterEnabled: boolField(source, "emailRegisterEnabled"),
     smsRegisterEnabled: boolField(source, "smsRegisterEnabled"),
+    passwordResetEnabled: boolField(source, "passwordResetEnabled"),
+    bindEmailEnabled: boolField(source, "bindEmailEnabled"),
     updatedAtMs: DEFAULT_LOGIN_METHODS.updatedAtMs,
     updatedBy: DEFAULT_LOGIN_METHODS.updatedBy,
   };

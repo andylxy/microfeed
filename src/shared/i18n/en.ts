@@ -2333,6 +2333,8 @@ export const en = {
     labelEmailRegister: "Email code registration",
     labelSms: "SMS (phone number)",
     labelWechat: "WeChat",
+    labelPasswordReset: "Password recovery",
+    labelBindEmail: "Add email",
     labelQq: "QQ",
     save: "Save",
     saved: "Saved.",

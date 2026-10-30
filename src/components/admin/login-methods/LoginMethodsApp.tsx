@@ -59,6 +59,10 @@ const REGISTER_ROWS: Array<{
 }> = [
   {key: "smsRegisterEnabled", labelKey: "appLoginMethods.labelPhoneRegister"},
   {key: "emailRegisterEnabled", labelKey: "appLoginMethods.labelEmailRegister"},
+  // 账号安全两项（ADR-0015）：与注册共用同一份配置通道，但语义是"已有账号"的
+  // 找回口令 / 补邮箱。独立成键，避免"关注册"这种停机手段对它们无效（F33）。
+  {key: "passwordResetEnabled", labelKey: "appLoginMethods.labelPasswordReset"},
+  {key: "bindEmailEnabled", labelKey: "appLoginMethods.labelBindEmail"},
 ];
 
 /**
