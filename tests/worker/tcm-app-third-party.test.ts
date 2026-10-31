@@ -152,7 +152,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     const user = await db.prepare(
       'SELECT email, username FROM "auth_user" WHERE id = ? LIMIT 1',
     ).bind(verified!.userId).first<{email: string; username: string}>();
-    expect(user!.email).toBe("qq_OPENID_A@oauth.local");
+    expect(user!.email).toBe("qq_OPENID_A@users.microfeed.local");
     expect(user!.username).toBe("qq_openid_a");
 
     // ADR-0014 D8/D9：注册来源记成 'qq'，且占位邮箱不可发信。
@@ -180,7 +180,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     expect(oauthRows!.c).toBe(1);
     const users = await db.prepare(
       'SELECT COUNT(*) AS c FROM "auth_user" WHERE email = ?',
-    ).bind("qq_OPENID_C@oauth.local").first<{c: number}>();
+    ).bind("qq_OPENID_C@users.microfeed.local").first<{c: number}>();
     expect(users!.c).toBe(1);
   });
 
@@ -255,7 +255,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     ).bind(
       preExistingId,
       "legacy",
-      "qq_OPENID_B@oauth.local",
+      "qq_OPENID_B@users.microfeed.local",
       now,
       now,
       "qq_openid_b",
@@ -296,7 +296,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     ).bind(
       preExistingId,
       "小写那次登录",
-      "qq_openid_case@oauth.local",
+      "qq_openid_case@users.microfeed.local",
       now,
       now,
       "qq_openid_case",

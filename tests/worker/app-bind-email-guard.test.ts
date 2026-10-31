@@ -94,7 +94,7 @@ describe("verifyReauth（ADR-0014 D10）", () => {
   });
 
   it("纯 QQ 账号：openid 映射回本人即通过", async () => {
-    await seedUser("u_qq_only", "qq_OPENID_REAUTH@oauth.local",
+    await seedUser("u_qq_only", "qq_OPENID_REAUTH@users.microfeed.local",
       {qqOpenid: "OPENID_REAUTH"});
     const result = await verifyReauth(
       mockEnv(), localRequest(), "u_qq_only",
@@ -104,7 +104,7 @@ describe("verifyReauth（ADR-0014 D10）", () => {
   });
 
   it("纯 QQ 账号：openid 属于别人则拒绝（归属校验不因旁路放松）", async () => {
-    await seedUser("u_qq_only", "qq_OPENID_REAUTH@oauth.local",
+    await seedUser("u_qq_only", "qq_OPENID_REAUTH@users.microfeed.local",
       {qqOpenid: "OPENID_REAUTH"});
     await seedUser("u_both", "other@example.com", {qqOpenid: "OPENID_OTHER"});
     const result = await verifyReauth(

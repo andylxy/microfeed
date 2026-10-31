@@ -12,13 +12,13 @@ export const BIND_EMAIL_PURPOSE = "bind_email";
 
 /**
  * 永远收不到信的合成域（D15）：
- * - `@oauth.local`：QQ 建号（`app-third-party.ts:162`），`.local` 不参与全局 DNS 委派；
- * - `@users.microfeed.local`：用户名建号（`AdminCredentials.ts:30`，注释自认 never reachable）。
+ * - `@users.microfeed.local`：唯一占位域（ADR-0014 rev.9 / I7）。QQ 建号
+ *   （`app-third-party.ts:166`）与用户名建号（`AdminCredentials.ts`，注释自认
+ *   never reachable）都收敛到这一个域，`.local` 不参与全局 DNS 委派。
  *
  * 判定用「后缀 + 小写」，与 SQL 侧的 `lower(email) LIKE '%@xxx'` 同口径。
  */
 export const PLACEHOLDER_EMAIL_SUFFIXES = [
-  "@oauth.local",
   "@users.microfeed.local",
 ] as const;
 

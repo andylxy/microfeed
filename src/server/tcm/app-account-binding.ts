@@ -45,8 +45,9 @@ interface TargetRow extends AuthUserRow {
  *
  * 先走 `email = ?`（大小写敏感的 UNIQUE 索引，命中绝大多数行），未命中再走
  * `lower(email) = ?`。第二条不能省：`auth_user.email` 的唯一索引**大小写敏感**
- * （实测 `email = 'qq_3974…b9d@oauth.local'` 命中 0 行、`lower(email) = …` 命中 1 行），
- * 而 QQ 建号的占位邮箱保留 openid 的原始大写（`qq_<OPENID>@oauth.local`）。
+ * （实测 `email = 'qq_3974…b9d@users.microfeed.local'` 命中 0 行、
+ * `lower(email) = …` 命中 1 行），而 QQ 建号的占位邮箱保留 openid 的原始大写
+ * （`qq_<OPENID>@users.microfeed.local`，域已统一 rev.9）。
  * 兜底条件的索引见迁移 `0158_schema_auth_user_email_lower.sql`。
  */
 async function findTargetByEmail(

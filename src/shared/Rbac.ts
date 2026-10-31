@@ -80,6 +80,12 @@ export interface RbacBoard {
   roles: RbacBoardRole[];
 }
 
+/**
+ * Registration source — how an account was first created (ADR-0014 §8).
+ * Immutable after creation; `admin` covers every management-side entry point.
+ */
+export type SignupSource = "email" | "qq" | "admin";
+
 /** One account, with the roles granted to it through `ext_user_roles`. */
 export interface RbacUser {
   banned: boolean;
@@ -89,6 +95,12 @@ export interface RbacUser {
   legacyRole: string | null;
   name: string;
   roles: string[];
+  /**
+   * Registration source — how the account was first created. One of
+   * `email` / `qq` / `admin` (ADR-0014 §8 "注册来源", immutable). Drives the
+   * admin users page category accordion.
+   */
+  signupSource: SignupSource;
   /**
    * Login username, present only for username accounts (email accounts have
    * none). `display_username` is preferred (keeps the original case), falling

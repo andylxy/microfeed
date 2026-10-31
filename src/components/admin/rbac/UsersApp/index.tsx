@@ -1,10 +1,21 @@
 import {useState} from "react";
+import {
+  ChevronRightIcon,
+  PlusIcon,
+  UsersIcon,
+} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
+import {
+  PermissionBranchToggle,
+  TreeBadge,
+  TREE_ROW_CLASS,
+  TREE_ROW_SELECTED_CLASS,
+} from "@/components/admin/rbac/PermissionTreeNode";
 import {cn} from "@/lib/utils";
 import {
   isReservedAdminEmailDomain,
@@ -16,7 +27,9 @@ import {
 } from "@/shared/AdminCredentials";
 import {
   DEFAULT_USER_ROLE,
+  type RbacUser,
   type RbacUserBoard,
+  type SignupSource,
 } from "@/shared/Rbac";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
@@ -27,6 +40,28 @@ interface Props {
 }
 
 const ROW_CLASS = "w-full rounded-[10px] px-3 py-2 text-left text-sm";
+
+/**
+ * Account categories for the accordion, keyed by `signup_source`
+ * (ADR-0014 §8). "All users" is the static tree root above these — it is not a
+ * category and never participates in filtering.
+ */
+type CategoryKey = SignupSource;
+
+const CATEGORY_KEYS: CategoryKey[] = ["email", "qq", "admin"];
+
+/** i18n key for each category's group-head label. */
+const CATEGORY_LABEL_KEY: Record<CategoryKey, string> = {
+  email: "rbac.userCategoryEmail",
+  qq: "rbac.userCategoryQq",
+  admin: "rbac.userCategoryAdmin",
+};
+
+/** Which user fields the search box matches (name / email / username). */
+function userMatchesQuery(user: RbacUser, query: string): boolean {
+  const haystack = `${user.name}\u0000${user.email}\u0000${user.username ?? ""}`.toLowerCase();
+  return haystack.includes(query);
+}
 
 /** Pull a localized message out of a failed RBAC ajax response. */
 async function parseError(response: Response, fallback: string): Promise<string> {
@@ -51,6 +86,49 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [selectedId, setSelectedId] = useState(initialBoard.users[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
 
+  // Category accordion (ADR-0014 §8 "四维判据"): the admin users page groups
+  // accounts by registration source under a static "All users" root. `null`
+  // means all categories collapsed (the default). Single-level accordion —
+  // expanding one category collapses the others.
+  const [openCategory, setOpenCategory] = useState<CategoryKey | null>(null);
+  const [search, setSearch] = useState("");
+
+  const searchActive = search.trim().length > 0;
+  const query = search.trim().toLowerCase();
+
+  const categoryUsers = (category: CategoryKey) =>
+    board.users.filter((entry) => entry.signupSource === category);
+
+  // Search wins over the accordion: while a query is active every category
+  // containing a match is forced open, showing only the matching users.
+  const categoryVisibleUsers = (category: CategoryKey) => {
+    const users = categoryUsers(category);
+    return searchActive ? users.filter((entry) => userMatchesQuery(entry, query)) : users;
+  };
+  const visibleUsers = searchActive
+    ? board.users.filter((entry) => userMatchesQuery(entry, query))
+    : openCategory
+      ? categoryUsers(openCategory)
+      : [];
+
+  // Toggle one category: expand it if collapsed, collapse everything if it was
+  // already the open one (spec §2 "再点已展开的组头 = 全折叠").
+  const toggleCategory = (category: CategoryKey) => {
+    const next = openCategory === category ? null : category;
+    setOpenCategory(next);
+    if (next) {
+      const first = categoryUsers(next)[0];
+      if (first) setSelectedId(first.id);
+    }
+  };
+
+  // Collapse every category (leaves only the group heads under the root).
+  const collapseAll = () => setOpenCategory(null);
+
+  // Keep the selection inside the visible set: if the selected account is
+  // filtered out, fall back to the first visible one.
+  const visibleUser = visibleUsers.find((entry) => entry.id === selectedId) ?? visibleUsers[0];
+
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   // The username and the address are two separate fields: the username is the
@@ -73,7 +151,9 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
-  const user = board.users.find((entry) => entry.id === selectedId);
+  // The detail panel always shows the user under the currently open category;
+  // if the selected id got filtered out we fall back to the first visible one.
+  const user = visibleUser;
 
   const toggle = (code: string, granted: boolean) => {
     if (!user) return;
@@ -369,30 +449,121 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-72">
-        <ul className="flex flex-col gap-1">
-          {board.users.map((entry) => (
-            <li key={entry.id}>
-              <button
-                aria-current={entry.id === selectedId ? "true" : undefined}
-                className={cn(
-                  ROW_CLASS,
-                  entry.id === selectedId
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-                onClick={() => setSelectedId(entry.id)}
-                type="button"
-              >
-                <span className="block truncate">{entry.name || entry.email}</span>
-                <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
-                  {entry.name
-                    ? `${entry.email} · ${entry.roles.length}`
-                    : entry.roles.length}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="p-1">
+          <Input
+            aria-label={t("rbac.userCategorySearch")}
+            className="w-full"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("rbac.userCategorySearchPlaceholder")}
+            value={search}
+          />
+        </div>
+        <div className="flex items-center gap-2 px-1 pb-2">
+          <Button
+            onClick={collapseAll}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("rbac.userCategoryCollapseAll")}
+          </Button>
+          <span className="flex-1" />
+          <Button
+            onClick={() => showToast(t("rbac.userCategoryFixedTip"), "info")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <PlusIcon aria-hidden="true" />
+            {t("rbac.userCategoryCreateGroup")}
+          </Button>
+        </div>
+
+        {/* Static tree root, mirroring the RBAC permission tree root: the
+            "All users" heading is not a category and never filters. */}
+        <div className={cn(TREE_ROW_CLASS, "gap-1.5")}>
+          <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center">
+            <ChevronRightIcon className="size-4 rotate-90 text-muted-foreground" />
+          </span>
+          <UsersIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+            {t("rbac.userCategoryAll")}
+          </span>
+          <TreeBadge>{board.users.length}</TreeBadge>
+        </div>
+
+        {searchActive && visibleUsers.length === 0 ? (
+          <p className="px-2 py-6 text-sm text-muted-foreground">
+            {t("rbac.userCategoryNoResults")}
+          </p>
+        ) : (
+          <ul className={cn("ml-3.5 flex flex-col gap-0.5 border-l pl-2")}>
+            {CATEGORY_KEYS.map((category) => {
+              const users = categoryVisibleUsers(category);
+              const expanded = searchActive || openCategory === category;
+              const label = t(CATEGORY_LABEL_KEY[category]);
+              return (
+                <li key={category}>
+                  <div
+                    className={cn(
+                      TREE_ROW_CLASS,
+                      expanded ? TREE_ROW_SELECTED_CLASS : undefined,
+                    )}
+                  >
+                    <PermissionBranchToggle
+                      expanded={expanded}
+                      label={label}
+                      onToggle={() => toggleCategory(category)}
+                    />
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground transition hover:text-foreground"
+                      onClick={() => toggleCategory(category)}
+                      type="button"
+                    >
+                      <span className="truncate">{label}</span>
+                      <TreeBadge>{users.length}</TreeBadge>
+                    </button>
+                  </div>
+                  {expanded && (
+                    <ul className="ml-3.5 flex flex-col gap-1 border-l pl-2">
+                      {users.map((entry) => (
+                        <li key={entry.id}>
+                          <button
+                            aria-current={
+                              entry.id === selectedId ? "true" : undefined
+                            }
+                            className={cn(
+                              ROW_CLASS,
+                              entry.id === selectedId
+                                ? "bg-muted font-medium text-foreground"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                            onClick={() => setSelectedId(entry.id)}
+                            type="button"
+                          >
+                            <span className="block truncate">
+                              {entry.name || entry.email}
+                            </span>
+                            <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+                              {entry.name
+                                ? `${entry.email} · ${entry.roles.length}`
+                                : entry.roles.length}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                      {users.length === 0 && (
+                        <li className="px-1.5 py-1 text-xs text-muted-foreground">
+                          {t("rbac.userCategoryEmpty")}
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         <div className="mt-2 border-t p-1 pt-2">
           {creating ? (

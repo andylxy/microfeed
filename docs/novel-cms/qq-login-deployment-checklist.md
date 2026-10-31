@@ -146,7 +146,7 @@ if (!loginMethods.qqEnabled) return "该登录方式已停用";
 ## 6. 平台侧状态（已结案 / 长期口径）
 
 - **已结案（2026-10-30）**：三个 AppID —— `1906152348`（release）/ `1906152522`（debug）/ `1906151545`（preview）—— **全部审核通过**。
-  debug 变体真机实测 QQ 登录成功，服务端落库 `qq_39746869556B3DEAF1163DDCD5A12B9D@oauth.local`（`auth_user.name = xjx-bbx`）、
+  debug 变体真机实测 QQ 登录成功，服务端落库 `qq_39746869556B3DEAF1163DDCD5A12B9D@users.microfeed.local`（`auth_user.name = xjx-bbx`，占位域已统一，ADR-0014 rev.9）、
   `ext_user_oauth.openid = 39746869556B3DEAF1163DDCD5A12B9D`。此前那次 `110401` 确认为平台同步延迟，现已消失。
 - **长期口径**：`110401` = 请求的应用不存在（同步/包名/签名问题），**与审核状态无关**；`110406` 才是「未过审被挡」；
   `100044` = 签名校验失败。审核期开发者本人可正常 SSO 调试（腾讯 wiki 长期口径），但不能开放给其他 QQ 号。

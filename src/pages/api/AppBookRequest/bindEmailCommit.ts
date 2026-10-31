@@ -38,9 +38,10 @@ import {
  *
  * ## 为什么 UPDATE 带占位域条件
  *
- * `AND (lower(email) LIKE '%@oauth.local' OR ...)` 是并发闸：两个设备同时绑不同
+ * `AND lower(email) LIKE '%@users.microfeed.local'` 是并发闸：两个设备同时绑不同
  * 邮箱时，第一个成功把 email 改掉，第二个的 WHERE 不再匹配 → `changes = 0`
- * → 拒绝。不需要额外加锁。
+ * → 拒绝。不需要额外加锁。占位域已统一为单一 `@users.microfeed.local`
+ * （ADR-0014 rev.9），不再枚举两套。
  *
  * ## 为什么同批补写 username（F30）
  *
@@ -109,8 +110,7 @@ export const POST: APIRoute = async ({request}) => {
       .prepare(
         'UPDATE "auth_user" SET "email" = ?, "emailVerified" = 1, ' +
           '"username" = COALESCE(NULLIF(trim("username"), \'\'), ?), "updatedAt" = ? ' +
-          'WHERE "id" = ? AND (lower("email") LIKE \'%@oauth.local\' ' +
-          'OR lower("email") LIKE \'%@users.microfeed.local\')',
+          'WHERE "id" = ? AND lower("email") LIKE \'%@users.microfeed.local\'',
       )
       .bind(email, fallbackUsername, now, user.userId)
       .run();

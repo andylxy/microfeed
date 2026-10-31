@@ -162,7 +162,9 @@ async function createQqUser(
   nickname: string,
   avatar: string,
 ): Promise<string> {
-  const email = `qq_${openid}@oauth.local`;
+  // 占位域统一为单一 `@users.microfeed.local`（ADR-0014 rev.9 / I7）：QQ 建号与
+  // 用户名建号的合成地址都收敛到这一个域，判定只写一处，不再分域。
+  const email = `qq_${openid}@users.microfeed.local`;
   const username = `qq_${openid.toLowerCase()}`;
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -208,7 +210,7 @@ async function createQqUser(
     // 必须是同一 openid 派生出来的账号，否则会把这张 QQ 的登录态签到别人账上。
     // 按小写比较，覆盖「同一 openid 换头大小写」这种情况。
     // email 与 username **都要**对得上（ADR-0015 F28 L2）。
-    // 只比 email 时，占位地址一旦被抢占（别人把 `qq_<victim>@oauth.local` 绑到自己
+    // 只比 email 时，占位地址一旦被抢占（别人把 `qq_<victim>@users.microfeed.local` 绑到自己
     // 名下），受害者首登就会命中这一行、判等通过，随后 `bindOpenid` 把受害者
     // openid 绑到抢占者的 userId——顶号。合法行的 username 必定是
     // `qq_<openid 小写>`（上面生成规则），对不上就说明这行不是本 openid 的。
@@ -229,14 +231,17 @@ async function createQqUser(
 }
 
 /**
- * 空壳账号判定（ADR-0014 D4 / I4）：QQ 首登自动建号产生的占位邮箱 `qq_<openid>@oauth.local`。
+ * 空壳账号判定（ADR-0014 D4 / I4）：QQ 首登自动建号产生的占位邮箱
+ * `qq_<openid>@users.microfeed.local`（域已统一，ADR-0014 rev.9）。
  *
- * 用它而不是 `isPlaceholderEmail`：后者还含 `@users.microfeed.local`（后台建号），
- * 而这里要区分的是「这个账号的资料归谁」——只有自动建出来的空壳才允许被 QQ 侧资料覆盖。
+ * 注意它与 `isPlaceholderEmail` 的区别：后者只认「域」，凡
+ * `@users.microfeed.local`（含后台用户名建号 `xiaoyang@users.microfeed.local`）都算；
+ * 而这里靠 `qq_` 前缀把「QQ 自动建出的空壳」从「后台建号」里分出来——
+ * 只有空壳才允许被 QQ 侧资料覆盖（后台建号是受控账号，资料归自己）。
  */
 function isQqShellEmail(email: string | null): boolean {
   const value = (email ?? "").trim().toLowerCase();
-  return value.startsWith("qq_") && value.endsWith("@oauth.local");
+  return value.startsWith("qq_") && value.endsWith("@users.microfeed.local");
 }
 
 /** 取 auth_user 行（用于签发凭证与组包）。 */

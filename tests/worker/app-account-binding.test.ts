@@ -27,7 +27,7 @@ const db = env.FEED_DB;
 const PASSWORD = "secret1";
 const SHELL_ID = "u_bind_shell";
 const TARGET_ID = "u_bind_target";
-const SHELL_EMAIL = "qq_OPENID_BIND@oauth.local";
+const SHELL_EMAIL = "qq_OPENID_BIND@users.microfeed.local";
 const TARGET_EMAIL = "bind-target@example.com";
 const OPENID = "OPENID_BIND";
 

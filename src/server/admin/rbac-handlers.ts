@@ -64,6 +64,7 @@ import {
   type PermissionAudience,
   type RbacBoard,
   type RbacUserBoard,
+  type SignupSource,
 } from "@/shared/Rbac";
 import {
   audienceOf,
@@ -305,11 +306,20 @@ async function purgeRoleMembersAccess(
 }
 
 /** Accounts, the roles granted to them, and the roles available to grant. */
+/**
+ * Narrow a raw `auth_user.signup_source` value to the known set (ADR-0014 §8).
+ * `null` (DB never ran migration 0157) and unknown values both fall back to
+ * `"email"` so the admin users accordion never renders an unmapped category.
+ */
+function toSignupSource(raw: string | null): SignupSource {
+  return raw === "qq" || raw === "admin" ? raw : "email";
+}
+
 export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
   const [accounts, roles, grants] = await Promise.all([
     db
       .prepare(
-        `SELECT id, name, email, role, banned, username, displayUsername
+        `SELECT id, name, email, role, banned, username, displayUsername, signup_source
          FROM auth_user ORDER BY email`,
       )
       .all<{
@@ -319,6 +329,7 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
         id: string;
         name: string;
         role: string | null;
+        signup_source: string | null;
         username: string | null;
       }>(),
     db
@@ -352,6 +363,11 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
       legacyRole: row.role,
       name: row.name,
       roles: (byUser.get(row.id) ?? []).sort(),
+      // Fall back to "email" so a DB that never ran migration 0157 (no
+      // signup_source column yet) doesn't break the admin board. Anything
+      // outside the known set also collapses to "email" so the UI accordion
+      // never sees an unmapped category.
+      signupSource: toSignupSource(row.signup_source),
       username: row.displayUsername ?? row.username ?? undefined,
     })),
   };

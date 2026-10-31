@@ -68,7 +68,8 @@ async function findAuthUser(
  * 邮箱注册出来的账号在「我的 → 个人资料」里永远显示不出邮箱。
  *
  * `EmailUsable` 是「这个邮箱能不能收信」（ADR-0014 D9）。占位域账号（QQ 建号的
- * `qq_<openid>@oauth.local`、后台建号的 `@users.microfeed.local`）为 0，其余为 1。
+ * `qq_<openid>@users.microfeed.local`、后台建号的 `@users.microfeed.local`，域已统一
+ * rev.9）为 0，其余为 1。
  * 客户端据此决定是否提示「补充邮箱」，所以 `null`（老后端/未迁移）一律按「未知、
  * 不提示」处理 —— 这也是 Android 侧必须用 `Integer` 的原因：`int` 会把缺失当成 0，
  * 把全部老账号误判成「不能收信」。
