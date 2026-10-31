@@ -177,6 +177,13 @@ export interface AuthUserRow {
   name: string;
   username: string | null;
   image?: string | null;
+  /**
+   * 邮件可发信标记（迁移 0157 的 VIRTUAL 生成列，ADR-0014 D9）：1 = 可收信，
+   * 0 = 占位域不可发信。可选是因为签发凭证只需要 id/email/username，
+   * 调用方不查这一列时它是 undefined —— 登录响应遇到 undefined 下发 `null`
+   * （客户端按「未知、不提示」处理）。
+   */
+  email_usable?: number | null;
 }
 
 /** App 登录凭证的稳定名（≤80，`normalizeLoginCredentialName` 上限）。 */

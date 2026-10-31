@@ -1243,7 +1243,12 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
       // this, a freshly created super-admin keeps `role = "user"` and a second,
       // invisible authorization path splits from RBAC. Shape mirrors
       // `replaceUserRoles` so the two code paths cannot drift apart.
-      env.FEED_DB.prepare("UPDATE auth_user SET role = ? WHERE id = ?")
+      // 同批写 `signup_source = 'admin'`（ADR-0014 D8 / I13 / N10）：后台「新建用户」
+      // 走 `api.createUser` 内部写库，INSERT 语句碰不到，只能建号后补写。
+      // 用**真实邮箱**建号时 I9 断言（只查两个占位域）抓不到漏写，所以这条不能省。
+      env.FEED_DB.prepare(
+        "UPDATE auth_user SET role = ?, signup_source = 'admin' WHERE id = ?",
+      )
         .bind(
           roleCodes.includes(SUPER_ADMIN)
             ? BETTER_AUTH_ADMIN_ROLE

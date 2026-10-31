@@ -154,6 +154,16 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     ).bind(verified!.userId).first<{email: string; username: string}>();
     expect(user!.email).toBe("qq_OPENID_A@oauth.local");
     expect(user!.username).toBe("qq_openid_a");
+
+    // ADR-0014 D8/D9：注册来源记成 'qq'，且占位邮箱不可发信。
+    const attrs = await db.prepare(
+      'SELECT signup_source, email_usable FROM "auth_user" WHERE id = ? LIMIT 1',
+    ).bind(verified!.userId).first<{email_usable: number; signup_source: string}>();
+    expect(attrs!.signup_source).toBe("qq");
+    expect(attrs!.email_usable).toBe(0);
+    // 下发给客户端的是「能不能收信」，不是来源（`signup_source` 按下发范围决议不下发）。
+    expect(payload.EmailUsable).toBe(0);
+    expect(payload.signup_source).toBeUndefined();
   });
 
   it("同 openid 重复登录复用同一用户与凭证（幂等）", async () => {
@@ -339,7 +349,9 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
       env,
       localRequest(ROUTE),
       {platform: "qq", openid: "OPENID_EVIL", accessToken: "t"},
-    )).rejects.toThrow(/已被非本 openid 的账号占用/u);
+    // 文案以 `createQqUser` 的抛错为准（ADR-0015 把措辞收敛成「占位标识被占用」，
+    // 因为被占的是 email/username 这对占位标识，不是 openid 本身）。
+    )).rejects.toThrow(/占位标识被非本 openid 的行占用/u);
 
     // 既没有新账号，也没有把 openid 绑到无关账号上。
     const oauth = await db.prepare(
@@ -432,6 +444,34 @@ describe("QQ 第三方登录（真实校验，mock 腾讯，ADR-0013）", () => 
     ) as Record<string, unknown>;
     expect(payload.Account).toBe("qq_OPENID_REAL"); // 仍以腾讯权威 openid 为准
     expect(payload.UserName).toBe("调试昵称");
+  });
+
+  it("D4：绑定后的真实账号不再被 QQ 昵称/头像覆盖（原值无备份，改不回去）", async () => {
+    // 造一个真实邮箱账号，并把 openid 绑到它名下 —— 即 ADR-0014 绑定完成后的形态。
+    const realId = "u_d4_real";
+    await db.prepare(
+      'INSERT INTO "auth_user" (id, name, email, emailVerified, createdAt, updatedAt, ' +
+        'role, image, signup_source) VALUES (?, ?, ?, 1, ?, ?, \'user\', ?, \'email\')',
+    ).bind(realId, "张真人", "real-d4@example.com", "2024-01-01", "2024-01-01",
+      "https://a/mine.jpg").run();
+    await db.prepare(
+      "INSERT OR IGNORE INTO ext_user_oauth (provider, openid, user_id, created_at_ms) " +
+        "VALUES ('qq', ?, ?, ?)",
+    ).bind("OPENID_D4", realId, Date.now()).run();
+
+    await appThirdPartyLogin(
+      env,
+      appRequest(ROUTE),
+      {platform: "qq", openid: "x", accessToken: "tok"},
+      qqMockFetcher("OPENID_D4", TEST_APP_ID, "QQ昵称", "https://a/qq.jpg"),
+    );
+
+    // 库里两列必须原封不动。
+    const row = await db.prepare(
+      'SELECT name, image FROM "auth_user" WHERE id = ? LIMIT 1',
+    ).bind(realId).first<{name: string; image: string}>();
+    expect(row!.name).toBe("张真人");
+    expect(row!.image).toBe("https://a/mine.jpg");
   });
 
   it("再登刷新昵称/头像（资料不永远停在首登快照）", async () => {

@@ -69,9 +69,12 @@ export async function bootstrapAdmin(
     await seedRbac(runtimeEnv.FEED_DB);
     await runtimeEnv.FEED_DB.batch([
       runtimeEnv.FEED_DB.prepare(
+        // `signup_source` 显式写 'admin'（ADR-0014 D8 / I9）：这是管理侧引导建号，
+        // 不是邮件注册。迁移 0157 的存量回填只能按 email 后缀猜，而这个入口可能用
+        // **真实邮箱**建号（实测 xi.ernest@gmail.com 就是一例），猜不出来 → 必须显式写。
         'INSERT INTO "auth_user" ' +
           '("id", "name", "email", "emailVerified", "createdAt", ' +
-          '"updatedAt", "role") VALUES (?, ?, ?, ?, ?, ?, ?)',
+          '"updatedAt", "role", "signup_source") VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       ).bind(
         userId,
         normalizedEmail,
@@ -79,6 +82,7 @@ export async function bootstrapAdmin(
         1,
         timestamp,
         timestamp,
+        "admin",
         "admin",
       ),
       runtimeEnv.FEED_DB.prepare(

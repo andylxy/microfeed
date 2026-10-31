@@ -146,6 +146,25 @@ describe("App login (ticket 12)", () => {
     expect(payload.Account).toBe("mail@example.com");
   });
 
+  it("reports whether the account's email can actually receive mail (ADR-0014 D9)", async () => {
+    // 用户名建号 → email 落在占位域 `@users.microfeed.local` → 不可发信。
+    await createAccount({account: "nouser0", name: "No Mail", password: "secret1"});
+    const placeholder = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
+      UserName: "nouser0",
+      Password: "secret1",
+    })) as Record<string, unknown>;
+    expect(placeholder.Email).toMatch(/@users\.microfeed\.local$/u);
+    expect(placeholder.EmailUsable).toBe(0);
+
+    // 真实邮箱注册 → 可发信。
+    await createAccount({account: "Real@Example.com", name: "Real", password: "secret1"});
+    const real = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({
+      UserName: "real@example.com",
+      Password: "secret1",
+    })) as Record<string, unknown>;
+    expect(real.EmailUsable).toBe(1);
+  });
+
   it("rejects a wrong password without leaking account existence", async () => {
     await createAccount({account: "gooduser", name: "Good", password: "secret1"});
     const wrong = await appLogin(env, appRequest("/api/AppBookRequest/login"), await withCaptcha({

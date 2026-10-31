@@ -168,9 +168,12 @@ async function createQqUser(
   const id = crypto.randomUUID();
 
   const insert = await database.prepare(
+    // `signup_source` 显式写 'qq'（ADR-0014 D8 / I9）。必须显式写，不能靠迁移回填：
+    // 回填按 email 后缀推导，而用户一旦补了邮箱（bindEmailCommit）后缀就没了，
+    // 那时已无法证明这个账号当初是 QQ 建号（§6.2 回填时间窗）。
     `INSERT OR IGNORE INTO "auth_user" ` +
-      "(id, name, email, emailVerified, image, createdAt, updatedAt, role, username, displayUsername, banned) " +
-      "VALUES (?, ?, ?, 1, ?, ?, ?, 'user', ?, ?, 0)",
+      "(id, name, email, emailVerified, image, createdAt, updatedAt, role, username, displayUsername, banned, signup_source) " +
+      "VALUES (?, ?, ?, 1, ?, ?, ?, 'user', ?, ?, 0, 'qq')",
   ).bind(
     id,
     nickname || `qq_${openid}`,
@@ -225,10 +228,23 @@ async function createQqUser(
   return id;
 }
 
+/**
+ * 空壳账号判定（ADR-0014 D4 / I4）：QQ 首登自动建号产生的占位邮箱 `qq_<openid>@oauth.local`。
+ *
+ * 用它而不是 `isPlaceholderEmail`：后者还含 `@users.microfeed.local`（后台建号），
+ * 而这里要区分的是「这个账号的资料归谁」——只有自动建出来的空壳才允许被 QQ 侧资料覆盖。
+ */
+function isQqShellEmail(email: string | null): boolean {
+  const value = (email ?? "").trim().toLowerCase();
+  return value.startsWith("qq_") && value.endsWith("@oauth.local");
+}
+
 /** 取 auth_user 行（用于签发凭证与组包）。 */
 async function findAuthUserById(database: D1Database, id: string): Promise<AuthUserRow | null> {
+  // `email_usable` 同 `findAuthUser`：读生成列，不在 TS 侧重算（I10 双源同步）。
   return database.prepare(
-    'SELECT id, email, name, username, image FROM "auth_user" WHERE id = ? LIMIT 1',
+    'SELECT id, email, name, username, image, email_usable FROM "auth_user" ' +
+      "WHERE id = ? LIMIT 1",
   ).bind(id).first<AuthUserRow>();
 }
 
@@ -261,6 +277,9 @@ function thirdPartyLoginPayload(
     Name: nickname || user.name || account,
     Img: avatar || "",
     UserName: nickname || user.name || account,
+    // 与 `loginPayload` 同义同口径（ADR-0014 D9）：QQ 建号的占位邮箱恒为 0，
+    // 补过邮箱之后变成 1。`signup_source` 按下发范围决议**不下发**。
+    EmailUsable: user.email_usable ?? null,
     DefaultModule: null,
     ModuleList: null,
   };
@@ -351,15 +370,20 @@ export async function appThirdPartyLogin(
   let userId = await findUserIdByOpenid(database, trustedOpenid);
   if (!userId) {
     userId = await createQqUser(database, trustedOpenid, nickname, avatar);
-  } else if (nickname || avatar) {
-    // 已存在用户：再登刷新昵称/头像（best-effort）。
-    await refreshProfile(database, userId, nickname, avatar);
   }
 
   const user = await findAuthUserById(database, userId);
   if (!user) return "登录失败，请稍后重试";
 
   if (await accountIsBlocked(database, userId)) return "登录失败，请稍后重试";
+
+  // D4 / I4：只有**空壳账号**才用 QQ 昵称/头像刷新资料（best-effort）。
+  // 绑定到真实账号之后，openid 指向的是用户自己的账号，这里再刷就会把用户自己改过的
+  // 名字和头像覆盖掉 —— 而 `auth_user` 没有历史值备份，改不回去，且每次登录都会再改一次。
+  // 组包用的是腾讯刚返回的值，所以刷新与否不影响本次响应体。
+  if ((nickname || avatar) && isQqShellEmail(user.email)) {
+    await refreshProfile(database, userId, nickname, avatar);
+  }
 
   const credential = await ensureAppLoginCredential(database, user);
   if (!credential) return "登录凭证数已达上限，请在后台清理后重试";

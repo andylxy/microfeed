@@ -266,9 +266,11 @@ export async function completeAdminPasswordSetup(
     const accountId = crypto.randomUUID();
     results = await database.batch([
       database.prepare(
+        // `signup_source` 显式写 'admin'（ADR-0014 D8 / I9）：初始所有者由安装流程建号，
+        // 属管理侧入口。与 bootstrap 同理——迁移 0157 的后缀回填推导不出这条路径。
         'INSERT INTO "auth_user" ("id", "name", "email", ' +
-          '"emailVerified", "createdAt", "updatedAt", "role") ' +
-          'SELECT ?, "email", "email", 1, ?, ?, ? FROM ' +
+          '"emailVerified", "createdAt", "updatedAt", "role", "signup_source") ' +
+          'SELECT ?, "email", "email", 1, ?, ?, ?, ? FROM ' +
           '"auth_password_setup" WHERE "id" = ? AND "purpose" = ? ' +
           'AND "tokenHash" = ? AND "expiresAt" > ? AND NOT EXISTS ' +
           '(SELECT 1 FROM "auth_user")',
@@ -276,6 +278,7 @@ export async function completeAdminPasswordSetup(
         userId,
         now,
         now,
+        "admin",
         "admin",
         "owner",
         "initial",

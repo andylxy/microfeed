@@ -52,8 +52,11 @@ async function findAuthUser(
   account: string,
 ): Promise<AuthUserRow | null> {
   const column = looksLikeEmail(account) ? "email" : "username";
+  // `email_usable` 是 VIRTUAL 生成列（迁移 0157 / ADR-0014 D9），直接读它而不是在
+  // TS 侧按 email 后缀重算——重算会让「库口径」与「接口口径」变成两个真值源（I10）。
   const row = await database.prepare(
-    `SELECT id, email, name, username FROM "auth_user" WHERE ${column} = ? LIMIT 1`,
+    `SELECT id, email, name, username, email_usable FROM "auth_user" ` +
+      `WHERE ${column} = ? LIMIT 1`,
   ).bind(account.toLowerCase()).first<AuthUserRow>();
   return row ?? null;
 }
@@ -63,8 +66,16 @@ async function findAuthUser(
  *
  * `Email` 是本次新增的一项：App 的 `UserInfo` 有 email 列，登录响应不带它的话，
  * 邮箱注册出来的账号在「我的 → 个人资料」里永远显示不出邮箱。
+ *
+ * `EmailUsable` 是「这个邮箱能不能收信」（ADR-0014 D9）。占位域账号（QQ 建号的
+ * `qq_<openid>@oauth.local`、后台建号的 `@users.microfeed.local`）为 0，其余为 1。
+ * 客户端据此决定是否提示「补充邮箱」，所以 `null`（老后端/未迁移）一律按「未知、
+ * 不提示」处理 —— 这也是 Android 侧必须用 `Integer` 的原因：`int` 会把缺失当成 0，
+ * 把全部老账号误判成「不能收信」。
  */
-function loginPayload(
+// 导出供 `app-account-binding` 复用：绑定成功后返回的就是「目标账号的一次登录」，
+// 形状必须与账号登录完全一致，否则客户端 `applyLoginSession` 会拿到半套字段（A14 教训）。
+export function loginPayload(
   token: string,
   account: string,
   user: AuthUserRow | null,
@@ -76,6 +87,7 @@ function loginPayload(
     Name: user?.name ?? "",
     Img: "",
     UserName: user?.username ?? account,
+    EmailUsable: user?.email_usable ?? null,
     DefaultModule: null,
     ModuleList: null,
   };

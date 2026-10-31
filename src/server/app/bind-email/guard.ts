@@ -57,9 +57,15 @@ export function isResponse(value: unknown): value is Response {
 /**
  * 再认证：证明"操作者是账号本人"，而不是"某个持有令牌的人"。
  *
- * - 账号有 QQ 绑定（`ext_user_oauth`）→ 必须带 `openid` + `accessToken`，
- *   向腾讯校验后要求 openid 映射回**当前** userId；
- * - 否则账号是口令账号 → 必须带当前 `password`，与该用户 credential 行的 hash 比对。
+ * **两条并列通道，任一通过即放行**（ADR-0014 D10 / I17）：
+ *
+ * - 口令：请求带 `password`，且该用户 `auth_account(providerId='credential')` 行比对通过；
+ * - QQ：请求带 `openid` + `accessToken`，向腾讯校验后要求 openid 映射回**当前** userId。
+ *
+ * 为什么不是「有 QQ 绑定就只走 QQ」的 if/else：真实邮箱账号绑定 QQ 之后会同时具备
+ * 两者，独占分支会把它从口令通道踢出去，而 Android **不持久化** QQ accessToken
+ * （只在 QQ 登录那一刻存在）→ 该账号的「补充/更换邮箱」再认证等于关闭。
+ * 口令与 accessToken 都是「只有本人有的东西」，并列不降低安全性。
  *
  * dev-mock（`QQ_OAUTH_DEV_MOCK=1` 且 host 在本机/局域网）跳过腾讯调用，但仍要求
  * openid 映射回当前 userId——旁路只省网络，不省归属校验。
@@ -71,61 +77,54 @@ export async function verifyReauth(
   body: unknown,
 ): Promise<Response | null> {
   const database = runtimeEnv.FEED_DB;
+  const reject = (): Response =>
+    jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
 
+  // 通道 1：口令。先试口令再试 QQ —— 顺序本身是需求，见函数文档（D10 / I17）。
+  const password = readStringField(body, "password");
+  if (password) {
+    const credential = await database
+      .prepare(
+        "SELECT password FROM auth_account WHERE userId = ? AND providerId = 'credential' LIMIT 1",
+      )
+      .bind(userId)
+      .first<{password: string | null}>();
+    if (credential?.password
+        && await verifyPassword({hash: credential.password, password})) {
+      return null;
+    }
+  }
+
+  // 通道 2：QQ。
   const qqBinding = await database
     .prepare(
       "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ? LIMIT 1",
     )
     .bind(userId)
     .first<{user_id: string}>();
+  if (!qqBinding) return reject();
 
-  if (qqBinding) {
-    const openid = readStringField(body, "openid").trim();
-    const accessToken = readStringField(body, "accessToken");
-    if (!openid || !accessToken) {
-      return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-    }
+  const openid = readStringField(body, "openid").trim();
+  const accessToken = readStringField(body, "accessToken");
+  if (!openid || !accessToken) return reject();
 
-    let trustedOpenid = openid;
-    if (!isDevMockEnabled(runtimeEnv, request)) {
-      const verified = await verifyQqToken(
-        accessToken,
-        runtimeEnv.QQ_APP_ID ?? "",
-      );
-      if (verified.error) {
-        return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-      }
-      trustedOpenid = verified.result!.openid;
-    }
-
-    const owner = await database
-      .prepare(
-        "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-      )
-      .bind(trustedOpenid)
-      .first<{user_id: string}>();
-    if (!owner || owner.user_id !== userId) {
-      return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-    }
-    return null;
+  let trustedOpenid = openid;
+  if (!isDevMockEnabled(runtimeEnv, request)) {
+    const verified = await verifyQqToken(
+      accessToken,
+      runtimeEnv.QQ_APP_ID ?? "",
+    );
+    if (verified.error) return reject();
+    trustedOpenid = verified.result!.openid;
   }
 
-  const password = readStringField(body, "password");
-  if (!password) {
-    return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-  }
-  const credential = await database
+  const owner = await database
     .prepare(
-      "SELECT password FROM auth_account WHERE userId = ? AND providerId = 'credential' LIMIT 1",
+      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
     )
-    .bind(userId)
-    .first<{password: string | null}>();
-  if (!credential?.password) {
-    return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-  }
-  if (!await verifyPassword({hash: credential.password, password})) {
-    return jsonResponse(appEnvelope("身份验证失败，请重新登录后再试"));
-  }
+    .bind(trustedOpenid)
+    .first<{user_id: string}>();
+  if (!owner || owner.user_id !== userId) return reject();
   return null;
 }
 
