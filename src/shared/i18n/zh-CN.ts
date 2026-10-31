@@ -2086,7 +2086,6 @@ export const zhCN: TranslationKey = {
     userCategoryEmail: "注册用户",
     userCategoryQq: "QQ用户",
     userCategoryAdmin: "管理账号",
-    userCategoryEmpty: "该分类下暂无账号",
     userCategorySearch: "搜索账号",
     userCategorySearchPlaceholder: "搜索名称、邮箱、用户名…",
     userCategoryCollapseAll: "全收起",

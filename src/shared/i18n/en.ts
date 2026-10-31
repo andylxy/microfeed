@@ -2102,7 +2102,6 @@ export const en = {
     userCategoryEmail: "Registered users",
     userCategoryQq: "QQ users",
     userCategoryAdmin: "Admin accounts",
-    userCategoryEmpty: "No accounts in this category",
     userCategorySearch: "Search accounts",
     userCategorySearchPlaceholder: "Search name, email, username…",
     userCategoryCollapseAll: "Collapse all",

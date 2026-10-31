@@ -81,8 +81,8 @@ export interface RbacBoard {
 }
 
 /**
- * Registration source — how an account was first created (ADR-0014 §8).
- * Immutable after creation; `admin` covers every management-side entry point.
+ * 注册来源——账号首次创建的方式（ADR-0014 §8）。创建后不可变；`admin` 涵盖
+ * 后台侧的每个入口。
  */
 export type SignupSource = "email" | "qq" | "admin";
 
@@ -96,9 +96,8 @@ export interface RbacUser {
   name: string;
   roles: string[];
   /**
-   * Registration source — how the account was first created. One of
-   * `email` / `qq` / `admin` (ADR-0014 §8 "注册来源", immutable). Drives the
-   * admin users page category accordion.
+   * 注册来源——账号首次创建的方式。取 `email` / `qq` / `admin` 之一
+   * （ADR-0014 §8「注册来源」，不可变）。驱动后台用户页的分类手风琴。
    */
   signupSource: SignupSource;
   /**

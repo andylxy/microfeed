@@ -42,22 +42,21 @@ interface Props {
 const ROW_CLASS = "w-full rounded-[10px] px-3 py-2 text-left text-sm";
 
 /**
- * Account categories for the accordion, keyed by `signup_source`
- * (ADR-0014 §8). "All users" is the static tree root above these — it is not a
- * category and never participates in filtering.
+ * 手风琴的分类，按 `signup_source`（ADR-0014 §8）取值。「全部用户」是这些分类
+ * 之上的静态树根，它本身不是分类，不参与过滤。
  */
 type CategoryKey = SignupSource;
 
 const CATEGORY_KEYS: CategoryKey[] = ["email", "qq", "admin"];
 
-/** i18n key for each category's group-head label. */
+/** 每个分类组头标签的 i18n 键。 */
 const CATEGORY_LABEL_KEY: Record<CategoryKey, string> = {
   email: "rbac.userCategoryEmail",
   qq: "rbac.userCategoryQq",
   admin: "rbac.userCategoryAdmin",
 };
 
-/** Which user fields the search box matches (name / email / username). */
+/** 搜索框匹配的用户字段（名称 / 邮箱 / 用户名）。 */
 function userMatchesQuery(user: RbacUser, query: string): boolean {
   const haystack = `${user.name}\u0000${user.email}\u0000${user.username ?? ""}`.toLowerCase();
   return haystack.includes(query);
@@ -86,10 +85,9 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [selectedId, setSelectedId] = useState(initialBoard.users[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
 
-  // Category accordion (ADR-0014 §8 "四维判据"): the admin users page groups
-  // accounts by registration source under a static "All users" root. `null`
-  // means all categories collapsed (the default). Single-level accordion —
-  // expanding one category collapses the others.
+  // 分类手风琴（ADR-0014 §8「四维判据」）：后台用户页按注册来源分组，根节点是
+  // 静态「全部用户」。null 表示全部分类折叠（默认态）。单层手风琴——展开一个
+  // 分类会收起其余。
   const [openCategory, setOpenCategory] = useState<CategoryKey | null>(null);
   const [search, setSearch] = useState("");
 
@@ -99,8 +97,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const categoryUsers = (category: CategoryKey) =>
     board.users.filter((entry) => entry.signupSource === category);
 
-  // Search wins over the accordion: while a query is active every category
-  // containing a match is forced open, showing only the matching users.
+  // 搜索优先于手风琴：有查询词时每个分类只保留命中的用户，且只有含命中的
+  // 分类被强制展开，无命中则整类收起（spec §9）。
   const categoryVisibleUsers = (category: CategoryKey) => {
     const users = categoryUsers(category);
     return searchActive ? users.filter((entry) => userMatchesQuery(entry, query)) : users;
@@ -111,8 +109,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
       ? categoryUsers(openCategory)
       : [];
 
-  // Toggle one category: expand it if collapsed, collapse everything if it was
-  // already the open one (spec §2 "再点已展开的组头 = 全折叠").
+  // 点一个分类：收起态则展开，已是展开态则全部收起（spec §2「再点已展开的
+  // 组头 = 全折叠」）。
   const toggleCategory = (category: CategoryKey) => {
     const next = openCategory === category ? null : category;
     setOpenCategory(next);
@@ -122,11 +120,10 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     }
   };
 
-  // Collapse every category (leaves only the group heads under the root).
+  // 全部收起，只留各分类组头在根节点下。
   const collapseAll = () => setOpenCategory(null);
 
-  // Keep the selection inside the visible set: if the selected account is
-  // filtered out, fall back to the first visible one.
+  // 让选中项保持在可见集合内：选中账号被过滤掉时回退到第一个可见账号。
   const visibleUser = visibleUsers.find((entry) => entry.id === selectedId) ?? visibleUsers[0];
 
   const [creating, setCreating] = useState(false);
@@ -151,8 +148,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
-  // The detail panel always shows the user under the currently open category;
-  // if the selected id got filtered out we fall back to the first visible one.
+  // 详情面板始终显示当前展开分类下的账号；选中 id 被过滤掉时回退到第一个可见账号。
   const user = visibleUser;
 
   const toggle = (code: string, granted: boolean) => {
@@ -460,6 +456,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
         </div>
         <div className="flex items-center gap-2 px-1 pb-2">
           <Button
+            disabled={searchActive}
             onClick={collapseAll}
             size="sm"
             type="button"
@@ -479,8 +476,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
           </Button>
         </div>
 
-        {/* Static tree root, mirroring the RBAC permission tree root: the
-            "All users" heading is not a category and never filters. */}
+        {/* 静态树根，仿 RBAC 权限树根：「全部用户」是标题，不是分类，不参与过滤。 */}
         <div className={cn(TREE_ROW_CLASS, "gap-1.5")}>
           <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center">
             <ChevronRightIcon className="size-4 rotate-90 text-muted-foreground" />
@@ -500,7 +496,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
           <ul className={cn("ml-3.5 flex flex-col gap-0.5 border-l pl-2")}>
             {CATEGORY_KEYS.map((category) => {
               const users = categoryVisibleUsers(category);
-              const expanded = searchActive || openCategory === category;
+              const expanded = searchActive ? users.length > 0 : openCategory === category;
               const label = t(CATEGORY_LABEL_KEY[category]);
               return (
                 <li key={category}>
@@ -521,7 +517,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                       type="button"
                     >
                       <span className="truncate">{label}</span>
-                      <TreeBadge>{users.length}</TreeBadge>
+                      <TreeBadge>{categoryUsers(category).length}</TreeBadge>
                     </button>
                   </div>
                   {expanded && (
@@ -552,11 +548,6 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                           </button>
                         </li>
                       ))}
-                      {users.length === 0 && (
-                        <li className="px-1.5 py-1 text-xs text-muted-foreground">
-                          {t("rbac.userCategoryEmpty")}
-                        </li>
-                      )}
                     </ul>
                   )}
                 </li>

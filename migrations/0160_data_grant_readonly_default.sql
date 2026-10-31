@@ -5,11 +5,10 @@
 -- ext_user_roles 里没有任何角色授权 → 按「无授权即无任何权限」处理会连只读都用不了。
 -- 本迁移给这批账号补上 r_readonly（只读角色，实测 23 权限）。
 --
--- 为什么用「无授权则全补」而不是逐账号列 id：
---   - 这是策略本身（每个账号至少 readonly），不是针对某几行的补丁；
---   - 显式列 id 会把 dev/test 库的 user_id 硬编码进迁移，跑测试库时
---     applyD1Migrations 触发 FOREIGN KEY 违例（那些 id 在测试库不存在）；
---   - 本迁移在任何环境都幂等（已有授权的不受影响）。
+-- 用「无授权则全补」这一通用策略：每个账号至少 readonly；显式列 id 会把
+-- dev/test 库的 user_id 硬编码进迁移，跑测试库时 applyD1Migrations 触发
+-- FOREIGN KEY 违例（那些 id 在测试库不存在）；本迁移在任何环境都幂等
+-- （已有授权的不受影响）。
 -- 实测（dev/test 库 2026-10-30）受惠账号为：
 --   probe-bind2 / probe-app / e2e.reg.20261029 / QQ 空壳(5ebee6d2) / xiaoyang_02。
 --

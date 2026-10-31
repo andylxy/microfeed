@@ -8,8 +8,8 @@
 -- 本迁移只搬「存量里仍留在 @oauth.local 的行」。当前唯一一行是 QQ 空壳：
 --   id       = 5ebee6d2-1e2e-41a4-bce3-c1779d907a20  (signup_source = 'qq')
 --   email    = qq_39746869556B3DEAF1163DDCD5A12B9D@oauth.local
--- 用「域后缀替换」而非整串硬编码：保留 openid 的原始大小写（见 0158 注释，email 与
--- username 大小写不同步是刻意的），只换最后一段域。
+-- 用「域后缀替换」（substr 截尾再拼接）保留 openid 的原始大小写，只换最后一段域
+-- （见 0158 注释，email 与 username 大小写不同步是刻意的）。
 --
 -- 注意：email_usable 是 VIRTUAL 生成列（0157），随 email 自动重算——两个域在该生成列
 -- CASE 里都判 0，本迁移无须也不得改 email_usable（I11）。

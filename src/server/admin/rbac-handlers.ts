@@ -307,9 +307,9 @@ async function purgeRoleMembersAccess(
 
 /** Accounts, the roles granted to them, and the roles available to grant. */
 /**
- * Narrow a raw `auth_user.signup_source` value to the known set (ADR-0014 §8).
- * `null` (DB never ran migration 0157) and unknown values both fall back to
- * `"email"` so the admin users accordion never renders an unmapped category.
+ * 把原始 `auth_user.signup_source` 值收敛到已知集合（ADR-0014 §8）。
+ * `null`（库没跑迁移 0157）与未知值都回退为 `"email"`，后台用户手风琴
+ * 不会渲染出未映射的分类。
  */
 function toSignupSource(raw: string | null): SignupSource {
   return raw === "qq" || raw === "admin" ? raw : "email";
