@@ -23,11 +23,12 @@ export const MAX_ADMIN_USERNAME_LENGTH = 32;
 const ADMIN_USERNAME_PATTERN = /^[a-zA-Z0-9_.]+$/u;
 
 /**
- * Domain used to synthesise an address for an account that signs in by
- * username. better-auth requires an address on every user; this one is never
- * reachable, so such an account cannot receive password-reset mail.
+ * 唯一占位域（ADR-0014 rev.9 / I7）：QQ 建号（app-third-party.ts）与用户名建号
+ * 的合成地址都收敛到这一个域。better-auth 要求每个用户都有地址，这里合成的是
+ * 永远收不到信的占位地址，账号无法接收密码重置邮件；`.local` 不参与全局 DNS
+ * 委派，占位判定只写一处。
  */
-export const ADMIN_USERNAME_EMAIL_DOMAIN = "users.microfeed.local";
+export const PLACEHOLDER_EMAIL_DOMAIN = "users.microfeed.local";
 
 export interface AdminSetupCredentials {
   email: string;
@@ -113,7 +114,7 @@ export function validateAdminUsername(value: string): string | undefined {
 
 /** The address stored for a username-only account (see the domain constant). */
 export function adminUsernameEmail(username: string): string {
-  return `${normalizeAdminUsername(username)}@${ADMIN_USERNAME_EMAIL_DOMAIN}`;
+  return `${normalizeAdminUsername(username)}@${PLACEHOLDER_EMAIL_DOMAIN}`;
 }
 
 /**
@@ -124,5 +125,5 @@ export function adminUsernameEmail(username: string): string {
  * receive mail anyway.
  */
 export function isReservedAdminEmailDomain(value: string): boolean {
-  return normalizeAdminEmail(value).endsWith(`@${ADMIN_USERNAME_EMAIL_DOMAIN}`);
+  return normalizeAdminEmail(value).endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`);
 }

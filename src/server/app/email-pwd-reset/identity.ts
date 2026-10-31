@@ -5,26 +5,23 @@
  * 链路各写一份 endsWith 白名单而漂移。
  */
 
+import {PLACEHOLDER_EMAIL_DOMAIN} from "@/shared/AdminCredentials";
+
 /** 忘记密码用的 OTP 用途。必须服务端硬编码，不接受客户端传入（D14）。 */
 export const PWD_RESET_PURPOSE = "password_reset";
 /** 补充邮箱用的 OTP 用途。 */
 export const BIND_EMAIL_PURPOSE = "bind_email";
 
 /**
- * 永远收不到信的合成域（D15）：
- * - `@users.microfeed.local`：唯一占位域（ADR-0014 rev.9 / I7）。QQ 建号
- *   （`app-third-party.ts:166`）与用户名建号（`AdminCredentials.ts`，注释自认
- *   never reachable）都收敛到这一个域，`.local` 不参与全局 DNS 委派。
+ * 永远收不到信的合成域（D15）：`PLACEHOLDER_EMAIL_DOMAIN`（ADR-0014 rev.9 / I7，
+ * `@/shared/AdminCredentials` 的唯一定义）。QQ 建号与用户名建号都收敛到这一个域，
+ * `.local` 不参与全局 DNS 委派。
  *
  * 判定用「后缀 + 小写」，与 SQL 侧的 `lower(email) LIKE '%@xxx'` 同口径。
  */
-export const PLACEHOLDER_EMAIL_SUFFIXES = [
-  "@users.microfeed.local",
-] as const;
-
 export function isPlaceholderEmail(email: string): boolean {
   const normalized = email.trim().toLowerCase();
-  return PLACEHOLDER_EMAIL_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+  return normalized.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`);
 }
 
 export interface EmailAccount {

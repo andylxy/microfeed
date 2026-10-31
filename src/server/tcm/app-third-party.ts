@@ -20,6 +20,7 @@ import {
   ensureAppLoginCredential,
   type AuthUserRow,
 } from "@/server/auth/login-credentials";
+import {PLACEHOLDER_EMAIL_DOMAIN} from "@/shared/AdminCredentials";
 import FeedDb from "@/server/feed/FeedDb";
 import {readStringField} from "@/server/http";
 import {accountIsBlocked} from "@/server/rbac/resolve";
@@ -162,9 +163,9 @@ async function createQqUser(
   nickname: string,
   avatar: string,
 ): Promise<string> {
-  // 占位域统一为单一 `@users.microfeed.local`（ADR-0014 rev.9 / I7）：QQ 建号与
-  // 用户名建号的合成地址都收敛到这一个域，判定只写一处，不再分域。
-  const email = `qq_${openid}@users.microfeed.local`;
+  // 占位域统一为单一占位域（ADR-0014 rev.9 / I7）：QQ 建号与用户名建号的合成
+  // 地址都收敛到这一个域，判定只写一处（PLACEHOLDER_EMAIL_DOMAIN），不再分域。
+  const email = `qq_${openid}@${PLACEHOLDER_EMAIL_DOMAIN}`;
   const username = `qq_${openid.toLowerCase()}`;
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -241,7 +242,7 @@ async function createQqUser(
  */
 function isQqShellEmail(email: string | null): boolean {
   const value = (email ?? "").trim().toLowerCase();
-  return value.startsWith("qq_") && value.endsWith("@users.microfeed.local");
+  return value.startsWith("qq_") && value.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`);
 }
 
 /** 取 auth_user 行（用于签发凭证与组包）。 */

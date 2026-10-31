@@ -1,6 +1,7 @@
 import type {APIRoute} from "astro";
 import {cache, env} from "cloudflare:workers";
 
+import {PLACEHOLDER_EMAIL_DOMAIN} from "@/shared/AdminCredentials";
 import FeedDb from "@/server/feed/FeedDb";
 import {jsonResponse, readStringField} from "@/server/http";
 import {appEnvelope} from "@/server/tcm/envelope";
@@ -110,7 +111,7 @@ export const POST: APIRoute = async ({request}) => {
       .prepare(
         'UPDATE "auth_user" SET "email" = ?, "emailVerified" = 1, ' +
           '"username" = COALESCE(NULLIF(trim("username"), \'\'), ?), "updatedAt" = ? ' +
-          'WHERE "id" = ? AND lower("email") LIKE \'%@users.microfeed.local\'',
+          `WHERE "id" = ? AND lower("email") LIKE '%@${PLACEHOLDER_EMAIL_DOMAIN}'`,
       )
       .bind(email, fallbackUsername, now, user.userId)
       .run();
