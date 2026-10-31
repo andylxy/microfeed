@@ -36,6 +36,10 @@ const THROTTLED_AUTH_PATHS = new Set([
   // 第三方登录端点（ADR-0013，见 AndroidProject-old 仓 docs/adr/0013-qq-third-party-login.md）
   // ——同款暴力破解防护。
   "/api/AppBookRequest/thirdPartyLogin",
+  // 账号绑定（ADR-0014 I15）：这个端点校验**目标账号的口令**，是登录之外的第二个
+  // 口令校验入口。不登记就等于全站唯一一个无限次撞库点，而它统一的失败文案
+  // 「账号或密码错误」正好能拿来枚举账号是否存在。
+  "/api/AppBookRequest/bindAccount",
 ]);
 
 export async function enforceAuthEndpointThrottle(

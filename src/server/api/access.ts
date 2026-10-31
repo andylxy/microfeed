@@ -106,6 +106,11 @@ export const APP_BOOK_REQUEST_ROUTES = [
   // （`requireAppUser` + `verifyReauth`），所以不登记进匿名集合。
   "bindEmailSend",
   "bindEmailCommit",
+  // QQ 账号绑定三端点（ADR-0014 §4）：与补邮箱同族——**已登录态**，由端点自己用
+  // `mflc_` 令牌鉴权（`requireAppUser`），所以不进内容路由集合。
+  "getAccountBindings",
+  "bindAccount",
+  "unbindAccount",
 ] as const;
 
 /**
@@ -142,6 +147,12 @@ export const APP_BOOK_REQUEST_ANONYMOUS_ROUTES = [
   // 鉴权由端点自己负责：`requireAppUser`（mflc_ 令牌）+ `verifyReauth`（再认证）。
   "bindEmailSend",
   "bindEmailCommit",
+  // QQ 账号绑定三端点（ADR-0014 §4）：同补邮箱——必须登记为匿名，登记成 content
+  // 会继承内容路由的权限模型，普通 QQ 用户（role=user）直接 403。
+  // 鉴权由端点自己负责：`requireAppUser`（`mflc_` 令牌）。
+  "getAccountBindings",
+  "bindAccount",
+  "unbindAccount",
 ] as const;
 
 export const APP_BOOK_REQUEST_CANONICAL = new Map(
