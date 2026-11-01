@@ -92,3 +92,73 @@ describe("auth_user.role stays a derived mirror of the RBAC super_admin grant", 
     ]);
   });
 });
+
+/**
+ * 安装向导建所有者时，`auth_user` 行与 super_admin 授予必须同批提交：授予若留在
+ * 批次之后，一旦失败就留下「role = 'admin' 却没有 super_admin」的越权行，
+ * 而迁移只能事后订正，堵不住再生。这里守两件事：授予语句在批次之内，且批次校验
+ * 只看前 3 条（授予是 `INSERT OR IGNORE`，已存在时返回 0 changes）。
+ */
+describe("password-setup grants the owner role inside the create batch", () => {
+  it("keeps exactly one grant statement inside the create batch", async () => {
+    const source = await readFile(
+      path.join(sourceRoot, "server", "auth", "password-setup.ts"),
+      "utf8",
+    );
+    expect(source.match(/INSERT OR IGNORE INTO ext_user_roles/gu) ?? [])
+      .toHaveLength(1);
+
+    // 授予必须写在建号批次的方括号之内：移到批次之后就会重新出现「账号已建、
+    // 授权失败」的越权窗口。
+    const batchStart = source.indexOf("results = await database.batch([");
+    expect(batchStart).toBeGreaterThan(-1);
+    const batchEnd = source.indexOf("]);", batchStart);
+    expect(batchEnd).toBeGreaterThan(batchStart);
+
+    const grantAt = source.indexOf("INSERT OR IGNORE INTO ext_user_roles");
+    expect(grantAt).toBeGreaterThan(batchStart);
+    expect(grantAt).toBeLessThan(batchEnd);
+
+    // 授予是批次里的第 4 条：它前面有 3 条各自 `.bind(...)` 结尾的语句
+    // （建账号、建凭证、删 token），批次校验只读这 3 条。
+    const bindsBefore = source
+      .slice(batchStart, grantAt)
+      .match(/\.bind\(/gu) ?? [];
+    expect(bindsBefore).toHaveLength(3);
+    expect(source).toContain("results.slice(0, 3)");
+  });
+});
+
+/**
+ * 存量漂移的订正放在一个 data 迁移里（`role` 是派生值，两侧不一致即为缺陷）。
+ * 这里守的是迁移的**分支完整性**：以后有人编辑该文件时删掉某一支，测试立即报，
+ * 不靠人工复核 SQL。本文件读文件不读库，所以断言不到「漂移真的被改掉」——
+ * 那一半只能靠部署后跑运维查询。
+ */
+describe("auth_user.role drift correction migration", () => {
+  it("covers all three drift branches and keys on the role code", async () => {
+    const source = await readFile(
+      path.join(
+        repositoryRoot,
+        "migrations",
+        "0161_data_sync_auth_user_role.sql",
+      ),
+      "utf8",
+    );
+    expect(source).toContain("-- rollback:");
+
+    // 先剥掉注释行：rollback 块里的示例语句与说明会干扰匹配。
+    const body = source
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("--"))
+      .join("\n");
+
+    expect(body).toMatch(/UPDATE\s+"auth_user"/u);
+    expect(body).toMatch(/"role"\s+IS\s+NULL/u);
+    expect(body).toMatch(/"role"\s*=\s*'admin'\s+AND\s+NOT\s+EXISTS/u);
+    expect(body).toMatch(/"role"\s*=\s*'user'\s+AND\s+EXISTS/u);
+    // 判据是角色码，不是角色主键：各环境的 id 未必一致。
+    expect(body).toMatch(/r\."code"\s*=\s*'super_admin'/u);
+    expect(body).not.toMatch(/r\."id"\s*=\s*'r_super_admin'/u);
+  });
+});

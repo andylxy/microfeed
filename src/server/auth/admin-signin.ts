@@ -15,7 +15,7 @@
  * （见 `resolve.ts` 的 `userMayEnterAdmin` 注释）。
  */
 
-import {userMayEnterAdmin} from "@/server/rbac/resolve";
+import {readSnapshotGate} from "@/server/rbac/snapshot";
 import {publicLocalizedError} from "@/server/http";
 
 /**
@@ -76,7 +76,11 @@ export async function enforceAdminSignIn(
   if (!userId) {
     return response;
   }
-  if (await userMayEnterAdmin(db, userId)) {
+  // 判据取自权限快照（ADR-0053），与 middleware 的每请求判断、以及凭证登录
+  // 通道（credential-login.ts）同一个来源。三处若各用各的判据，被拒的账号会
+  // 拿到 cookie 再被每次请求 403。
+  const gate = await readSnapshotGate(db, userId);
+  if (gate !== null && gate.adminLoginAllowed) {
     return response;
   }
   return adminLoginDeniedResponse(request);

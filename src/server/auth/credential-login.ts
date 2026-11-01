@@ -24,7 +24,7 @@ import {
   recordLoginFailure,
 } from "@/server/auth/login-throttle";
 import {jsonResponse, publicLocalizedError} from "@/server/http";
-import {userMayEnterAdmin} from "@/server/rbac/resolve";
+import {readSnapshotGate} from "@/server/rbac/snapshot";
 import {adminLoginDeniedResponse} from "@/server/auth/admin-signin";
 import {adminUrl} from "@/shared/AdminPath";
 
@@ -94,7 +94,12 @@ export async function handleCredentialLogin(
   // 之前：给一个进不了后台的账号发会话 cookie，只会让它每次都被 403 弹回来。
   // 不记失败次数——凭证本身是对的，记了会把正确的凭证也一起限流。
   // 拒绝响应与另一条登录通道（admin-signin.ts 的后处理门）共用一份。
-  if (!await userMayEnterAdmin(env.FEED_DB, verified.userId)) {
+  //
+  // 判据取自权限快照（ADR-0053），与 middleware 的每请求判断同一个来源。两处
+  // 用不同判据会出现「凭证签发成功、每次请求 403」，浏览器在登录页与后台之间
+  // 反复跳转。
+  const gate = await readSnapshotGate(env.FEED_DB, verified.userId);
+  if (gate === null || !gate.adminLoginAllowed) {
     return adminLoginDeniedResponse(request);
   }
 

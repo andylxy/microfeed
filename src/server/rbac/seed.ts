@@ -7,6 +7,7 @@
  */
 
 import {RBAC_WILDCARD} from "./resolve";
+import {refreshRoleMembersSnapshotStatements} from "./snapshot";
 
 export interface RbacPermissionDef {
   code: string;
@@ -258,6 +259,12 @@ export async function seedRbac(db: D1Database): Promise<void> {
           .bind(roleId(role.code), permissionId(code)),
       );
     }
+  }
+  // 目录写完，持这些角色的账号要把权限快照重算一遍（ADR-0053）。首装时这些
+  // DELETE / INSERT 命中 0 行；真正的用处是「已有账号、缺管理员」的修复场景——
+  // 那种场景里补授权不重算，那些账号会一直持着旧码。
+  for (const role of RBAC_ROLES) {
+    statements.push(...refreshRoleMembersSnapshotStatements(db, roleId(role.code)));
   }
   if (statements.length > 0) await db.batch(statements);
 }

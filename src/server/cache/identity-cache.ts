@@ -1,9 +1,10 @@
 /**
  * App 凭证鉴权用的角色对象缓存（方案 4.3）。
  *
- * `resolveUserAccess` 每次鉴权要读四张表（`ext_user_roles` / `ext_roles` /
- * `ext_role_permissions` / `ext_permissions`），本机快照 24 行。角色、授权、
- * 用户角色分配都是人工月级操作，按 `userId` 缓存 24 小时，写路径按用户清。
+ * 回源读权限快照表的一行（ADR-0053）：`ext_user_permissions` 已经按账号物化了
+ * 权限码与会员标记，所以这里不再读 `ext_user_roles` / `ext_roles` /
+ * `ext_role_permissions` / `ext_permissions` 四张表。角色、授权、用户角色分配
+ * 都是人工月级操作，按 `userId` 缓存 24 小时，写路径按用户清。
  *
  * 命中时 `permissions` 必须还原成 `Set`：`permissionsInclude` 用 `.has()`
  * 判定，数组会让它静默失效（所有请求都判无权限）。
@@ -14,7 +15,7 @@
 
 import {TTL_TIER_OF} from "@/shared/AppCacheControl";
 import type {UserAccess} from "@/server/rbac/resolve";
-import {resolveUserAccess} from "@/server/rbac/resolve";
+import {readSnapshotAccess} from "@/server/rbac/snapshot";
 import {APP_CACHE_TAG, readAppCacheControl} from "./cache-control";
 import {
   deleteWorkerCacheKeys,
@@ -59,7 +60,7 @@ export async function cachedUserAccess(
     const hit = fromCached(await readJsonEntry<unknown>(key));
     if (hit !== null) return hit;
   }
-  const access = await resolveUserAccess(db, userId);
+  const access = await readSnapshotAccess(db, userId);
   if (!bypass) {
     const ttl = control.ttls[TTL_TIER_OF.identity];
     await writeJsonEntry(

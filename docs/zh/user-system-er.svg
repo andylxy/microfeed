@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 820" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect x="0" y="0" width="1060" height="820" fill="#f8fafc"/>
+  <text x="20" y="20" font-size="18" font-weight="bold" fill="#0f172a">microfeed 用户体系 ER 图</text>
+
+  <!-- ===== Legend ===== -->
+  <g font-size="12" fill="#334155">
+    <rect x="780" y="6" width="14" height="4" fill="#2563eb"/><text x="800" y="12">→ auth_user</text>
+    <rect x="780" y="22" width="14" height="4" fill="#16a34a"/><text x="800" y="28">→ oauth_client</text>
+    <rect x="780" y="38" width="14" height="4" fill="#ea580c"/><text x="800" y="44">→ auth_session</text>
+    <rect x="900" y="6" width="14" height="4" fill="#7c3aed"/><text x="920" y="12">→ oauth_refresh_token</text>
+  </g>
+
+  <!-- ===== Edges (drawn first, cards opaque on top) ===== -->
+  <g stroke-width="1.6" fill="none" opacity="0.75">
+    <!-- to auth_user (blue) -->
+    <g stroke="#2563eb">
+      <line x1="125" y1="220" x2="125" y2="195"/>
+      <line x1="125" y1="420" x2="125" y2="195"/>
+      <line x1="125" y1="620" x2="125" y2="195"/>
+      <line x1="560" y1="107.5" x2="230" y2="107.5"/>
+      <line x1="560" y1="307.5" x2="230" y2="107.5"/>
+      <line x1="560" y1="507.5" x2="230" y2="107.5"/>
+      <line x1="560" y1="707.5" x2="230" y2="107.5"/>
+      <line x1="830" y1="107.5" x2="230" y2="107.5"/>
+      <line x1="830" y1="307.5" x2="230" y2="107.5"/>
+    </g>
+    <!-- to oauth_client (green) -->
+    <g stroke="#16a34a">
+      <line x1="665" y1="420" x2="665" y2="395"/>
+      <line x1="665" y1="620" x2="665" y2="395"/>
+      <line x1="830" y1="107.5" x2="770" y2="307.5"/>
+      <line x1="830" y1="307.5" x2="770" y2="307.5"/>
+    </g>
+    <!-- to auth_session (orange) -->
+    <g stroke="#ea580c">
+      <line x1="830" y1="107.5" x2="230" y2="307.5"/>
+      <line x1="830" y1="307.5" x2="230" y2="307.5"/>
+    </g>
+    <!-- to oauth_refresh_token (purple) -->
+    <g stroke="#7c3aed">
+      <line x1="935" y1="220" x2="935" y2="195"/>
+    </g>
+  </g>
+
+  <!-- ===== Cards ===== -->
+  <!-- auth_user -->
+  <g>
+    <rect x="20" y="20" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M20,30 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="32" y="44" font-size="13" font-weight="bold" fill="#fff">auth_user</text>
+    <text x="32" y="76" font-size="12" fill="#334155">PK id</text>
+    <text x="32" y="100" font-size="12" fill="#334155">name</text>
+    <text x="32" y="124" font-size="12" fill="#334155">email</text>
+    <text x="32" y="148" font-size="12" fill="#334155">role</text>
+    <text x="32" y="172" font-size="12" fill="#334155">banned / banExpires</text>
+  </g>
+  <!-- auth_session -->
+  <g>
+    <rect x="20" y="220" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M20,230 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="32" y="244" font-size="13" font-weight="bold" fill="#fff">auth_session</text>
+    <text x="32" y="276" font-size="12" fill="#334155">PK id</text>
+    <text x="32" y="300" font-size="12" fill="#334155">token</text>
+    <text x="32" y="324" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="32" y="348" font-size="12" fill="#334155">ipAddress</text>
+  </g>
+  <!-- auth_account -->
+  <g>
+    <rect x="20" y="420" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M20,430 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="32" y="444" font-size="13" font-weight="bold" fill="#fff">auth_account</text>
+    <text x="32" y="476" font-size="12" fill="#334155">PK id</text>
+    <text x="32" y="500" font-size="12" fill="#334155">providerId</text>
+    <text x="32" y="524" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="32" y="548" font-size="12" fill="#334155">password</text>
+  </g>
+  <!-- auth_password_setup -->
+  <g>
+    <rect x="20" y="620" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M20,630 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="32" y="644" font-size="13" font-weight="bold" fill="#fff">auth_password_setup</text>
+    <text x="32" y="676" font-size="12" fill="#334155">PK id ('owner')</text>
+    <text x="32" y="700" font-size="12" fill="#334155">purpose</text>
+    <text x="32" y="724" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="32" y="748" font-size="12" fill="#334155">tokenHash</text>
+  </g>
+  <!-- auth_verification -->
+  <g>
+    <rect x="290" y="20" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M290,30 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="302" y="44" font-size="13" font-weight="bold" fill="#fff">auth_verification</text>
+    <text x="302" y="76" font-size="12" fill="#334155">PK id</text>
+    <text x="302" y="100" font-size="12" fill="#334155">identifier</text>
+    <text x="302" y="124" font-size="12" fill="#334155">value</text>
+    <text x="302" y="148" font-size="12" fill="#334155">expiresAt</text>
+    <text x="302" y="172" font-size="11" fill="#94a3b8">（无外键）</text>
+  </g>
+  <!-- auth_rate_limit -->
+  <g>
+    <rect x="290" y="220" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M290,230 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="302" y="244" font-size="13" font-weight="bold" fill="#fff">auth_rate_limit</text>
+    <text x="302" y="276" font-size="12" fill="#334155">PK id</text>
+    <text x="302" y="300" font-size="12" fill="#334155">key</text>
+    <text x="302" y="324" font-size="12" fill="#334155">count</text>
+    <text x="302" y="348" font-size="12" fill="#334155">lastRequest</text>
+    <text x="302" y="372" font-size="11" fill="#94a3b8">（无外键）</text>
+  </g>
+  <!-- api_keys -->
+  <g>
+    <rect x="290" y="420" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M290,430 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="302" y="444" font-size="13" font-weight="bold" fill="#fff">api_keys</text>
+    <text x="302" y="476" font-size="12" fill="#334155">PK id</text>
+    <text x="302" y="500" font-size="12" fill="#334155">name</text>
+    <text x="302" y="524" font-size="12" fill="#334155">api_key</text>
+    <text x="302" y="548" font-size="12" fill="#334155">created_at_ms</text>
+    <text x="302" y="572" font-size="11" fill="#94a3b8">（无外键）</text>
+  </g>
+  <!-- microfeed_installation -->
+  <g>
+    <rect x="290" y="620" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M290,630 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="302" y="644" font-size="13" font-weight="bold" fill="#fff">microfeed_installation</text>
+    <text x="302" y="676" font-size="12" fill="#334155">PK id ('installation')</text>
+    <text x="302" y="700" font-size="12" fill="#334155">instanceId</text>
+    <text x="302" y="724" font-size="12" fill="#334155">createdAt</text>
+    <text x="302" y="748" font-size="11" fill="#94a3b8">（无外键）</text>
+  </g>
+  <!-- passkey -->
+  <g>
+    <rect x="560" y="20" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M560,30 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="572" y="44" font-size="13" font-weight="bold" fill="#fff">passkey</text>
+    <text x="572" y="76" font-size="12" fill="#334155">PK id</text>
+    <text x="572" y="100" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="572" y="124" font-size="12" fill="#334155">credentialID</text>
+    <text x="572" y="148" font-size="12" fill="#334155">publicKey</text>
+  </g>
+  <!-- oauth_client -->
+  <g>
+    <rect x="560" y="220" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M560,230 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="572" y="244" font-size="13" font-weight="bold" fill="#fff">oauth_client</text>
+    <text x="572" y="276" font-size="12" fill="#334155">PK id</text>
+    <text x="572" y="300" font-size="12" fill="#334155">clientId / clientSecret</text>
+    <text x="572" y="324" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="572" y="348" font-size="12" fill="#334155">scopes / redirectUris</text>
+  </g>
+  <!-- oauth_connection -->
+  <g>
+    <rect x="560" y="420" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M560,430 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="572" y="444" font-size="13" font-weight="bold" fill="#fff">oauth_connection</text>
+    <text x="572" y="476" font-size="12" fill="#334155">PK id</text>
+    <text x="572" y="500" font-size="12" fill="#dc2626">FK clientId → oauth_client</text>
+    <text x="572" y="524" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="572" y="548" font-size="12" fill="#334155">lastUsedAt</text>
+  </g>
+  <!-- oauth_consent -->
+  <g>
+    <rect x="560" y="620" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M560,630 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="572" y="644" font-size="13" font-weight="bold" fill="#fff">oauth_consent</text>
+    <text x="572" y="676" font-size="12" fill="#334155">PK id</text>
+    <text x="572" y="700" font-size="12" fill="#dc2626">FK clientId → oauth_client</text>
+    <text x="572" y="724" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="572" y="748" font-size="12" fill="#334155">scopes</text>
+  </g>
+  <!-- oauth_refresh_token -->
+  <g>
+    <rect x="830" y="20" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M830,30 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="842" y="44" font-size="13" font-weight="bold" fill="#fff">oauth_refresh_token</text>
+    <text x="842" y="76" font-size="12" fill="#334155">PK id</text>
+    <text x="842" y="100" font-size="12" fill="#dc2626">FK clientId → oauth_client</text>
+    <text x="842" y="124" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="842" y="148" font-size="12" fill="#dc2626">FK sessionId → auth_session</text>
+  </g>
+  <!-- oauth_access_token -->
+  <g>
+    <rect x="830" y="220" width="210" height="175" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <path d="M830,230 a10,10 0 0 1 10,-10 h190 a10,10 0 0 1 10,10 v18 h-210 z" fill="#0f172a"/>
+    <text x="842" y="244" font-size="13" font-weight="bold" fill="#fff">oauth_access_token</text>
+    <text x="842" y="276" font-size="12" fill="#334155">PK id</text>
+    <text x="842" y="300" font-size="12" fill="#dc2626">FK clientId → oauth_client</text>
+    <text x="842" y="324" font-size="12" fill="#dc2626">FK userId → auth_user</text>
+    <text x="842" y="348" font-size="12" fill="#dc2626">FK refreshId → oauth_refresh_token</text>
+  </g>
+</svg>

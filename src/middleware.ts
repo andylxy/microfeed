@@ -62,8 +62,8 @@ import {
   registerUserDevice,
   resolveRbacContext,
   RBAC_WILDCARD,
-  userMayEnterAdmin,
 } from "@/server/rbac/resolve";
+import {readSnapshotGate} from "@/server/rbac/snapshot";
 import {markLoginCredentialUsed} from "@/server/auth/login-credentials";
 import {requireAppVersion} from "@/server/rbac/guard";
 import {readVersionGateInputs, type VersionGateInputs} from "@/server/app/version/resolve";
@@ -566,9 +566,11 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       if (pathname === loginPath) {
         // 角色的「登录后台」开关：被拒的会话仍然能打开登录页，否则他们连换个
         // 账号都做不到，只能自己清 cookie。这一判只为不被弹回后台、在登录页与
-        // 后台之间来回跳。
+        // 后台之间来回跳。判据与下面 `resolveRbacContext` 同出权限快照
+        // （ADR-0053）：两处用不同判据就会出现「这里放行、后台 403」的往返。
         const mayEnterAdmin = authSession
-          ? await userMayEnterAdmin(env.FEED_DB, authSession.user.id)
+          ? (await readSnapshotGate(env.FEED_DB, authSession.user.id))
+            ?.adminLoginAllowed === true
           : true;
         if (authSession && mayEnterAdmin) {
           return withAuthSessionCookies(

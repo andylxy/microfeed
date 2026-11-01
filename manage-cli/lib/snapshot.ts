@@ -62,6 +62,11 @@ export const SNAPSHOT_TABLES = {
     "ext_role_permissions",
     "ext_user_security",
     "ext_user_devices",
+    // 权限快照（migration 0162，ADR-0053）。内容是 ext_user_roles /
+    // ext_role_permissions / ext_roles 的物化结果，理论可从上面三张表重算，
+    // 但恢复流程没有重算步骤，漏了它会让恢复后的站点所有人进不了后台
+    // （读侧查不到快照行即无权限）。所以整表随快照走。
+    "ext_user_permissions",
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log
@@ -197,6 +202,12 @@ export const SNAPSHOT_TABLES = {
     // `(email, purpose)` is ever honoured — nothing here is worth carrying across a
     // snapshot boundary (a restored site simply issues a fresh code).
     "ext_email_otp",
+    // Graphical-captcha one-time ledger (migration 0156). Rows are keyed by the
+    // request-number digest and pruned 24h after use, so the table only answers "has
+    // this captcha already been spent" inside one short window. A restored site
+    // issues its own codes; carrying the digests over would only re-block codes that
+    // no longer exist.
+    "ext_captcha_nonce",
   ],
   internal: ["_cf_KV", "d1_kv"],
   targetSpecific: ["microfeed_installation"],

@@ -120,6 +120,38 @@ describe("RBAC permission resolution", () => {
     await deleteRbacRole(env.FEED_DB, "member_role");
     await deleteRbacRole(env.FEED_DB, "plain_role");
   });
+
+  it("同一权限码经多个角色重复出现时，结果按集合去重且会员标记取并集", async () => {
+    await createRbacRole(env.FEED_DB, "dup_a", "Dup A");
+    await createRbacRole(env.FEED_DB, "dup_b", "Dup B");
+    await replaceRolePermissions(
+      env.FEED_DB,
+      "dup_a",
+      ["content:book:create", "content:book:update"],
+      "desktop",
+    );
+    await replaceRolePermissions(
+      env.FEED_DB,
+      "dup_b",
+      ["content:book:create"],
+      "desktop",
+    );
+    await setRbacRoleMember(env.FEED_DB, "dup_a", true);
+    await seedUser("u-dup", "user");
+    await assignRole("u-dup", "r_dup_a");
+    await assignRole("u-dup", "r_dup_b");
+
+    // SQL 侧不判重，两个角色都会带回 `content:book:create`：消费端的 Set 把它收成一项。
+    const access = await resolveUserAccess(env.FEED_DB, "u-dup");
+    expect([...access.permissions].sort()).toEqual([
+      "content:book:create",
+      "content:book:update",
+    ]);
+    expect(access.isMember).toBe(true);
+
+    await deleteRbacRole(env.FEED_DB, "dup_a");
+    await deleteRbacRole(env.FEED_DB, "dup_b");
+  });
 });
 
 describe("requirePermission decision branches", () => {

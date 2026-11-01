@@ -38,6 +38,10 @@ import {permissionId, roleId} from "@/server/rbac/seed";
 import {readAppRequestQuotaRows} from "@/server/rbac/app-quota";
 import {RBAC_WILDCARD} from "@/server/rbac/resolve";
 import {
+  refreshRoleMembersSnapshotStatements,
+  refreshUserSnapshotStatements,
+} from "@/server/rbac/snapshot";
+import {
   purgeUserAccess,
   purgeUsersAccess,
 } from "@/server/cache/identity-cache";
@@ -286,6 +290,9 @@ export async function replaceRolePermissions(
         )
         .bind(role.id, permissionId(code)),
     ),
+    // 权限码变了，持这个角色的账号快照要跟着变（ADR-0053）。排在授权改动之后，
+    // 聚合才看得到新值。
+    ...refreshRoleMembersSnapshotStatements(db, role.id),
     // Same batch: the grants and the record of who changed them are atomic.
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
@@ -588,6 +595,10 @@ export async function replaceUserRoles(
           : BETTER_AUTH_USER_ROLE,
         userId,
       ),
+    // 角色分配变了，这个账号的权限快照跟着变（ADR-0053）。清空角色时
+    // `roleCodes` 是空数组，聚合命中 0 行，这两条里的 DELETE 生效、INSERT 不插，
+    // 结果就是「没有快照行 = 无权限」。
+    ...refreshUserSnapshotStatements(db, userId),
     // The audit row rides the same batch, so the change and its record are
     // atomic: either both land or neither does.
     ...(audit ? [auditStatement(db, audit)] : []),
@@ -713,6 +724,8 @@ export async function setRbacRoleAdminLogin(
        SET allow_admin_login = ?, updated_at = CURRENT_TIMESTAMP
        WHERE code = ?`,
     ).bind(allow ? 1 : 0, code),
+    // 「允许登录后台」进了权限快照（ADR-0053 约束 2），持这个角色的账号要重算。
+    ...refreshRoleMembersSnapshotStatements(db, role.id),
     // 同一批：开关与「谁改的」一起提交。
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
@@ -722,8 +735,8 @@ export async function setRbacRoleAdminLogin(
 /**
  * 改角色的「会员」标记（`ext_roles.is_member`，migration 0144）。
  *
- * 该标记驱动 App 侧会员档：鉴权时经 `resolveUserAccess` 并入 `locals.appMember`，
- * GetNav / 章节正文等 App 接口据此选内容桶（改它下一次请求即生效，缓存键只含
+ * 该标记驱动 App 侧会员档：鉴权时随权限快照（ADR-0053）一并读出，四个 App
+ * 内容端点经 `locals.appMember` 选内容桶（改它下一次请求即生效，缓存键只含
  * 档位、不含身份）。与「登录后台」不同，它对 `super_admin` 同样开放——没有一个
  * 必须固定的取值。
  */
@@ -746,6 +759,8 @@ export async function setRbacRoleMember(
        SET is_member = ?, updated_at = CURRENT_TIMESTAMP
        WHERE code = ?`,
     ).bind(member ? 1 : 0, code),
+    // 会员标记进了权限快照（ADR-0053 约束 2），持这个角色的账号要重算。
+    ...refreshRoleMembersSnapshotStatements(db, role.id),
     // 同一批：开关与「谁改的」一起提交。
     ...(audit ? [auditStatement(db, audit)] : []),
   ]);
@@ -1271,6 +1286,9 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
             : BETTER_AUTH_USER_ROLE,
           newUserId,
         ),
+      // 新账号的角色分配在同批里刚刚写好，权限快照也在这里一并生成
+      // （ADR-0053）。缺了它，新账号第一次进后台就是 403。
+      ...refreshUserSnapshotStatements(env.FEED_DB, newUserId),
       auditStatement(env.FEED_DB, createAudit),
     ]);
   } else {
@@ -1322,9 +1340,16 @@ export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
   // B16: login credentials carry no ON DELETE CASCADE (migrations/0036 leaves
   // cleanup to application code), so removing the account here would otherwise
   // orphan its mflc_ tokens. The account is gone, so drop its credentials too.
-  await env.FEED_DB.prepare(
-    "DELETE FROM ext_login_credentials WHERE user_id = ?",
-  ).bind(userId).run();
+  // 权限快照名义上有 ON DELETE CASCADE，但 D1 的外键强制开关不由本仓控制，所以
+  // 一并显式删（ADR-0053）。多删一次是幂等的，漏删会让同名 id 重建后继承旧权限。
+  await env.FEED_DB.batch([
+    env.FEED_DB.prepare(
+      "DELETE FROM ext_login_credentials WHERE user_id = ?",
+    ).bind(userId),
+    env.FEED_DB.prepare(
+      "DELETE FROM ext_user_permissions WHERE user_id = ?",
+    ).bind(userId),
+  ]);
   // The account removal goes through Better Auth's admin plugin, so it cannot
   // share a batch with our trail — written on its own. The removal itself is
   // idempotent: a retry after a failed audit write does not un-delete anything.

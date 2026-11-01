@@ -11,6 +11,8 @@
 
 import {PERMISSION_CODES} from "@/shared/Constants";
 
+import {readSnapshotGate} from "./snapshot";
+
 export const RBAC_WILDCARD = "*";
 
 /**
@@ -74,6 +76,8 @@ export interface UserAccess {
  * `ur` 走 `ext_user_roles` 主键 `(user_id, role_id)`（覆盖索引），`r` / `p` 走各自
  * 主键，`rp` 走 `ext_role_permissions` 主键 `(role_id, permission_id)`（覆盖索引）。
  * 返回行数 = 该账号角色数 × 每个角色的授权数（本机 4 角色 / 62 条授权，几十行量级）。
+ * 同一权限码会因多个角色重复出现，去重交给下方 `new Set()`：SQL 侧再判一次重只会
+ * 多建一个临时 B-tree。
  */
 export async function resolveUserAccess(
   db: D1Database,
@@ -81,7 +85,7 @@ export async function resolveUserAccess(
 ): Promise<UserAccess> {
   const result = await db
     .prepare(
-      `SELECT DISTINCT p.code AS code, r.is_member AS isMember
+      `SELECT p.code AS code, r.is_member AS isMember
        FROM ext_user_roles ur
        JOIN ext_roles r ON r.id = ur.role_id
        LEFT JOIN ext_role_permissions rp ON rp.role_id = ur.role_id
@@ -252,6 +256,12 @@ export async function registerUserDevice(
  * 口径一致。**没有任何角色**的账号不设限：这一列是角色挂上的否决位，不是一份
  * 准入名单，账号在分配角色之前不该被它挡住。
  *
+ * ⚠️ 运行时判据已不在这里。后台每请求判断、两处登录闸门（`admin-signin.ts` /
+ * `credential-login.ts`）与登录页重定向判断统一读权限快照（ADR-0053），那条路径
+ * 对零角色账号返回拒绝。本函数保留为**真源读法**：它直接算角色表的并集，供测试
+ * 与运维比对快照是否漂移，不要在运行时新增调用点——两套判据并存会让同一个账号
+ * 在登录闸门与后台之间得到相反结论。
+ *
  * 只服务后台路径。App 内容接口按登录凭证鉴权，与这一列无关——关掉登录后台
  * 不该让一个 App 账号的连接凭证失效。
  */
@@ -279,33 +289,29 @@ export async function userMayEnterAdmin(
  *
  * Device capture lives here (called from the middleware login flow) and never
  * inside Better Auth — D-09 keeps `better-auth.ts` untouched.
+ *
+ * 权限、会员标记、后台准入三者出自权限快照表的一行（ADR-0053），封禁位与待改密
+ * 也在同一条点查里 LEFT JOIN 出来。这条路径因此只有一条语句、一个往返，读回一行。
  */
 export async function resolveRbacContext(
   db: D1Database,
   userId: string,
   request: Request,
 ): Promise<RbacResolved> {
-  const [permissions, adminLoginAllowed] = await Promise.all([
-    resolveUserPermissions(db, userId),
-    userMayEnterAdmin(db, userId),
-  ]);
-
-  const banned = await accountIsBlocked(db, userId);
-
-  let mustChangePassword = false;
-  const security = await db
-    .prepare(
-      "SELECT must_change_password AS flag FROM ext_user_security WHERE user_id = ?",
-    )
-    .bind(userId)
-    .first<{flag: number}>();
-  if (security && security.flag === 1) {
-    mustChangePassword = true;
-  }
+  const gate = await readSnapshotGate(db, userId);
 
   // Revocation is checked before the upsert, so a revoked device stays revoked.
   const deviceRevoked = await isDeviceRevoked(db, userId, request);
   await registerUserDevice(db, userId, request);
 
-  return {permissions, adminLoginAllowed, mustChangePassword, deviceRevoked, banned};
+  return {
+    // 账号存在但没有快照行（零角色）与账号不存在（gate === null）都归入空集合。
+    permissions: gate?.permissions ?? new Set<string>(),
+    // 快照缺失即拒绝进入后台：零角色账号拿到 403，不再进空后台。
+    adminLoginAllowed: gate !== null && gate.adminLoginAllowed,
+    mustChangePassword: gate !== null && gate.mustChangePassword,
+    deviceRevoked,
+    // 账号不存在时与 accountIsBlocked 的语义一致：视为被拦。
+    banned: gate === null || gate.banned,
+  };
 }

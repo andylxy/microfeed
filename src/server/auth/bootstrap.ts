@@ -7,6 +7,7 @@ import {
 } from "@/shared/AdminCredentials";
 import {hasAdminOwner} from "@/server/auth/admin-owner";
 import {seedRbac} from "@/server/rbac/seed";
+import {refreshUserSnapshotStatements} from "@/server/rbac/snapshot";
 
 export type AdminBootstrapStatus =
   | "already_initialized"
@@ -105,6 +106,9 @@ export async function bootstrapAdmin(
       runtimeEnv.FEED_DB.prepare(
         "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, 'r_super_admin')",
       ).bind(userId),
+      // 上面这条授予就是这个账号的全部权限，权限快照在同一批里生成（ADR-0053）。
+      // 漏了它，全新安装的第一个管理员登录后台就是 403。
+      ...refreshUserSnapshotStatements(runtimeEnv.FEED_DB, userId),
     ]);
     return "created";
   } catch (error) {

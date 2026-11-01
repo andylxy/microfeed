@@ -365,11 +365,23 @@ function snapshotSql(
     ]).has(name)) {
       continue;
     }
-    const rows = database.prepare(`SELECT * FROM "${name}"`) .all() as Array<Record<string, unknown>>;
+    // 生成列（`auth_user.email_usable`，0157）不能出现在 INSERT 的列清单里，SQLite
+    // 会直接拒绝。`wrangler d1 export` 走的 sqlite3 dump 本来就不导生成列，这里按
+    // 同一口径取列：`table_xinfo` 的 hidden 为 0 才是可写列（2/3 分别是虚拟/存储生成列）。
+    const columns = (database
+      .prepare(`PRAGMA table_xinfo("${name}")`)
+      .all() as Array<{hidden: number; name: string}>)
+      .filter((column) => column.hidden === 0)
+      .map((column) => column.name);
+    const rows = database
+      .prepare(
+        `SELECT ${columns.map((column) => `"${column}"`).join(", ")} FROM "${name}"`,
+      )
+      .all() as Array<Record<string, unknown>>;
     for (const row of rows) {
-      const columns = Object.keys(row).map((column) => `"${column}"`).join(", ");
+      const columnList = Object.keys(row).map((column) => `"${column}"`).join(", ");
       data.push(
-        `INSERT INTO "${name}" (${columns}) VALUES (` +
+        `INSERT INTO "${name}" (${columnList}) VALUES (` +
           `${Object.values(row).map(quoteSql).join(", ")});`,
       );
     }

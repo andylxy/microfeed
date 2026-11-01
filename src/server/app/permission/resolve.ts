@@ -16,7 +16,7 @@
 
 import {providedLoginCredentialBearer} from "@/server/auth/credential-login";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
-import {resolveUserPermissions} from "@/server/rbac/resolve";
+import {readSnapshotAccess} from "@/server/rbac/snapshot";
 
 /**
  * 三种失败形态，「凭证 → 权限集合」链路与各功能开关的 outcome 共用一份：
@@ -76,7 +76,8 @@ export async function resolveAppPermissionSet(
 
   let permissions: Set<string>;
   try {
-    permissions = await resolveUserPermissions(db, verified.userId);
+    // 权限码出自权限快照表的一行（ADR-0053），与后台路径同一个来源。
+    permissions = (await readSnapshotAccess(db, verified.userId)).permissions;
   } catch (error) {
     return failed("解析用户权限", error, module);
   }

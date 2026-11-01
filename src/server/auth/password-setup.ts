@@ -6,6 +6,7 @@ import {
 } from "@/shared/AdminCredentials";
 import {adminUrl} from "@/shared/AdminPath";
 import {managementCommand} from "@/shared/ManagementCli";
+import {refreshUserSnapshotStatements} from "@/server/rbac/snapshot";
 
 export const ADMIN_PASSWORD_SETUP_TTL_SECONDS = 30 * 60;
 export const ADMIN_PASSWORD_SETUP_COOKIE =
@@ -310,26 +311,28 @@ export async function completeAdminPasswordSetup(
         'DELETE FROM "auth_password_setup" WHERE "id" = ? ' +
           'AND "purpose" = ? AND "tokenHash" = ? AND "expiresAt" > ?',
       ).bind("owner", "initial", tokenHash, now),
+      // 授予与建号同批：批次里任何一条失败都会整批回滚，不会留下「auth_user 已建、
+      // ext_user_roles 没授予」的越权账号（role = 'admin' 却没有 super_admin）。
+      // 超管角色行缺失时 role_id 外键会拒绝写入，整批随之回滚——这正是想要的。
+      database
+        .prepare(
+          "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) " +
+            "SELECT id, 'r_super_admin' FROM auth_user WHERE id = ?",
+        )
+        .bind(userId),
+      // 权限快照同批生成（ADR-0053）：授予刚在上一条写入，聚合看得到。
+      // 这两条排在末尾，所以上面的 slice(0, 3) 仍然只读前 3 条。
+      ...refreshUserSnapshotStatements(database, userId),
     ]);
-    if (results.some((result) => result.meta.changes !== 1)) {
+    // 只看前 3 条：第 4 条是 INSERT OR IGNORE，授权已存在时返回 0 changes，把它算进
+    // 「链接已被用过」的判断会让重放场景误报 410。第 4 条真失败时 batch 整体 reject，
+    // 根本不会返回结果项，所以 slice 不会掩盖它。
+    if (results.slice(0, 3).some((result) => result.meta.changes !== 1)) {
       return completionError(
         "This password link was already used or replaced.",
         410,
       );
     }
-    // Grant the RBAC role *after* the batch, not inside it: `INSERT OR IGNORE`
-    // reports 0 changes when the grant already exists, and the check above reads
-    // 0 as "this link was already used" — which would delete the token and report
-    // a replay for an account it had just created. The owner used to get its
-    // access from the guard's legacy bypass, which is gone, so this grant is what
-    // keeps the deployment reachable.
-    await database
-      .prepare(
-        "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) " +
-          "SELECT id, 'r_super_admin' FROM auth_user WHERE id = ?",
-      )
-      .bind(userId)
-      .run();
   } else {
     results = await database.batch([
       database.prepare(

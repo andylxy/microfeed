@@ -193,6 +193,16 @@ describe("browser-based admin password setup", () => {
     });
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
 
+    // 授予与建号同批：账号建好的同时就持 super_admin，不存在「有 auth_user 行、没有
+    // 角色授予」的中间态。
+    const ownerRoles = await env.FEED_DB.prepare(
+      'SELECT ur."role_id" AS "roleId" FROM "ext_user_roles" ur ' +
+        'JOIN "auth_user" u ON u."id" = ur."user_id" WHERE u."email" = ?',
+    ).bind(EMAIL).all<{roleId: string}>();
+    expect(ownerRoles.results.map((row) => row.roleId)).toEqual([
+      "r_super_admin",
+    ]);
+
     const account = await env.FEED_DB.prepare(
       'SELECT "password" FROM "auth_account"',
     ).first<{password: string}>();
