@@ -277,19 +277,21 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 
 > 索引：`ext_login_credentials_secret_hash`、`ext_login_credentials_user`。节流表 `ext_login_credential_attempts`（0037）按 `key` 记 60 秒固定窗口计数，防暴力猜令牌。
 
-### 6.2 `signup_source` 与注册来源配置
+### 6.2 `signup_source` — 注册来源（三值，无后台开关）
 
 - **列**：`auth_user.signup_source`，`NOT NULL DEFAULT 'email'`（0157）。
-- **三值**：`email`（邮件注册，只能吃 DEFAULT）、`qq`（QQ 首登建号，`createQqUser` 显式写）、`admin`（管理侧任意入口）。**建号后任何操作都不得修改**（ADR-0014 I12），也不能改成按 `ext_user_oauth` 是否存在派生——绑定瞬间值会翻转。
-- **配置位置**：既有 KV 型 `settings` 表（`category = "signup_sources"`，`data` 为 JSON 数组 `[{value,label}]`），不新增迁移、不新增 ext 列。
-- **种子默认**：`admin/后台创建`、`email/邮箱注册`、`qq/QQ 登录`；`value` 规则 `/^[a-z][a-z0-9_]{0,31}$/u`。
-- **读写**：`src/server/auth/signup-source.ts`（`getSignupSources` 读 settings，无数据则种子回写；`setSignupSources` 用 `ON CONFLICT(category) DO UPDATE`）。
-- **端点**：`ajax/signup-sources`（GET 任意管理员可读 / PUT 仅超管可改）。
-- **前端**：`UsersSettingsApp` 详情下拉（即改即存 PATCH `signupSource`）、左树按配置动态分组（不在列表的归「其他」）、「注册来源管理」弹层。
+- **三值固定**，代码侧是联合类型 `SignupSource = "email" | "qq" | "admin"`（`src/shared/Rbac.ts`）：
+  - `email` 邮件注册。better-auth `signUpEmail` 内部写库，只能吃列的 DEFAULT；
+  - `qq` QQ 首登建号，`src/server/tcm/app-third-party.ts` 的 `createQqUser` 显式写；
+  - `admin` 管理侧任意入口（`bootstrap.ts` / `password-setup.ts` / `rbac-handlers.ts`）。
+- **建号后任何操作都不得修改**（ADR-0014 I12）：补邮箱、绑定 QQ、解绑、提权都不动这一列。
+- 不能改成按 `ext_user_oauth` 是否存在派生——绑定那一刻值会翻转，注册来源就丢了。也不能只做二值：`@users.microfeed.local` 那类用户名账号既不是邮件注册，也无法发信。
+- **消费方**：后台用户页左树按它分组（`src/components/admin/rbac/UsersApp/index.tsx`），`RbacUser.signupSource` 直接读这一列。
+- **没有**「注册来源管理」配置项：`settings` 表里没有 `signup_sources` 分类，也没有 `ajax/signup-sources` 端点。要加档位只能改代码 + 迁移。
 
 ### 6.3 占位邮箱
 
-用户名建号与 QQ 首登建号都没有真实邮箱，统一写 `*@users.microfeed.local`（`docs`/`src/shared/AdminCredentials.ts` 的 `PLACEHOLDER_EMAIL_DOMAIN`，0159 统一过域）。历史遗留域 `@oauth.local` 只剩存量行，`email_usable` 生成列把两者都判为 0。
+用户名建号与 QQ 首登建号都没有真实邮箱，统一写 `*@users.microfeed.local`（常量 `PLACEHOLDER_EMAIL_DOMAIN`，定义在 `src/shared/AdminCredentials.ts`，0159 统一过域）。历史遗留域 `@oauth.local` 只剩存量行，`email_usable` 生成列把两者都判为 0。
 
 ## 7. 用户功能演进与变更记录（重点）
 
@@ -408,9 +410,9 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 - **加角色开关**：改 `ext_roles` 的列或语义时，同步 §5.4 的 9 个重算点与快照的两个布尔；只改一侧会出现「授权变了、快照没变」。
 - **改判定顺序**：只动 `src/server/rbac/guard.ts`，顺序即定论；`tests/worker/rbac.test.ts` 覆盖 401/403/428 三个分支。
 - **加账号字段**：优先确认是否已有槽位（本册表基本没有 ext 列）；确需新列则新增迁移，并在 §2 补一行字段说明。
-- **加注册来源选项**：改 `settings` 表的 `signup_sources` 列表（UI：用户页「注册来源管理」；代码种子：`signup-source.ts`），无需迁移。
+- **加注册来源档位**：三值写死在 `SignupSource` 联合类型里，没有后台开关、没有 `settings` 配置项、没有独立端点。要加一档得同时改 `SignupSource`（`src/shared/Rbac.ts`）、所有建号路径、用户页分组（`UsersApp`），并补一条迁移给存量行归类。
 - **改 Better Auth 配置**：`src/server/auth/better-auth.ts`（插件、`emailAndPassword`、`additionalFields`）。启用 `socialProviders` 会改变第三方登录的存储位置（现在走 `ext_user_oauth`），需同步 §2.10 与 §6.3。
 - **校验**：`git diff --check`；门禁（typecheck / test / docs:check / `yarn check`）按 AGENTS.md「最高指令：仅在手动触发时运行」，不自动跑。快照一致性另用 `scripts/check-permission-snapshot.ts` 在真实库上查。
-- **文件位置**：`migrations/`、`src/server/auth/`、`src/server/rbac/`、`src/shared/{Rbac,Constants,AdminCredentials}.ts`、`src/server/admin/rbac-handlers.ts`、`src/components/admin/settings/UsersSettingsApp/`、`src/pages/[adminPath]/ajax/{users,signup-sources}/`。
+- **文件位置**：`migrations/`、`src/server/auth/`、`src/server/rbac/`、`src/shared/{Rbac,Constants,AdminCredentials}.ts`、`src/server/admin/rbac-handlers.ts`、`src/server/admin/pc-interfaces.ts`（接口 → 权限码登记表）、`src/components/admin/rbac/{UsersApp,RbacApp,RbacAuditApp,RoleManagerDialog}.tsx`、`src/pages/[adminPath]/users/index.astro`、`src/pages/[adminPath]/rbac/`。
 
 > ER 图见同目录 `user-system-er.svg`，**只画 Better Auth 核心表与外键**（不含 RBAC 的 `ext_*` 表，那部分以 §5.1 的字段清单为准）。
