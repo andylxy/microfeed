@@ -10,14 +10,7 @@
  * what makes it safe not to swallow errors: there is no window in which the
  * change committed but the trail did not, so AGENTS.md's fast-fail rule applies
  * with no caveat about retries.
- *
- * A few mutations go through Better Auth's admin plugin rather than our own
- * writes and cannot share a batch with us; they use {@link recordRbacAudit} as a
- * separate statement. Every one of them is idempotent, so a retry after a
- * failure re-applies it harmlessly and writes the row.
  */
-
-import {env} from "cloudflare:workers";
 
 import type {RbacAuditRow} from "@/shared/RbacAudit";
 
@@ -76,14 +69,6 @@ export function auditStatement(
       Date.now(),
       ...(onlyIf?.binds ?? []),
     );
-}
-
-/**
- * Write the row on its own — only for mutations that cannot share a batch with
- * the trail (those that go through Better Auth's admin plugin).
- */
-export async function recordRbacAudit(entry: PendingAudit): Promise<void> {
-  await auditStatement(env.FEED_DB, entry).run();
 }
 
 /** The latest trail rows, newest first — read side for the admin page.

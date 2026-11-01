@@ -293,12 +293,13 @@ describe("Better Auth on Workers with D1", () => {
       sessionRequest,
     ).handler(sessionRequest);
     expect(session.status).toBe(200);
-    expect(await session.json()).toMatchObject({
-      user: {
-        email: "owner@example.com",
-        role: "admin",
-      },
+    // 会话只回 `auth_user` 的基础列。`role` 曾是 admin 插件塞进 user 对象的派生
+    // 字段，插件移除后不再出现（ADR-0054）；授权一律看 RBAC 的码。
+    const sessionBody = await session.json() as {user?: Record<string, unknown>};
+    expect(sessionBody).toMatchObject({
+      user: {email: "owner@example.com"},
     });
+    expect(sessionBody.user).not.toHaveProperty("role");
 
     const signOutRequest = authRequest("/api/auth/sign-out", {
       body: "{}",

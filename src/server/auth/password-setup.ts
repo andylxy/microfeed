@@ -6,6 +6,10 @@ import {
 } from "@/shared/AdminCredentials";
 import {adminUrl} from "@/shared/AdminPath";
 import {managementCommand} from "@/shared/ManagementCli";
+import {
+  authUserInsertFromSetupSql,
+  credentialAccountFromSetupStatement,
+} from "@/server/auth/account-insert";
 import {refreshUserSnapshotStatements} from "@/server/rbac/snapshot";
 
 export const ADMIN_PASSWORD_SETUP_TTL_SECONDS = 30 * 60;
@@ -269,44 +273,17 @@ export async function completeAdminPasswordSetup(
       database.prepare(
         // `signup_source` 显式写 'admin'（ADR-0014 D8 / I9）：初始所有者由安装流程建号，
         // 属管理侧入口。与 bootstrap 同理——迁移 0157 的后缀回填推导不出这条路径。
-        'INSERT INTO "auth_user" ("id", "name", "email", ' +
-          '"emailVerified", "createdAt", "updatedAt", "role", "signup_source") ' +
-          'SELECT ?, "email", "email", 1, ?, ?, ?, ? FROM ' +
-          '"auth_password_setup" WHERE "id" = ? AND "purpose" = ? ' +
-          'AND "tokenHash" = ? AND "expiresAt" > ? AND NOT EXISTS ' +
-          '(SELECT 1 FROM "auth_user")',
-      ).bind(
-        userId,
-        now,
-        now,
-        "admin",
-        "admin",
-        "owner",
-        "initial",
-        tokenHash,
-        now,
-      ),
-      database.prepare(
-        'INSERT INTO "auth_account" ("id", "accountId", "providerId", ' +
-          '"userId", "password", "createdAt", "updatedAt") ' +
-          'SELECT ?, ?, ?, ?, ?, ?, ? FROM "auth_password_setup" ' +
-          'WHERE "id" = ? AND "purpose" = ? AND "tokenHash" = ? ' +
-          'AND "expiresAt" > ? AND EXISTS ' +
-          '(SELECT 1 FROM "auth_user" WHERE "id" = ?)',
-      ).bind(
+        authUserInsertFromSetupSql({}),
+      ).bind(userId, now, now, "owner", "initial", tokenHash, now),
+      credentialAccountFromSetupStatement(database, {
         accountId,
-        userId,
-        "credential",
-        userId,
         passwordHash,
-        now,
-        now,
-        "owner",
-        "initial",
+        purpose: "initial",
+        setupId: "owner",
+        timestamp: now,
         tokenHash,
-        now,
         userId,
-      ),
+      }),
       database.prepare(
         'DELETE FROM "auth_password_setup" WHERE "id" = ? ' +
           'AND "purpose" = ? AND "tokenHash" = ? AND "expiresAt" > ?',

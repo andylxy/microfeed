@@ -5,6 +5,10 @@ import {
   normalizeAdminEmail,
   validateAdminSetupCredentials,
 } from "@/shared/AdminCredentials";
+import {
+  authUserInsertSql,
+  credentialAccountStatement,
+} from "@/server/auth/account-insert";
 import {hasAdminOwner} from "@/server/auth/admin-owner";
 import {seedRbac} from "@/server/rbac/seed";
 import {refreshUserSnapshotStatements} from "@/server/rbac/snapshot";
@@ -73,36 +77,17 @@ export async function bootstrapAdmin(
         // `signup_source` 显式写 'admin'（ADR-0014 D8 / I9）：这是管理侧引导建号，
         // 不是邮件注册。迁移 0157 的存量回填只能按 email 后缀猜，而这个入口可能用
         // **真实邮箱**建号（实测 xi.ernest@gmail.com 就是一例），猜不出来 → 必须显式写。
-        'INSERT INTO "auth_user" ' +
-          '("id", "name", "email", "emailVerified", "createdAt", ' +
-          '"updatedAt", "role", "signup_source") VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).bind(
-        userId,
-        normalizedEmail,
-        normalizedEmail,
-        1,
-        timestamp,
-        timestamp,
-        "admin",
-        "admin",
-      ),
-      runtimeEnv.FEED_DB.prepare(
-        'INSERT INTO "auth_account" ' +
-          '("id", "accountId", "providerId", "userId", "password", ' +
-          '"createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).bind(
+        authUserInsertSql({signupSource: "admin"}),
+      ).bind(userId, normalizedEmail, normalizedEmail, timestamp, timestamp),
+      credentialAccountStatement(runtimeEnv.FEED_DB, {
         accountId,
-        userId,
-        "credential",
-        userId,
         passwordHash,
         timestamp,
-        timestamp,
-      ),
+        userId,
+      }),
       // Assign the bootstrap admin to super_admin so a fresh install is fully
-      // provisioned. This grant *is* the access: the guard's legacy
-      // `role='admin'` bypass is gone, and `auth_user.role` is only a derived
-      // mirror of this role (see BETTER_AUTH_ADMIN_ROLE).
+      // provisioned. This grant *is* the access: the guard's legacy role bypass
+      // is gone, and `auth_user.role` is no longer read anywhere.
       runtimeEnv.FEED_DB.prepare(
         "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, 'r_super_admin')",
       ).bind(userId),

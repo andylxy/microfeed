@@ -15,6 +15,7 @@
 
 import {cache} from "cloudflare:workers";
 
+import {authUserInsertSql} from "@/server/auth/account-insert";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {
   ensureAppLoginCredential,
@@ -174,9 +175,12 @@ async function createQqUser(
     // `signup_source` 显式写 'qq'（ADR-0014 D8 / I9）。必须显式写，不能靠迁移回填：
     // 回填按 email 后缀推导，而用户一旦补了邮箱（bindEmailCommit）后缀就没了，
     // 那时已无法证明这个账号当初是 QQ 建号（§6.2 回填时间窗）。
-    `INSERT OR IGNORE INTO "auth_user" ` +
-      "(id, name, email, emailVerified, image, createdAt, updatedAt, role, username, displayUsername, banned, signup_source) " +
-      "VALUES (?, ?, ?, 1, ?, ?, ?, 'user', ?, ?, 0, 'qq')",
+    authUserInsertSql({
+      orIgnore: true,
+      signupSource: "qq",
+      withImage: true,
+      withUsername: true,
+    }),
   ).bind(
     id,
     nickname || `qq_${openid}`,

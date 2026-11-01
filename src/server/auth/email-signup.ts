@@ -10,9 +10,10 @@
  *
  * ## 为什么是 `signUpEmail`
  *
- * admin 插件的 `createUser` 要求管理员会话，本链路是匿名请求，调用只会拿到
- * 401。所以走公开注册原语，实例由 `createSignUpEnabledAuth` 提供、按请求新建、
- * 只在本文件内使用。建号授权来自调用方刚校验通过的验证码，不来自这个开关。
+ * 后台建号与 bootstrap 走 `account-insert.ts` 自拼语句；本链路保留公开注册原
+ * 语，因为建号授权已经由调用方刚校验通过的验证码给出，原语顺带提供了邮箱唯一
+ * 的冲突判定与口令哈希。实例由 `createSignUpEnabledAuth` 提供、按请求新建、只
+ * 在本文件内使用。
  *
  * ## username 与 emailVerified 要补写
  *

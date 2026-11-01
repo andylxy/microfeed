@@ -22,12 +22,11 @@
  * must be kicked out, and one who must change their password must be stopped,
  * exactly like any other account.
  *
- * There is deliberately no legacy `auth_user.role = 'admin'` bypass any more:
- * RBAC is the only authority. Every administrator that used to depend on that
- * bypass holds the `super_admin` role instead — migration 0031 backfilled the
- * historical ones, 0053 closes the remaining gap, and `password-setup` grants
- * it at creation. `auth_user.role` stays a Better Auth field that authorises
- * nothing.
+ * There is deliberately no legacy `auth_user.role = 'admin'` bypass: RBAC is the
+ * only authority. Every administrator that used to depend on that bypass holds
+ * the `super_admin` role instead — migration 0031 backfilled the historical
+ * ones, 0053 closed the remaining gap, and `password-setup` grants it at
+ * creation. The column itself is no longer written or read (ADR-0054).
  *
  * Status code spectrum (DESIGN.md §7): 401 unauthorized, 403 forbidden,
  * 400 replay, 428 must-change-password, 426 app-version-too-low.
@@ -50,9 +49,9 @@ import type {PermissionAudience} from "@/shared/Rbac";
 
 export interface RbacLocals {
   /**
-   * The signed-in account. Only `id` is read here: `auth_user.role` used to feed
-   * a legacy bypass and now authorises nothing in this module — it only gates
-   * Better Auth's own admin plugin (see `BETTER_AUTH_ADMIN_ROLE`).
+   * The signed-in account. Only `id` is read here — `auth_user.role` no longer
+   * exists as an input anywhere, since the admin plugin that gated on it was
+   * removed (ADR-0054).
    */
   authUser?: {id?: string} | null;
   rbacPermissions?: Set<string> | null;

@@ -18,20 +18,6 @@ import type {AdminLanguage} from "./AdminLanguage";
 export const DEFAULT_USER_ROLE = "readonly";
 
 /**
- * The `auth_user.role` value that lets an account call Better Auth's own admin
- * plugin endpoints (set-role, ban-user, remove-user, impersonate-user, …).
- *
- * Those endpoints gate on `auth_user.role`, not on RBAC, so this field is the
- * second authorization source. It is therefore treated as a **derived mirror**
- * of holding the RBAC `super_admin` role — `replaceUserRoles` and migration
- * 0053 keep the two in step — and never as an independent grant.
- */
-export const BETTER_AUTH_ADMIN_ROLE = "admin";
-
-/** The `auth_user.role` value of an account that may not call the admin plugin. */
-export const BETTER_AUTH_USER_ROLE = "user";
-
-/**
  * 权限对象的终端归属（ADR-0039 D1）：
  *   - `desktop` —— 后台页面权限（内容 / 审核 / 站点 / 集成 / 账户 / 运营）；
  *   - `app` —— App 能力权限码（`app:nav:read` / `app:version:read` / …）。
@@ -91,8 +77,6 @@ export interface RbacUser {
   banned: boolean;
   email: string;
   id: string;
-  /** `auth_user.role`, the Better Auth string role that predates RBAC. */
-  legacyRole: string | null;
   name: string;
   roles: string[];
   /**

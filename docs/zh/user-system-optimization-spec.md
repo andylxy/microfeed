@@ -51,7 +51,9 @@
 
 量级要摆正：**权限判定是微秒级，D1 往返是毫秒级。** 实测（2026-11-01 本机，`node` `hrtime.bigint()`，2 万次采样，见 §7.3）一次后台页 38 次判定的总耗时是 **0.48 µs** —— 约为一次 D1 查询的 0.01%。所以优化只能打往返数，不能打判定次数。
 
-### 2.2 两个真源与它们的镜像关系
+### 2.2 两个真源与它们的镜像关系（已作废，见 ADR-0054）
+
+> **本节的镜像那一半不再成立。** better-auth admin 插件已移除，`auth_user.role` 停写停读、存量值由 `0163` 清为 NULL，镜像不再有读者（ADR-0054）。下表描述的 `tests/unit/auth-role-mirror.test.ts` 两个用例也已改写为反向断言。保留本节是为了说明「当时为什么会有那一层冗余」。
 
 - `ext_user_roles` 是「账号持有哪些角色」的唯一真源，授权全读它。
 - `auth_user.role` 是**有损**派生镜像：持 `super_admin` 记 `admin`，其余记 `user`（`src/shared/Rbac.ts:29,32`）。它只服务 Better Auth admin 插件自己的端点，不参与授权。
@@ -192,7 +194,9 @@ SEARCH s USING INDEX sqlite_autoindex_ext_user_security_1 (user_id=?) LEFT-JOIN
 
 > 往返数按现有 `Promise.all` 的并发假设计。若某个环境下 D1 会话内串行执行，则退化为 3 条串行语句 —— 仍比现状少 1 条语句、少 1 趟往返。
 
-## 5. D：修掉 `auth_user.role` 与 `ext_user_roles` 的漂移
+## 5. D：修掉 `auth_user.role` 与 `ext_user_roles` 的漂移（已作废，见 ADR-0054）
+
+> **本节及 §5.1–§5.5 描述的动作已成历史。** ADR-0054 把镜像整体清空，两侧不再并存，漂移无从产生：`0161` 那一版让镜像与真源取同一值，`0163` 把镜像清为空值，两步都留在迁移台账里。运维查询与检查点脚本不再需要，`password-setup` 的授权时机调整仍在代码里（它同时是 ADR-0053 快照的写入点之一）。
 
 ### 5.1 缺陷本体
 

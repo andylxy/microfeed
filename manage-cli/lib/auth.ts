@@ -2,6 +2,10 @@ import {randomUUID} from "node:crypto";
 
 import {hashPassword} from "better-auth/crypto";
 
+import {
+  ADMIN_CREATED_DEFAULTS,
+  AUTH_USER_COLUMNS,
+} from "@/shared/AdminAccountColumns";
 import {normalizeAdminEmail} from "@/shared/AdminCredentials";
 
 export {
@@ -15,7 +19,6 @@ export {
 export interface AuthOwner {
   email: string;
   id: string;
-  role: string | null;
 }
 
 export interface AuthPasswordSetup {
@@ -39,20 +42,23 @@ export async function ownerInsertSql(
   const userId = randomUUID();
   const accountId = randomUUID();
   const timestamp = new Date().toISOString();
+  // 按列名取值：`AUTH_USER_COLUMNS` 增列时这里会编译失败，逼调用方补出新列的
+  // 取值，不会静默少写一列。
+  const userValues: Record<(typeof AUTH_USER_COLUMNS)[number], string> = {
+    id: sqlString(userId),
+    name: sqlString(email),
+    email: sqlString(email),
+    emailVerified: String(ADMIN_CREATED_DEFAULTS.emailVerified),
+    createdAt: sqlString(timestamp),
+    updatedAt: sqlString(timestamp),
+    banned: String(ADMIN_CREATED_DEFAULTS.banned),
+    signup_source: sqlString("admin"),
+  };
   return [
     "INSERT INTO \"auth_user\" (" +
-      "\"id\", \"name\", \"email\", \"emailVerified\", \"createdAt\", " +
-      "\"updatedAt\", \"role\"" +
+      AUTH_USER_COLUMNS.map((column) => `"${column}"`).join(", ") +
       ") VALUES (" +
-      [
-        sqlString(userId),
-        sqlString(email),
-        sqlString(email),
-        "1",
-        sqlString(timestamp),
-        sqlString(timestamp),
-        sqlString("admin"),
-      ].join(", ") +
+      AUTH_USER_COLUMNS.map((column) => userValues[column]).join(", ") +
       ");",
     "INSERT INTO \"auth_account\" (" +
       "\"id\", \"accountId\", \"providerId\", \"userId\", \"password\", " +

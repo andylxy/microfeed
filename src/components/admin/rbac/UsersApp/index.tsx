@@ -722,12 +722,6 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
             <dl className="mb-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
               <div className="flex gap-1">
-                <dt>{t("rbac.legacyRole")}</dt>
-                <dd className="font-mono text-foreground">
-                  {user.legacyRole ?? t("rbac.legacyRoleNone")}
-                </dd>
-              </div>
-              <div className="flex gap-1">
                 <dt>{t("rbac.accountState")}</dt>
                 <dd className={cn("font-mono", user.banned ? "text-amber-600 dark:text-amber-300" : "text-foreground")}>
                   {user.banned ? t("rbac.accountBanned") : t("rbac.accountActive")}
@@ -893,10 +887,6 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 </div>
               )}
             </div>
-
-            <p className="mb-4 text-xs text-muted-foreground">
-              {t("rbac.legacyRoleHint")}
-            </p>
 
             {user.id === currentUserId && (
               <p className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">

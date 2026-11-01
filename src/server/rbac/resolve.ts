@@ -142,7 +142,7 @@ export interface RbacResolved {
  * Both conditions live here so a newly added authentication path cannot forget
  * either half. The flag is read from the table rather than off
  * `locals.authUser`, which is typed as the base Better Auth `User` and does not
- * carry the admin plugin's fields.
+ * carry the `banned` column.
  */
 export async function accountIsBlocked(
   db: D1Database,

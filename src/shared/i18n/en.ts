@@ -2110,10 +2110,6 @@ export const en = {
     userCategoryNoResults: "No matching accounts",
     userRolesSaveFailed: "Could not save roles",
     userRolesDescription: "Tick the roles this account should hold. Changes apply on the next request — nobody has to sign in again.",
-    legacyRole: "Better Auth role",
-    legacyRoleHint:
-      "This field authorises nothing on its own: access comes from the roles above.",
-    legacyRoleNone: "none",
     accountState: "Account",
     accountActive: "active",
     accountBanned: "banned",

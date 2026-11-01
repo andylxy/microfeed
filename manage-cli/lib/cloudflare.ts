@@ -71,9 +71,6 @@ function parseAuthOwnerOutput(output: string): AuthOwner | null {
     return {
       email: String(row.email ?? ""),
       id: String(row.id ?? ""),
-      role: row.role === null || row.role === undefined
-        ? null
-        : String(row.role),
     };
   }
   return null;
@@ -1814,7 +1811,7 @@ export class CloudflareClient {
       local ? "FEED_DB" : config.d1.name,
       local ? "--local" : "--remote",
       "--command",
-      "SELECT \"id\", \"email\", \"role\" FROM \"auth_user\" " +
+      "SELECT \"id\", \"email\" FROM \"auth_user\" " +
         "ORDER BY \"createdAt\" LIMIT 1",
       "--json",
       "--config",

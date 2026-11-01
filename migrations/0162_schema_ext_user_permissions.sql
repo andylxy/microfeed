@@ -7,14 +7,17 @@
 -- 授权、用户角色分配三者都是人工月级操作，所以把结果按账号物化，读侧降为
 -- 一条点查、一行、7.67 µs。
 --
--- 这张表是仓库里第二个镜像（第一个是 auth_user.role，ADR-0052）：
+-- 这张表是仓库里唯一的物化镜像（ADR-0053）：
 --   - 权威仍在 ext_user_roles / ext_role_permissions / ext_roles；
 --   - 写入由应用层在同一批次里维护，没有触发器、没有外键约束保证内容；
 --   - 读侧查不到即无权限（ADR-0053 约束 3），所以写路径漏一处就是 403 或越权。
 --
--- banned / banReason / banExpires 刻意不进这张表：它们由 better-auth admin
--- 插件自己写库（rbac-handlers.ts 调 api.banUser），应用层看不到写入时刻，
--- 物化会长期漂移，且漂移方向是「已封禁仍放行」。
+-- banned / banReason / banExpires 刻意不进这张表：读路径已经在同一条语句里
+-- 顺带把它们从 auth_user / ext_user_security 取回（见 src/server/rbac/snapshot.ts
+-- 的 readSnapshotGate），物化既不减少往返也不减少行数，只多出一处需要同步的写点。
+--
+--   banExpires 是时间判据：读路径一旦开始做「过期即解封」的比较，物化就会把时间
+--   维度固化下来，那时更不能进这张表。
 --
 -- type = schema。
 -- rollback:

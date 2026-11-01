@@ -1,13 +1,11 @@
 /**
- * `auth_user.role` is a *derived mirror* of the RBAC `super_admin` grant, not an
- * independent authorization source (ADR-0011 D4; `BETTER_AUTH_ADMIN_ROLE` in
- * `src/shared/Rbac.ts`).
+ * 反向守卫：`auth_user.role` 不再是 `ext_user_roles` 的派生镜像。
  *
- * Better Auth's own admin plugin reads that column, so it has to stay in step
- * with `ext_user_roles`. A second code path that wrote it without touching the
- * RBAC tables would silently split authorization in two — the exact drift D4
- * warns about. This is the tripwire: it pins every writer of the column, so a
- * new one fails the suite and forces a review instead of a quiet divergence.
+ * 这一列曾由六处代码写入、供 Better Auth 的 admin 插件端点鉴权。插件移除后它
+ * 无写者、无读者，唯一的风险是被谁「顺手补回来」——那样会重新长出第二条授权面。
+ * 本文件守的就是这件事。
+ *
+ * 原条款见 ADR-0052 决策 2，该条已由 ADR-0054 撤回。
  */
 import {readdir, readFile} from "node:fs/promises";
 import path from "node:path";
@@ -15,27 +13,28 @@ import {fileURLToPath} from "node:url";
 
 import {describe, expect, it} from "vitest";
 
+import {AUTH_USER_COLUMNS} from "@/shared/AdminAccountColumns";
+import {
+  authUserInsertFromSetupSql,
+  credentialAccountFromSetupStatement,
+} from "@/server/auth/account-insert";
+import {makeD1, makeSqlite} from "./server/helpers/d1";
+
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const sourceRoot = path.join(repositoryRoot, "src");
+const cliRoot = path.join(repositoryRoot, "manage-cli");
 
 /**
- * `UPDATE ["<"]auth_user[">] SET ["<"]role[">] =` — the mirror write. Quotes are
- * optional on both identifiers so a quoted variant (the repo already writes
- * `INSERT INTO "auth_user"`) cannot slip past the tripwire.
+ * `UPDATE ["<"]auth_user[">] SET ["<"]role[">] =` —— 镜像写入。两个标识符的引号
+ * 都可选，带引号的写法不能从这条规则下溜过去。
  */
-const MIRROR_WRITE = /UPDATE\s+"?auth_user"?\s+SET\s+"?role"?\s*=/giu;
-
-/** `INSERT INTO ["<"]auth_user` — the account-creation write. */
-const USER_INSERT = /INSERT\s+INTO\s+"?auth_user\b/giu;
+const MIRROR_WRITE = /UPDATE\s+"?auth_user"?\s+SET\s+"?role"?\s*=/iu;
 
 /**
- * The mapping every mirror write must carry: holding `super_admin` becomes the
- * Better Auth admin role, anything else the plain user role. Pinning the whole
- * ternary — not just "the file mentions the constants" — is what stops a flipped
- * mapping from passing.
+ * `auth_user` 后面紧跟括号的地方就是建号列清单。前导的 `INSERT INTO` 可能是模板
+ * 变量（`${head}`）或转义引号（`\"auth_user\"`），所以只认表名本身。
  */
-const MIRROR_MAPPING =
-  /includes\(SUPER_ADMIN\)\s*\?\s*BETTER_AUTH_ADMIN_ROLE\s*:\s*BETTER_AUTH_USER_ROLE/gu;
+const USER_INSERT = /auth_user\\?"?\s*\(/gu;
 
 async function sourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, {withFileTypes: true});
@@ -51,56 +50,197 @@ async function sourceFiles(directory: string): Promise<string[]> {
   return files.flat();
 }
 
-/** Files under `src/` whose text matches `pattern`, relative to the repo root. */
-async function writersOf(pattern: RegExp): Promise<string[]> {
-  const files = await sourceFiles(sourceRoot);
+/** 目录树下文本命中 `pattern` 的文件，路径相对仓库根。 */
+async function writersOf(
+  pattern: RegExp,
+  roots: readonly string[],
+): Promise<string[]> {
   const hits: string[] = [];
-  for (const file of files) {
-    const source = await readFile(file, "utf8");
-    // The patterns are global, so `test` advances `lastIndex`; reset per file.
-    pattern.lastIndex = 0;
-    if (pattern.test(source)) {
-      hits.push(path.relative(repositoryRoot, file));
+  for (const root of roots) {
+    for (const file of await sourceFiles(root)) {
+      const source = await readFile(file, "utf8");
+      if (pattern.test(source)) {
+        hits.push(path.relative(repositoryRoot, file));
+      }
     }
   }
   return hits.sort();
 }
 
-describe("auth_user.role stays a derived mirror of the RBAC super_admin grant", () => {
-  it("mutates the mirror column only in rbac-handlers.ts", async () => {
-    const writers = await writersOf(MIRROR_WRITE);
-    expect(writers).toEqual([
-      path.join("src", "server", "admin", "rbac-handlers.ts"),
-    ]);
+/**
+ * 每条 `INSERT INTO "auth_user"` 之后的列清单窗口。列名可能由常量拼出，窗口
+ * 就只能按位置取；`\brole\b` 不会命中 `roles`。
+ */
+async function insertWindows(
+  roots: readonly string[],
+): Promise<{file: string; text: string}[]> {
+  const windows: {file: string; text: string}[] = [];
+  for (const root of roots) {
+    for (const file of await sourceFiles(root)) {
+      const source = await readFile(file, "utf8");
+      for (const match of source.matchAll(USER_INSERT)) {
+        windows.push({
+          file: path.relative(repositoryRoot, file),
+          text: source.slice(match.index, match.index + 600),
+        });
+      }
+    }
+  }
+  return windows;
+}
 
-    const source = await readFile(
-      path.join(sourceRoot, "server", "admin", "rbac-handlers.ts"),
-      "utf8",
-    );
-    // Exactly two mirror writes — `replaceUserRoles` and `createAdminRbacUser` —
-    // and each one carries the super_admin -> admin mapping. A flipped or dropped
-    // mapping fails here rather than silently authorizing the wrong way.
-    expect(source.match(MIRROR_WRITE) ?? []).toHaveLength(2);
-    expect(source.match(MIRROR_MAPPING) ?? []).toHaveLength(2);
+describe("auth_user.role 不再有任何写入点", () => {
+  it("src/ 与 manage-cli/ 里都没有针对该列的 UPDATE", async () => {
+    expect(await writersOf(MIRROR_WRITE, [sourceRoot, cliRoot])).toEqual([]);
   });
 
-  it("creates an auth_user row with a role only in the two owner paths", async () => {
-    const writers = await writersOf(USER_INSERT);
-    expect(writers).toEqual([
-      path.join("src", "server", "auth", "bootstrap.ts"),
-      path.join("src", "server", "auth", "password-setup.ts"),
-    ]);
+  it("建号语句的列清单都不含 role", async () => {
+    const windows = await insertWindows([sourceRoot, cliRoot]);
+    // 三条路径共用 `account-insert.ts` 的两条语句，加上 manage-cli 的一份，
+    // 命中数不为零才说明扫描器真的看到了建号语句。
+    expect(windows.length).toBeGreaterThanOrEqual(3);
+    for (const window of windows) {
+      expect(`${window.file}: ${/\brole\b/iu.test(window.text)}`).toBe(
+        `${window.file}: false`,
+      );
+    }
+  });
+
+  it("列清单常量不含 role 且恰好八列", () => {
+    expect(AUTH_USER_COLUMNS).not.toContain("role");
+    // 列清单是全仓唯一一份：两条 `INSERT INTO "auth_user"` 语句都由它拼出。
+    expect(AUTH_USER_COLUMNS).toHaveLength(8);
+  });
+
+  it("better-auth 实例不再加载 admin 插件", async () => {
+    const source = await readFile(
+      path.join(sourceRoot, "server", "auth", "better-auth.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/better-auth\/plugins\/admin/u);
+
+    const pluginsAt = source.indexOf("plugins: [");
+    expect(pluginsAt).toBeGreaterThan(-1);
+    const pluginsEnd = source.indexOf("\n    ],", pluginsAt);
+    expect(pluginsEnd).toBeGreaterThan(pluginsAt);
+    const plugins = source.slice(pluginsAt, pluginsEnd);
+
+    // 剩下的三个插件是 passkey / username / oauthProvider。
+    // 切片里出现 `adminUrl(...)` 与 `adminPath` 是正常的，这里只认插件调用形态。
+    expect(plugins).not.toMatch(/(?:^|[\s,])admin\s*\(/mu);
+    expect(plugins).toMatch(/\bpasskey\s*\(/u);
+    expect(plugins).toMatch(/\busername\s*\(/u);
+    expect(plugins).toMatch(/\boauthProvider\s*\(/u);
   });
 });
 
+/** 安装流程用到的四张表，只保留本组断言需要的列。 */
+const SETUP_SCHEMA = `
+CREATE TABLE "auth_user" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "email" TEXT NOT NULL UNIQUE,
+  "emailVerified" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TEXT NOT NULL,
+  "updatedAt" TEXT NOT NULL,
+  "banned" INTEGER NOT NULL DEFAULT 0,
+  "signup_source" TEXT NOT NULL DEFAULT 'email'
+);
+CREATE TABLE "auth_account" (
+  "id" TEXT PRIMARY KEY,
+  "accountId" TEXT NOT NULL,
+  "providerId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "password" TEXT,
+  "createdAt" TEXT NOT NULL,
+  "updatedAt" TEXT NOT NULL
+);
+CREATE TABLE "auth_password_setup" (
+  "id" TEXT PRIMARY KEY,
+  "purpose" TEXT NOT NULL,
+  "email" TEXT NOT NULL,
+  "userId" TEXT,
+  "tokenHash" TEXT NOT NULL,
+  "createdAt" TEXT NOT NULL,
+  "expiresAt" TEXT NOT NULL
+);
+CREATE TABLE "ext_user_roles" (
+  "user_id" TEXT NOT NULL,
+  "role_id" TEXT NOT NULL,
+  PRIMARY KEY ("user_id", "role_id")
+);
+`;
+
+async function insertSetupRow(
+  db: D1Database,
+  input: {expiresAt: string; now: string; tokenHash: string},
+): Promise<void> {
+  await db
+    .prepare(
+      'INSERT INTO "auth_password_setup" ("id", "purpose", "email", ' +
+        '"userId", "tokenHash", "createdAt", "expiresAt") ' +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(
+      "owner",
+      "initial",
+      "owner@example.com",
+      null,
+      input.tokenHash,
+      input.now,
+      input.expiresAt,
+    )
+    .run();
+}
+
 /**
- * 安装向导建所有者时，`auth_user` 行与 super_admin 授予必须同批提交：授予若留在
- * 批次之后，一旦失败就留下「role = 'admin' 却没有 super_admin」的越权行，
- * 而迁移只能事后订正，堵不住再生。这里守两件事：授予语句在批次之内，且批次校验
- * 只看前 3 条（授予是 `INSERT OR IGNORE`，已存在时返回 0 changes）。
+ * 复刻安装流程批次里与令牌相关的前三条语句。`at` 是与 `expiresAt` 比较的「当前
+ * 时刻」，由调用方给，便于构造过期场景。
  */
-describe("password-setup grants the owner role inside the create batch", () => {
-  it("keeps exactly one grant statement inside the create batch", async () => {
+async function runCreateBatch(
+  db: D1Database,
+  tokenHash: string,
+  at: string,
+): Promise<void> {
+  const userId = "user-1";
+  await db.batch([
+    db
+      .prepare(authUserInsertFromSetupSql({}))
+      .bind(userId, at, at, "owner", "initial", tokenHash, at),
+    credentialAccountFromSetupStatement(db, {
+      accountId: "account-1",
+      passwordHash: "hash",
+      purpose: "initial",
+      setupId: "owner",
+      timestamp: at,
+      tokenHash,
+      userId,
+    }),
+    db
+      .prepare(
+        'DELETE FROM "auth_password_setup" WHERE "id" = ? AND "purpose" = ? ' +
+          'AND "tokenHash" = ? AND "expiresAt" > ?',
+      )
+      .bind("owner", "initial", tokenHash, at),
+  ]);
+}
+
+async function countRows(db: D1Database, table: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS total FROM "${table}"`)
+    .first<{total: number}>();
+  return Number(row?.total ?? 0);
+}
+
+/**
+ * 安装向导建所有者时，`auth_user` 行、凭证行、授予与快照必须同批提交：授予若
+ * 留在批次之后，一旦失败就留下「账号已建、没有 super_admin」的越权行，而迁移只能
+ * 事后订正，堵不住再生。
+ *
+ * 两条断言：批次结构（授予语句在 batch 方括号之内）与真实行为（令牌只能用一次）。
+ */
+describe("password-setup 的建号批次", () => {
+  it("授予语句与两条建号语句在同一个 batch 内", async () => {
     const source = await readFile(
       path.join(sourceRoot, "server", "auth", "password-setup.ts"),
       "utf8",
@@ -108,8 +248,6 @@ describe("password-setup grants the owner role inside the create batch", () => {
     expect(source.match(/INSERT OR IGNORE INTO ext_user_roles/gu) ?? [])
       .toHaveLength(1);
 
-    // 授予必须写在建号批次的方括号之内：移到批次之后就会重新出现「账号已建、
-    // 授权失败」的越权窗口。
     const batchStart = source.indexOf("results = await database.batch([");
     expect(batchStart).toBeGreaterThan(-1);
     const batchEnd = source.indexOf("]);", batchStart);
@@ -119,46 +257,50 @@ describe("password-setup grants the owner role inside the create batch", () => {
     expect(grantAt).toBeGreaterThan(batchStart);
     expect(grantAt).toBeLessThan(batchEnd);
 
-    // 授予是批次里的第 4 条：它前面有 3 条各自 `.bind(...)` 结尾的语句
-    // （建账号、建凭证、删 token），批次校验只读这 3 条。
-    const bindsBefore = source
-      .slice(batchStart, grantAt)
-      .match(/\.bind\(/gu) ?? [];
-    expect(bindsBefore).toHaveLength(3);
+    // 建号两条改由公共函数给出，仍在同一批次内。
+    for (const builder of [
+      "authUserInsertFromSetupSql(",
+      "credentialAccountFromSetupStatement(",
+    ]) {
+      const at = source.indexOf(builder);
+      expect(at).toBeGreaterThan(batchStart);
+      expect(at).toBeLessThan(batchEnd);
+    }
+
+    // 批次校验只读前 3 条（建账号、建凭证、删 token）；授予是 `INSERT OR IGNORE`，
+    // 已存在时返回 0 changes，算进去会让重放场景误报 410。
     expect(source).toContain("results.slice(0, 3)");
   });
-});
 
-/**
- * 存量漂移的订正放在一个 data 迁移里（`role` 是派生值，两侧不一致即为缺陷）。
- * 这里守的是迁移的**分支完整性**：以后有人编辑该文件时删掉某一支，测试立即报，
- * 不靠人工复核 SQL。本文件读文件不读库，所以断言不到「漂移真的被改掉」——
- * 那一半只能靠部署后跑运维查询。
- */
-describe("auth_user.role drift correction migration", () => {
-  it("covers all three drift branches and keys on the role code", async () => {
-    const source = await readFile(
-      path.join(
-        repositoryRoot,
-        "migrations",
-        "0161_data_sync_auth_user_role.sql",
-      ),
-      "utf8",
-    );
-    expect(source).toContain("-- rollback:");
+  it("首跑三条语句都生效，重放不新增账号", async () => {
+    const database = makeSqlite(SETUP_SCHEMA);
+    const db = makeD1(database);
+    const now = new Date().toISOString();
+    const future = new Date(Date.now() + 60_000).toISOString();
+    await insertSetupRow(db, {expiresAt: future, now, tokenHash: "token"});
 
-    // 先剥掉注释行：rollback 块里的示例语句与说明会干扰匹配。
-    const body = source
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("--"))
-      .join("\n");
+    await runCreateBatch(db, "token", now);
+    expect(await countRows(db, "auth_user")).toBe(1);
+    expect(await countRows(db, "auth_account")).toBe(1);
+    expect(await countRows(db, "auth_password_setup")).toBe(0);
 
-    expect(body).toMatch(/UPDATE\s+"auth_user"/u);
-    expect(body).toMatch(/"role"\s+IS\s+NULL/u);
-    expect(body).toMatch(/"role"\s*=\s*'admin'\s+AND\s+NOT\s+EXISTS/u);
-    expect(body).toMatch(/"role"\s*=\s*'user'\s+AND\s+EXISTS/u);
-    // 判据是角色码，不是角色主键：各环境的 id 未必一致。
-    expect(body).toMatch(/r\."code"\s*=\s*'super_admin'/u);
-    expect(body).not.toMatch(/r\."id"\s*=\s*'r_super_admin'/u);
+    // 令牌行已被上一条 DELETE 消费掉，重放时 SELECT 命中 0 行。
+    await runCreateBatch(db, "token", now);
+    expect(await countRows(db, "auth_user")).toBe(1);
+    expect(await countRows(db, "auth_account")).toBe(1);
+  });
+
+  it("令牌过期时一条都不写", async () => {
+    const database = makeSqlite(SETUP_SCHEMA);
+    const db = makeD1(database);
+    const now = new Date().toISOString();
+    const past = new Date(Date.now() - 60_000).toISOString();
+    await insertSetupRow(db, {expiresAt: past, now, tokenHash: "token"});
+
+    await runCreateBatch(db, "token", now);
+    expect(await countRows(db, "auth_user")).toBe(0);
+    expect(await countRows(db, "auth_account")).toBe(0);
+    // 过期行不会被删：WHERE 里的 `expiresAt > ?` 不成立。
+    expect(await countRows(db, "auth_password_setup")).toBe(1);
   });
 });

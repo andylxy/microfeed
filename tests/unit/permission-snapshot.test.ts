@@ -128,10 +128,16 @@ describe("权限快照的写入收口", () => {
     expect(snapshot).toContain("DELETE FROM ext_user_permissions");
     expect(snapshot).toContain("INSERT INTO ext_user_permissions");
 
-    // 删账号那条在 rbac-handlers.ts：不能依赖 D1 的外键强制开关，显式删一次。
+    // 删账号那条随清单一起迁到 user-owned-tables.ts：不能依赖 D1 的外键强制
+    // 开关，必须显式删一次。handler 侧只剩按清单展开的循环，没有字面量。
+    const owned = await readSource("src", "server", "admin", "user-owned-tables.ts");
+    expect(owned).toContain('{column: "user_id", table: "ext_user_permissions"}');
+    expect(owned).toContain('["ext_api_access_log"]');
+
     const handlers = await readSource("src", "server", "admin", "rbac-handlers.ts");
-    expect(handlers.split("ext_user_permissions")).toHaveLength(2);
-    expect(handlers).toContain("DELETE FROM ext_user_permissions WHERE user_id = ?");
+    expect(handlers).not.toContain("ext_user_permissions");
+    expect(handlers).toContain("...USER_OWNED_TABLES.map(");
+    expect(handlers).toContain('DELETE FROM "${table}" WHERE "${column}" = ?');
 
     // 其余写路径只许调构造器，不许自己拼这张表的语句。
     const others = [

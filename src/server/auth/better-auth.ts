@@ -1,7 +1,7 @@
 import {oauthProvider} from "@better-auth/oauth-provider";
 import {passkey} from "@better-auth/passkey";
 import {betterAuth} from "better-auth";
-import {admin, username} from "better-auth/plugins";
+import {username} from "better-auth/plugins";
 
 import {oauthConnectionHandoff} from "@/server/auth/account-security";
 import {
@@ -20,7 +20,6 @@ import {
   OAUTH_REFRESH_TOKEN_SECONDS,
   OAUTH_SCOPES,
 } from "@/shared/OAuth";
-import {BETTER_AUTH_ADMIN_ROLE} from "@/shared/Rbac";
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
@@ -34,9 +33,10 @@ export function createMicrofeedAuth(
 /**
  * 放开公开注册原语的实例，**只允许邮箱注册链路调用**。
  *
- * 为什么需要它：邮箱注册端点是匿名的，而 admin 插件的 `createUser` 要求管理员
- * 会话（匿名调用直接 401），所以匿名建号只能走公开原语 `signUpEmail`——全站
- * `disableSignUp: true` 把它关掉了，只有这里临时打开。
+ * 为什么需要它：全站 `disableSignUp: true`，公开注册原语 `signUpEmail` 默认不
+ * 可用。匿名邮箱注册链路仍要它——原语由 better-auth 自己完成 `auth_user` 与
+ * `auth_account` 双表写入，并带上邮箱唯一的冲突判定与口令哈希，本链路不必再
+ * 拼一遍语句。注册只在这里临时打开。
  *
  * 安全边界没有移动：实例是按请求新建的，只有拿到它的调用方才受影响。公开路由
  * `/api/auth/sign-up/email` 由 `[...all].ts` 用默认实例服务，注册保持关闭。
@@ -89,11 +89,6 @@ function buildAuth(
       revokeSessionsOnPasswordReset: true,
     },
     plugins: [
-      // admin 插件用它自己的端点（set-role、ban-user、remove-user、
-      // impersonate-user 等），这些端点的判据是 `auth_user.role`，不走 RBAC。
-      // 不显式声明时它默认只认 ["admin"]，等于又开了一个授权来源——正是 RBAC
-      // 要收敛掉的那种。这里写出来，并与 RBAC 的 `super_admin` 角色对齐。
-      admin({adminRoles: [BETTER_AUTH_ADMIN_ROLE]}),
       passkey({
         origin,
         rpID: new URL(origin).hostname,

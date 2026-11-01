@@ -2,7 +2,7 @@ import {env} from "cloudflare:workers";
 import {beforeEach, describe, expect, it} from "vitest";
 
 import {STATUSES} from "@/shared/Constants";
-import {BETTER_AUTH_ADMIN_ROLE, DEFAULT_USER_ROLE} from "@/shared/Rbac";
+import {DEFAULT_USER_ROLE} from "@/shared/Rbac";
 import {POST as feedPost} from "@/pages/[adminPath]/ajax/feed";
 
 import {purgeVersionGateCache} from "@/server/app/version/gate-cache";
@@ -64,15 +64,12 @@ async function clearRbacRows(): Promise<void> {
   ]);
 }
 
-async function seedUser(
-  id: string,
-  role: string,
-): Promise<void> {
+async function seedUser(id: string): Promise<void> {
   await env.FEED_DB.prepare(
-    'INSERT INTO "auth_user" (id, name, email, emailVerified, createdAt, updatedAt, role) ' +
-      "VALUES (?, ?, ?, 1, '2024-01-01', '2024-01-01', ?)",
+    'INSERT INTO "auth_user" (id, name, email, emailVerified, createdAt, updatedAt) ' +
+      "VALUES (?, ?, ?, 1, '2024-01-01', '2024-01-01')",
   )
-    .bind(id, id.toUpperCase(), `${id}@example.com`, role)
+    .bind(id, id.toUpperCase(), `${id}@example.com`)
     .run();
 }
 
@@ -88,7 +85,7 @@ beforeEach(clearRbacRows);
 
 describe("RBAC permission resolution", () => {
   it("returns editor permissions (no wildcard) for an editor user", async () => {
-    await seedUser("u1", "user");
+    await seedUser("u1");
     await assignRole("u1", "r_editor");
     const permissions = await resolveUserPermissions(env.FEED_DB, "u1");
     expect(permissions.has("content:book:create")).toBe(true);
@@ -99,7 +96,7 @@ describe("RBAC permission resolution", () => {
   });
 
   it("resolves an empty set for a user with no roles", async () => {
-    await seedUser("u2", "user");
+    await seedUser("u2");
     const permissions = await resolveUserPermissions(env.FEED_DB, "u2");
     expect(permissions.size).toBe(0);
   });
@@ -108,7 +105,7 @@ describe("RBAC permission resolution", () => {
     await createRbacRole(env.FEED_DB, "member_role", "Member role");
     await createRbacRole(env.FEED_DB, "plain_role", "Plain role");
     await setRbacRoleMember(env.FEED_DB, "member_role", true);
-    await seedUser("u-member", "user");
+    await seedUser("u-member");
     await assignRole("u-member", "r_plain_role");
     expect((await resolveUserAccess(env.FEED_DB, "u-member")).isMember).toBe(false);
 
@@ -137,7 +134,7 @@ describe("RBAC permission resolution", () => {
       "desktop",
     );
     await setRbacRoleMember(env.FEED_DB, "dup_a", true);
-    await seedUser("u-dup", "user");
+    await seedUser("u-dup");
     await assignRole("u-dup", "r_dup_a");
     await assignRole("u-dup", "r_dup_b");
 
@@ -505,7 +502,7 @@ describe("RBAC catalog integrity", () => {
 
 describe("clearMustChangePassword", () => {
   it("clears the flag after a password change", async () => {
-    await seedUser("u3", "user");
+    await seedUser("u3");
     await env.FEED_DB.prepare(
       "INSERT INTO ext_user_security (user_id, must_change_password) VALUES (?, 1)",
     ).bind("u3").run();
@@ -830,20 +827,19 @@ describe("RBAC 两端控制台分区", () => {
 
 describe("RBAC user administration", () => {
   it("lists accounts with the roles granted to them", async () => {
-    await seedUser("u-admin", "admin");
-    await seedUser("u-writer", "user");
+    await seedUser("u-admin");
+    await seedUser("u-writer");
     await assignRole("u-writer", "r_editor");
 
     const board = await readRbacUsers(env.FEED_DB);
     const writer = board.users.find((entry) => entry.id === "u-writer");
     expect(writer?.roles).toEqual(["editor"]);
-    expect(writer?.legacyRole).toBe("user");
     expect(writer?.banned).toBe(false);
     expect(board.roles.map((role) => role.code)).toContain("super_admin");
   });
 
   it("replaces an account's roles", async () => {
-    await seedUser("u-swap", "user");
+    await seedUser("u-swap");
     expect(await replaceUserRoles(env.FEED_DB, "u-swap", ["editor"]))
       .toEqual({ok: true});
 
@@ -861,7 +857,7 @@ describe("RBAC user administration", () => {
   it("refuses to strip super_admin from the last account holding it", async () => {
     // Without this the deployment could be left with nobody able to administer
     // it, and the dashboard offers no way back in.
-    await seedUser("u-only-super", "admin");
+    await seedUser("u-only-super");
     await assignRole("u-only-super", "r_super_admin");
 
     expect(await replaceUserRoles(env.FEED_DB, "u-only-super", ["editor"]))
@@ -873,8 +869,8 @@ describe("RBAC user administration", () => {
   });
 
   it("allows dropping super_admin once a second holder exists", async () => {
-    await seedUser("u-super-a", "admin");
-    await seedUser("u-super-b", "admin");
+    await seedUser("u-super-a");
+    await seedUser("u-super-b");
     await assignRole("u-super-a", "r_super_admin");
     await assignRole("u-super-b", "r_super_admin");
 
@@ -885,7 +881,7 @@ describe("RBAC user administration", () => {
   it("rejects an unknown account and an unknown role code", async () => {
     expect(await replaceUserRoles(env.FEED_DB, "nobody", []))
       .toEqual({ok: false, reason: "unknownUser"});
-    await seedUser("u-known", "user");
+    await seedUser("u-known");
     expect(await replaceUserRoles(env.FEED_DB, "u-known", ["nope"]))
       .toEqual({ok: false, reason: "unknownRole"});
   });
@@ -914,7 +910,7 @@ describe("RBAC user administration", () => {
     } as never);
     expect(allowed.status).toBe(200);
 
-    await seedUser("u-gated", "user");
+    await seedUser("u-gated");
     const post = () => new Request(
       "https://feed.example.com/admin/ajax/rbac/user-roles",
       {
@@ -1029,7 +1025,7 @@ describe("RBAC role CRUD (pure functions)", () => {
   });
 
   it("refuses to delete a role that an account still holds", async () => {
-    await seedUser("u-busy", "user");
+    await seedUser("u-busy");
     await createRbacRole(env.FEED_DB, "busy_role", "Busy");
     await assignRole("u-busy", "r_busy_role");
     expect(await deleteRbacRole(env.FEED_DB, "busy_role"))
@@ -1056,7 +1052,7 @@ describe("角色的「登录后台」开关", () => {
     await createRbacRole(env.FEED_DB, "app_only", "App only");
     expect(await setRbacRoleAdminLogin(env.FEED_DB, "app_only", false))
       .toEqual({ok: true});
-    await seedUser("u-app-only", "user");
+    await seedUser("u-app-only");
     await assignRole("u-app-only", "r_app_only");
     expect(await userMayEnterAdmin(env.FEED_DB, "u-app-only")).toBe(false);
 
@@ -1071,7 +1067,7 @@ describe("角色的「登录后台」开关", () => {
   });
 
   it("没有角色的账号不设限", async () => {
-    await seedUser("u-no-role", "user");
+    await seedUser("u-no-role");
     expect(await userMayEnterAdmin(env.FEED_DB, "u-no-role")).toBe(true);
   });
 
@@ -1112,7 +1108,7 @@ describe("RBAC role code rename (Feature A)", () => {
     await replaceRolePermissions(env.FEED_DB, "code_a", ["content:book:read"], "desktop");
     // 会员标记也必须跟着改代码一起过去。
     await setRbacRoleMember(env.FEED_DB, "code_a", true);
-    await seedUser("u-code-a", "user");
+    await seedUser("u-code-a");
     await assignRole("u-code-a", "r_code_a");
 
     expect(await renameRbacRoleCode(env.FEED_DB, "code_a", "code_b"))
@@ -1511,9 +1507,9 @@ describe("RBAC user CRUD endpoints", () => {
     expect(response.status).toBe(404);
   });
 
-  it("creates, bans, and deletes an account through Better Auth", async () => {
-    // The lifecycle endpoints delegate to Better Auth's admin plugin, so the
-    // request must carry an administrator session.
+  it("creates, bans, and deletes an account through the RBAC endpoints", async () => {
+    // The lifecycle endpoints write to D1 directly (ADR-0054), so the request
+    // only needs the `system:user:manage` gate and an administrator session.
     await handleAdminBootstrap(
       {
         FEED_DB: env.FEED_DB,
@@ -1576,9 +1572,8 @@ describe("RBAC user CRUD endpoints", () => {
     // default rather than being created permission-less.
     expect(newUser?.roles).toEqual([DEFAULT_USER_ROLE]);
 
-    // B1: a freshly created account whose RBAC role is super_admin must mirror
-    // that onto `auth_user.role`, so Better Auth's own admin gate (which reads
-    // that column) stays consistent with RBAC instead of leaving a stale "user".
+    // 后台建号后 `auth_user.role` 保持 NULL：这一列已无写者，账号的权限完全由
+    // `ext_user_roles` 与权限快照决定。
     const superCreated = await createAdminRbacUser({
       locals: userManage(["system:user:manage"]),
       request: withSession("user-create", {
@@ -1592,10 +1587,10 @@ describe("RBAC user CRUD endpoints", () => {
     const superJson = await superCreated.json() as Awaited<ReturnType<typeof readRbacUsers>>;
     const superUser = superJson.users.find((entry) => entry.email === "super@example.com");
     expect(superUser).toBeTruthy();
-    const mirrored = await env.FEED_DB.prepare(
+    const leftover = await env.FEED_DB.prepare(
       'SELECT role FROM "auth_user" WHERE id = ?',
-    ).bind(superUser?.id).first<{role: string} | null>();
-    expect(mirrored?.role).toBe(BETTER_AUTH_ADMIN_ROLE);
+    ).bind(superUser?.id).first<{role: string | null} | null>();
+    expect(leftover?.role ?? null).toBeNull();
 
     const superDeleted = await deleteAdminRbacUser({
       locals: userManage(["system:user:manage"]),
@@ -1629,7 +1624,7 @@ describe("RBAC device administration (Gap E)", () => {
   }
 
   it("revokes and restores a device (pure functions)", async () => {
-    await seedUser("u-dev", "user");
+    await seedUser("u-dev");
     await seedDevice("u-dev", "device-a", "active");
 
     expect(await revokeUserDevice(env.FEED_DB, "u-dev", "device-a")).toEqual({ok: true});
@@ -1647,7 +1642,7 @@ describe("RBAC device administration (Gap E)", () => {
   });
 
   it("refuses an unknown account or device", async () => {
-    await seedUser("u-dev2", "user");
+    await seedUser("u-dev2");
     await seedDevice("u-dev2", "device-b");
     expect(await revokeUserDevice(env.FEED_DB, "nope", "device-b"))
       .toEqual({ok: false, reason: "unknownUser"});
@@ -1656,7 +1651,7 @@ describe("RBAC device administration (Gap E)", () => {
   });
 
   it("lists a user's devices", async () => {
-    await seedUser("u-dev3", "user");
+    await seedUser("u-dev3");
     await seedDevice("u-dev3", "device-c");
     const devices = await readRbacUserDevices(env.FEED_DB, "u-dev3");
     expect(devices).toHaveLength(1);
@@ -1670,7 +1665,7 @@ describe("RBAC device administration (Gap E)", () => {
   });
 
   it("gates the device endpoints on system:user:manage (401 / 403 / 200)", async () => {
-    await seedUser("u-dev4", "user");
+    await seedUser("u-dev4");
     await seedDevice("u-dev4", "device-d");
 
     const listAnonymous = await getAdminRbacUserDevices({

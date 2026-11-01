@@ -5,14 +5,15 @@
  * 实测 25.33 µs。快照把「某账号持有哪些权限码」按账号物化，读侧降为一条点查、
  * 一行、7.67 µs。
  *
- * 权威仍在 `ext_user_roles` / `ext_role_permissions` / `ext_roles`。这张表是
- * 仓库里第二个镜像（第一个是 `auth_user.role`），所以：
+ * 权威仍在 `ext_user_roles` / `ext_role_permissions` / `ext_roles`。这张表是仓库
+ * 里唯一的物化镜像，所以：
  *   - 写入只能走这里导出的两个 `*Statement(s)` 构造器，不要就地写 SQL；
  *   - 读侧查不到即无权限，写路径漏一处就是 403 或越权。
  *
- * `banned` / `banReason` / `banExpires` 刻意不进快照：它们由 better-auth admin
- * 插件自己写库（`rbac-handlers.ts` 调 `api.banUser`），应用层看不到写入时刻。
- * 读路径每次把 `banned` 与 `must_change_password` 现查，与快照 LEFT JOIN 成一条。
+ * `banned` / `banReason` / `banExpires` 刻意不进快照：读路径已经在同一条语句里
+ * 从 `auth_user` / `ext_user_security` 顺带取回 `banned` 与 `must_change_password`，
+ * 物化既不减少往返也不减少行数，只多出一处需要同步的写点。`banExpires` 是时间
+ * 判据，读路径一旦开始做「过期即解封」的比较，物化还会把时间维度固化下来。
  */
 
 import type {UserAccess} from "./resolve";

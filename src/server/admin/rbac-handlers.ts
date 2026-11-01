@@ -13,9 +13,14 @@
 
 import {env} from "cloudflare:workers";
 import type {APIRoute} from "astro";
+import {hashPassword} from "better-auth/crypto";
 
 import {jsonResponse, localizedError} from "@/server/http";
-import {createMicrofeedAuth} from "@/server/auth/better-auth";
+import {
+  authUserInsertSql,
+  credentialAccountStatement,
+} from "@/server/auth/account-insert";
+import {USER_OWNED_TABLES} from "./user-owned-tables";
 import {
   createLoginCredential,
   LoginCredentialLimitError,
@@ -31,7 +36,6 @@ import {
 import {
   auditStatement,
   type PendingAudit,
-  recordRbacAudit,
 } from "@/server/rbac/audit";
 import {PERMISSION_CODES} from "@/shared/Constants";
 import {permissionId, roleId} from "@/server/rbac/seed";
@@ -61,8 +65,6 @@ import {
   type LoginCredentialBoard,
 } from "@/shared/LoginCredential";
 import {
-  BETTER_AUTH_ADMIN_ROLE,
-  BETTER_AUTH_USER_ROLE,
   DEFAULT_USER_ROLE,
   isPermissionAudience,
   type PermissionAudience,
@@ -326,7 +328,7 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
   const [accounts, roles, grants] = await Promise.all([
     db
       .prepare(
-        `SELECT id, name, email, role, banned, username, displayUsername, signup_source
+        `SELECT id, name, email, banned, username, displayUsername, signup_source
          FROM auth_user ORDER BY email`,
       )
       .all<{
@@ -335,7 +337,6 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
         email: string;
         id: string;
         name: string;
-        role: string | null;
         signup_source: string | null;
         username: string | null;
       }>(),
@@ -367,7 +368,6 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
       banned: Number(row.banned) === 1,
       email: row.email,
       id: row.id,
-      legacyRole: row.role,
       name: row.name,
       roles: (byUser.get(row.id) ?? []).sort(),
       // Fall back to "email" so a DB that never ran migration 0157 (no
@@ -583,18 +583,6 @@ export async function replaceUserRoles(
         )
         .bind(userId, byCode.get(code)),
     ),
-    // Keep `auth_user.role` a *derived mirror* of the RBAC role: Better Auth's
-    // admin plugin gates its own endpoints on that field, so leaving a stale
-    // value behind would be a second, invisible way to authorize
-    // (see BETTER_AUTH_ADMIN_ROLE).
-    db
-      .prepare("UPDATE auth_user SET role = ? WHERE id = ?")
-      .bind(
-        roleCodes.includes(SUPER_ADMIN)
-          ? BETTER_AUTH_ADMIN_ROLE
-          : BETTER_AUTH_USER_ROLE,
-        userId,
-      ),
     // 角色分配变了，这个账号的权限快照跟着变（ADR-0053）。清空角色时
     // `roleCodes` 是空数组，聚合命中 0 行，这两条里的 DELETE 生效、INSERT 不插，
     // 结果就是「没有快照行 = 无权限」。
@@ -1088,12 +1076,14 @@ export const deleteAdminRbacRole: APIRoute = async ({locals, request}) => {
 };
 
 /**
- * Account lifecycle, delegated to Better Auth's admin plugin.
+ * Account lifecycle, written straight to D1.
  *
- * Creating and removing accounts is deliberately not done with SQL here: the
- * plugin owns `auth_user` (and the credential rows), so going through it keeps
- * password hashing and session cleanup on the supported path. RBAC only supplies
- * the `system:user:manage` gate and the role assignment on top.
+ * `auth_user` and its credential row are inserted in the same batch as the role
+ * grants, the permission snapshot and the audit trail: a failure in any of them
+ * rolls the whole thing back, so there is no window where an account exists
+ * without its roles. Password hashing still goes through `hashPassword`
+ * (`better-auth/crypto`), which `bootstrap.ts` and `password-setup.ts` already
+ * call directly.
  */
 export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
@@ -1209,94 +1199,56 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
     return localizedError(request, "errors.rbac.unknownRole", 404);
   }
 
-  let newUserId: string | null = null;
-  try {
-    const created = await createMicrofeedAuth(env, request).api.createUser({
-      body: {
-        email,
-        name,
-        password,
-        role: "user",
-        // Extra user fields ride through `data`; the username plugin's
-        // `user.create.before` hook re-validates and normalizes them, so this is
-        // the same gate the username sign-in endpoint reads back.
-        ...(username
-          ? {data: {displayUsername: account, username}}
-          : {}),
-      },
-      headers: request.headers,
-    });
-    newUserId = (created as {user?: {id?: string}} | undefined)?.user?.id ?? null;
-  } catch {
-    return localizedError(request, "errors.rbac.createUserFailed", 400);
-  }
-
-  // 上一行按结构断言从 `created` 取 `user.id`；取不到时回查一次，下面的角色行
-  // 才能关联到正确账号。`email` 在调用前已转小写，admin 插件的 create-user
-  // 路由也会再转一次，所以等值比较可以直接比较。等值查重的计划为
-  // `SEARCH auth_user USING INDEX sqlite_autoindex_auth_user_2 (email=?)`
-  // （`probe-facts21.mjs`），仅读取 1 条索引项与 1 行表数据（本地 auth_user
-  // 4 行 / 4,096 字节）。该索引的名称与列的出处见 {@link emailIsTaken}
-  // 的文档注释；探针脚本在 `.scratch/d1-scan-fix/`（未纳入版本管理），
-  // 取证范围见 ADR-0043 的「验证」一节。
-  if (!newUserId) {
-    const row = await env.FEED_DB.prepare(
-      "SELECT id FROM auth_user WHERE email = ?",
-    ).bind(email).first<{id: string}>();
-    newUserId = row?.id ?? null;
-  }
+  const userId = crypto.randomUUID();
+  const accountId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  const passwordHash = await hashPassword(password);
   const createAudit: PendingAudit = {
     action: "user.create",
     actor: locals.authUser,
     detail: roleCodes.join(","),
-    target: newUserId ?? email,
+    target: userId,
   };
-  if (newUserId) {
-    // Local policy — this deployment does not force a password change on first
-    // sign-in (see the upstream-divergence note in .workbuddy memory; migration
-    // 0042 clears the flag for accounts created under the old behaviour). The
-    // account starts with the roles the operator ticked, defaulting to
-    // `readonly`, so a fresh account is never permission-less.
-    // The role assignments and the record of who created the account ride the
-    // same batch, so the change and its trail are atomic. The Better Auth account
-    // creation above is the one part we cannot batch with — it is a separate,
-    // idempotent write elsewhere.
-    await env.FEED_DB.batch([
-      env.FEED_DB.prepare("DELETE FROM ext_user_roles WHERE user_id = ?")
-        .bind(newUserId),
-      ...roleCodes.map((code) =>
-        env.FEED_DB.prepare(
-          "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
-        ).bind(newUserId, roleId(code)),
-      ),
-      // B1: mirror the chosen RBAC role onto `auth_user.role` so Better Auth's
-      // admin plugin gates its own endpoints on the same source of truth. Without
-      // this, a freshly created super-admin keeps `role = "user"` and a second,
-      // invisible authorization path splits from RBAC. Shape mirrors
-      // `replaceUserRoles` so the two code paths cannot drift apart.
-      // 同批写 `signup_source = 'admin'`（ADR-0014 D8 / I13 / N10）：后台「新建用户」
-      // 走 `api.createUser` 内部写库，INSERT 语句碰不到，只能建号后补写。
-      // 用**真实邮箱**建号时 I9 断言（只查两个占位域）抓不到漏写，所以这条不能省。
+  // 建号、凭证、角色授予、权限快照、审计在同一批里提交：任何一条失败都整批回滚，
+  // 不会留下「账号已建、角色没授予」的半成品。
+  //
+  // `username` / `displayUsername` 的归一化与唯一性原本由 username 插件的
+  // `user.create.before` 钩子代做。插件已移除，改由本路径自己保证：上面
+  // `normalizeAdminUsername` 与 `usernameIsTaken` 已在前置执行，写入值与校验值
+  // 同一形式。这里没有钩子兜底，新增写路径时必须自己补这两步。
+  //
+  // 角色分配不需要先 `DELETE`：`userId` 是刚生成的，`INSERT OR IGNORE` 已覆盖
+  // 重复键。
+  await env.FEED_DB.batch([
+    env.FEED_DB.prepare(
+      authUserInsertSql({
+        signupSource: "admin",
+        withUsername: username !== null,
+      }),
+    ).bind(
+      userId,
+      name,
+      email,
+      timestamp,
+      timestamp,
+      ...(username === null ? [] : [username, account]),
+    ),
+    credentialAccountStatement(env.FEED_DB, {
+      accountId,
+      passwordHash,
+      timestamp,
+      userId,
+    }),
+    ...roleCodes.map((code) =>
       env.FEED_DB.prepare(
-        "UPDATE auth_user SET role = ?, signup_source = 'admin' WHERE id = ?",
-      )
-        .bind(
-          roleCodes.includes(SUPER_ADMIN)
-            ? BETTER_AUTH_ADMIN_ROLE
-            : BETTER_AUTH_USER_ROLE,
-          newUserId,
-        ),
-      // 新账号的角色分配在同批里刚刚写好，权限快照也在这里一并生成
-      // （ADR-0053）。缺了它，新账号第一次进后台就是 403。
-      ...refreshUserSnapshotStatements(env.FEED_DB, newUserId),
-      auditStatement(env.FEED_DB, createAudit),
-    ]);
-  } else {
-    // No user id was ever resolved, so the row can't be tied to the account —
-    // write it on its own; the account creation itself is the Better Auth part we
-    // can't batch with.
-    await recordRbacAudit(createAudit);
-  }
+        "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
+      ).bind(userId, roleId(code)),
+    ),
+    // 上面刚写好角色分配，权限快照在同批里一并生成（ADR-0053）。缺了它，
+    // 新账号第一次进后台就是 403。
+    ...refreshUserSnapshotStatements(env.FEED_DB, userId),
+    auditStatement(env.FEED_DB, createAudit),
+  ]);
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -1329,35 +1281,28 @@ export const deleteAdminRbacUser: APIRoute = async ({locals, request}) => {
     }
   }
 
-  try {
-    await createMicrofeedAuth(env, request).api.removeUser({
-      body: {userId},
-      headers: request.headers,
-    });
-  } catch {
-    return localizedError(request, "errors.rbac.deleteUserFailed", 400);
-  }
-  // B16: login credentials carry no ON DELETE CASCADE (migrations/0036 leaves
-  // cleanup to application code), so removing the account here would otherwise
-  // orphan its mflc_ tokens. The account is gone, so drop its credentials too.
-  // 权限快照名义上有 ON DELETE CASCADE，但 D1 的外键强制开关不由本仓控制，所以
-  // 一并显式删（ADR-0053）。多删一次是幂等的，漏删会让同名 id 重建后继承旧权限。
-  await env.FEED_DB.batch([
-    env.FEED_DB.prepare(
-      "DELETE FROM ext_login_credentials WHERE user_id = ?",
-    ).bind(userId),
-    env.FEED_DB.prepare(
-      "DELETE FROM ext_user_permissions WHERE user_id = ?",
-    ).bind(userId),
-  ]);
-  // The account removal goes through Better Auth's admin plugin, so it cannot
-  // share a batch with our trail — written on its own. The removal itself is
-  // idempotent: a retry after a failed audit write does not un-delete anything.
-  await recordRbacAudit({
+  // 19 条语句一个批次：17 张从属表逐张删，`auth_user` 收尾，再接审计。
+  //
+  // 逐张显式删，不只依赖 ON DELETE CASCADE：D1 的外键强制开关不由本仓控制，
+  // 而 `ext_api_key_owners` 与 `ext_login_credentials` 本身就是 NO ACTION。
+  // 多删一次是幂等的；漏删会让同名 id 重建后继承旧的密钥归属与权限。
+  const deleteAudit: PendingAudit = {
     action: "user.delete",
     actor: locals.authUser,
     target: userId,
-  });
+  };
+  const results = await env.FEED_DB.batch([
+    ...USER_OWNED_TABLES.map(({column, table}) =>
+      env.FEED_DB.prepare(`DELETE FROM "${table}" WHERE "${column}" = ?`)
+        .bind(userId),
+    ),
+    env.FEED_DB.prepare('DELETE FROM "auth_user" WHERE "id" = ?').bind(userId),
+    auditStatement(env.FEED_DB, deleteAudit),
+  ]);
+  // 账号在读取与删除之间消失时，`auth_user` 那条命中 0 行，必须自己判。
+  if ((results[USER_OWNED_TABLES.length]?.meta.changes ?? 0) !== 1) {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
+  }
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -1390,23 +1335,42 @@ export const updateAdminRbacUserBan: APIRoute = async ({locals, request}) => {
     }
   }
 
-  try {
-    const auth = createMicrofeedAuth(env, request);
-    await (body.banned ? auth.api.banUser : auth.api.unbanUser)({
-      body: {userId},
-      headers: request.headers,
-    });
-  } catch {
-    return localizedError(request, "errors.rbac.banUserFailed", 400);
-  }
-  // The ban/unban goes through Better Auth's admin plugin, so it cannot share a
-  // batch with our trail — written on its own. The toggle is idempotent: retries
-  // are harmless.
-  await recordRbacAudit({
+  const banAudit: PendingAudit = {
     action: body.banned ? "user.ban" : "user.unban",
     actor: locals.authUser,
     target: userId,
-  });
+  };
+  const timestamp = new Date().toISOString();
+  // 封禁 = 收回该账号的全部身份凭据，与置标志同批提交：标志写上了而凭据还在，
+  // 封禁就等于没做。
+  //
+  // 解封只把标志置回，被吊销的凭据不会复活——`mflc_` 要重新签发，第三方应用要
+  // 重新授权，后台要重新登录。这是严格封禁的语义，运营侧不能把它当成可逆的暂停。
+  //
+  // 自我封禁会把自己登出：改密路径靠 `keepSessionId` 保住操作者的当前会话，
+  // 这条路径刻意不保。唯一超管封自己在上面已被 `lastSuperAdmin` 挡住。
+  const banStatements = body.banned
+    ? [
+      env.FEED_DB.prepare(
+        'UPDATE "auth_user" SET "banned" = 1, "banReason" = NULL, ' +
+          '"updatedAt" = ? WHERE "id" = ?',
+      ).bind(timestamp, userId),
+      ...revokeUserDerivedStatements(env.FEED_DB, userId),
+    ]
+    : [
+      env.FEED_DB.prepare(
+        'UPDATE "auth_user" SET "banned" = 0, "banReason" = NULL, ' +
+          '"updatedAt" = ? WHERE "id" = ?',
+      ).bind(timestamp, userId),
+    ];
+  const results = await env.FEED_DB.batch([
+    ...banStatements,
+    auditStatement(env.FEED_DB, banAudit),
+  ]);
+  // 账号不存在时 UPDATE 命中 0 行。以前插件的 ban-user 会抛错，这里必须自己判。
+  if ((results[0]?.meta.changes ?? 0) !== 1) {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
+  }
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 
@@ -1460,59 +1424,48 @@ async function emailIsTaken(
 }
 
 /**
- * Map a Better Auth admin-plugin error to our localized response. A 404
- * (`NOT_FOUND`) means the target user does not exist; any other client error is
- * surfaced through `failedKey`; everything else is a 500.
- */
-function mapBetterAuthError(
-  request: Request,
-  error: unknown,
-  failedKey: string,
-): Response {
-  const statusCode = (error as {statusCode?: unknown})?.statusCode;
-  const statusText = (error as {status?: unknown})?.status;
-  if (statusCode === 404 || statusText === "NOT_FOUND") {
-    return localizedError(request, "errors.rbac.unknownUser", 404);
-  }
-  if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500) {
-    return localizedError(request, failedKey, 400);
-  }
-  console.error(failedKey, error);
-  return localizedError(request, failedKey, 500);
-}
-
-/**
- * Revoke every credential derived from an account after a forced password
- * reset: dashboard sessions, OAuth app grants (access/refresh tokens, consents,
- * connections), and the `mflc_` login credentials. This closes at least the
- * same surface as the CLI `reset-password` path (`manage-cli/lib/auth.ts`
- * `passwordResetSql` — sessions plus the OAuth tables) and goes one step
- * further by also revoking the login credentials — leaving a reset account's
- * third-party app access or API keys alive would defeat the point of a reset
- * done in response to a suspected compromise. The user's own
- * `auth_user`/`auth_account` rows are left intact; only the *derived* grants go.
+ * 派生凭据的吊销语句。封禁与改密共用这一份清单，吊销范围不会各走一套。
  *
- * `keepSessionId` spares one dashboard session — used when the admin resets
- * their own account so the reset does not sign them out of the request that
- * performs it.
+ * `auth_user` / `auth_account` 行原样保留，收回的只是*派生*凭据：后台会话、
+ * `mflc_` 登录凭证、OAuth 授权四表。
+ *
+ * `keepSessionId` 留一个后台会话——管理员重置自己的口令时，不能让当前请求的
+ * 会话一起失效。
  */
-async function revokeUserDerivedCredentials(
+function revokeUserDerivedStatements(
   database: D1Database,
   userId: string,
   keepSessionId?: string,
-): Promise<void> {
+): D1PreparedStatement[] {
   const sessionDelete = keepSessionId
     ? database.prepare('DELETE FROM "auth_session" WHERE "userId" = ? AND "id" <> ?')
       .bind(userId, keepSessionId)
     : database.prepare('DELETE FROM "auth_session" WHERE "userId" = ?').bind(userId);
-  await database.batch([
+  return [
     sessionDelete,
     database.prepare('DELETE FROM "oauth_access_token" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "oauth_refresh_token" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "oauth_consent" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "oauth_connection" WHERE "userId" = ?').bind(userId),
     database.prepare('DELETE FROM "ext_login_credentials" WHERE "user_id" = ?').bind(userId),
-  ]);
+  ];
+}
+
+/**
+ * 单独一批跑吊销。需要与别的语句同批时改用 {@link revokeUserDerivedStatements}。
+ *
+ * 覆盖范围比 CLI 的 `reset-password`（`manage-cli/lib/auth.ts` 的
+ * `passwordResetSql`，会话 + OAuth 四表）多一张 `ext_login_credentials`：
+ * 账号疑似失陷后重置口令，若第三方授权或 API 凭证还活着，重置就失去意义。
+ */
+async function revokeUserDerivedCredentials(
+  database: D1Database,
+  userId: string,
+  keepSessionId?: string,
+): Promise<void> {
+  await database.batch(
+    revokeUserDerivedStatements(database, userId, keepSessionId),
+  );
 }
 
 /**
@@ -1552,45 +1505,50 @@ export const resetAdminRbacUserPassword: APIRoute = async ({locals, request}) =>
       min: String(MIN_ADMIN_PASSWORD_LENGTH),
     });
   }
-  try {
-    await createMicrofeedAuth(env, request).api.setUserPassword({
-      body: {newPassword, userId},
-      headers: request.headers,
-    });
-  } catch (error) {
-    return mapBetterAuthError(request, error, "errors.rbac.passwordResetFailed");
+  const passwordHash = await hashPassword(newPassword);
+  const timestamp = new Date().toISOString();
+  // 改密与审计同批提交：口令换了而没有流水，事后查不出谁改的。
+  const resetAudit: PendingAudit = {
+    action: "user.passwordReset",
+    actor: locals.authUser,
+    target: userId,
+  };
+  const results = await env.FEED_DB.batch([
+    env.FEED_DB
+      .prepare(
+        'UPDATE "auth_account" SET "password" = ?, "updatedAt" = ? ' +
+          'WHERE "userId" = ? AND "providerId" = \'credential\'',
+      )
+      .bind(passwordHash, timestamp, userId),
+    auditStatement(env.FEED_DB, resetAudit),
+  ]);
+  // 没有凭证行时 UPDATE 会静默命中 0 行。以前走插件会抛错，这里必须自己判，
+  // 否则「改密成功」的响应背后什么都没改。
+  if ((results[0]?.meta.changes ?? 0) !== 1) {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
   }
-  // The admin `set-user-password` endpoint only re-hashes the password; it does
-  // not revoke the target's sessions, OAuth grants, or login credentials, so we
-  // pull every derived credential to make the reset effective everywhere. A
-  // self-reset keeps the performing session alive (otherwise the admin would be
-  // signed out mid-request); resetting anyone else loses every session. If the
-  // current session cannot be identified, everything is revoked (fail closed).
+  // 口令行之外的一切派生凭据都要收回：会话、OAuth 授权、`mflc_` 凭证，
+  // 否则改密的效力只在新登录上生效。自改密保当前会话（否则管理员在本请求中途
+  // 被登出）；改别人的一律全清。识别不出当前会话时全清（fail closed）。
   await revokeUserDerivedCredentials(
     env.FEED_DB,
     userId,
     locals.authUser?.id === userId ? locals.authSession?.id : undefined,
   );
-  await recordRbacAudit({
-    action: "user.passwordReset",
-    actor: locals.authUser,
-    target: userId,
-  });
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
+
+/** 后台可改的资料列。SET 子句的键集合就是这张清单。 */
+type ProfileField = "displayUsername" | "email" | "name" | "username";
 
 /**
  * Admin edit of an account's display name, email, and/or username.
  *
- * All three go through Better Auth's `admin-update-user` (`data`), which the
- * admin role may call (`user: ["update"]`, and `user: ["set-email"]` for the
- * email). Email uniqueness is checked here first so the precise `emailTaken`
- * (409) can be returned instead of letting the write throw; Better Auth
- * lowercases the address the same way `normalizeAdminEmail` does. The username
- * is a one-way door: an account created before the username column existed may
- * be given one, but an existing username is never overwritten, because it is
- * what sign-in resolves. Only `name`/`email`/`username` change — no forced
- * password reset, matching the local "no first-sign-in reset" policy.
+ * 三个字段都直写 `auth_user`：只对实际提交的字段拼 SET 子句，没提交的列不动。
+ * 邮箱唯一性在这里先查一次，好返回准确的 `emailTaken`（409），不必等写入抛错
+ * 再翻译。用户名是单向门：只有用户名列出现之前建的账号可以被赋予一次，已有的
+ * 用户名永不覆盖——登录解析就靠它。只改 `name`/`email`/`username`，不附带强制
+ * 改密，与本地「首次登录不强制改密」的口径一致。
  */
 export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
@@ -1612,7 +1570,8 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
   if (rawEmail === undefined && rawName === undefined && rawUsername === undefined) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
-  const data: Record<string, string> = {};
+  // 键限定在可改的四列：SET 子句照这里的键拼，键集合就是列白名单。
+  const data: Partial<Record<ProfileField, string>> = {};
   if (rawUsername !== undefined) {
     // Only the accounts that predate the username column may be given one: an
     // existing username is the identifier sessions and tokens resolve against,
@@ -1659,20 +1618,32 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
     }
     data.email = email;
   }
-  try {
-    await createMicrofeedAuth(env, request).api.adminUpdateUser({
-      body: {userId, data},
-      headers: request.headers,
-    });
-  } catch (error) {
-    return mapBetterAuthError(request, error, "errors.rbac.profileUpdateFailed");
+  const assignments: string[] = [];
+  const values: string[] = [];
+  for (const [column, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    assignments.push(`"${column}" = ?`);
+    values.push(value);
   }
-  await recordRbacAudit({
+  assignments.push('"updatedAt" = ?');
+  values.push(new Date().toISOString());
+  values.push(userId);
+  const profileAudit: PendingAudit = {
     action: "user.profile",
     actor: locals.authUser,
     detail: Object.keys(data).join(","),
     target: userId,
-  });
+  };
+  const results = await env.FEED_DB.batch([
+    env.FEED_DB
+      .prepare(`UPDATE "auth_user" SET ${assignments.join(", ")} WHERE "id" = ?`)
+      .bind(...values),
+    auditStatement(env.FEED_DB, profileAudit),
+  ]);
+  // 账号在读取与写入之间被删时 UPDATE 命中 0 行，必须自己判，否则响应说改成功。
+  if ((results[0]?.meta.changes ?? 0) !== 1) {
+    return localizedError(request, "errors.rbac.unknownUser", 404);
+  }
   return jsonResponse(await readRbacUsers(env.FEED_DB));
 };
 

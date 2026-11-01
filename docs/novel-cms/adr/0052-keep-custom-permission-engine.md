@@ -1,8 +1,8 @@
 # ADR-0052: 权限判定保持自研，不迁入 Better Auth access control
 
-- 状态：Accepted（已否决迁移方向，只保留三项定向优化）
+- 状态：Accepted（已否决迁移方向，只保留三项定向优化；**决策 2 与「保留的缺陷」段已被 ADR-0054 撤回**，决策 1/3/4 仍有效）
 - 日期：2026-11-01
-- 关联：ADR-0008（API 认证与授权收敛，`mflc_` 凭证与自研 RBAC 码的来源）、ADR-0038（自持权限树）、ADR-0039（按终端归属分区）、ADR-0040（角色级「允许登录后台」，`allow_admin_login` 即 `userMayEnterAdmin` 的判据）、`CONTEXT.md`（角色分配 / 角色镜像 / 通配权限 / 权限判定）、`docs/zh/user-system-optimization-spec.md`（本次实际执行的改动）
+- 关联：ADR-0008（API 认证与授权收敛，`mflc_` 凭证与自研 RBAC 码的来源）、ADR-0038（自持权限树）、ADR-0039（按终端归属分区）、ADR-0040（角色级「允许登录后台」，`allow_admin_login` 即 `userMayEnterAdmin` 的判据）、ADR-0053（权限快照，判定链路已改）、ADR-0054（移除 admin 插件，撤回本 ADR 决策 2）、`CONTEXT.md`（角色分配 / 角色镜像 / 通配权限 / 权限判定）、`docs/zh/user-system-optimization-spec.md`（本次实际执行的改动）
 
 ## 背景
 
@@ -13,9 +13,15 @@
 ## 决策
 
 1. **权限判定保持自研。** `src/server/rbac/resolve.ts` 的 `permissionsInclude` 仍是唯一判定规则；通配权限继续短路放行，不展开。
-2. **角色分配的单源保持 `ext_user_roles`。** `auth_user.role` 继续只是有损派生镜像（`admin` / `user`），只供 Better Auth admin 插件端点使用，不承载授权。
+2. **角色分配的单源保持 `ext_user_roles`。** `auth_user.role` 继续只是有损派生镜像（`admin` / `user`），只供 Better Auth admin 插件端点使用，不承载授权。**（该条已被 ADR-0054 撤回：插件删除，列停写停读，存量值由 `0163` 清空。可见的只有「单源保持 `ext_user_roles`」这半句，镜像半句作废。）**
 3. **不引入 Better Auth 的 access control、organization 动态角色或 `userHasPermission` 端点。**
 4. 只执行三项定向优化：去掉一处冗余 `DISTINCT`、合并两条账号闸门查询、订正 `auth_user.role` 的存量漂移（含 `password-setup.ts` 的授权时机调整，理由见下文「保留的缺陷与它的修法」）。
+
+> **修订（ADR-0054，2026-11-01）**：决策 2 撤回。admin 插件已移除，`auth_user.role` 停写停读，`migrations/0163_data_clear_auth_user_role.sql` 把存量值清为 NULL；镜像不再有读者，也就不存在「只供插件使用」这个用途。
+>
+> 决策 4 的第三项（订正镜像存量漂移）随决策 2 一起成为历史动作：`0161` 那一版让镜像与真源取同一值，`0163` 把镜像清空，两步都保留在台账里。决策 4 的前两项（去冗余 `DISTINCT`、合并闸门查询）已由 ADR-0053 的权限快照取代实现。
+>
+> 决策 1、决策 3 不受影响。下文「否决依据（量化）」表的四行随插件移除失去分母，逐行处置见 ADR-0054「量化依据差量」；重算之前不能继续引用原表数字，但拒绝迁移的结论维持。
 
 ## 否决依据（量化）
 
@@ -49,7 +55,9 @@
 - **角色权限全部固定写在代码 `ac.newRole` 里**：最标准，但会取消后台在线改权，属产品能力倒退。
 - **只改 `auth_user.role` 承载真实角色码、判定引擎不动**：改动最小，但仍是双写，且把有损镜像改成有损真源，问题更多。
 
-## 保留的缺陷与它的修法
+## 保留的缺陷与它的修法（整段已由 ADR-0054 撤回）
+
+> 本节描述的是「镜像继续存在」前提下的漂移问题。ADR-0054 清空了镜像，两侧不再并存，漂移无从产生；`0161` 与本节引用的运维查询归档为历史记录，`password-setup` 的授权时机调整仍留在代码里（它同时是 ADR-0053 快照写入点之一）。
 
 否决迁移**不**等于现状无缺陷。评估过程中实测到一处真问题（2026-11-01，本机实例 9 个账号）：`auth_user.role` 与 `ext_user_roles` 漂移。
 

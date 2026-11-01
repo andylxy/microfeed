@@ -49,7 +49,6 @@ describe("Better Auth owner provisioning", () => {
     const owner = {
       email: "owner@example.com",
       id: "owner-id",
-      role: "admin",
     };
     const password = "a replacement private password";
     const passwordSql = await passwordResetSql(owner, password);

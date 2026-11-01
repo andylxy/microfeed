@@ -31,8 +31,8 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `image` | TEXT | 头像 URL |
 | `createdAt` | DATE NOT NULL | 创建时间 |
 | `updatedAt` | DATE NOT NULL | 更新时间 |
-| `role` | TEXT | **有损角色镜像**：持 `super_admin` 记 `admin`，其余记 `user`。只服务 Better Auth admin 插件自己的端点（封禁 / 删除 / 模拟登录），**不参与授权**（ADR-0052） |
-| `banned` | INTEGER | 是否封禁（0/1）。由 `api.banUser` 直写，应用层只读 |
+| `role` | TEXT | **已废止列**（ADR-0054）。曾是有损角色镜像：持 `super_admin` 记 `admin`，其余记 `user`，只服务 Better Auth admin 插件。插件已移除，此列停写停读，存量值由 `0163` 清为 NULL；列本身保留是为了避开重建表与 18 张表的外键改动 |
+| `banned` | INTEGER | 是否封禁（0/1）。三个后台写操作改为自研 UPDATE 后，应用层读写都归自己（ADR-0054）；登录闸门只读它 |
 | `banReason` | TEXT | 封禁原因 |
 | `banExpires` | DATE | 封禁到期时间（NULL=永久）。**当前判定不读它**，只看 `banned` |
 | `username` | TEXT | 登录名之一（0039）。`UNIQUE` 索引，NULL 表示未设置 |
@@ -236,7 +236,7 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 7. 权限码在集合内 → 放行
 8. 其余 → **403**
 
-**没有** `auth_user.role = 'admin'` 的遗留旁路（0053 删除）。
+**没有** `auth_user.role = 'admin'` 的遗留旁路（0053 删除），也没有第二套授权面：admin 插件挂出的 15 条 `/api/auth/admin/*` 端点已随插件删除（ADR-0054），`auth_user.role` 不参与任何一步判定。
 
 ### 5.3 读取路径
 
@@ -246,7 +246,9 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 
 ### 5.4 快照的写入约定
 
-快照是仓库里第二个镜像（第一个是 `auth_user.role`）。**改真源的写入点必须在同一批 `db.batch` 里重算**，共 9 处：`replaceRolePermissions`、`replaceUserRoles`、`setRbacRoleAdminLogin`、`setRbacRoleMember`、后台建号、`bootstrap.ts`、`password-setup.ts`、`seedRbac`、删账号（显式删快照行）。重算语句只能来自 `snapshot.ts` 的两个构造器；`tests/unit/permission-snapshot.test.ts` 沿 TypeScript 语法树逐函数检查，漏调即报函数名。
+快照是仓库里唯一的物化镜像。**改真源的写入点必须在同一批 `db.batch` 里重算**，共 9 处：`replaceRolePermissions`、`replaceUserRoles`、`setRbacRoleAdminLogin`、`setRbacRoleMember`、后台建号、`bootstrap.ts`、`password-setup.ts`、`seedRbac`、删账号（显式删快照行）。重算语句只能来自 `snapshot.ts` 的两个构造器；`tests/unit/permission-snapshot.test.ts` 沿 TypeScript 语法树逐函数检查，漏调即报函数名。
+
+`banned` 不进快照：读路径已在同一条语句里 `FROM auth_user u LEFT JOIN` 顺带取回，物化既不减往返也不减行数，只多一处需要同步的写点。
 
 漂移用 `scripts/check-permission-snapshot.ts` 查：报「缺快照行 / 多余快照行 / 权限码不等 / 两个布尔不等」四类，退出码 0 一致、1 有差异。
 
@@ -339,8 +341,9 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `0132_schema_role_admin_login` | `ext_roles` 增 `allow_admin_login`（默认 1） | 角色级「能否进后台」开关 |
 | `0144_schema_role_member` | `ext_roles` 增 `is_member`（默认 0） | 会员档按角色表达 |
 | `0160_data_grant_readonly_default` | 给无任何角色授权的存量账号补 `r_readonly` | 老账号不再一进后台就 403 |
-| `0161_data_sync_auth_user_role` | 订正 `auth_user.role` 与 `ext_user_roles` 的方向 A 漂移（超管被降权 1 例） | 镜像字段与真源一致 |
+| `0161_data_sync_auth_user_role` | 订正 `auth_user.role` 与 `ext_user_roles` 的方向 A 漂移（超管被降权 1 例） | 历史动作：镜像随后被 0163 整体清空 |
 | `0162_schema_ext_user_permissions` | 建权限快照表并回填（ADR-0053） | 后台判定从 3 条 SQL 合成 1 条点查 |
+| `0163_data_clear_auth_user_role` | `auth_user.role` 清为 NULL；`signup_source` 越界值收敛回 `email`（ADR-0054） | 镜像废止，两个授权面收敛为一套 |
 
 > **同名表提示**：`ext_user_permissions` 这个名字在 0045 属于「按账号权限覆盖」，0046 已删除；0162 用同名建的是**权限快照**，语义完全不同。恢复 0045 时期的旧快照时不要把它当成快照表。
 

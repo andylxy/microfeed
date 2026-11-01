@@ -85,14 +85,14 @@ describe("Deploy to Cloudflare admin bootstrap", () => {
     await expect(response.json()).resolves.toEqual({status: "created"});
 
     const user = await env.FEED_DB.prepare(
-      'SELECT "email", "role" FROM "auth_user"',
-    ).first<{email: string; role: string}>();
+      'SELECT "email", "signup_source" FROM "auth_user"',
+    ).first<{email: string; signup_source: string}>();
     const account = await env.FEED_DB.prepare(
       'SELECT "password" FROM "auth_account"',
     ).first<{password: string}>();
     expect(user).toEqual({
       email: "admin@example.com",
-      role: "admin",
+      signup_source: "admin",
     });
     expect(account?.password).toBeTruthy();
     expect(account?.password).not.toBe(PASSWORD);
