@@ -269,10 +269,10 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `ext_user_roles` | `(user_id, role_id)` | 外键均 CASCADE | 账号持有哪些角色 |
 | `ext_user_permissions` | `user_id` | `codes`（JSON 数组）、`is_member`、`admin_login_allowed`、`updated_at` | **权限快照**（0162，ADR-0053） |
 | `ext_permission_nodes` | `id`（`pn_*`） | `code` UNIQUE、`kind`（`group`/`page`/`code`）、`parent_code`、`permission_code`、`audience`（`desktop`/`app`）、`path`、`entry_code`、`name_zh`/`name_en`、`icon`、`i18n_key`、`is_visible`、`sort`、`source`、`created_at_ms` | 权限树（ADR-0038 自持，ADR-0039 按终端分区） |
-| `ext_menu` | `id` | `code` UNIQUE、`parent_code`、`path`、`i18n_key`、`icon`、`permission_code`、`sort`、`is_visible`、`name_zh`/`name_en` | 后台菜单行，可见性靠 `permission_code` 直列判定 |
+| `ext_menu` | `id` | `code` UNIQUE、`parent_code`、`path`、`i18n_key`、`icon`、`permission_code`、`sort`、`is_visible`、`name_zh`/`name_en` | **历史兼容表**：0041 起菜单变数据，0127 权限树自持（ADR-0038）、0133 侧栏改读 `ext_permission_nodes`（ADR-0041 / 0042），本表不再驱动侧栏（可见性判定在节点 `entry_code`，不在本表 `permission_code`） |
 | `ext_rbac_audit` | `id` | `actor_user_id`、`actor_label`、`action`、`target`、`detail`、`before_detail`、`created_at_ms` | 角色与授权改动的审计 |
 
-`ext_menu_permissions`（0040 建、0052 重建并种子）**已删除（0164）**：0127 权限树自持（ADR-0038）、0145 起菜单可见性走 `ext_menu.permission_code` 直列后，本表零读零写，0164 物理删除，索引随表消失。
+`ext_menu_permissions`（0040 建、0052 重建并种子）**已删除（0164）**：0127 权限树自持（ADR-0038）、0133 侧栏改读节点 `entry_code`（ADR-0041 / 0042）后，本表零读零写，0164 物理删除，索引随表消失。
 
 ### 5.2 判定顺序
 
@@ -294,6 +294,8 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 后台每个请求读一行快照（`src/server/rbac/snapshot.ts` 的 `readSnapshotGate`）：一条点查把权限码、会员标记、后台准入、封禁位、待改密一次取回。App 侧两条读路径同样读快照（`readSnapshotAccess`）：`cachedUserAccess` 的缓存未命中回源、`resolveAppPermissionSet` 的功能开关判定。
 
 `resolveUserAccess` / `resolveUserPermissions` / `userMayEnterAdmin` 三个按真源现算的读法保留在 `resolve.ts`，用途是比对与测试，**运行时不再调用**。
+
+侧栏/菜单的读取路径独立于授权判定：`readAdminMenu`（`src/server/admin/menu.ts`）读 `ext_permission_nodes` 的 `desktop` 行集（`audience='desktop' AND is_visible=1 AND kind IN ('group','page')`，走 `ix_ext_permission_nodes_audience` 索引，60s TTL 缓存），`buildSidebarItems` 逐行用 `rbacAllows` 门控（与页面守卫同一把锁）。**某后台页要用什么守卫码**的发现入口是 `src/shared/AdminPageGuards.ts` 的 `ADMIN_PAGE_GUARDS` 静态目录（相对 `[adminPath]` 路径 → 权限码，46 页，`admin-page-guards` 测试锁双向一致），改页面守卫码应同步该目录。
 
 ### 5.4 快照的写入约定
 

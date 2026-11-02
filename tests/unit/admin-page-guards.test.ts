@@ -1,10 +1,11 @@
 import {readdirSync, readFileSync} from "node:fs";
-import {join} from "node:path";
+import {join, relative} from "node:path";
 
 import {describe, expect, it} from "vitest";
 
 import {migrationNames, readMigration} from "./support/migrations";
 import {PERMISSION_CODES} from "../../src/shared/Constants";
+import {ADMIN_PAGE_GUARDS} from "../../src/shared/AdminPageGuards";
 
 /**
  * The consistency red line from the menu design: a menu row binds a permission
@@ -307,5 +308,71 @@ describe("menu page guards", () => {
         `${page.file} guards with ${page.code}, which no menu row binds`,
       ).toBe(true);
     }
+  });
+});
+
+/** Every `.astro` under the admin area, whether or not it guards. */
+function allAstroFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, {withFileTypes: true})) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...allAstroFiles(full));
+    else if (entry.name.endsWith(".astro")) found.push(full);
+  }
+  return found;
+}
+
+/**
+ * 页面守卫登记表 `ADMIN_PAGE_GUARDS`（`src/shared/AdminPageGuards.ts`）与真实
+ * 页面文件的双向一致（方向 1，2026-11）。目录是只读的——运行时权威仍在各页面
+ * 自己的 `requirePagePermission` 调用——所以这里只核对两套事实重合：
+ *   - 目录里每一页都能在文件树上找到并守卫同一码（无孤儿条目）；
+ *   - 每个守卫页都登记在目录里（无漏记条目）；
+ *   - 每个真的调用 `requirePagePermission` 的页面都能被解析出来（否则漏记
+ *     断言会被静默绕过——解析失败的页面根本进不了 `actual`）。
+ * 改页面守卫码而忘同步目录，或反过来，都会在这一组直接红。
+ */
+describe("admin page guard catalog", () => {
+  const actual = new Map<string, string>();
+  for (const page of guardedPages(PAGES)) {
+    const rel = relative(PAGES, page.file)
+      .replace(/\\/gu, "/")
+      .replace(/\/index\.astro$/u, "");
+    actual.set(rel, page.code);
+  }
+
+  it("covers every guarded page (no missing entries)", () => {
+    for (const [rel, code] of actual) {
+      expect(
+        ADMIN_PAGE_GUARDS[rel],
+        `${rel} is guarded but absent from ADMIN_PAGE_GUARDS`,
+      ).toBe(code);
+    }
+  });
+
+  it("contains no orphan entries (no page-less codes)", () => {
+    for (const [rel, code] of Object.entries(ADMIN_PAGE_GUARDS)) {
+      expect(
+        actual.get(rel),
+        `${rel} is in ADMIN_PAGE_GUARDS but no page guards with it`,
+      ).toBe(code);
+    }
+  });
+
+  it("parses every page that calls requirePagePermission", () => {
+    const unparsed: string[] = [];
+    for (const file of allAstroFiles(PAGES)) {
+      const source = readFileSync(file, "utf8");
+      if (
+        /requirePagePermission\s*\(/u.test(source) &&
+        !pageGuardCode(source)
+      ) {
+        unparsed.push(relative(PAGES, file).replace(/\\/gu, "/"));
+      }
+    }
+    expect(
+      unparsed,
+      `pages call requirePagePermission but cannot be parsed: ${unparsed.join(", ")}`,
+    ).toEqual([]);
   });
 });
