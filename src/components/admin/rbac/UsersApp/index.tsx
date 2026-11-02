@@ -1,24 +1,13 @@
 import {Fragment, useState} from "react";
-import {
-  ChevronRightIcon,
-  PlusIcon,
-  Trash2Icon,
-  UsersIcon,
-} from "lucide-react";
+import {PlusIcon, Trash2Icon, UsersIcon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
-import AdminSelect from "@/components/admin/shared/AdminSelect";
+import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";import AdminSelect from "@/components/admin/shared/AdminSelect";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
-import {
-  PermissionBranchToggle,
-  TreeBadge,
-  TREE_ROW_CLASS,
-  TREE_ROW_SELECTED_CLASS,
-} from "@/components/admin/rbac/PermissionTreeNode";
 import {cn} from "@/lib/utils";
 import {
   isReservedAdminEmailDomain,
@@ -50,8 +39,6 @@ interface Props {
   /** The signed-in account, so the page can flag editing yourself. */
   currentUserId?: string;
 }
-
-const ROW_CLASS = "w-full rounded-[10px] px-3 py-2 text-left text-sm";
 
 /** 搜索框匹配的用户字段（名称 / 邮箱 / 用户名）。 */
 function userMatchesQuery(user: RbacUser, query: string): boolean {
@@ -605,90 +592,42 @@ export default function UsersApp({
           </Button>
         </div>
 
-        {/* 静态树根，仿 RBAC 权限树根：「全部用户」是标题，不是分类，不参与过滤。 */}
-        <div className={cn(TREE_ROW_CLASS, "gap-1.5")}>
-          <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center">
-            <ChevronRightIcon className="size-4 rotate-90 text-muted-foreground" />
-          </span>
-          <UsersIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-            {t("rbac.userCategoryAll")}
-          </span>
-          <TreeBadge>{board.users.length}</TreeBadge>
-        </div>
-
-        {searchActive && visibleUsers.length === 0 ? (
-          <p className="px-2 py-6 text-sm text-muted-foreground">
-            {t("rbac.userCategoryNoResults")}
-          </p>
-        ) : (
-          <ul className={cn("ml-3.5 flex flex-col gap-0.5 border-l pl-2")}>
-            {categoryList.map((category) => {
-              const users = categoryVisibleUsers(category);
-              const expanded = searchActive ? users.length > 0 : openCategory === category;
-              const label = categoryLabel(category);
-              return (
-                <li key={category}>
-                  <div
-                    className={cn(
-                      TREE_ROW_CLASS,
-                      expanded ? TREE_ROW_SELECTED_CLASS : undefined,
-                    )}
-                  >
-                    <PermissionBranchToggle
-                      expanded={expanded}
-                      label={label}
-                      onToggle={() => toggleCategory(category)}
-                    />
-                    <button
-                      className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-sm text-muted-foreground transition hover:text-foreground"
-                      onClick={() => toggleCategory(category)}
-                      type="button"
-                    >
-                      <span className="truncate">{label}</span>
-                      <TreeBadge>{categoryUsers(category).length}</TreeBadge>
-                    </button>
-                  </div>
-                  {expanded && (
-                    <ul className="ml-3.5 flex flex-col gap-1 border-l pl-2">
-                      {users.map((entry) => (
-                        <li key={entry.id}>
-                          <button
-                            aria-current={
-                              entry.id === selectedId ? "true" : undefined
-                            }
-                            className={cn(
-                              ROW_CLASS,
-                              entry.id === selectedId
-                                ? "bg-muted font-medium text-foreground"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                            )}
-                            onClick={() => setSelectedId(entry.id)}
-                            type="button"
-                          >
-                            <span className="block truncate">
-                              {entry.name || entry.email}
-                            </span>
-                            <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
-                              {entry.name
-                                ? `${entry.email} · ${entry.roles.length}`
-                                : entry.roles.length}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                      {users.length === 0 && (
-                        <li className="px-2 py-1 text-xs text-muted-foreground">
-                          {t("rbac.userGroupEmpty")}
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {/* 左栏分组树（CONTEXT.md「分组树」）：分组、计数与成员过滤都在本组件
+            算好传入；手风琴单展开、搜索强制展开有命中的分组、换组自动选中首行
+            都由上面的状态与回调表达，AdminGroupTree 只渲染传入状态。 */}
+        <AdminGroupTree
+          emptyLeafText={t("rbac.userGroupEmpty")}
+          emptyTreeText={searchActive ? t("rbac.userCategoryNoResults") : undefined}
+          expandedKeys={
+            searchActive
+              ? categoryList.filter((category) => categoryVisibleUsers(category).length > 0)
+              : openCategory
+                ? [openCategory]
+                : []
+          }
+          groups={categoryList.map((category) => ({
+            count: categoryUsers(category).length,
+            key: category,
+            label: categoryLabel(category),
+            leaves: categoryVisibleUsers(category).map((entry) => ({
+              description: entry.name
+                ? `${entry.email} · ${entry.roles.length}`
+                : String(entry.roles.length),
+              id: entry.id,
+              label: entry.name || entry.email,
+            })),
+          }))}
+          onSelectLeaf={setSelectedId}
+          onToggleGroup={toggleCategory}
+          root={{
+            count: board.users.length,
+            icon: (
+              <UsersIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            ),
+            label: t("rbac.userCategoryAll"),
+          }}
+          selectedLeafId={selectedId}
+        />
 
         <div className="mt-2 border-t p-1 pt-2">
           {creating ? (
