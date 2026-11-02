@@ -22,7 +22,7 @@ import {
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
 import {createLoginSessionCookies} from "@/server/auth/login-session";
-import {LOGIN_THROTTLE_MAX_ATTEMPTS} from "@/server/auth/login-throttle";
+import {LOGIN_FAILURE} from "@/server/rate-limit/kinds";
 import {quotaSelectStatement} from "@/server/rbac/app-quota";
 import {permissionId} from "@/server/rbac/seed";
 import {registerUserDevice} from "@/server/rbac/resolve";
@@ -87,11 +87,11 @@ async function grantCodes(userId: string, codes: string[]): Promise<void> {
 beforeEach(async () => {
   await env.FEED_DB.batch([
     env.FEED_DB.prepare("DELETE FROM ext_api_access_log"),
-    env.FEED_DB.prepare("DELETE FROM ext_login_credential_attempts"),
-    env.FEED_DB.prepare("DELETE FROM ext_app_request_quota"),
+    env.FEED_DB.prepare(
+      "DELETE FROM ext_rate_limit WHERE kind IN ('login-failure', 'app-quota', 'replay-nonce')",
+    ),
     env.FEED_DB.prepare("DELETE FROM ext_login_credentials"),
     env.FEED_DB.prepare("DELETE FROM ext_user_roles"),
-    env.FEED_DB.prepare("DELETE FROM ext_replay_nonces"),
     env.FEED_DB.prepare('DELETE FROM "auth_session"'),
     env.FEED_DB.prepare('DELETE FROM "auth_user"'),
   ]);
@@ -443,8 +443,8 @@ describe("sessionless API bearer", () => {
     });
     const resetAtMs = Date.now() + 60_000;
     await env.FEED_DB.prepare(
-      "INSERT OR REPLACE INTO ext_app_request_quota " +
-        "(credential_id, count, reset_at_ms) VALUES (?, 3, ?)",
+      "INSERT OR REPLACE INTO ext_rate_limit " +
+        "(kind, key, count, expires_at_ms) VALUES ('app-quota', ?, 3, ?)",
     ).bind(credential.id, resetAtMs).run();
 
     const result = await decideLoginCredentialApiRequest(
@@ -458,7 +458,7 @@ describe("sessionless API bearer", () => {
     expect(result.kind).toBe("allow");
     expect(result.kind === "allow" ? result.quota : undefined).toEqual({
       credentialId: credential.id,
-      row: {count: 3, reset_at_ms: resetAtMs},
+      row: {count: 3, expires_at_ms: resetAtMs},
     });
 
     // 没要求计数的路径不带配额结果，也就不执行那次 SELECT。
@@ -741,7 +741,7 @@ describe("sessionless API bearer", () => {
     let kind = "";
     for (
       let attempt = 0;
-      attempt < LOGIN_THROTTLE_MAX_ATTEMPTS + 2;
+      attempt < LOGIN_FAILURE.max + 2;
       attempt += 1
     ) {
       const result = await decideLoginCredentialApiRequest(
@@ -837,7 +837,7 @@ describe("sessionless bearer throttling", () => {
     let kind = "";
     for (
       let attempt = 0;
-      attempt < LOGIN_THROTTLE_MAX_ATTEMPTS + 2;
+      attempt < LOGIN_FAILURE.max + 2;
       attempt += 1
     ) {
       const result = await decideLoginCredentialApiRequest(
@@ -863,7 +863,7 @@ describe("sessionless bearer throttling", () => {
     });
     for (
       let attempt = 0;
-      attempt < LOGIN_THROTTLE_MAX_ATTEMPTS + 2;
+      attempt < LOGIN_FAILURE.max + 2;
       attempt += 1
     ) {
       const result = await decideLoginCredentialApiRequest(

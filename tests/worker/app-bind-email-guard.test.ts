@@ -51,9 +51,9 @@ async function seedUser(
   }
   if (options.qqOpenid) {
     await db.prepare(
-      "INSERT OR IGNORE INTO ext_user_oauth (provider, openid, user_id, created_at_ms) " +
-        "VALUES ('qq', ?, ?, ?)",
-    ).bind(options.qqOpenid, id, Date.now()).run();
+      "INSERT OR IGNORE INTO auth_account (id, accountId, providerId, userId, createdAt, updatedAt) " +
+        "VALUES ('acc_qq_' || ?, ?, 'qq', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+    ).bind(options.qqOpenid, options.qqOpenid, id).run();
   }
 }
 
@@ -65,8 +65,6 @@ afterEach(async () => {
       db.prepare('DELETE FROM "auth_user" WHERE id = ?').bind(id)),
     ...IDS.map((id) =>
       db.prepare("DELETE FROM auth_account WHERE userId = ?").bind(id)),
-    ...IDS.map((id) =>
-      db.prepare("DELETE FROM ext_user_oauth WHERE user_id = ?").bind(id)),
   ]);
 });
 

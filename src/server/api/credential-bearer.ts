@@ -24,12 +24,13 @@ import {
   type LoginCredentialLookupRow,
 } from "@/server/auth/login-credentials";
 import {clientAddress} from "@/server/auth/client-address";
+import {LOGIN_FAILURE} from "@/server/rate-limit/kinds";
 import {
-  loginThrottleRowAllows,
-  loginThrottleSelectStatement,
-  recordLoginFailure,
-  type LoginThrottleRow,
-} from "@/server/auth/login-throttle";
+  readWindowStatement,
+  recordWindowHit,
+  windowAllows,
+  type WindowRow,
+} from "@/server/rate-limit/window";
 import {
   deviceRevocationStatement,
   deviceRevokedFromRow,
@@ -113,16 +114,16 @@ export async function decideLoginCredentialApiRequest(
   const credentialStatement = await loginCredentialVerifyStatement(database, token);
   if (!credentialStatement) return {kind: "unauthorized"};
   const throttleStatement = throttleKey
-    ? loginThrottleSelectStatement(database, throttleKey)
+    ? readWindowStatement(database, LOGIN_FAILURE.kind, throttleKey)
     : null;
   const preludeStatements = throttleStatement
     ? [throttleStatement, credentialStatement]
     : [credentialStatement];
   const prelude = await database.batch(preludeStatements);
   const throttleRow = throttleStatement
-    ? rowOf<LoginThrottleRow>(prelude[0])
+    ? rowOf<WindowRow>(prelude[0])
     : null;
-  if (throttleStatement && !loginThrottleRowAllows(throttleRow)) {
+  if (throttleStatement && !windowAllows(throttleRow, LOGIN_FAILURE.max)) {
     return {kind: "throttled"};
   }
 
@@ -130,7 +131,7 @@ export async function decideLoginCredentialApiRequest(
     rowOf<LoginCredentialLookupRow>(prelude[throttleStatement ? 1 : 0]),
   );
   if (!verified) {
-    if (throttleKey) await recordLoginFailure(database, throttleKey);
+    if (throttleKey) await recordWindowHit(database, LOGIN_FAILURE, throttleKey);
     return {kind: "unauthorized"};
   }
 

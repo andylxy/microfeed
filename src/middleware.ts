@@ -246,12 +246,13 @@ const handleRequest = defineMiddleware(async (context, next) => {  let {pathname
       }
     }
     // 内容端点：先防重放（App 带 `X-Timestamp` / `X-Nonce`，在
-    // `ext_replay_nonces` 里去重），再过版本门，最后由下面的 API 鉴权段按调用方
-    // 登录凭证（`mflc_…`）校验该端点要求的 RBAC 码（`api-permissions.ts` 分发）。
+    // `ext_rate_limit`（`kind = 'replay-nonce'`）里去重），再过版本门，最后由
+    // 下面的 API 鉴权段按调用方登录凭证（`mflc_…`）校验该端点要求的 RBAC 码
+    // （`api-permissions.ts` 分发）。
     //
     // 防重放只对非安全方法生效：GET 与 HEAD 幂等、不产生状态变更，重放同一个
     // nonce 不会改变任何数据，去重没有可保护的对象。收窄后每个内容 GET 少一次
-    // `ext_replay_nonces` 插入（1 行写）。
+    // nonce 插入（1 行写）。
     const replay = isUnsafeMethod(context.request.method)
       ? await checkReplay(env.FEED_DB, context.request)
       : null;

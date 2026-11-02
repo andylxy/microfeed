@@ -4,8 +4,10 @@
  * 五条建号路径的差异在语句形态与输出，不在列清单：
  * - 直接给值：`authUserInsertSql`（安装引导、后台建号、QQ 建号）
  * - 从 `auth_password_setup` 条件插入：`authUserInsertFromSetupSql`（安装流程）
- * - 凭证行：`credentialAccountStatement`（三条直接给值的路径）
+ * - 凭证行：`credentialAccountStatement`（安装引导、后台建号两条直接给值的路径；
+ *   QQ 建号只写 `auth_user` + 绑定行，不写凭证行）
  * - 带令牌校验的凭证行：`credentialAccountFromSetupStatement`（安装流程）
+ * - QQ 绑定行：`qqBindingAccountStatement`（ADR-0055）
  *
  * `manage-cli` 只取 `@/shared/AdminAccountColumns` 的常量自行拼字符串：它的输出
  * 是给终端打印的 SQL 文本，不是 `D1PreparedStatement`，硬塞进同一签名会让返回值
@@ -150,7 +152,7 @@ export function authUserInsertFromSetupSql(options: {
 }
 
 /**
- * `auth_account` 的凭证行。三条直接给值的路径（安装引导、后台建号、QQ 建号）
+ * `auth_account` 的凭证行。两条直接给值的路径（安装引导、后台建号）
  * 形态完全一致，全部走它。
  */
 export function credentialAccountStatement(
@@ -200,4 +202,31 @@ export function credentialAccountFromSetupStatement(
       input.timestamp,
       input.userId,
     );
+}
+
+/** QQ 绑定行的输入。`openid` 由腾讯校验回的权威值传入，调用方不得信任客户端自报。 */
+export interface QqBindingAccountInput {
+  openid: string;
+  userId: string;
+}
+
+/**
+ * `auth_account` 的 QQ 绑定行（ADR-0055）：`providerId = 'qq'`，`accountId` 列放
+ * openid（提供方侧账户标识），token / password 列留 NULL。
+ *
+ * 行 id 用确定性值 `'acc_qq_' || openid`：并发首登同 openid 会撞同一行 id 主键，
+ * `INSERT OR IGNORE` 把冲突吞掉后由调用方先查 `findUserIdByOpenid` 幂等兜底，
+ * 裸 INSERT 是未捕获 500。幂等闸门本身由迁移 0165 的
+ * `UNIQUE INDEX auth_account_provider_account (providerId, accountId)` 承担。
+ */
+export function qqBindingAccountStatement(
+  db: D1Database,
+  input: QqBindingAccountInput,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT OR IGNORE INTO "auth_account" ${AUTH_ACCOUNT_COLUMNS_SQL} ` +
+        "VALUES ('acc_qq_' || ?, ?, 'qq', ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+    )
+    .bind(input.openid, input.openid, input.userId);
 }

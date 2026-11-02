@@ -157,9 +157,10 @@ describe("删号清单覆盖所有按 userId 引用的表", () => {
       !ownedTables.has(table) && !exemptTables.has(table)
     );
     expect(uncovered).toEqual([]);
-    // 18 张：17 张随账号删，`ext_api_access_log` 豁免。新增从属表时这个数字会变，
-    // 逼人回头确认清单，而不是默默漏掉。
-    expect(userScoped).toHaveLength(18);
+    // 17 张：16 张随账号删，`ext_api_access_log` 豁免。`ext_user_oauth` 已随
+    // ADR-0055 并入 `auth_account`（0165 删表），不再占位。新增从属表时这个
+    // 数字会变，逼人回头确认清单，而不是默默漏掉。
+    expect(userScoped).toHaveLength(17);
   });
 
   it("清单里的表都真实存在，列名与建表语句一致", async () => {

@@ -1,4 +1,5 @@
-// App 账号绑定：把 QQ 身份（`ext_user_oauth` 的 openid）与既有账号关联 / 解关联。
+// App 账号绑定：把 QQ 身份（auth_account 的 providerId='qq' 绑定行，ADR-0055）
+// 与既有账号关联 / 解关联。
 //
 // 方案见 AndroidProject-old 仓 docs/adr/0014-qq-account-binding-and-phone.md（rev.6）。
 // 与 `bindEmailSend/Commit`（补邮箱）是同一个「已登录态 + 端点自鉴权」家族：
@@ -65,6 +66,22 @@ async function findTargetByEmail(
 }
 
 /**
+ * 把 `auth_account.createdAt` 换算成毫秒时间戳（响应字段 `BoundAtMs` 保持
+ * 与旧 `ext_user_oauth.created_at_ms` 一致的毫秒语义）。
+ *
+ * 该列存量有两种格式：应用写入的 ISO（`2024-01-01T…Z`）与迁移 0165 回填写入的
+ * `CURRENT_TIMESTAMP`（`YYYY-MM-DD HH:MM:SS`，UTC、无时区标记）。SQLite 的
+ * CURRENT_TIMESTAMP 是 UTC，无标记时补 `Z` 统一按 UTC 解析；解析失败回 0。
+ */
+function boundAtMs(createdAt: string): number {
+  const normalized = createdAt.includes("T")
+    ? createdAt
+    : `${createdAt.replace(" ", "T")}Z`;
+  const value = Date.parse(normalized);
+  return Number.isNaN(value) ? 0 : value;
+}
+
+/**
  * 绑定状态查询（§4.0）。
  *
  * 不返回 openid（客户端用不到，且解绑也不需要它），也不返回 QQ 昵称——绑定后
@@ -80,9 +97,9 @@ export async function appGetAccountBindings(
   if (isResponse(user)) return user;
 
   const bindings = await database.prepare(
-    "SELECT provider, created_at_ms FROM ext_user_oauth WHERE user_id = ? " +
-      "ORDER BY created_at_ms",
-  ).bind(user.userId).all<{created_at_ms: number; provider: string}>();
+    'SELECT "providerId" AS provider, "createdAt" FROM "auth_account" ' +
+      'WHERE "providerId" = \'qq\' AND "userId" = ? ORDER BY "createdAt"',
+  ).bind(user.userId).all<{createdAt: string; provider: string}>();
 
   // 解绑前置（I14）：有没有口令决定「解绑」按钮能不能点。
   const credential = await database.prepare(
@@ -95,7 +112,7 @@ export async function appGetAccountBindings(
 
   return {
     Bindings: (bindings.results ?? []).map((row) => ({
-      BoundAtMs: row.created_at_ms,
+      BoundAtMs: boundAtMs(row.createdAt),
       Provider: row.provider,
     })),
     EmailUsable: usable?.email_usable ?? null,
@@ -133,7 +150,8 @@ export async function appBindAccount(
 
   // 当前会话名下的 openid（D3：全部重定向）。
   const owned = await database.prepare(
-    "SELECT openid FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+    'SELECT "accountId" AS openid FROM "auth_account" ' +
+      'WHERE "providerId" = \'qq\' AND "userId" = ?',
   ).bind(user.userId).all<{openid: string}>();
   const openids = (owned.results ?? []).map((row) => row.openid);
   if (openids.length === 0) return "该账号未关联 QQ，请先用 QQ 登录";
@@ -166,8 +184,8 @@ export async function appBindAccount(
 
   for (const openid of openids) {
     const moved = await database.prepare(
-      "UPDATE ext_user_oauth SET user_id = ? WHERE provider = 'qq' " +
-        "AND openid = ? AND user_id = ?",
+      'UPDATE "auth_account" SET "userId" = ? WHERE "providerId" = \'qq\' ' +
+        'AND "accountId" = ? AND "userId" = ?',
     ).bind(target.id, openid, user.userId).run();
     if ((moved.meta?.changes ?? 0) !== 1) return "绑定失败，请重试";
   }
@@ -184,7 +202,7 @@ export async function appBindAccount(
 }
 
 /**
- * 解绑（§4.2）：删除当前会话名下全部 `provider='qq'` 的行。
+ * 解绑（§4.2）：删除当前会话名下全部 `providerId='qq'` 的行。
  *
  * 不接受 openid 入参 —— 三个登录响应都不返回它，客户端拿不到（G1）。
  */
@@ -208,7 +226,7 @@ export async function appUnbindAccount(
   if (!credential) return "请先补充邮箱并设置密码后再解绑";
 
   const deleted = await database.prepare(
-    "DELETE FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+    "DELETE FROM auth_account WHERE providerId = 'qq' AND userId = ?",
   ).bind(user.userId).run();
   if ((deleted.meta?.changes ?? 0) === 0) return "未找到该绑定";
 

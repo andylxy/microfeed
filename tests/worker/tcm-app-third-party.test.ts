@@ -88,14 +88,13 @@ function guardFetcher(): {fetcher: typeof fetch; called: () => boolean} {
 
 async function clearTables(): Promise<void> {
   await db.batch([
-    db.prepare("DELETE FROM ext_user_oauth"),
     db.prepare("DELETE FROM ext_login_credentials"),
     db.prepare("DELETE FROM auth_account"),
     db.prepare("DELETE FROM auth_session"),
     db.prepare("DELETE FROM ext_user_security"),
     db.prepare("DELETE FROM ext_user_roles"),
     db.prepare("DELETE FROM ext_user_devices"),
-    db.prepare("DELETE FROM ext_auth_throttle"),
+    db.prepare("DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle'"),
     db.prepare('DELETE FROM "auth_user"'),
     db.prepare("DELETE FROM settings WHERE category = 'app_login_methods'"),
   ]);
@@ -141,12 +140,12 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     const verified = await verifyLoginCredentialToken(db, payload.Token as string);
     expect(verified).not.toBeNull();
 
-    // ext_user_oauth 绑定了 (qq, OPENID_A) → 该用户。
+    // auth_account 绑定了 (qq, OPENID_A) → 该用户（ADR-0055）。
     const oauth = await db.prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-    ).bind("OPENID_A").first<{user_id: string}>();
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND accountId = ? LIMIT 1",
+    ).bind("OPENID_A").first<{userId: string}>();
     expect(oauth).not.toBeNull();
-    expect(oauth!.user_id).toBe(verified!.userId);
+    expect(oauth!.userId).toBe(verified!.userId);
 
     // 写入数据库的账号：email / username 由 openid 派生，唯一可定位。
     const user = await db.prepare(
@@ -175,7 +174,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     expect(second.Account).toBe("qq_OPENID_C");
 
     const oauthRows = await db.prepare(
-      "SELECT COUNT(*) AS c FROM ext_user_oauth WHERE provider = 'qq' AND openid = ?",
+      "SELECT COUNT(*) AS c FROM auth_account WHERE providerId = 'qq' AND accountId = ?",
     ).bind("OPENID_C").first<{c: number}>();
     expect(oauthRows!.c).toBe(1);
     const users = await db.prepare(
@@ -271,9 +270,9 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     const verified = await verifyLoginCredentialToken(db, payload.Token as string);
     expect(verified!.userId).toBe(preExistingId); // 链接到既有用户，未新建
     const oauth = await db.prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-    ).bind("OPENID_B").first<{user_id: string}>();
-    expect(oauth!.user_id).toBe(preExistingId);
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND accountId = ? LIMIT 1",
+    ).bind("OPENID_B").first<{userId: string}>();
+    expect(oauth!.userId).toBe(preExistingId);
 
     // 链接路径也要刷昵称，否则历史账号永远停在旧名。
     const linked = await db.prepare(
@@ -318,12 +317,12 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
     expect(count!.c).toBe(1);
 
     const oauth = await db.prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-    ).bind("OPENID_CASE").first<{user_id: string}>();
-    expect(oauth!.user_id).toBe(preExistingId);
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND accountId = ? LIMIT 1",
+    ).bind("OPENID_CASE").first<{userId: string}>();
+    expect(oauth!.userId).toBe(preExistingId);
     // 关键：绑定指向的用户必须真实存在（幽灵绑定的判据）。
     const real = await db.prepare('SELECT id FROM "auth_user" WHERE id = ? LIMIT 1')
-      .bind(oauth!.user_id).first<{id: string}>();
+      .bind(oauth!.userId).first<{id: string}>();
     expect(real).not.toBeNull();
   });
 
@@ -355,7 +354,7 @@ describe("QQ 第三方登录（dev-mock 旁路，ADR-0013）", () => {
 
     // 既没有新账号，也没有把 openid 绑到无关账号上。
     const oauth = await db.prepare(
-      "SELECT COUNT(*) AS c FROM ext_user_oauth WHERE provider = 'qq'",
+      "SELECT COUNT(*) AS c FROM auth_account WHERE providerId = 'qq'",
     ).first<{c: number}>();
     expect(oauth!.c).toBe(0);
     const stranger = await db.prepare(
@@ -416,7 +415,7 @@ describe("QQ 第三方登录（真实校验，mock 腾讯，ADR-0013）", () => 
     expect(verified).not.toBeNull();
 
     const oauth = await db.prepare(
-      "SELECT openid FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ? LIMIT 1",
+      "SELECT accountId AS openid FROM auth_account WHERE providerId = 'qq' AND userId = ? LIMIT 1",
     ).bind(verified!.userId).first<{openid: string}>();
     expect(oauth!.openid).toBe("OPENID_REAL"); // 绑定的是权威 openid，不是客户端瞎报的
   });
@@ -455,9 +454,9 @@ describe("QQ 第三方登录（真实校验，mock 腾讯，ADR-0013）", () => 
     ).bind(realId, "张真人", "real-d4@example.com", "2024-01-01", "2024-01-01",
       "https://a/mine.jpg").run();
     await db.prepare(
-      "INSERT OR IGNORE INTO ext_user_oauth (provider, openid, user_id, created_at_ms) " +
-        "VALUES ('qq', ?, ?, ?)",
-    ).bind("OPENID_D4", realId, Date.now()).run();
+      "INSERT OR IGNORE INTO auth_account (id, accountId, providerId, userId, createdAt, updatedAt) " +
+        "VALUES ('acc_qq_' || ?, ?, 'qq', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+    ).bind("OPENID_D4", "OPENID_D4", realId).run();
 
     await appThirdPartyLogin(
       env,

@@ -8,11 +8,18 @@
  * traffic passes through untouched.
  *
  * - `X-Timestamp` must be within ±5 minutes of now.
- * - `X-Nonce` is de-duplicated in `ext_replay_nonces` with `INSERT OR IGNORE`;
- *   a reused nonce (within its expiry window) is rejected with 400.
+ * - `X-Nonce` is de-duplicated in `ext_rate_limit`（`kind = 'replay-nonce'`）with
+ *   `INSERT OR IGNORE`; a reused nonce (within its expiry window) is rejected
+ *   with 400.
+ *
+ * 本文件只剩请求头解析与 400 响应；去重与过期行清理在
+ * `server/rate-limit/once.ts`，保留期取自 `REPLAY_NONCE`。
  */
 
-const REPLAY_WINDOW_MS = 5 * 60 * 1000;
+import {REPLAY_NONCE} from "@/server/rate-limit/kinds";
+import {insertOnce} from "@/server/rate-limit/once";
+
+const REPLAY_WINDOW_MS = REPLAY_NONCE.retentionMs;
 
 export async function checkReplay(
   db: D1Database,
@@ -35,27 +42,15 @@ export async function checkReplay(
     return new Response("Replay timestamp out of window", {status: 400});
   }
 
-  const nowIso = new Date(now).toISOString();
-  // D1 has no TTL: prune expired nonces before inserting. 写节流（ADR-0049
-  // D4）：清理在每个带 nonce 的请求上都会跑（App 通道满额即 1 万次/日/凭证，
-  // 每次一写），改为 1% 采样——表上限 = 10 分钟窗口 × 请求速率，残留的过期行
-  // 不影响去重正确性（INSERT OR IGNORE 只比对 nonce 本身）。
-  if (Math.random() < 0.01) {
-    await db
-      .prepare("DELETE FROM ext_replay_nonces WHERE exp_at < ?")
-      .bind(nowIso)
-      .run();
-  }
-
-  const expiry = new Date(timestamp + REPLAY_WINDOW_MS).toISOString();
-  const inserted = await db
-    .prepare(
-      "INSERT OR IGNORE INTO ext_replay_nonces (nonce, exp_at) VALUES (?, ?)",
-    )
-    .bind(nonce, expiry)
-    .run();
-
-  if ((inserted.meta?.changes ?? 0) === 0) {
+  // 过期时刻按请求自带的时刻算：这条 nonce 只在它所属的时间窗口内有意义。
+  // 过期行由写入路径的 1% 采样清理（ADR-0049 D4），残留不影响去重正确性。
+  const inserted = await insertOnce(
+    db,
+    REPLAY_NONCE.kind,
+    nonce,
+    timestamp + REPLAY_WINDOW_MS,
+  );
+  if (!inserted) {
     return new Response("Replay detected", {status: 400});
   }
 

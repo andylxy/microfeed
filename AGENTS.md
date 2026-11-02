@@ -104,6 +104,7 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 | 10 | 项目文档在哪、怎么看文档、docs 目录、文档站、ADR、规则放哪 | 文档位置与查看 | `docs/zh/10-docs-view.md` |
 | 11 | 功能修改、改功能、加功能、改逻辑、需求变更、改接口、新端点、改行为 | 功能新增与修改 | `docs/zh/11-feature-modification.md` |
 | 12 | 用户、角色、权限、RBAC、username、signup_source、注册来源、用户管理、auth_user、role_permissions、login_credential、登录凭证、封禁、角色守卫、权限矩阵 | 用户体系与变更 | `docs/zh/12-user-system-schema.md` |
+| 13 | 链路、中间件、关卡、请求流程、鉴权流程、权限判定、401、403、426、429、防重放、限流、版本门、配额、guard、middleware | 请求链路与关卡 | `docs/zh/13-request-pipeline.md` |
 
 ## 如何加载分册
 

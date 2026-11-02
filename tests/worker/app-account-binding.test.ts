@@ -19,8 +19,8 @@ import {POST as bindAccountPost} from "@/pages/api/AppBookRequest/bindAccount";
 /**
  * QQ 账号绑定（ADR-0014 §4）。
  *
- * 被测的是三个端点在库上留下的结果与失败文案：`ext_user_oauth.user_id` 的重定向、
- * 空壳凭证的吊销、解绑的 I14 前置，以及 `bindAccount` 的限流（I15）。
+ * 被测的是三个端点在库上留下的结果与失败文案：`auth_account` qq 绑定行
+ * （ADR-0055）的重定向、空壳凭证的吊销、解绑的 I14 前置，以及 `bindAccount` 的限流（I15）。
  */
 
 const db = env.FEED_DB;
@@ -44,9 +44,9 @@ async function seedShell(): Promise<string> {
       "'2024-01-01', 'user', ?, 'qq')",
   ).bind(SHELL_ID, SHELL_EMAIL, "qq_openid_bind").run();
   await db.prepare(
-    "INSERT OR IGNORE INTO ext_user_oauth (provider, openid, user_id, created_at_ms) " +
-      "VALUES ('qq', ?, ?, ?)",
-  ).bind(OPENID, SHELL_ID, Date.now()).run();
+    "INSERT OR IGNORE INTO auth_account (id, accountId, providerId, userId, createdAt, updatedAt) " +
+      "VALUES ('acc_qq_' || ?, ?, 'qq', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+  ).bind(OPENID, OPENID, SHELL_ID).run();
   // 空壳的 mflc_ 令牌：requireAppUser 用它解析当前会话。
   const credential = await ensureAppLoginCredential(db, {
     email: SHELL_EMAIL,
@@ -81,7 +81,6 @@ const CHILD_TABLES: Array<[table: string, column: string]> = [
   ["ext_user_devices", "user_id"],
   ["ext_login_credentials", "user_id"],
   ["ext_app_login_log", "user_id"],
-  ["ext_user_oauth", "user_id"],
 ];
 
 async function cleanup(): Promise<void> {
@@ -152,9 +151,9 @@ describe("bindAccount（ADR-0014 §4.1）", () => {
 
     // openid 已归目标账号。
     const moved = await db.prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-    ).bind(OPENID).first<{user_id: string}>();
-    expect(moved!.user_id).toBe(TARGET_ID);
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND accountId = ? LIMIT 1",
+    ).bind(OPENID).first<{userId: string}>();
+    expect(moved!.userId).toBe(TARGET_ID);
 
     // 空壳凭证全部吊销（D7 / G3），含本次请求用的那一把。
     const left = await db.prepare(
@@ -173,7 +172,7 @@ describe("bindAccount（ADR-0014 §4.1）", () => {
     const token = await seedShell();
     await seedTarget();
     await db.prepare(
-      "DELETE FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+      "DELETE FROM auth_account WHERE providerId = 'qq' AND userId = ?",
     ).bind(SHELL_ID).run();
 
     expect(await appBindAccount(
@@ -243,8 +242,10 @@ describe("bindAccount（ADR-0014 §4.1）", () => {
     }
     expect(statuses.slice(0, 5).every((status) => status === 200)).toBe(true);
     expect(statuses[5]).toBe(429);
-    await db.prepare("DELETE FROM ext_auth_throttle WHERE key LIKE ?")
-      .bind(`auth:${ip}:%`).run();
+    await db.prepare(
+      "DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle' AND key LIKE ?",
+    )
+      .bind(`${ip}:%`).run();
   });
 });
 
@@ -262,7 +263,7 @@ describe("unbindAccount（ADR-0014 §4.2）", () => {
 
     // 绑定行仍在。
     const left = await db.prepare(
-      "SELECT COUNT(*) AS c FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+      "SELECT COUNT(*) AS c FROM auth_account WHERE providerId = 'qq' AND userId = ?",
     ).bind(SHELL_ID).first<{c: number}>();
     expect(left!.c).toBe(1);
   });
@@ -284,7 +285,7 @@ describe("unbindAccount（ADR-0014 §4.2）", () => {
     )).toEqual({QqBound: 0});
 
     const left = await db.prepare(
-      "SELECT COUNT(*) AS c FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+      "SELECT COUNT(*) AS c FROM auth_account WHERE providerId = 'qq' AND userId = ?",
     ).bind(SHELL_ID).first<{c: number}>();
     expect(left!.c).toBe(0);
   });
@@ -308,7 +309,7 @@ describe("unbindAccount（ADR-0014 §4.2）", () => {
         "createdAt, updatedAt) VALUES (?, ?, 'credential', ?, ?, '2024-01-01', '2024-01-01')",
     ).bind(`acc_${SHELL_ID}`, SHELL_ID, SHELL_ID, await hashPassword(PASSWORD)).run();
     await db.prepare(
-      "DELETE FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ?",
+      "DELETE FROM auth_account WHERE providerId = 'qq' AND userId = ?",
     ).bind(SHELL_ID).run();
 
     expect(await appUnbindAccount(

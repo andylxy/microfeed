@@ -8,8 +8,8 @@
  * single noisy client lock out everyone.
  *
  * Kept in its own module because both throttles need exactly this resolution —
- * `login-throttle.ts` (credential sign-in) and `auth-endpoint-throttle.ts`
- * (`/api/auth` throat) — and neither should own the other's copy.
+ * `LOGIN_FAILURE` (credential sign-in) and `AUTH_THROTTLE` (`/api/auth` throat),
+ * both in `server/rate-limit/kinds.ts` — and neither should own the other's copy.
  */
 export function clientAddress(request: Request): string | null {
   return request.headers.get("cf-connecting-ip")?.trim() ||

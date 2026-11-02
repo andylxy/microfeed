@@ -19,7 +19,7 @@ import {makeD1, makeSqlite} from "./helpers/d1";
 /**
  * 邮箱验证码的生成、存取、校验与限流（ADR §6.1）。
  *
- * 全部跑在真实 SQLite 上，建的是迁移 0153 / 0059 里那两张表的结构：`attempts`
+ * 全部跑在真实 SQLite 上，建的是迁移 0153 / 0166 里那两张表的结构：`count`
  * 自增、`ON CONFLICT` 更新窗口、`meta.changes` 判断消费成败，这些都得由真实引擎
  * 给结论，用假对象伪造等于没测。
  */
@@ -38,10 +38,12 @@ const SCHEMA = `
     created_at_ms INTEGER NOT NULL
   );
   CREATE INDEX ext_email_otp_email_purpose_idx ON ext_email_otp (email, purpose);
-  CREATE TABLE ext_auth_throttle (
-    key TEXT PRIMARY KEY,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    window_start INTEGER NOT NULL
+  CREATE TABLE ext_rate_limit (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    expires_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (kind, key)
   );
 `;
 
@@ -225,8 +227,11 @@ describe("rateLimitSend", () => {
       await rateLimitSend(db, `user${i}@example.com`, "register", ip);
     }
     sqlite
-      .prepare("UPDATE ext_auth_throttle SET window_start = ? WHERE key = ?")
-      .run(Math.floor(Date.now() / 1000) - 3600, `email-otp:${ip}`);
+      .prepare(
+        "UPDATE ext_rate_limit SET expires_at_ms = ? " +
+          "WHERE kind = 'email-otp-ip' AND key = ?",
+      )
+      .run(Date.now() - 3600_000, `email-otp:${ip}`);
     expect(await rateLimitSend(db, "fresh@example.com", "register", ip)).toEqual({ok: true});
   });
 });

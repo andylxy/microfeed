@@ -17,10 +17,9 @@ import {
 import {pwdResetGate, readMethods} from "@/server/app/email-pwd-reset/gate";
 import {clientAddress} from "@/server/auth/client-address";
 import {verifyCaptcha} from "@/server/tcm/captcha";
-import {
-  cleanupCaptchaNonces,
-  consumeCaptchaOnce,
-} from "@/server/tcm/captcha-nonce";
+import {CAPTCHA_NONCE} from "@/server/rate-limit/kinds";
+import {insertOnce} from "@/server/rate-limit/once";
+import {sha256Hex} from "@/shared/crypto";
 import {
   OTP_TTL_MS,
   generateEmailOtp,
@@ -46,8 +45,10 @@ import {readMailSettingsConfig, resolveFromAddress} from "@/server/mail/mail-con
  * ## 图形验证码为什么要"消费"
  *
  * `verifyCaptcha` 是无状态的（只验签），同一张码 120s 内可无限复用。不记账的话，
- * 解一次图就能打满 IP 窗口，门控成本被高估 40 倍（F2）。`consumeCaptchaOnce`
- * 用 `INSERT OR IGNORE` 的 changes 判首次使用，与 `consumeOtp` 同一套并发语义。
+ * 解一次图就能打满 IP 窗口，门控成本被高估 40 倍（F2）。`insertOnce` 用
+ * `INSERT OR IGNORE` 的 changes 判首次使用，与 `consumeOtp` 同一套并发语义；
+ * 台账行在 `ext_rate_limit`（`kind = 'captcha-nonce'`），过期行由写入路径的
+ * 概率采样清理，这里不再单独调清理函数。
  *
  * 消费发生在**发信之前**：发信失败时这张图已被烧掉，用户须刷新一次图。这是有意的
  * 取舍——宁可多刷一张图，也不允许一张图打多个请求。
@@ -78,10 +79,14 @@ export const POST: APIRoute = async ({request}) => {
     if (!await verifyCaptcha(env.BETTER_AUTH_SECRET, verificationCode, reqNo)) {
       return jsonResponse(appEnvelope("验证码错误或已过期"));
     }
-    if (!await consumeCaptchaOnce(env.FEED_DB, reqNo)) {
+    if (!await insertOnce(
+      env.FEED_DB,
+      CAPTCHA_NONCE.kind,
+      await sha256Hex(reqNo.trim()),
+      Date.now() + CAPTCHA_NONCE.retentionMs,
+    )) {
       return jsonResponse(appEnvelope("验证码已使用，请刷新后重试"));
     }
-    await cleanupCaptchaNonces(env.FEED_DB);
   }
 
   const limit = await rateLimitSend(

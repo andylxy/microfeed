@@ -13,8 +13,11 @@
  *   才删行。端点可以「先校验、再做后续检查、最后消费」，这样「邮箱已被占用」
  *   之类的失败不会把用户的验证码白白烧掉。
  * - 参数（6 位 / 10 分钟 / 60s 重发 / 当日 10 次 / 校验 5 次）在此唯一定义，
- *   端点不自行硬编码。
+ *   端点不自行硬编码。IP 维度窗口的参数在 `server/rate-limit/kinds.ts`。
  */
+
+import {EMAIL_OTP_IP} from "@/server/rate-limit/kinds";
+import {consumeWindow} from "@/server/rate-limit/window";
 
 export const OTP_LENGTH = 6;
 /** 验证码有效期（毫秒）：10 分钟。 */
@@ -28,8 +31,8 @@ export const OTP_MAX_ATTEMPTS = 5;
 /** 过期行的保留时长（毫秒）：写入时顺带删更早的行，避免表无界增长（ADR-0015 D16）。 */
 export const OTP_RETENTION_MS = 24 * 60 * 60 * 1000;
 /** IP 维度窗口（秒）与窗口内上限。 */
-export const OTP_IP_WINDOW_SECONDS = 60;
-export const OTP_IP_WINDOW_MAX = 20;
+export const OTP_IP_WINDOW_SECONDS = EMAIL_OTP_IP.windowMs / 1000;
+export const OTP_IP_WINDOW_MAX = EMAIL_OTP_IP.max;
 
 /** 校验结果。`id` 是命中的 OTP 行，交给 {@link consumeOtp} 精确定位要删的那一行。 */
 export type OtpVerifyResult =
@@ -204,10 +207,10 @@ export async function consumeOtp(
 /**
  * 发码前置限流：重发间隔 → 当日上限 → IP 窗口。
  *
- * IP 维度复用 `ext_auth_throttle`（迁移 0059，与 `auth-endpoint-throttle` 同表同形状：
- * key / attempts / window_start），键 `email-otp:<ip>`。之所以不碰 better-auth 的
+ * IP 维度用 `EMAIL_OTP_IP` 分类（`ext_rate_limit`，键 `email-otp:<ip>`），窗口
+ * 算术在 `server/rate-limit/window.ts`。之所以不碰 better-auth 的
  * `auth_rate_limit`——那是上游内置表，写它会给后续上游合并埋冲突点。
- * 命中窗口时顺带自增计数（与既有限流实现一致），被拒时不再自增。
+ * 被拒时不再自增。
  */
 export async function rateLimitSend(
   database: D1Database,
@@ -240,38 +243,15 @@ export async function rateLimitSend(
   }
 
   if (ip) {
-    const key = `email-otp:${ip}`;
-    const nowSeconds = Math.floor(now / 1000);
-    const windowRow = await database
-      .prepare(
-        "SELECT attempts, window_start FROM ext_auth_throttle WHERE key = ?",
-      )
-      .bind(key)
-      .first<{attempts: number; window_start: number}>();
-
-    if (
-      !windowRow ||
-      nowSeconds - windowRow.window_start >= OTP_IP_WINDOW_SECONDS
-    ) {
-      await database
-        .prepare(
-          "INSERT INTO ext_auth_throttle (key, attempts, window_start) VALUES (?, 1, ?) " +
-            "ON CONFLICT(key) DO UPDATE SET attempts = 1, window_start = excluded.window_start",
-        )
-        .bind(key, nowSeconds)
-        .run();
-      return {ok: true};
-    }
-
-    if (windowRow.attempts >= OTP_IP_WINDOW_MAX) {
+    const decision = await consumeWindow(
+      database,
+      EMAIL_OTP_IP,
+      `email-otp:${ip}`,
+      {now},
+    );
+    if (!decision.allowed) {
       return {ok: false, reason: "ipLimited"};
     }
-    await database
-      .prepare(
-        "UPDATE ext_auth_throttle SET attempts = attempts + 1 WHERE key = ?",
-      )
-      .bind(key)
-      .run();
   }
 
   return {ok: true};

@@ -56,7 +56,7 @@ const ORIGIN = "https://feed.example.com";
 
 async function clearRbacRows(): Promise<void> {
   await env.FEED_DB.batch([
-    env.FEED_DB.prepare("DELETE FROM ext_replay_nonces"),
+    env.FEED_DB.prepare("DELETE FROM ext_rate_limit WHERE kind = 'replay-nonce'"),
     env.FEED_DB.prepare("DELETE FROM ext_user_devices"),
     env.FEED_DB.prepare("DELETE FROM ext_user_security"),
     env.FEED_DB.prepare("DELETE FROM ext_user_roles"),

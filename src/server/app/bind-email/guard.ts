@@ -12,8 +12,8 @@
  * ## 为什么配额按账号算
  *
  * `rateLimitSend` 的计数键是 `(email, purpose)`，而绑定场景里 email 是**目标邮箱**
- * ——换个目标就是一份新配额，等于没有上限（F24）。这里用 `ext_auth_throttle`
- * 的 `bind-email-day:<userId>` 做 24 小时窗口，10 次/账号/日。
+ * ——换个目标就是一份新配额，等于没有上限（F24）。这里用 `BIND_QUOTA` 分类
+ * （`ext_rate_limit`，键 `bind-email-day:<userId>`）做 24 小时窗口，10 次/账号/日。
  */
 import {verifyPassword} from "better-auth/crypto";
 
@@ -21,11 +21,12 @@ import {jsonResponse, readStringField} from "@/server/http";
 import {appEnvelope} from "@/server/tcm/envelope";
 import {providedLoginCredentialBearer} from "@/server/auth/credential-login";
 import {verifyLoginCredentialToken} from "@/server/auth/login-credentials";
+import {BIND_QUOTA} from "@/server/rate-limit/kinds";
+import {consumeWindow} from "@/server/rate-limit/window";
 import {isDevMockEnabled, verifyQqToken} from "@/server/tcm/app-third-party";
 
 /** 每账号每日绑定发码上限。 */
-export const BIND_DAILY_LIMIT = 10;
-const BIND_WINDOW_SECONDS = 24 * 60 * 60;
+export const BIND_DAILY_LIMIT = BIND_QUOTA.max;
 
 export interface AppUser {
   userId: string;
@@ -98,10 +99,10 @@ export async function verifyReauth(
   // 通道 2：QQ。
   const qqBinding = await database
     .prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND user_id = ? LIMIT 1",
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND userId = ? LIMIT 1",
     )
     .bind(userId)
-    .first<{user_id: string}>();
+    .first<{userId: string}>();
   if (!qqBinding) return reject();
 
   const openid = readStringField(body, "openid").trim();
@@ -120,45 +121,28 @@ export async function verifyReauth(
 
   const owner = await database
     .prepare(
-      "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
+      "SELECT userId FROM auth_account WHERE providerId = 'qq' AND accountId = ? LIMIT 1",
     )
     .bind(trustedOpenid)
-    .first<{user_id: string}>();
-  if (!owner || owner.user_id !== userId) return reject();
+    .first<{userId: string}>();
+  if (!owner || owner.userId !== userId) return reject();
   return null;
 }
 
 /**
- * 每账号每日配额（`ext_auth_throttle`，键 `bind-email-day:<userId>`）。
+ * 每账号每日配额（`BIND_QUOTA`，键 `bind-email-day:<userId>`）。
  *
- * 与 `rateLimitSend` 的 IP 窗口同一张表、同一套 UPSERT 写法；区别只是窗口
- * 86400s、键里带 userId 而不是 email。返回 false 表示已用尽。
+ * 返回 false 表示已用尽。窗口算术在 `server/rate-limit/window.ts`，与登录端点
+ * 限流、凭证登录失败计数共用同一条 UPSERT；分类由 `kind` 列区分。
  */
 export async function consumeBindQuota(
   database: D1Database,
   userId: string,
 ): Promise<boolean> {
-  const key = `bind-email-day:${userId}`;
-  const now = Math.floor(Date.now() / 1000);
-  const row = await database
-    .prepare("SELECT attempts, window_start FROM ext_auth_throttle WHERE key = ?")
-    .bind(key)
-    .first<{attempts: number; window_start: number}>();
-
-  if (!row || now - row.window_start >= BIND_WINDOW_SECONDS) {
-    await database
-      .prepare(
-        "INSERT INTO ext_auth_throttle (key, attempts, window_start) VALUES (?, 1, ?) " +
-          "ON CONFLICT(key) DO UPDATE SET attempts = 1, window_start = excluded.window_start",
-      )
-      .bind(key, now)
-      .run();
-    return true;
-  }
-  if (row.attempts >= BIND_DAILY_LIMIT) return false;
-  await database
-    .prepare("UPDATE ext_auth_throttle SET attempts = attempts + 1 WHERE key = ?")
-    .bind(key)
-    .run();
-  return true;
+  const decision = await consumeWindow(
+    database,
+    BIND_QUOTA,
+    `bind-email-day:${userId}`,
+  );
+  return decision.allowed;
 }

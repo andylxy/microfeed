@@ -26,14 +26,16 @@ async function seedQuotaRow(
   resetAtMs: number,
 ): Promise<void> {
   await env.FEED_DB.prepare(
-    "INSERT OR REPLACE INTO ext_app_request_quota " +
-      "(credential_id, count, reset_at_ms) VALUES (?, ?, ?)",
+    "INSERT OR REPLACE INTO ext_rate_limit " +
+      "(kind, key, count, expires_at_ms) VALUES ('app-quota', ?, ?, ?)",
   ).bind(credentialId, count, resetAtMs).run();
 }
 
 describe("app request quota", () => {
   beforeEach(async () => {
-    await env.FEED_DB.prepare("DELETE FROM ext_app_request_quota").run();
+    await env.FEED_DB.prepare(
+      "DELETE FROM ext_rate_limit WHERE kind = 'app-quota'",
+    ).run();
   });
 
   it("counts up within a window", async () => {

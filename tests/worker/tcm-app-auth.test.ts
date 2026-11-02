@@ -79,7 +79,7 @@ beforeEach(async () => {
     db.prepare("DELETE FROM ext_user_security"),
     db.prepare("DELETE FROM ext_user_roles"),
     db.prepare("DELETE FROM ext_user_devices"),
-    db.prepare("DELETE FROM ext_auth_throttle"),
+    db.prepare("DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle'"),
     db.prepare('DELETE FROM "auth_user"'),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
@@ -90,7 +90,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await db.batch([
     db.prepare("DELETE FROM ext_login_credentials"),
-    db.prepare("DELETE FROM ext_auth_throttle"),
+    db.prepare("DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle'"),
     db.prepare("DELETE FROM channels WHERE id = ?").bind(CHANNEL_ID),
     db.prepare("DELETE FROM settings WHERE category = 'webGlobalSettings'"),
     db.prepare("DELETE FROM settings WHERE category = 'app_login_methods'"),
@@ -303,8 +303,10 @@ describe("App login throttle (ADR-0011 D1 / ticket 12 限流)", () => {
     const ip = "203.0.113.77";
     // 隔离：清掉该 IP 的限流计数，避免跨用例累加。
     await db
-      .prepare("DELETE FROM ext_auth_throttle WHERE key = ?")
-      .bind(`auth:${ip}:/api/AppBookRequest/login`)
+      .prepare(
+        "DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle' AND key = ?",
+      )
+      .bind(`${ip}:/api/AppBookRequest/login`)
       .run();
 
     const statuses: number[] = [];

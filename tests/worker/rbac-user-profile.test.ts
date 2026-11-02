@@ -159,7 +159,7 @@ beforeEach(async () => {
     env.FEED_DB.prepare("DELETE FROM ext_user_roles"),
     env.FEED_DB.prepare("DELETE FROM ext_user_devices"),
     env.FEED_DB.prepare("DELETE FROM ext_user_security"),
-    env.FEED_DB.prepare("DELETE FROM ext_replay_nonces"),
+    env.FEED_DB.prepare("DELETE FROM ext_rate_limit WHERE kind = 'replay-nonce'"),
     // Children before the parent `oauth_client` so the cleanup order is safe
     // even if foreign-key enforcement is on.
     env.FEED_DB.prepare('DELETE FROM "oauth_access_token"'),

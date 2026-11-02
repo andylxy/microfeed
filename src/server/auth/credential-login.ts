@@ -18,11 +18,14 @@ import {
   verifyLoginCredentialToken,
 } from "@/server/auth/login-credentials";
 import {clientAddress} from "@/server/auth/client-address";
+import {LOGIN_FAILURE} from "@/server/rate-limit/kinds";
 import {
-  clearLoginThrottle,
-  loginThrottleAllows,
-  recordLoginFailure,
-} from "@/server/auth/login-throttle";
+  clearWindow,
+  readWindowStatement,
+  recordWindowHit,
+  windowAllows,
+  type WindowRow,
+} from "@/server/rate-limit/window";
 import {jsonResponse, publicLocalizedError} from "@/server/http";
 import {readSnapshotGate} from "@/server/rbac/snapshot";
 import {adminLoginDeniedResponse} from "@/server/auth/admin-signin";
@@ -79,14 +82,21 @@ export async function handleCredentialLogin(
   // sharing a global "unknown" bucket that would lock out every addressless caller.
   const ip = clientAddress(request);
   const throttleKey = ip ? `${ip}:/ajax/auth/credential-login` : null;
-  if (throttleKey && !await loginThrottleAllows(env.FEED_DB, throttleKey)) {
-    return publicLocalizedError(request, "errors.loginCredential.tooManyAttempts", 429);
+  if (throttleKey) {
+    const throttleRow = await readWindowStatement(
+      env.FEED_DB,
+      LOGIN_FAILURE.kind,
+      throttleKey,
+    ).first<WindowRow>();
+    if (!windowAllows(throttleRow, LOGIN_FAILURE.max)) {
+      return publicLocalizedError(request, "errors.loginCredential.tooManyAttempts", 429);
+    }
   }
 
   // 封禁标记随验票同一趟 LEFT JOIN 取回（方案 4.4），不再单独查一次 `auth_user`。
   const verified = await verifyLoginCredentialToken(env.FEED_DB, token);
   if (!verified || verified.banned) {
-    if (throttleKey) await recordLoginFailure(env.FEED_DB, throttleKey);
+    if (throttleKey) await recordWindowHit(env.FEED_DB, LOGIN_FAILURE, throttleKey);
     return publicLocalizedError(request, "errors.loginCredential.invalid", 401);
   }
 
@@ -113,7 +123,7 @@ export async function handleCredentialLogin(
     console.error("credential-login: session creation failed", error);
     return publicLocalizedError(request, "errors.loginCredential.unavailable", 500);
   }
-  if (throttleKey) await clearLoginThrottle(env.FEED_DB, throttleKey);
+  if (throttleKey) await clearWindow(env.FEED_DB, LOGIN_FAILURE.kind, throttleKey);
   await markLoginCredentialUsed(env.FEED_DB, verified.credentialId);
 
   const headers = new Headers();

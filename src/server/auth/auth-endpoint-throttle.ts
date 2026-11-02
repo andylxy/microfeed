@@ -17,16 +17,18 @@
  * caller, which is a worse failure than an unthrottled request on a deployment
  * that never reports an address).
  *
- * The window counter itself stays separate from `login-throttle.ts` on purpose:
- * this one counts *pre-checked attempts in seconds* and answers 429 here, while
- * the credential throttle counts *failures in ms* and is cleared on success.
- * They share the address resolution and the shape, not the semantics.
+ * 计数由 `server/rate-limit/window.ts` 的固定窗口原语承担；本文件只剩 HTTP
+ * 这一层：路径白名单、地址解析与 429 响应。窗口键是「地址:路径」，分类由
+ * `kind` 列区分，不再往 key 里塞命名空间前缀。
+ *
+ * 与凭证登录失败计数（`LOGIN_FAILURE`）的分工不变：这边数**已放行的尝试**、
+ * 自己回 429；那边数**失败次数**、登录成功即清空。两者共用地址解析与窗口
+ * 算术，不共用语义。
  */
 
 import {clientAddress} from "@/server/auth/client-address";
-
-const AUTH_ENDPOINT_THROTTLE_MAX = 5;
-const AUTH_ENDPOINT_THROTTLE_WINDOW_SECONDS = 60;
+import {AUTH_THROTTLE} from "@/server/rate-limit/kinds";
+import {consumeWindow} from "@/server/rate-limit/window";
 
 const THROTTLED_AUTH_PATHS = new Set([
   "/api/auth/sign-in/username",
@@ -52,36 +54,18 @@ export async function enforceAuthEndpointThrottle(
   const ip = clientAddress(request);
   if (!ip) return null;
 
-  const key = `auth:${ip}:${pathname}`;
-  const nowSeconds = Math.floor(Date.now() / 1000);
+  const decision = await consumeWindow(
+    database,
+    AUTH_THROTTLE,
+    `${ip}:${pathname}`,
+  );
+  if (decision.allowed) return null;
 
-  const row = await database.prepare(
-    "SELECT attempts, window_start FROM ext_auth_throttle WHERE key = ?",
-  ).bind(key).first<{attempts: number; window_start: number}>();
-
-  // Fresh key, or the window has rolled over: start a new window and allow.
-  if (!row || nowSeconds - row.window_start >= AUTH_ENDPOINT_THROTTLE_WINDOW_SECONDS) {
-    await database.prepare(
-      "INSERT INTO ext_auth_throttle (key, attempts, window_start) VALUES (?, 1, ?) " +
-        "ON CONFLICT(key) DO UPDATE SET attempts = 1, window_start = excluded.window_start",
-    ).bind(key, nowSeconds).run();
-    return null;
-  }
-
-  if (row.attempts >= AUTH_ENDPOINT_THROTTLE_MAX) {
-    const retryAfter = AUTH_ENDPOINT_THROTTLE_WINDOW_SECONDS -
-      (nowSeconds - row.window_start);
-    return new Response("Too Many Requests", {
-      headers: {
-        "cache-control": "no-store",
-        "retry-after": String(Math.max(1, retryAfter)),
-      },
-      status: 429,
-    });
-  }
-
-  await database.prepare(
-    "UPDATE ext_auth_throttle SET attempts = attempts + 1 WHERE key = ?",
-  ).bind(key).run();
-  return null;
+  return new Response("Too Many Requests", {
+    headers: {
+      "cache-control": "no-store",
+      "retry-after": String(Math.max(1, decision.retryAfterSeconds)),
+    },
+    status: 429,
+  });
 }

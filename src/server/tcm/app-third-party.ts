@@ -3,7 +3,8 @@
 //
 // 安全模型：
 // - 客户端只报 openid / accessToken，后端必须向腾讯校验，绝不信任客户端自报 openid。
-// - 校验通过才 upsert auth_user + ext_user_oauth，复用账号登录的登录凭证签发
+// - 校验通过才 upsert auth_user + auth_account（providerId='qq' 绑定行，ADR-0055），
+//   复用账号登录的登录凭证签发
 //   （ensureAppLoginCredential → mflc_ 凭证），返回与账号登录同款的 LoginOutPut 形状。
 // - 并发首登同 openid：INSERT OR IGNORE + 回查，避免 UNIQUE 冲突 → 未捕获 500。
 // - 验证码闸门不套第三方登录（第三方无 verificationCode 输入）。
@@ -15,7 +16,7 @@
 
 import {cache} from "cloudflare:workers";
 
-import {authUserInsertSql} from "@/server/auth/account-insert";
+import {authUserInsertSql, qqBindingAccountStatement} from "@/server/auth/account-insert";
 import {createMicrofeedAuth} from "@/server/auth/better-auth";
 import {
   ensureAppLoginCredential,
@@ -138,25 +139,23 @@ async function fetchQqUserInfo(
   }
 }
 
-/** 按 openid 查已绑定的 user_id（ext_user_oauth 主键 provider+openid）。 */
+/** 按 openid 查已绑定的 user_id（auth_account 的 qq 绑定行，唯一索引 providerId+accountId，ADR-0055）。 */
 async function findUserIdByOpenid(database: D1Database, openid: string): Promise<string | null> {
   const row = await database.prepare(
-    "SELECT user_id FROM ext_user_oauth WHERE provider = 'qq' AND openid = ? LIMIT 1",
-  ).bind(openid).first<{user_id: string}>();
-  return row?.user_id ?? null;
+    'SELECT "userId" FROM "auth_account" WHERE "providerId" = \'qq\' AND "accountId" = ? LIMIT 1',
+  ).bind(openid).first<{userId: string}>();
+  return row?.userId ?? null;
 }
 
-/** 绑定 (qq, openid) → auth_user；主键冲突忽略（并发首登 / 重复登录都安全）。 */
+/** 绑定 (qq, openid) → auth_user；行冲突忽略（并发首登 / 重复登录都安全，ADR-0055）。 */
 async function bindOpenid(database: D1Database, openid: string, userId: string): Promise<void> {
-  await database.prepare(
-    "INSERT OR IGNORE INTO ext_user_oauth (provider, openid, user_id, created_at_ms) VALUES ('qq', ?, ?, ?)",
-  ).bind(openid, userId, Date.now()).run();
+  await qqBindingAccountStatement(database, {openid, userId}).run();
 }
 
 /**
  * 幂等建号：INSERT OR IGNORE，冲突（并发首登 / 同一 openid 换个大小写）时按
- * email 或 username 回查取回已有 id，避免 UNIQUE 冲突。成功后绑定 ext_user_oauth
- * （主键冲突忽略）。两条唯一键都查不到时抛错——绝不把 openid 绑到没插进去的 id。
+ * email 或 username 回查取回已有 id，避免 UNIQUE 冲突。成功后写 QQ 绑定行
+ * （冲突忽略）。两条唯一键都查不到时抛错——绝不把 openid 绑到没插进去的 id。
  */
 async function createQqUser(
   database: D1Database,
@@ -376,7 +375,7 @@ export async function appThirdPartyLogin(
     avatar = info.avatar;
   }
 
-  // 解析或创建用户（ext_user_oauth 关联）。
+  // 解析或创建用户（auth_account 的 qq 绑定行关联，ADR-0055）。
   let userId = await findUserIdByOpenid(database, trustedOpenid);
   if (!userId) {
     userId = await createQqUser(database, trustedOpenid, nickname, avatar);

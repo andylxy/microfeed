@@ -1,0 +1,28 @@
+-- 0164_schema_drop_ext_menu_permissions.sql
+--
+-- 物理删除 ext_menu_permissions（0040 建、0052 重建并种子）。
+--
+-- 这张表下线的链条：0127 起权限树自持于 ext_permission_nodes（ADR-0038），
+-- 树的分组与页面归属不再由菜单表派生；0145 起菜单行可见性靠
+-- ext_menu.permission_code 直列判定（ADR-0038 同一决策的另一面）。自此本表
+-- 零读零写，0145/0150 的注释里「不碰」留到今天。死表留着只会让快照分类、
+-- 库同步与后来人反复解释它的存在，0164 终结。
+--
+-- 索引 ix_ext_menu_permissions_permission 随表自动删除，无需单独语句。
+--
+-- 读量：DROP TABLE 是元数据操作，不扫数据行。
+--
+-- type = schema。
+-- rollback:
+--   结构可重建（0052 的现行 DDL）：
+--     CREATE TABLE IF NOT EXISTS ext_menu_permissions (
+--       menu_code       TEXT NOT NULL,
+--       permission_code TEXT NOT NULL,
+--       PRIMARY KEY (menu_code, permission_code)
+--     );
+--     CREATE INDEX IF NOT EXISTS ix_ext_menu_permissions_permission
+--       ON ext_menu_permissions(permission_code);
+--   历史映射数据不可恢复，也无恢复价值：行里的码均已退役，且
+--   树与菜单行早已不依赖这张表。
+
+DROP TABLE IF EXISTS ext_menu_permissions;

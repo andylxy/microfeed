@@ -27,7 +27,6 @@ export const USER_OWNED_TABLES = [
   {column: "user_id", table: "ext_app_login_log"},
   {column: "user_id", table: "ext_login_credentials"},
   {column: "user_id", table: "ext_user_devices"},
-  {column: "user_id", table: "ext_user_oauth"},
   {column: "user_id", table: "ext_user_permissions"},
   {column: "user_id", table: "ext_user_roles"},
   {column: "user_id", table: "ext_user_security"},

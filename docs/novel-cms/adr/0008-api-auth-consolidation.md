@@ -72,6 +72,7 @@ microfeed fork 后，API 面出现**三条鉴权路径 × 三套权限码**，�
 - ⚠️ `src/server/rbac/replay.ts` + `ext_replay_nonces` —— **`rbac/guard.ts` 也在用**
   （RBAC 自身的防重放，`requireAppVersion → checkReplay → requirePermission`）。
   无 `X-Nonce`/`X-Timestamp` 时自动 no-op，保留无副作用。
+  （2026-11-02 补注：表已由 0166 并入 `ext_rate_limit` 的 `kind = 'replay-nonce'`，模块与调用点未变，见 ADR-0056。）
 - `resolveUserPermissions` / `RBAC_WILDCARD` —— bearer 路径也用。
 - `access.ts` 的 `ApiAttribution` / `writeApiAccessLog` / `apiPathDetails` / `integrationSuffix`
   —— bearer 路径也用（且 `integrationSuffix` 是**上游**的）。

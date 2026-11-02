@@ -70,7 +70,8 @@ export const SNAPSHOT_TABLES = {
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log
-    // is a durable audit trail (no expiry, unlike ext_replay_nonces) mirroring
+    // is a durable audit trail (no expiry, unlike the replay-nonce ledger in
+    // `ext_rate_limit`) mirroring
     // the other ext_content_* audit tables above, so "who called what" survives
     // a snapshot boundary.
     "ext_api_key_owners",
@@ -81,9 +82,6 @@ export const SNAPSHOT_TABLES = {
     // mf_ key 哈希化（migration 0148）建表重造的临时名：RENAME 后该表名不存在，
     // 分类器扫迁移 DDL 时仍会遇到——与 ext_api_access_log_v2 同款处理。
     "api_keys_hashed",
-    // App 内容端点限流计数（migration 0147，ADR-0048/0049）：每把凭证一行
-    // 固定窗口计数，随本地→远程同步走 durable 口径。
-    "ext_app_request_quota",
     // NOTE: `microfeed_installation` is deliberately NOT listed here — it is
     // `targetSpecific` below (restore rewrites it per target), and listing it
     // twice makes `assertClassifiedTables` refuse the snapshot.
@@ -94,9 +92,11 @@ export const SNAPSHOT_TABLES = {
     // Admin menu (migration 0041). The menu is data, not code: a restore that
     // dropped these rows would leave the dashboard with an empty sidebar.
     "ext_menu",
-    // Menu page -> permission codes (migration 0052). Also data: without it the
-    // role editor's permission tree would drop every code into the "other
-    // permissions" bucket.
+    // ext_menu_permissions was dropped by migration 0164: dead since the
+    // permission tree went self-owned (0128) and menu visibility moved to
+    // ext_menu.permission_code. The entry stays because the classifier scans
+    // migration DDL and still meets the table name in that DROP statement —
+    // same treatment as api_keys_hashed above.
     "ext_menu_permissions",
     // 自持权限树（migration 0128）。分组行、页面行与树上自建的行都是运营手工
     // 维护的数据——在树编辑器里改过的名字、父级、显隐——快照不带它们，恢复后
@@ -139,12 +139,9 @@ export const SNAPSHOT_TABLES = {
     // (name, color) that the books board and the App's status filter render; a
     // restored site keeping items but not their statuses would mislabel every book.
     "ext_book_status",
-    // Third-party (QQ) login bindings (migration 0155). `(provider, openid) → user_id`
-    // is credential identity, the same nature as `ext_login_credentials` and
-    // `ext_api_key_owners` above: a restore that dropped these rows would leave
-    // every existing QQ user unlinked, and the next login would look like a first
-    // sign-in for an account they already own.
-    "ext_user_oauth",
+    // ext_user_oauth 已随 ADR-0055 并入 auth_account（迁移 0165 删表）：QQ 绑定
+    // 现在是 auth_account 的 providerId='qq' 行，随 durable 清单里的 auth_account
+    // 一起快照，无需单独登记。
   ],
   ephemeral: [
     "item_create_idempotency",
@@ -159,15 +156,16 @@ export const SNAPSHOT_TABLES = {
     // item bodies on first read, so a restore can drop it and let it self-heal.
     "ext_marker_citations",
     "ext_marker_citation_state",
-    // Anti-replay nonce ledger (migration 0030). Rows expire within minutes, so
-    // there is nothing worth carrying across a snapshot boundary.
-    "ext_replay_nonces",
-    // Credential sign-in throttle (migration 0037). A fixed 60s window; nothing
-    // worth carrying across a snapshot boundary.
-    "ext_login_credential_attempts",
-    // Auth-endpoint throttle (migration 0059). Fixed-window counters like the
-    // one above; nothing worth carrying across a snapshot boundary.
-    "ext_auth_throttle",
+    // 限流与一次性台账（migration 0166，ADR-0056）。整表都是运行态：计数器
+    // 按窗口重置、台账按保留期过期，带上它们只会让恢复后的站点继承一批早已
+    // 无效的计数。归 ephemeral 同时修掉了旧分类里「配额计数算 durable」那条
+    // 与 d1-sync 的 RUNTIME_DRIFT 归类相冲突的登记。
+    //
+    // 0166 之前的五张表（0030 / 0037 / 0059 / 0147 / 0156）不登记：表已被
+    // DROP，而 `buildRestoreFinalizationSql` 会为每个 ephemeral 表生成
+    // `DELETE FROM`——登记一张不存在的表会让恢复直接 `no such table`。
+    // 分类器只要求「库里存在的表都登记过」，不要求登记的条目都还在。
+    "ext_rate_limit",
     "oauth_access_token",
     "oauth_refresh_token",
     "oauth_consent",
@@ -202,12 +200,6 @@ export const SNAPSHOT_TABLES = {
     // `(email, purpose)` is ever honoured — nothing here is worth carrying across a
     // snapshot boundary (a restored site simply issues a fresh code).
     "ext_email_otp",
-    // Graphical-captcha one-time ledger (migration 0156). Rows are keyed by the
-    // request-number digest and pruned 24h after use, so the table only answers "has
-    // this captcha already been spent" inside one short window. A restored site
-    // issues its own codes; carrying the digests over would only re-block codes that
-    // no longer exist.
-    "ext_captcha_nonce",
   ],
   internal: ["_cf_KV", "d1_kv"],
   targetSpecific: ["microfeed_installation"],

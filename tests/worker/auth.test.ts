@@ -740,7 +740,9 @@ describe("Better Auth on Workers with D1", () => {
 
 describe("auth endpoint throttle (A6)", () => {
   beforeEach(async () => {
-    await env.FEED_DB.prepare("DELETE FROM ext_auth_throttle").run();
+    await env.FEED_DB.prepare(
+      "DELETE FROM ext_rate_limit WHERE kind = 'auth-throttle'",
+    ).run();
   });
 
   it("rate limits the username sign-in endpoint after 5 attempts", async () => {

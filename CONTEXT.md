@@ -17,7 +17,7 @@ _Avoid_: 菜单组、用户角色
 _Avoid_: 角色归属（旧称，易被读成另一个字段）
 
 **角色镜像**：
-`auth_user.role` 上由角色分配派生的有损镜像：持 `super_admin` 记 `admin`，其余记 `user`。它只服务 Better Auth 自己的 admin 插件端点（封禁、删除用户等），**不参与授权**，也不能承载「持有哪些角色」。它是派生值，两侧不一致即为缺陷。
+`auth_user.role` 上曾存在的派生值：持 `super_admin` 记 `admin`，其余记 `user`，只服务 Better Auth admin 插件。**已废止**（[ADR-0054](docs/novel-cms/adr/0054-drop-auth-admin-plugin.md) 移除插件，`0163` 清空存量；列保留但停写停读）。词条保留作历史沿革，授权从不认它。
 _Avoid_: Better Auth 角色（会被读成另一个独立概念）
 
 **权限快照**：
@@ -110,8 +110,12 @@ App 命名空间的安全模型（实为 fail-open）：「未登记进集成清
 _Avoid_: 白名单（方向相反）
 
 **登录方式**：
-App 用户完成身份认证的途径（账号密码 / 短信 / 微信 / QQ），由后台「登录管理」页逐一开关（[ADR-0050](docs/novel-cms/adr/0050-app-login-methods-config.md)）。短信 / 微信 / QQ 本期只控显隐，后端未接通。
+App 用户完成身份认证的途径（账号密码 / 短信 / 微信 / QQ），由后台「登录管理」页逐一开关（[ADR-0050](docs/novel-cms/adr/0050-app-login-methods-config.md)，其修订节记录 QQ 已于 2026-10-30 接通）。
 _Avoid_: 与正交的「账号闸门」（后台账号封禁 / 设备吊销）混淆
+
+**第三方绑定**：
+一个 openid 与一个账号的关联关系，由 `auth_account` 按 `providerId` 分流表达（QQ 为 `providerId='qq'` 行，见 [ADR-0055](docs/novel-cms/adr/0055-unify-third-party-binding-into-auth-account.md)）。一个 openid 只绑一个账号，一个账号可绑多个提供方；它不是登录凭据——凭据走登录凭证。
+_Avoid_: openid 表、OAuth 绑定表（旧 `ext_user_oauth` 已退役）、第三方登录凭据
 
 **前端入口显隐 / 后端受理**：
 一个登录方式的两个独立可控面：显隐 = App 登录页是否渲染该入口（`getLoginMethods` 响应）；受理 = `appLogin` 是否接受该方式的提交（硬门，关时返回「该登录方式已停用」）。两者同源一份配置，各自独立生效。
@@ -258,6 +262,28 @@ TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book
 阅读页与目录之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>/v/<篇章 id>/#mf-toc-<条 id>`（TCM 书；扁平条目书没有篇章，退回 `/book/<bookId>#mf-toc-<条 id>`），卷页给每个条文设 `id="mf-toc-<条 id>"`。哈希不能只在一侧改——收尾脚本（`web-body-end`）会在目录重建后按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)。
 
 卷页那条 URL 的**尾斜杠要留着**：卷页规范路径是 `/book/{id}/v/{篇章 id}/`，`public-cache.ts` 的 `isBookScopedPath` 用 `/^\/book\/[^/]+\/(?:v\/[^/]+\/)?$/u` 认它。少一个尾斜杠，服务端只回一个 **308** 补斜杠（本地实测：有斜杠 200 `no-cache`，无斜杠 308 `private, no-store`）；重定向本身不可缓存（`isPublicCacheableResponse` 要求 200），于是每次点「返回」多付一个不可缓存的往返。片段会被浏览器带过重定向，锚点不坏；页面本身仍走边缘缓存。
+
+## 限流与一次性台账
+
+**限流**：
+对同一调用方在一段时间窗口内的请求次数设上限，超限请求在业务逻辑之前被拒。上限与窗口长度是分类的属性，不由调用方各自另写一份。
+_Avoid_: 节流、频率控制、频控
+
+**窗口**：
+限流的计数周期。窗口结束后计数从头起算，不依赖清理任务。
+_Avoid_: 周期、时间片
+
+**配额**：
+窗口更长、上限更大的一种限流（App 内容端点是 24 小时 / 10,000 次 / 每把登录凭证），用尽后整窗拒绝。
+_Avoid_: 额度、流量包
+
+**一次性台账**：
+记录「某个一次性凭据已经被用过」的行，不计数、没有窗口重置，只在保留期内判重。防重放 nonce 与图形验证码的记账属于这一类，不属于限流。
+_Avoid_: nonce 表、防重放表
+
+**分类**：
+限流与台账行的分类标识，决定该行按哪个窗口计数、或按哪个保留期判重。分类是结构的一部分，不是键名里的字符串前缀。
+_Avoid_: 类型、命名空间
 
 ## 响应式设计
 

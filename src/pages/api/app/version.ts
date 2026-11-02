@@ -24,7 +24,7 @@
  * 引入后本端点**每次请求都会写一行**（一次 upsert），前提已变：现在它是一个（很小的）
  * 写放大面。当前仍维持不限流——App 只在启动时调用一次、写入是命中 UNIQUE 索引的单条
  * upsert——但若边缘日志显示该路径被高频刷，升级优先级高于票据 15 当时的判断：应尽快
- * 加按客户端 IP 的极简 D1 计数器（形状照 `ext_auth_throttle`）。
+ * 加按客户端 IP 的极简 D1 计数器（形状照 `ext_rate_limit` 的窗口分类）。
  *
  * 不属于 legacy `AppBookRequest` 信封（`{code,data,msg}`），也不注册进 OpenAPI 契约：
  * 它是 App 内部通道，不是公开 feed API —— 与 AGENTS.md「API 契约与文档」对

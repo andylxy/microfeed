@@ -27,7 +27,7 @@ sequenceDiagram
     BE->>BE: client_id 必须命中 QQ_APP_ID 允许清单（防重放别家 token）
     BE->>Tx: GET /user/get_user_info?oauth_consumer_key=appId&openid=...
     Tx-->>BE: { nickname, figureurl_qq_2 } (best-effort)
-    BE->>BE: upsert auth_user + ext_user_oauth（按 openid 绑定）
+    BE->>BE: upsert auth_user + auth_account（providerId='qq' 绑定行，ADR-0055）
     BE-->>App: 登录凭证（与账号登录同款 LoginOutPut）
 ```
 
@@ -97,7 +97,7 @@ if (!loginMethods.qqEnabled) return "该登录方式已停用";
 ### C. 不需要你管的（确认清单）
 
 - token 缓存/刷新：客户端每次带新 `accessToken`，后端现验现用。
-- openid→账号绑定：自动 upsert 到 `ext_user_oauth` + `auth_user`，并发首登用 `INSERT OR IGNORE` + 回查兜底（见 `createQqUser`：email/username 双重唯一键回查，避免幽灵绑定）。
+- openid→账号绑定：自动 upsert 到 `auth_account`（`providerId='qq'` 绑定行，ADR-0055 由 0165 自 `ext_user_oauth` 并入）+ `auth_user`，并发首登用 `INSERT OR IGNORE` + 回查兜底（见 `createQqUser`：email/username 双重唯一键回查，避免幽灵绑定）；绑定幂等闸门是 0165 的 `UNIQUE INDEX auth_account_provider_account`。
 - 限流：端点已接入 `enforceAuthEndpointThrottle`（路径感知，含本端点），同一 IP 60s 内 >5 次返 429，无需你配。
 - `unionid`：腾讯侧「未获取」也**不影响登录**——本设计三个 AppID 有意账号隔离（debug/正式互不相通），登录只用 `openid`，后端 `verifyQqToken` 也只走 `oauth2.0/me` + `openid`。**不需要申请 unionid。**
 
@@ -147,6 +147,6 @@ if (!loginMethods.qqEnabled) return "该登录方式已停用";
 
 - **已结案（2026-10-30）**：三个 AppID —— `1906152348`（release）/ `1906152522`（debug）/ `1906151545`（preview）—— **全部审核通过**。
   debug 变体真机实测 QQ 登录成功，服务端落库 `qq_39746869556B3DEAF1163DDCD5A12B9D@users.microfeed.local`（`auth_user.name = xjx-bbx`，占位域已统一，ADR-0014 rev.9）、
-  `ext_user_oauth.openid = 39746869556B3DEAF1163DDCD5A12B9D`。此前那次 `110401` 确认为平台同步延迟，现已消失。
+  `auth_account` qq 绑定行 `accountId = 39746869556B3DEAF1163DDCD5A12B9D`（ADR-0055 迁移前记于 `ext_user_oauth.openid`，历史留痕）。此前那次 `110401` 确认为平台同步延迟，现已消失。
 - **长期口径**：`110401` = 请求的应用不存在（同步/包名/签名问题），**与审核状态无关**；`110406` 才是「未过审被挡」；
   `100044` = 签名校验失败。审核期开发者本人可正常 SSO 调试（腾讯 wiki 长期口径），但不能开放给其他 QQ 号。
