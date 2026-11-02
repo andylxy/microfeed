@@ -11,9 +11,9 @@
 - 侧栏行集 = 桌面端（`audience = 'desktop'`）的 `kind = 'group'` 分组行与 `kind = 'page'` 页面行；码行（`kind = 'code'`）是角色编辑器里的勾选项，不进侧栏；App 端节点没有侧栏。表自引用：`parent_code` 指向同表父行，带 `ix_ext_permission_nodes_parent` / `_audience` / `_kind` / `_sort` 四个索引。
 - 页面行携带 `path`（相对 `/admin/` 的入口路径，分组行为 NULL）与 `entry_code`（入口门码），分组行两列均为 NULL；另有 `icon`、`sort`、`is_visible`、`i18n_key`、`source`、`created_at_ms` 与 `name_zh` / `name_en`（均可空，作为可选覆盖）。
 - 组装在 `src/shared/AdminSidebarItems.ts` 的 `buildSidebarItems`：按 `(sort, code)` 读序；`entry_code` 为空的页面行只挂码、不进侧栏；门码非空时按账号权限集合判定（持 `*` 通配视为全见）；子项全空的分组剪掉，父分组被滤掉时子分组升为顶层；分组本身不是页面，链接指向第一个子项。查询在 `src/server/admin/menu.ts` 的 `readAdminMenu`，门控走 `rbacAllows`。
-- 页面可达性由页面自身的 `requirePagePermission` 决定，判据是该页面节点绑定的同一个门码（一入口一门码，故为相等）。两侧一致由迁移人工比对、`tests/unit/admin-page-guards.test.ts` 静态重放迁移、`tests/worker/admin-menu.test.ts` 的「菜单行 ↔ 页面节点」比对检查共同保证。
+- 页面可达性由页面自身的 `requirePagePermission` 决定，判据是该页面节点绑定的同一个门码（一入口一门码，故为相等）。两侧一致由迁移人工比对、`tests/unit/admin-page-guards.test.ts` 静态重放迁移、`tests/worker/admin-menu.test.ts` 的节点表用例检查共同保证。
 - 同一份组装器给 `/admin/rbac/` 的「侧栏预览」复用：预览按所选角色的权限集合拼行集，运营调整门码即可看到侧栏的变化，两处不会漂移。
-- `ext_menu` 表只剩迁移种子一个用途：全新安装先走它的种子，0133 再把配对行回填进节点表；0135 已删掉随菜单管理页退役的 `menu_management` 行。
+- `ext_menu` **已于 0168 删除**（ADR-0057）：它在 0041 建表、0125 补双语名，0133 的配对回填是它最后一个读者，此后零 SQL 读写。`manage-cli/lib/snapshot.ts` 仍保留其 `durable` 条目，因为 `assertClassifiedTables` 拒绝未登记表、而 0041–0167 之间的中间快照里它还在。
 
 ### 三级子项的注入
 

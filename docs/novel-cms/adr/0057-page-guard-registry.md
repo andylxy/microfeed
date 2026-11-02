@@ -12,7 +12,7 @@
 | --- | --- |
 | 后台页面各自 inline 门码 | 46 个 `.astro`（36 个单行调用 + 10 个多行调用） |
 | handler 分散 `requireRbac(…, PERMISSION_CODES.X, …)` | 6 个 `src/server/admin/*-handlers.ts` 调用，共 32 处（`rbac-handlers.ts` 一文件 17 处） |
-| 权限码镜像 | 3 处（`src/shared/Constants.ts` / `src/server/rbac/seed.ts` / 迁移 SQL） |
+| 权限码镜像 | 4 处（`src/shared/Constants.ts` / `src/server/rbac/seed.ts` / 迁移 SQL / `src/shared/RbacPermissionDocs.ts`） |
 
 用户的实际痛点是「要找好多个文件才知道相关的内容、容易漏改」。页面守卫码这一环，既没有「一处查全」的入口，也没有「改了一页忘了别处」的提示——虽然 `tests/unit/admin-page-guards.test.ts` 已经把「页面守卫码 ⇔ 菜单行 `permission_code`」对齐了，但那份对齐靠**回放迁移 + 解析页面文件**，不是一份人能直接读的清单。
 
@@ -175,10 +175,15 @@
 | `source` | 来源标记 |
 | `created_at_ms` | 创建时刻 |
 
-#### `ext_menu`（历史兼容表）
+#### `ext_menu`（已下线，0168 删除）
+
 | 字段 | 说明 |
 | --- | --- |
-| `id` / `code` / `parent_code` / `path` / `i18n_key` / `icon` / `permission_code` / `sort` / `is_visible` / `name_zh` / `name_en` | 0127 权限树自持后侧栏不读它；保留作兼容，见 12 分册 §5.1 |
+| `id` / `code` / `parent_code` / `path` / `i18n_key` / `icon` / `permission_code` / `sort` / `is_visible` / `name_zh` / `name_en` | 0041 建表，0127 权限树自持后侧栏不再读它；**0168 已 `DROP TABLE`**，见本 ADR 后果节 |
+
+原表结构（供读旧迁移时对照）：`id` 主键、`code` UNIQUE、`parent_code`、`path`、`i18n_key`、`icon`、`permission_code`、`sort`、`is_visible`、`created_at_ms`，0125 增 `name_zh` / `name_en`。
+
+下线时的状态：`src/` 下**零条 SQL 语句**读写这张表（只有注释提及）；最后一个读者是迁移 `0133` 的一次性回填（`SET path = (SELECT m.path FROM ext_menu m …)`），它按 `code = 'page_' || m.code` 把 25 个配对页的 `path` / `entry_code` 抄进节点表，此后节点表自持。删除前本地快照 36 行（6 个分组 + 29 个可见页面行 + 1 个不可见行），与 `ext_permission_nodes` 的桌面页面行零漂移。快照清单里仍保留 `durable` 条目（见后果节）。
 
 #### `ext_rbac_audit`
 | 字段 | 说明 |
@@ -198,6 +203,10 @@
 - **页面 → 表 映射不进代码。** 本轮只写进本 ADR；要机器校验时再补 `AdminPageTables.ts`（只读 + 测试锁），触发条件：该映射出现第一次真实漂移（页面改表而 ADR 没跟上）。
 - **方向 2（权限码单一镜像）、方向 3（菜单模块收敛）、方向 4（快照重算收敛）不做**，见会话记录：2/3 属中大型重构，留待真实需求；4 已有 `permission-snapshot.test.ts` 语法树锁住 9 个写点，动了风险高于收益。
 
+  方向 2 暂缓的依据不是「加码不常发生」——实测有 29 个迁移写过 `ext_permissions`，0119–0154 期间 5 个迁移各加 1 个码；依据是**四条边都已被测试钉住**，漏改会立刻红而不会静默漂移：常量 ↔ SQL 由 `tests/unit/admin-endpoint-guards.test.ts`「keeps PERMISSION_CODES equal to the SQL permission catalog」比对，SQL ↔ 库 ↔ 种子由 `tests/worker/rbac.test.ts`「keeps the SQL seed in sync with the code catalog」比对，种子 ↔ 说明由 `tests/unit/shared/rbac-permission-docs.test.ts` 双向比对。方向 2 解决的是**工效**（加一码要动 4 个文件），不是正确性。
+
+  重评触发条件（任一成立即重新评估，不设频次阈值——加码是持续行为，频次阈值会恒真而失去意义）：出现一次真实漏改并造成 403 或侧栏缺项；权限码超过 80（现 65）；出现第 5 处镜像，或某处镜像无法被测试覆盖。
+
 ## 后果
 
 - 「某页要什么码」从「翻 46 个页面文件」降为「读一张表」；新增页面时忘记登记，catalog 测试直接报路径。
@@ -206,6 +215,25 @@
 - **页面 → 表 附录会漂移。** 它是文档，不受测试保护；页面改了主表而没更新 ADR 时不会报错。这是本轮明确接受的取舍——把它写进 ADR 是为了「先有」，不是为了「永不漂移」。
 - **「表 → 字段」是节选副本。** 它取 `docs/zh/12-user-system-schema.md` §2 / §5.1 的判定相关字段，12 分册为单源；两者不一致时以 12 分册为准。
 - 与 `pc-interfaces.ts` 形成一对：端点 → 码（PC 接口目录）与页面 → 码（页面目录），两者都是「只读目录 + 测试防漂移 + 运行时权威在别处」的同一形态。
+
+### `ext_menu` 已下线（0168）
+
+这张表在 0168 之前**已无运行时读者**（`src/` 零条 SQL 触及，最后一个读者是 0133 的一次性回填），只被 4 处测试当比对基准读。`migrations/0168_cleanup_drop_ext_menu.sql` 物理删除，含完整 `-- rollback:` 块——它从 `ext_permission_nodes` 的桌面页面行反推重建 `ext_menu` 的页面行与分组行，所以回滚是本迁移的产物还原，不是另造结构。
+
+四处同步改动（实际做的事，与最初的评估有出入）：
+
+| 处 | 改动 |
+| --- | --- |
+| `migrations/0168_cleanup_drop_ext_menu.sql` | `DROP TABLE IF EXISTS "ext_menu";`，`type = cleanup`，带反推式回滚块 |
+| `manage-cli/lib/snapshot.ts` | **保留** `durable` 里的 `"ext_menu"` 条目，加注释说明理由（见下） |
+| `tests/worker/admin-menu.test.ts` | 三条 seed 用例改读 `ext_permission_nodes`；「菜单行镜像为页面节点」那条删掉——被镜像的一方已不存在，前提由 0133 固化 |
+| `tests/unit/admin-page-guards.test.ts` | 重放器改成推 `ext_permission_nodes`，并按 0133 的真实语义回放 `ext_menu`（在 0168 的 `DROP` 之前菜单行仍然活着） |
+
+**`snapshot.ts` 为什么保留条目**：最初计划是「跟着删」，但 `assertClassifiedTables` 是**拒绝未登记表**的，且 0041→0168 之间的任何一张中间版本快照里 `ext_menu` 都还在。删掉条目会让那些快照恢复时报「未登记的表」，而不是让新快照顺利过。清单要覆盖的是**所有可能出现的表**，不是「当前 schema 的表」。这与已删的 `api_keys_hashed`、`ext_menu_permissions` 保留条目的处理一致。
+
+**`ext_permission_nodes` 的重放器为什么还要认 `ext_menu`**：0133 的 `entry_code` 值来自菜单行的 `permission_code`（`books` → `content:book:read`），不是从页面名推导出来的。测试按迁移顺序回放到 0133 时，菜单行还没被 0168 删，所以必须在内存里也回放一遍 `ext_menu`，读到 `DROP TABLE ext_menu` 时再清空。只按 `page_<code>` 命名推测会让 `page_books` 绑 `content:book:read` 之外的码，或让 `page_media` 误绑一个码。
+
+**收益**：删掉一张 36 行、零读者的表，及其在快照/恢复链路上的一段历史包袱。不减少任何每次请求的成本（它本来就不在热路径上）。副作用是「读旧迁移时要对照的表少了一张」，所以本 ADR 保留了它的原结构。
 
 ## 被否决的替代方案
 

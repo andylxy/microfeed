@@ -92,6 +92,13 @@ export const SNAPSHOT_TABLES = {
     // Admin menu (migration 0041). The menu is data, not code: a restore that
     // dropped these rows would leave the dashboard with an empty sidebar.
     "ext_menu",
+    // ⚠️ `ext_menu` 已随迁移 0168 删除（ADR-0057）：侧栏自 0133 起读
+    // `ext_permission_nodes`，这张表此后零 SQL 读写，原先「丢了侧栏就空」的登记
+    // 理由随 0133 失效。它**必须留在本清单里**，因为 `assertClassifiedTables` 会
+    // 拒绝任何未登记的库内表，而建表（0041）到删表（0168）之间的中间版本快照
+    // 里它仍存在——移除条目会让那些快照恢复时直接失败。恢复后侧栏由下面
+    // `ext_permission_nodes` 提供，本表的行已在 0168 里随表一起消失。
+    //
     // ext_menu_permissions was dropped by migration 0164: dead since the
     // permission tree went self-owned (0128) and menu visibility moved to
     // ext_menu.permission_code. The entry stays because the classifier scans

@@ -52,10 +52,11 @@ function findItem(items: AdminMenuItem[], id: string): AdminMenuItem | undefined
   return undefined;
 }
 
-/** The group rows: every `parent_code` actually used by a menu row (0050). */
+/** The group rows a page hangs off, read from the tree that now drives the sidebar. */
 async function groupCodes(): Promise<Set<string>> {
   const rows = await env.FEED_DB.prepare(
-    "SELECT DISTINCT parent_code AS code FROM ext_menu WHERE parent_code IS NOT NULL",
+    "SELECT DISTINCT parent_code AS code FROM ext_permission_nodes " +
+      "WHERE audience = 'desktop' AND kind = 'page' AND parent_code IS NOT NULL",
   ).all<{code: string}>();
   return new Set((rows.results ?? []).map((row) => row.code));
 }
@@ -68,43 +69,49 @@ afterEach(async () => {
 });
 
 /**
- * The menu seed is data (migration 0041, grouped by 0050), not the hard-coded
- * array it used to be. Since 2026-10-21 the sidebar reads `ext_permission_nodes`
- * instead; this table is now only the seed that migration 0133 backfills from
- * (migration 0135 removes the retired menu-management row).
+ * The sidebar has read `ext_permission_nodes` since 2026-10-21 (ADR-0042 D6); the
+ * `ext_menu` seeds it used to be built from are gone as of migration 0168
+ * (ADR-0057). These cases hold the node table to the invariants the old menu rows
+ * carried — one row per nav entry, group headings without a code, every page
+ * entry bound to a real permission — so the sidebar keeps a single, tested source.
  */
 describe("admin menu seed", () => {
-  it("has a row for every menu code, plus one group row per parent", async () => {
-    const rows = await env.FEED_DB.prepare("SELECT code FROM ext_menu")
-      .all<{code: string}>();
-    const dbCodes = new Set((rows.results ?? []).map((row) => row.code));
+  it("has a page node for every menu code, plus one group node per parent", async () => {
+    const rows = await env.FEED_DB.prepare(
+      "SELECT code, kind FROM ext_permission_nodes WHERE audience = 'desktop'",
+    ).all<{code: string; kind: string}>();
+    const seeded = rows.results ?? [];
+    const nodeCodes = new Set(seeded.map((row) => row.code));
     const menuCodes = new Set<string>(Object.values(ADMIN_MENU_CODES));
     const groups = await groupCodes();
 
     for (const code of menuCodes) {
-      expect(dbCodes.has(code), `no ext_menu row for ${code}`).toBe(true);
+      if (code === ADMIN_MENU_CODES.ADMIN_HOME) continue;
+      expect(nodeCodes.has(`page_${code}`), `no page node for ${code}`).toBe(true);
     }
-    // Every row that is not a page code must be a group heading, and every
-    // group heading must have a row.
-    for (const code of dbCodes) {
-      if (menuCodes.has(code)) continue;
-      expect(groups.has(code), `${code} is neither a page code nor a group`).toBe(true);
-    }
+    // Every group heading the pages hang off must itself be a group node.
     for (const code of groups) {
-      expect(dbCodes.has(code), `group ${code} has no row`).toBe(true);
+      const node = seeded.find((row) => row.code === code);
+      expect(node, `group ${code} has no node`).toBeDefined();
+      expect(node?.kind, `${code} is a parent but not a group node`).toBe("group");
     }
   });
 
   it("binds every page entry but home to a real permission code", async () => {
     const rows = await env.FEED_DB.prepare(
-      "SELECT code, permission_code FROM ext_menu",
-    ).all<{code: string; permission_code: string | null}>();
+      "SELECT code, entry_code FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'page'",
+    ).all<{code: string; entry_code: string | null}>();
     const seeded = rows.results ?? [];
-    const groups = await groupCodes();
 
-    const home = seeded.find((row) => row.code === ADMIN_MENU_CODES.ADMIN_HOME);
-    expect(home).toBeDefined();
-    expect(home?.permission_code).toBeNull();
+    // The home entry has no node: `buildSidebarItems` synthesises it. What the
+    // seed must guarantee is the opposite — nothing pretends to be home.
+    expect(
+      seeded.some((row) => row.code === `page_${ADMIN_MENU_CODES.ADMIN_HOME}`),
+    ).toBe(false);
+    // `page_media` is the deliberate exception: `media` only carries codes and
+    // is not in the sidebar, so it binds no code either.
+    const unbindable = new Set(["page_media"]);
 
     const permissions = await env.FEED_DB.prepare(
       "SELECT code FROM ext_permissions",
@@ -112,28 +119,35 @@ describe("admin menu seed", () => {
     const known = new Set((permissions.results ?? []).map((row) => row.code));
 
     for (const row of seeded) {
-      // Home and the group headings are public by design.
-      if (row.code === ADMIN_MENU_CODES.ADMIN_HOME) continue;
-      if (groups.has(row.code)) {
-        expect(row.permission_code, `group ${row.code} must not bind a code`).toBeNull();
+      if (unbindable.has(row.code)) {
+        expect(row.entry_code, `${row.code} must not bind a code`).toBeNull();
         continue;
       }
-      expect(row.permission_code, `menu ${row.code} has no permission`).toBeTruthy();
-      expect(known.has(row.permission_code ?? ""), `menu ${row.code} binds an unknown code`).toBe(true);
+      expect(row.entry_code, `node ${row.code} has no entry code`).toBeTruthy();
+      expect(
+        known.has(row.entry_code ?? ""),
+        `node ${row.code} binds an unknown code`,
+      ).toBe(true);
     }
   });
+
   it("gives every entry a path fragment and an i18n key", async () => {
     const rows = await env.FEED_DB.prepare(
-      "SELECT code, path, i18n_key FROM ext_menu WHERE is_visible = 1",
-    ).all<{code: string; path: string; i18n_key: string}>();
+      "SELECT code, path FROM ext_permission_nodes " +
+        "WHERE audience = 'desktop' AND kind = 'page' AND is_visible = 1",
+    ).all<{code: string; path: string | null}>();
     const seeded = rows.results ?? [];
     expect(seeded.length).toBeGreaterThan(0);
     for (const row of seeded) {
-      expect(row.i18n_key, `menu ${row.code} has no i18n key`).toBeTruthy();
-      // The home entry and the group headings are not links, so an empty
-      // fragment is correct; every page entry must carry a real one or its link
-      // would point at the root.
-      expect(typeof row.path).toBe("string");
+      // Every visible desktop page node needs a path, or its sidebar link
+      // points at the root. Home has no node (it is synthesised), and
+      // `page_media` is the one visible page that is not in the sidebar — it
+      // sits outside the guard compared by `admin-page-guards.test.ts`.
+      if (row.code === "page_media") {
+        expect(row.path, "page_media is not in the sidebar").toBeNull();
+        continue;
+      }
+      expect(row.path, `node ${row.code} has no path`).toBeTruthy();
     }
   });
 });
@@ -323,35 +337,16 @@ describe("readAdminMenu", () => {
 });
 
 /**
- * 侧栏自 2026-10-21 起读 `ext_permission_nodes`（ADR-0042 D6）。`ext_menu` 只剩
- * 迁移种子一个用途（菜单管理页与行已随 0135 退役）。这两条守住切换的前提：
- * 节点行必须与菜单行逐项对齐，否则切换后侧栏会静默少项或换链接。
+ * 侧栏自 2026-10-21 起读 `ext_permission_nodes`（ADR-0042 D6），`ext_menu` 已随迁移
+ * 0168 删除（ADR-0057）。原先整组「permission-tree sidebar source」比对的是「菜单行
+ * 与节点行是否一致」——基准表没了，这组断言的对象随之消失。0133 把菜单行整批复制进
+ * 节点表这件事由 `tests/unit/permission-node-entry-migration.test.ts` 在迁移层面守住
+ * （它自建一张最小 `ext_menu` 再跑 0133），所以这里不再保留同一口径的运行时副本。
+ *
+ * 仍然留下的是两条不依赖旧表、且只有这里能查的约束：只挂码不进侧栏的页面两列为空、
+ * 名称列与 i18n 文案不漂移。
  */
 describe("permission-tree sidebar source", () => {
-  it("mirrors every menu page row as a page node with the same path and entry code", async () => {
-    const menuRows = await env.FEED_DB.prepare(
-      "SELECT code, path, icon, permission_code FROM ext_menu " +
-        "WHERE is_visible = 1 AND parent_code IS NOT NULL",
-    ).all<{code: string; icon: string | null; path: string; permission_code: string | null}>();
-    const nodeRows = await env.FEED_DB.prepare(
-      "SELECT code, path, icon, entry_code FROM ext_permission_nodes " +
-        "WHERE audience = 'desktop' AND kind = 'page'",
-    ).all<{code: string; entry_code: string | null; icon: string | null; path: string | null}>();
-    const byCode = new Map((nodeRows.results ?? []).map((row) => [row.code, row]));
-
-    const seeded = menuRows.results ?? [];
-    expect(seeded.length).toBeGreaterThan(0);
-    for (const row of seeded) {
-      const node = byCode.get(`page_${row.code}`);
-      expect(node, `no node for menu ${row.code}`).toBeDefined();
-      expect(node?.path, `path drift for ${row.code}`).toBe(row.path);
-      expect(node?.entry_code, `entry code drift for ${row.code}`)
-        .toBe(row.permission_code);
-      // 图标也在渲染输出里：切到节点后侧栏画的是这一列。
-      expect(node?.icon, `icon drift for ${row.code}`).toBe(row.icon);
-    }
-  });
-
   it("gives every group heading a visible desktop group node", async () => {
     const groups = await groupCodes();
     const nodeRows = await env.FEED_DB.prepare(
@@ -366,30 +361,12 @@ describe("permission-tree sidebar source", () => {
     }
   });
 
-  it("leaves path and entry code empty on pages that have no menu row", async () => {
+  it("leaves path and entry code empty on pages that are not in the sidebar", async () => {
     // ADR-0042 验证口径 阶段1：`media` 这类只挂码、不进侧栏的页面两列都为空。
     const media = await env.FEED_DB.prepare(
       "SELECT path, entry_code FROM ext_permission_nodes WHERE code = 'page_media'",
     ).first<{entry_code: string | null; path: string | null}>();
     expect(media).toEqual({path: null, entry_code: null});
-
-    const menuCodes = new Set(
-      (
-        await env.FEED_DB.prepare(
-          "SELECT code FROM ext_menu WHERE parent_code IS NOT NULL",
-        ).all<{code: string}>()
-      ).results?.map((row) => row.code) ?? [],
-    );
-    const nodeRows = await env.FEED_DB.prepare(
-      "SELECT code, path, entry_code FROM ext_permission_nodes " +
-        "WHERE audience = 'desktop' AND kind = 'page'",
-    ).all<{code: string; entry_code: string | null; path: string | null}>();
-
-    for (const row of nodeRows.results ?? []) {
-      if (menuCodes.has(row.code.replace(/^page_/u, ""))) continue;
-      expect(row.path, `path leaked onto ${row.code}`).toBeNull();
-      expect(row.entry_code, `entry code leaked onto ${row.code}`).toBeNull();
-    }
   });
 
   it("keeps the seeded display names equal to the nav text they replace", async () => {

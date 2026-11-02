@@ -1,0 +1,69 @@
+-- 0168_cleanup_drop_ext_menu.sql
+--
+-- 退役 `ext_menu`（ADR-0057「ext_menu 可以下线」）。侧栏自 0133 起读
+-- `ext_permission_nodes`，此后这张表在 `src/` 下**零条 SQL 读写**——唯一读过它的是
+-- 0133 的一次性回填；它留下的实际作用只有两处：快照里 36 行只进不出，以及四处
+-- 测试把它当比对基准。
+--
+-- 为什么现在删：它与节点表在本地快照里逐项一致（29 个页面行 = 29 个 page_ 节点，
+-- path / entry_code / icon 零漂移；另有 1 个 page_media 节点本来就没有菜单行），
+-- 说明 0133 的前提已被固定下来，表本身不再承担任何判断，只剩「让人误以为菜单还有
+-- 第二来源」的坏处。
+--
+-- 删除时同步改了这些地方（缺一处就红）：
+--   - `manage-cli/lib/snapshot.ts`：`durable` 清单里的 `ext_menu` 条目**保留**。
+--     `assertClassifiedTables` 是拒绝未登记表的，而 0041–0167 之间的任何一张中间
+--     版本快照里这张表还在；删掉条目会让那些快照恢复时报「未登记的表」。清单覆盖
+--     的是「所有可能出现的表」，不是「当前 schema 的表」——与已删的 `api_keys_hashed`、
+--     `ext_menu_permissions` 保留条目的处理一致。
+--   - `tests/worker/admin-menu.test.ts`：「菜单行镜像为页面节点」那条整条删掉（被镜像
+--     的一方已不存在，前提由 0133 固定下来）；其余 seed 用例改读 `ext_permission_nodes`。
+--   - `tests/unit/admin-page-guards.test.ts`：重放器改推 `ext_permission_nodes`，但**仍
+--     认 `ext_menu`**——0133 写入 `entry_code` 的值来自菜单行的 `permission_code`
+--     （`books` → `content:book:read`），按页面名推导不出来；回放走到本迁移的
+--     `DROP TABLE` 时再清空菜单内存表。
+--
+-- 不可回退的取舍：表里的 `i18n_key` / `name_zh` / `name_en` / `sort` 随表一起消失。
+-- 这些值在 0133 已复制进 `ext_permission_nodes`（本次迁移前实测逐项一致），所以
+-- 回退时按下方 rollback 块从节点表反推即可，不需要额外的数据备份文件。
+--
+-- type = cleanup。执行器不会跑 rollback 块，只供人工回退时参考。
+-- rollback:
+--   CREATE TABLE IF NOT EXISTS ext_menu (
+--     id              TEXT PRIMARY KEY,
+--     code            TEXT NOT NULL UNIQUE,
+--     parent_code     TEXT,
+--     path            TEXT NOT NULL,
+--     i18n_key        TEXT NOT NULL,
+--     icon            TEXT,
+--     permission_code TEXT,
+--     sort            INTEGER NOT NULL DEFAULT 0,
+--     is_visible      INTEGER NOT NULL DEFAULT 1,
+--     created_at_ms   INTEGER NOT NULL,
+--     name_zh         TEXT,
+--     name_en         TEXT
+--   );
+--   INSERT OR IGNORE INTO ext_menu
+--     (id, code, parent_code, path, i18n_key, icon, permission_code, sort,
+--      is_visible, created_at_ms, name_zh, name_en)
+--     SELECT 'm_' || substr(code, 6), substr(code, 6), parent_code, path,
+--            COALESCE(i18n_key, ''), icon, entry_code, sort, is_visible,
+--            COALESCE(created_at_ms, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
+--            name_zh, name_en
+--       FROM ext_permission_nodes
+--      WHERE audience = 'desktop'
+--        AND kind = 'page'
+--        AND path IS NOT NULL
+--        AND entry_code IS NOT NULL;
+--   -- 分组行按节点里的 kind = 'group' 反推，path 在原表里是空串而非 NULL。
+--   INSERT OR IGNORE INTO ext_menu
+--     (id, code, parent_code, path, i18n_key, icon, permission_code, sort,
+--      is_visible, created_at_ms, name_zh, name_en)
+--     SELECT 'm_' || code, code, parent_code, '', COALESCE(i18n_key, ''), icon,
+--            NULL, sort, is_visible,
+--            COALESCE(created_at_ms, CAST(strftime('%s', 'now') AS INTEGER) * 1000),
+--            name_zh, name_en
+--       FROM ext_permission_nodes
+--      WHERE audience = 'desktop' AND kind = 'group';
+
+DROP TABLE IF EXISTS "ext_menu";

@@ -4,6 +4,18 @@
  * stay in sync.
  *
  * Permission codes follow the `module:resource:action` convention (DESIGN.md).
+ *
+ * ⚠️ 标记区 `// <rbac-gen:begin>` … `// <rbac-gen:end>` 由 `yarn rbac:gen`
+ * 整体重铺：条目顺序跟 `src/shared/Constants.ts` 的 `PERMISSION_CODES`，新码自动
+ * 补进来，新码同时产出一份追加迁移。
+ *
+ * **标记区内只放条目，不写注释**——生成器重铺时会丢掉区内的所有 `//`。想写
+ * 「这个码为何只授 super_admin」「某次改名的沿革」这类判断，写在标记区**外面**
+ * （见下方 `CATALOG_NOTES`），或写进 `src/shared/RbacPermissionDocs.ts` 的
+ * summary（那里有码做键，重排不会让它跑位）。
+ *
+ * 早先的实现把注释锚定到后面的码跟着搬家，结果锚定的码被删时，注释会在下一轮
+ * 被重新锚定到无关的码上——错得很安静，所以改成了纯数据。
  */
 
 import {RBAC_WILDCARD} from "./resolve";
@@ -14,41 +26,52 @@ export interface RbacPermissionDef {
   name: string;
 }
 
+/**
+ * 目录的设计说明：**在标记区之外，生成器不会碰**。
+ *
+ * 按主题记「为什么这么设计」，不按码逐条记（逐条的理由写进
+ * `RbacPermissionDocs.ts`，那里有码做键，重排不会让它跑位）。
+ *
+ * 它被 `tests/unit/rbac-catalog-single-source.test.ts` 读取并断言非空——不是为了
+ * 凑一个消费者，而是把「标记区里不许写注释」这条规则的另一半钉住：注释被禁掉，
+ * 必须有一个明确允许写说明的地方，否则下一个人只能二选一（违规写进区里，或干脆
+ * 不写）。这条常量的存在本身就是那个答案，测试保证它不会被人清空。
+ */
+export const CATALOG_NOTES: readonly string[] = [
+  "只授 super_admin（走 `*`）的码：书籍状态字典（0142）、权限管理等治理类码。" +
+    "它们不进 EDITOR_PERMISSIONS——状态种类影响前台可见面，属于管理侧决策。",
+  "`content:chapter:*` 由 `article` 改名而来（0057），为的是与内容读取 API 的 " +
+    "`chapters` 路径段一致（ADR-0006）；上游端点里的 `items` 是同一实体，保持上游命名。",
+  "App 内容端点的门码按内容域细分（0131，原 `app:mobile:access` 一个码管 8 条端点，" +
+    "粒度太粗）。一个码对应一个用途，分发规则见 `src/server/api/api-permissions.ts` 的 " +
+    "DOMAIN_RULES。刻意不采用 `api:*` 前缀：那一族前缀已由 ADR-0009 退役（0055）。",
+  "`app:search:*` / `app:mingci:view` / `app:nav:read` 等属 App 能力码，" +
+    "在 `ext_permission_nodes` 里以 `kind='code'` 节点承接；不默认授予角色，由运营按需挂。",
+  "设备管理与 App 版本管理（0082）：`:read` 打开看板，`:manage` 才放开吊销/恢复与版本写入。",
+];
+
+// <rbac-gen:begin>
 export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
-  // content - books
   {code: "content:book:create", name: "新建书"},
   {code: "content:book:read", name: "查看书"},
   {code: "content:book:update", name: "编辑书"},
   {code: "content:book:delete", name: "删除书"},
-  // 书籍状态字典（migration 0142）。只授 super_admin（走 `*`），不进
-  // EDITOR_PERMISSIONS：状态种类影响前台可见面，属于管理侧决策。
-  // Mirror of PERMISSION_CODES in src/shared/Constants.ts.
   {code: "content:book-status:manage", name: "书籍状态管理"},
-  // content - categories
   {code: "content:category:create", name: "新建分类"},
   {code: "content:category:read", name: "查看分类"},
   {code: "content:category:update", name: "编辑分类"},
   {code: "content:category:delete", name: "删除分类"},
   {code: "content:category:order", name: "分类排序"},
-  // content - volumes
   {code: "content:volume:update", name: "卷结构编辑"},
   {code: "content:volume:read", name: "查看卷"},
-  // content - chapters (renamed from `article` in migration 0057 so the codes
-  // match the `chapters` path segment of the content read API, ADR-0006;
-  // `items` in upstream endpoints is the same entity and stays as upstream has it)
   {code: "content:chapter:create", name: "新建章节"},
   {code: "content:chapter:read", name: "查看章节"},
   {code: "content:chapter:update", name: "编辑章节"},
   {code: "content:chapter:delete", name: "删除章节"},
-  // system
   {code: "system:user:manage", name: "用户管理"},
   {code: "system:role:manage", name: "角色管理"},
   {code: "content:settings:manage", name: "站点设置管理"},
   {code: "system:webhook:manage", name: "Webhook 管理"},
-  // menu - admin menu visibility (migration 0040). A menu row binds at most one
-  // of these; a menu with no code is public. `system:api:manage` gates opening
-  // the dashboard's API area. What an API call may read or write is decided by
-  // the same `content:*:*` codes the dashboard uses (ADR-0009).
   {code: "content:channel:manage", name: "频道设置管理"},
   {code: "content:review:manage", name: "审核管理"},
   {code: "content:audit:read", name: "审计查看"},
@@ -56,13 +79,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:site_file:manage", name: "站点文件管理"},
   {code: "media:file:manage", name: "媒体文件管理"},
   {code: "system:api:manage", name: "API 管理"},
-  // App 内容端点按内容域细分的门码（migration 0131，原 `app:mobile:access`
-  // 一门管 8 条内容端点，粒度过粗）。一个码对应一个用途，分发见
-  // `src/server/api/api-permissions.ts` 的 DOMAIN_RULES。与 `app:search:*` /
-  // `app:mingci:view` 同族：App 能力权限，不进 ext_menu，在 `ext_permission_nodes`
-  // 里以 `kind='code'` 节点承接；不默认授予角色（沿用原 `app:mobile:access`
-  // 的授权口径，由运营按需手工挂到角色）。刻意不采用 `api:*` 前缀：
-  // ADR-0009 已让那一族前缀退役（migration 0055）。
   {code: "app:nav:read", name: "App 导航读取"},
   {code: "app:style:read", name: "App 提示样式读取"},
   {code: "app:chapter:read", name: "App 章节目录读取"},
@@ -71,77 +87,38 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "app:zhongyao:read", name: "App 中药读取"},
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
-  // content - fangs (方剂 / prescriptions), view-only on the dedicated board
   {code: "content:fang:read", name: "方剂查看"},
   {code: "content:alias:read", name: "别名查看"},
   {code: "content:alias:manage", name: "别名维护"},
-  // content - yao (中药) / term (名词): view on the board, manage for its CRUD
   {code: "content:yao:read", name: "中药查看"},
   {code: "content:yao:manage", name: "中药维护"},
   {code: "content:term:read", name: "名词查看"},
   {code: "content:term:manage", name: "名词维护"},
-  // Device management + app version/rollout administration (migration 0082).
-  // `:read` opens the board, `:manage` unlocks revoke/restore and version writes.
   {code: "system:device:read", name: "设备查看"},
   {code: "system:device:manage", name: "设备管理"},
   {code: "system:app-version:read", name: "版本查看"},
   {code: "system:app-version:manage", name: "版本管理"},
-  // App login-time log (ADR-0023, migration 0084). `:read` opens the board.
-  // Mirror of PERMISSION_CODES in src/shared/Constants.ts — admin-endpoint-guards
-  // and rbac.test.ts keep the two in lockstep.
   {code: "system:login-log:read", name: "登录日志查看"},
   {code: "system:login-log:manage", name: "登录日志管理"},
-  // App 消息通知（Announcements，migration 0087）。Mirror of PERMISSION_CODES in
-  // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:announcement:read", name: "公告查看"},
   {code: "system:announcement:manage", name: "公告管理"},
-  // App 关于页内容（migration 0145）。Mirror of PERMISSION_CODES in
-  // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:app-about:read", name: "关于页查看"},
   {code: "system:app-about:manage", name: "关于页管理"},
-  // App 登录管理（migration 0150）。Mirror of PERMISSION_CODES in
-  // src/shared/Constants.ts — admin-endpoint-guards and rbac.test.ts keep the two in lockstep.
   {code: "system:app-login-methods:read", name: "登录方式查看"},
   {code: "system:app-login-methods:manage", name: "登录方式管理"},
-  // 邮件设置（migration 0154：发信地址/名称/主题与正文模板）。Mirror of
-  // PERMISSION_CODES in src/shared/Constants.ts — admin-endpoint-guards and
-  // rbac.test.ts keep the two in lockstep.
   {code: "system:mail-settings:read", name: "邮件设置查看"},
   {code: "system:mail-settings:manage", name: "邮件设置管理"},
-  // App 缓存控制面（migration 0152）。一个码管读控制项、保存与清空；治理类，
-  // 只授 super_admin（走 `*`），不进 EDITOR_PERMISSIONS。Mirror of
-  // PERMISSION_CODES in src/shared/Constants.ts.
   {code: "system:cache:manage", name: "缓存管理"},
-  // App 搜索权限（Search Permission，migration 0088）。两个码是 App 能力权限，
-  // 不是后台页面权限，因此不进 ext_menu；它们在 `ext_permission_nodes` 里以
-  // `kind='code'` 节点存在（ADR-0038 自持权限树。旧代码的 `group_other` 兜底
-  // 逻辑已退役，迁移 0127 把当时的承接页固化为普通行，此后可自由移动）。
-  // 运营在「权限树」页把码挂到角色叶子即可开放搜索。
   {code: "app:search:global", name: "搜索-首页"},
   {code: "app:search:book", name: "搜索-书内"},
-  // 名词解释查看（MingCi View Permission，migration 0096）。G3 全局单开关 → 一个码。
-  // App 能力权限，不进菜单，在 `ext_permission_nodes` 里以 `kind='code'` 节点承接
-  // （ADR-0038 自持权限树。旧代码的 `group_other` 兜底逻辑已退役，迁移 0127 把当时
-  // 的承接页固化为普通行）；运营在「权限树」页挂到角色叶子即开放阅读页
-  // `$g{名词解释}` 的底层名词数据（无权限时列表不加载）。
   {code: "app:mingci:view", name: "名词解释查看"},
-  // 版本升级 / 运营公告（2026-10-16，migration 0119）。与 app:search:* / app:mingci:view
-  // 同族：App 能力权限，不建菜单行、不进 ext_menu，在 `ext_permission_nodes`
-  // 里以 `kind='code'` 节点承接（ADR-0038 自持权限树。旧代码的 `group_other`
-  // 兜底逻辑已退役，迁移 0127 把当时的承接页固化为普通行）。
   {code: "app:version:read", name: "版本升级检查"},
   {code: "app:announcement:read", name: "运营公告"},
-  // Cloudflare 使用情况看板（migration 0123）。只读运维看板，一个码覆盖 D1 / R2 /
-  // Workers 三个分区；只授 super_admin（拍板 B1），不进 EDITOR_PERMISSIONS。
-  // Mirror of PERMISSION_CODES in src/shared/Constants.ts.
   {code: "system:cloud-usage:read", name: "Cloudflare 用量查看"},
-  // 权限管理页（migration 0130，ADR-0039）。App 能力控制不另设入口：权限管理
-  // 单页内按终端归属分区，PC 端与 App 端共用这一页。只授 super_admin（走 `*`），
-  // 不进 EDITOR_PERMISSIONS。Mirror of PERMISSION_CODES in src/shared/Constants.ts.
   {code: "system:app-capability:manage", name: "App 能力管理"},
-  // wildcard
   {code: RBAC_WILDCARD, name: "超级管理员（全部）"},
 ];
+// <rbac-gen:end>
 
 export interface RbacRoleDef {
   code: string;

@@ -1,6 +1,6 @@
 ---
 title: 13 请求链路与关卡
-description: 一个请求从进来到拿到数据要过的全部关卡：三条通道（后台会话 / App 凭证 / OpenAPI 密钥）逐关拆解，每关的作用、判定、拒绝状态码、背后数据库表，以及权限域全部数据表的索引。
+description: 一个请求从进来到拿到数据要过的全部关卡：三条通道（后台会话 / App 凭证 / OpenAPI 密钥）逐关解析，每关的作用、判定、拒绝状态码、背后数据库表，以及权限域全部数据表的索引。
 ---
 
 # 13 请求链路与关卡
@@ -8,7 +8,8 @@ description: 一个请求从进来到拿到数据要过的全部关卡：三条�
 > **用途**：回答「这个请求为什么被 401 / 403 / 426 / 429 挡住了」「某一关检查什么、读哪张表」，以及新增端点时判断该挂哪道关。
 > **触发词**：链路、中间件、关卡、请求流程、鉴权流程、权限判定、401、403、426、429、防重放、限流、版本门、配额、guard、middleware。
 > **加载时机**：排查请求被拒原因、新增端点要挂守卫、或要理解鉴权/角色/权限判定全貌时读本册。
-> **单一数据源**：所有表的字段级中文说明一律见 12 册（`12-user-system-schema.md`），本册只做链路拆解与表索引，不复制字段。
+> **单一数据源**：所有表的字段级中文说明一律见 12 册（`12-user-system-schema.md`），本册只做链路梳理与表索引，不复制字段。
+> **表间关系见 14 册**：本册讲「请求经过哪几关」，不讲「权限数据从哪来到哪去」——授权链 / 呈现链、快照为何是派生、7 个重算写点见 `docs/zh/14-authorization-data-model.md`。
 
 ## 1. 总览：三条通道
 
@@ -28,7 +29,7 @@ flowchart TB
   end
   subgraph CHB["通道 B · App 凭证 mflc_ Bearer"]
     direction LR
-    B1["集成名单判定 fail-open"] --> B2["配额缓存标记 429"] --> B3["防重放 400"] --> B4["版本门 stage1 426"] --> B5["凭证鉴权 401/403/429"] --> B6["版本门 stage2 426"] --> B7["配额消费 429"] --> B8["审计落库"] --> B9["handler 无守卫"]
+    B1["集成名单判定 fail-open"] --> B2["配额缓存标记 429"] --> B3["防重放 400"] --> B4["版本门 stage1 426"] --> B5["凭证鉴权 401/403/429"] --> B6["版本门 stage2 426"] --> B7["配额消费 429"] --> B8["审计写库"] --> B9["handler 无守卫"]
   end
   subgraph CHC["通道 C · OpenAPI 密钥 / OAuth"]
     direction LR
@@ -36,7 +37,7 @@ flowchart TB
   end
 ```
 
-三条通道最终都会落到 §5 的共同底层判定（`guard.ts` 的 8 步顺序）——通道 B 的端点级 RBAC 码与通道 A 的页面守卫都由它执行。
+三条通道最终都会汇入 §5 的共同底层判定（`guard.ts` 的 8 步顺序）——通道 B 的端点级 RBAC 码与通道 A 的页面守卫都由它执行。
 
 ## 2. 通道 A · 后台 `{adminPath}/*`
 
@@ -175,7 +176,7 @@ flowchart TB
 - **背后表**：无。
 - **位置**：`src/middleware.ts`（`apiWebhookContextHeadersSchema.safeParse`）。
 
-### B8 审计落库（响应后）
+### B8 审计写库（响应后）
 
 - **作用**：`next()` 之后按**真实响应状态码**写 `ext_api_access_log` 一行（allow/deny 双向留痕；deny 的 403 在返回前就写）。经 `waitUntil` 移出关键路径。
 - **背后表**：`ext_api_access_log`（`api_key_id` 与 `credential_id` 恰好一个非空，区分两条 bearer 通道）。
@@ -205,7 +206,7 @@ flowchart TB
   | not-found | 集成功能未开 → 404 |
   | unauthorized | 无 key / 校验失败 → 401 |
   | insufficient-scope | scope 不够 → 403（写 deny 审计行） |
-- **背后表**：`api_keys`（按 `secret_hash` 查，读 `scopes`）、`ext_api_key_owners`（密钥 → 归属账号）、OAuth 令牌表（`oauth_access_token` / `oauth_refresh_token`，无 key 时回落校验）。
+- **背后表**：`api_keys`（按 `secret_hash` 查，读 `scopes`）、`ext_api_key_owners`（密钥 → 归属账号）、OAuth 令牌表（`oauth_access_token` / `oauth_refresh_token`，无 key 时回退校验）。
 - **位置**：`src/server/api/access.ts` `decideLegacyApiRequest`。
 
 ### C3 scope 与 RBAC 的两套语义
@@ -215,7 +216,7 @@ flowchart TB
 
 ### C4 公共尾巴
 
-- 与通道 B 共享：automation 头校验（400）、`loadFeed`（通道 B 跳过，C 需要内容 locals）、`next()` 后审计落库。
+- 与通道 B 共享：automation 头校验（400）、`loadFeed`（通道 B 跳过，C 需要内容 locals）、`next()` 后审计写库。
 
 ## 5. 共同底层判定
 
@@ -230,7 +231,7 @@ flowchart TB
 7. 权限码在集合内 → 放行
 8. 其余 → **403**
 
-步骤 2–5 刻意排在 6–7 之前：被吊销设备的超管必须被踢出，与持有什么码无关。实现上拆成两半——账号半段 `requireAccountAccess`（1–5 步）与权限半段 `hasPermission` / `requirePermission`（6–8 步），组合函数：
+步骤 2–5 刻意排在 6–7 之前：被吊销设备的超管必须被踢出，与持有什么码无关。实现上分成两半——账号半段 `requireAccountAccess`（1–5 步）与权限半段 `hasPermission` / `requirePermission`（6–8 步），组合函数：
 
 | 函数 | 用途 |
 | --- | --- |
@@ -304,7 +305,7 @@ SELECT u.banned, sec.must_change_password,
 | `ext_user_security` | 账号安全标记（must_change_password，休眠） | user_id → auth_user CASCADE | §2.11 |
 | `ext_user_permissions` | **权限快照**（0162；0045 同名表是历史重写后的占位，勿混淆） | user_id → auth_user CASCADE | §5.1 |
 | `ext_permission_nodes` | 权限树（audience 分 PC/App；kind = group/page/code） | 无 | §5.1 |
-| `ext_menu` | 后台菜单行（可见性靠 permission_code 直列） | 无 | §5.1 |
+| `ext_menu` | 后台菜单行（**已删除**，0168；侧栏改由 `ext_permission_nodes` 的页面/分组行组织） | 无 | §5.1 |
 | `ext_menu_permissions` | 菜单→码映射（**已删除**，0164；退役后零读零写） | 无 | §5.1 |
 | `ext_rbac_audit` | 角色与授权改动审计 | 无 | §5.1 |
 

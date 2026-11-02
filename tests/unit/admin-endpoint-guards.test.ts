@@ -122,8 +122,30 @@ describe("admin endpoint guards", () => {
   });
 
   it("keeps PERMISSION_CODES equal to the SQL permission catalog", () => {
-    const constants = new Set(Object.values(PERMISSION_CODES));
-    expect([...constants].sort()).toEqual([...catalog].sort());
+    // 两侧必须独立：左侧是手写的 `Constants.ts`，右侧是**磁盘上的全部迁移文件**
+    // 重放出来的结果（`readCatalogCodes` 逐文件解析 `INSERT` / `DELETE`）。
+    //
+    // ⚠️ 这条测试的意义全在「来源不同」上。`scripts/rbac-catalog.ts` 会同时写
+    // `seed.ts` 与新增迁移，如果这里改成比对 seed 或生成器内存输出，就会退化成
+    // 「代码自己检查自己」——永远绿，且失去发现漏改的能力。所以它继续读迁移文件，
+    // 而 seed 与代码目录的一致性由 `rbac-catalog-single-source.test.ts` 负责。
+    //
+    // 差集分开报：`toEqual` 只说「两个数组不相等」，漏掉哪个码还得自己 diff 65 项。
+    // 两侧元素类型不同（`catalog` 是迁移里读出的联合字面量，`constants` 是
+    // `Object.values` 出来的 string），差集先统一按 string 比，否则 `Set.has`
+    // 的参数类型对不上。
+    const constants = new Set<string>(Object.values(PERMISSION_CODES));
+    const inSql = new Set<string>([...catalog]);
+    const missing = [...constants].filter((code) => !inSql.has(code)).sort();
+    const extra = [...inSql].filter((code) => !constants.has(code)).sort();
+    expect(
+      missing,
+      `这些码写在 Constants.ts 里，但没有任何迁移把它们种进 ext_permissions：${missing.join(", ")}`,
+    ).toEqual([]);
+    expect(
+      extra,
+      `这些码由迁移种下，但 Constants.ts 里没有（拼写不一致，或迁移漏了 DELETE）：${extra.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("guards every endpoint with a real catalog permission code", () => {

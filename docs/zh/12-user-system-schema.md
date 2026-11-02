@@ -8,6 +8,7 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 > **用途**：理解用户体系全貌、查阅字段、了解功能演进（谁在什么时候改了什么），以及修改时的规范位置。
 > **触发词**：用户、角色、权限、RBAC、username、signup_source、注册来源、用户管理、auth_user、ext_roles、ext_user_roles、ext_permission_nodes、权限快照、login_credential、登录凭证、封禁、角色守卫、权限树。
 > **加载时机**：要改用户/角色/权限相关功能、查用户表字段、或理解用户体系历史演进时读取本册。
+> **表间关系见 14 册**：本册按表给字段，不解释「哪张表是权威、哪张是派生」「改一处要同步哪几个位置」「授权链与呈现链为何互不相交」——那些见 `docs/zh/14-authorization-data-model.md`。两册冲突时，字段以本册为准、关系与不变量以 14 册为准。
 
 ## 1. 总览与来源
 
@@ -269,10 +270,9 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `ext_user_roles` | `(user_id, role_id)` | 外键均 CASCADE | 账号持有哪些角色 |
 | `ext_user_permissions` | `user_id` | `codes`（JSON 数组）、`is_member`、`admin_login_allowed`、`updated_at` | **权限快照**（0162，ADR-0053） |
 | `ext_permission_nodes` | `id`（`pn_*`） | `code` UNIQUE、`kind`（`group`/`page`/`code`）、`parent_code`、`permission_code`、`audience`（`desktop`/`app`）、`path`、`entry_code`、`name_zh`/`name_en`、`icon`、`i18n_key`、`is_visible`、`sort`、`source`、`created_at_ms` | 权限树（ADR-0038 自持，ADR-0039 按终端分区） |
-| `ext_menu` | `id` | `code` UNIQUE、`parent_code`、`path`、`i18n_key`、`icon`、`permission_code`、`sort`、`is_visible`、`name_zh`/`name_en` | **历史兼容表**：0041 起菜单变数据，0127 权限树自持（ADR-0038）、0133 侧栏改读 `ext_permission_nodes`（ADR-0041 / 0042），本表不再驱动侧栏（可见性判定在节点 `entry_code`，不在本表 `permission_code`） |
 | `ext_rbac_audit` | `id` | `actor_user_id`、`actor_label`、`action`、`target`、`detail`、`before_detail`、`created_at_ms` | 角色与授权改动的审计 |
 
-`ext_menu_permissions`（0040 建、0052 重建并种子）**已删除（0164）**：0127 权限树自持（ADR-0038）、0133 侧栏改读节点 `entry_code`（ADR-0041 / 0042）后，本表零读零写，0164 物理删除，索引随表消失。
+`ext_menu`（0041 建、0125 增展示名）**已删除（0168）**：0127 权限树自持（ADR-0038）、0133 侧栏改读 `ext_permission_nodes`（ADR-0041 / 0042）后，本表零 SQL 读写，唯一的读者是 0133 的一次性回填（按 `code = 'page_' || m.code` 把 25 个配对页的 `path` / `entry_code` 抄进节点表）。0168 物理删除，快照清单保留其 `durable` 条目以兼容 0041–0167 之间的中间版本快照，理由见 ADR-0057 后果节。
 
 ### 5.2 判定顺序
 
@@ -543,6 +543,7 @@ erDiagram
 | `0162_schema_ext_user_permissions` | 建权限快照表并回填（ADR-0053） | 后台判定从 3 条 SQL 合成 1 条点查 |
 | `0163_data_clear_auth_user_role` | `auth_user.role` 清为 NULL；`signup_source` 越界值收敛回 `email`（ADR-0054） | 镜像废止，两个授权面收敛为一套 |
 | `0164_schema_drop_ext_menu_permissions` | 物理删除零读零写的下线表 `ext_menu_permissions` | 快照/同步清单不再携带死对象 |
+| `0168_cleanup_drop_ext_menu` | 物理删除零读零写的下线表 `ext_menu`（ADR-0057） | 侧栏早已读节点表，历史包袱清理；快照条目保留以兼容旧快照 |
 
 > **同名表提示**：`ext_user_permissions` 这个名字在 0045 属于「按账号权限覆盖」，0046 已删除；0162 用同名建的是**权限快照**，语义完全不同。恢复 0045 时期的旧快照时不要把它当成快照表。
 
@@ -573,6 +574,7 @@ erDiagram
 | `0135_cleanup_retire_menu_management` | 「菜单管理」页整页下线，节点与码退役 | 菜单管理回到代码 |
 | `0142_seed_book_status` | 书籍状态字典进数据表 | 状态可自助增删 |
 | `0150` / `0152` / `0154` | App 登录管理 / 缓存控制 / 邮件设置的码 + 菜单行 | 三个运营页可授权 |
+| `0168_cleanup_drop_ext_menu` | 物理删除 `ext_menu`（ADR-0057） | 侧栏读节点表已久，表本身成为误导源 |
 
 ### 7.4 App 侧
 

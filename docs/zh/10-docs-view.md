@@ -30,9 +30,11 @@ description: microfeed 项目文档存放位置、本地/线上查看方式，�
 | `docs/reference/` | 术语表 |
 | `docs/adr/` | **架构决策记录**（ADR），编号 `NNNN-kebab.md` |
 | `docs/src/` | 文档站源码（`content.config.ts`、组件、样式、资源） |
-| `docs/zh/` | **中文协作分册**（`01`~`12`，按功能/用途拆分） |
+| `docs/zh/` | **中文协作分册**（`01`~`14`，按功能/用途分册） |
 
-**内容收录**：`docs/src/content.config.ts` 用 `glob` 收录 `index.mdx`、三个 CLI 参考、以及 `start-here/` `dashboard/` `themes/` `manage/` `api/` `automation/` `webhooks/` `reference/` `contribute/` `zh/` 子目录的 md/mdx。**新增文档要进站，必须在此新增 glob 模式**。
+**内容收录**：`docs/src/content.config.ts` 用 `glob` 收录 `index.mdx`、三个 CLI 参考、以及 `start-here/` `dashboard/` `themes/` `manage/` `api/` `automation/` `webhooks/` `reference/` `contribute/` 子目录的 md/mdx。**新增文档要进站，必须在此新增 glob 模式**。
+
+⚠️ `docs/zh/` 与 `docs/agents/` **不在**收录范围：中文分册只供 `Read` 进上下文，不进文档站，因此 `yarn docs:check` 不校验它们。这也意味着这两处可以写内网信息（实例名、账号 ID、域名）。
 
 ## 2. 怎么查看
 
