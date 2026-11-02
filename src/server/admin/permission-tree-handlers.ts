@@ -33,6 +33,7 @@ import {
   type PermissionTreeOp,
 } from "@/shared/PermissionTreeOps";
 
+// d1scan:ignore 权限树管理页按端取全量行：走 (audience, kind) 索引，排序输入 ≤ 全表 104 行（迁移种子封顶增长），小表排序。
 const AUDIENCE_ROWS_SQL =
   `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
    WHERE audience = ? ORDER BY sort, code`;

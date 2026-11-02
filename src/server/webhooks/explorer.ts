@@ -170,6 +170,7 @@ export async function listWebhookExplorerSubjects(
       if (!await adminTypeaheadReady(runtimeEnv.FEED_DB)) return [];
       return await itemSubjectsByIndex(runtimeEnv.FEED_DB, query);
     }
+    // d1scan:ignore 空搜索词最近条目：沿 items_updated_at 倒序流式读、LIMIT 50 早停，实测读 50 行 / 0.128ms（见上方 2026-10-21 实测记录）。
     const result = await runtimeEnv.FEED_DB.prepare(`
       SELECT id, status, COALESCE(json_extract(data, '$.title'), '') AS title
       FROM items

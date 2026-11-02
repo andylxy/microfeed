@@ -837,6 +837,7 @@ export async function getDerivedYaoAliases(
     // 不省 D1 额度），故维持现状、不建索引。items 行数增长 10 倍后按同一探针复估。
     const yaoRows = await db
       .prepare(
+        // d1scan:ignore 已知接受项（D1SCAN-002 A/B 实测见上）：排序输入 172 行、0.468ms；补索引 A/B +0.079ms 噪声级退化且 rows read 不变，维持现状。
         "SELECT data FROM items WHERE tcm_kind = 'yao' AND status = 1 ORDER BY id",
       )
       .all();

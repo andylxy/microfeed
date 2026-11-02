@@ -40,6 +40,7 @@ import {
  * （desktop 6 分组 + 28 页面，全表 95 行），读回 16 列约 4.3 KB（4288 字节），
  * 一次请求行读 34 行。`ORDER BY sort, code` 借临时 B 树排序，只排这 34 行。
  */
+// d1scan:ignore 走 ix_ext_permission_nodes_audience 索引取单端行集，TEMP B-TREE 只排匹配的 34 行（全表 104 行、迁移种子封顶），小表排序不值得为它加索引。
 const NODE_ROWS = `SELECT ${PERMISSION_NODE_COLUMNS} FROM ext_permission_nodes
   WHERE audience = 'desktop' AND is_visible = 1 AND kind IN ('group', 'page')
   ORDER BY sort, code`;

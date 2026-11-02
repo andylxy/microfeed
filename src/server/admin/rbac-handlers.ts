@@ -132,6 +132,7 @@ export async function readRbacBoard(
       .all<{roleId: string; code: string}>(),
     db
       .prepare(
+        // d1scan:ignore 权限树读侧：走 ix_ext_permission_nodes_audience 索引，排序输入 ≤ 全表 104 行（种子封顶），小表排序。
         `SELECT ${PERMISSION_NODE_COLUMNS}
          FROM ext_permission_nodes WHERE audience = ? ORDER BY sort, code`,
       )
@@ -393,6 +394,7 @@ export async function readRbacUserDevices(
 > {
   const rows = await db
     .prepare(
+      // d1scan:ignore 用户设备列表：user_id 走主键索引点查，排序输入 = 该用户的设备数（全表 106 行），小表排序。
       `SELECT device_id AS deviceId, status, last_seen_at AS lastSeenAt, created_at AS createdAt
        FROM ext_user_devices WHERE user_id = ? ORDER BY last_seen_at DESC`,
     )
@@ -1763,6 +1765,7 @@ export const updateAdminRbacRole: APIRoute = async ({locals, request}) => {
 
   // 先读当前授权：审计行只有记下「改之前是什么」才有用。范围限在本端，
   // 否则「改之前」会把另一端的码混进来。
+  // d1scan:ignore 角色码装配：四表全走索引点查，排序输入 = 该角色在本端的码数（数十行），小表排序。
   const previous = await env.FEED_DB.prepare(
     "SELECT p.code AS code FROM ext_role_permissions rp " +
       "JOIN ext_roles r ON r.id = rp.role_id " +

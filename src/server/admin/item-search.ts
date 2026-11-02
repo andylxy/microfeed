@@ -161,6 +161,7 @@ export async function searchAdminItems(
   const likeClauses = clauses.map(() =>
     `json_extract(data, '$.title') LIKE ? ESCAPE '${LIKE_ESCAPE}'`
   ).join(" AND ");
+  // d1scan:ignore 后台搜索（ADR-0051 D2）：沿 items_updated_at 流式读、撞够 LIMIT 即停（命中 5.6ms 实测）；仅零命中词扫完整条索引 29.9ms = 0.19% 日读额度，后台低频已接受，见文件头实测记录。
   const response = await database.prepare(`
     SELECT ${ADMIN_SEARCH_SELECT}
     FROM items INDEXED BY items_updated_at
@@ -191,6 +192,7 @@ export async function latestAdminItems(
   const statusValues = statuses.map((status) =>
     ITEM_STATUSES_STRINGS_DICT[status]
   );
+  // d1scan:ignore 最近条目下拉：无 LIKE 纯 top-N，沿 items_updated_at 倒序流式读，读 ≈ limit 行即停，非整条索引扫描。
   const response = await database.prepare(`
     SELECT ${ADMIN_SEARCH_SELECT}
     FROM items INDEXED BY items_updated_at

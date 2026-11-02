@@ -264,6 +264,7 @@ async function listTcmVolumes(
   // `tcm_kind != 'chapter'` 把篇章自身挡在分组之外——篇章行的 `tcm_parent_id` 是空的。
   // 未归类只数 `section`：方剂（`fang`）也带着本书的 `book_id`，但它是独立的方剂
   // 目录、不属于卷/章树，混进来会凭空造出一个几百条的「未归类」桶。
+  // d1scan:ignore 卷计数：book_id 走 items_book_kind 覆盖索引（不回表），GROUP BY 输入 = 单书条目数，索引内排序代价有界。
   const countResult = await db.prepare(
     "SELECT tcm_parent_id AS parent, tcm_kind AS kind, COUNT(*) AS total FROM items " +
       "WHERE book_id = ? AND tcm_kind != 'chapter' AND status != ? " +
@@ -341,6 +342,7 @@ async function listTcmVolumeEntries(
     // 再用主键点查确认父项是不是本书篇章。父键为 NULL 的行同样算孤儿（`NOT EXISTS` 对
     // NULL 恒为真）；子查询刻意不带 status 条件，被软删的篇章照样算父项，它下面的条文
     // 不落进这里——与卷列表的计数口径同一条。
+    // d1scan:ignore 未归类孤儿：book_id+tcm_kind 走 items_book_kind 索引，ORDER BY 为 json_extract 表达式（常规索引不可用），排序输入 = 单书 section 行数。
     const orphanResult = await db.prepare(
       "SELECT id, status, data, pub_date FROM items " +
         "WHERE book_id = ? AND tcm_kind = 'section' AND status != ? " +

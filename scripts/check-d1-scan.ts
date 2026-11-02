@@ -138,9 +138,17 @@ interface SqlBlob {
   ignore?: string;
 }
 
-/** 剥 `//` 与 `/* *\/` 注释（SQL 字面量内几乎不含 `//`，可接受极小误剥风险）。 */
+/**
+ * 剥 `//` 与 `/* *\/` 注释（SQL 字面量内几乎不含 `//`，可接受极小误剥风险）。
+ * 注释字符替换为**等长空白并保留换行**——剥离结果与原文件逐字符对齐，blob 的
+ * 行号因此就是真实行号。旧实现把整段注释折叠成单个空格，块注释之后的行号整体
+ * 上移：报告里的 file:line 指不到 SQL，`d1scan:ignore` 的按行匹配也只能贴在
+ * 错位行上。字符（含括号、引号）照样被空白吞掉，词法结果与删除完全一致。
+ */
 function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//gu, " ").replace(/\/\/[^\n]*/gu, " ");
+  return src
+    .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
+    .replace(/\/\/[^\n]*/gu, (m) => m.replace(/[^\n]/gu, " "));
 }
 
 /** 收集文件内字符串型 `const X = "..."` / 模板串 / 拼接，供内联替换。 */

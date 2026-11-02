@@ -42,6 +42,7 @@ export async function listTcmEntryBooks(
   db: VolumeDb,
   tcmKind: string,
 ): Promise<VolumeBookOption[]> {
+  // d1scan:ignore TCM 书选择器：tcm_kind 走 items_bie_ming 索引（yao 172 / fang 804 行），DISTINCT 与 ORDER BY 的输入 = 命中书数（channels 全表 13 行），小结果集。
   const result = await db.prepare(
     "SELECT DISTINCT i.book_id AS id, c.data AS cdata FROM items i " +
       "JOIN channels c ON c.id = i.book_id " +

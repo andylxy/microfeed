@@ -170,6 +170,7 @@ export async function normalizeItemSearchContent(
   for (let batch = 0; batch < MAX_NORMALIZATION_BATCHES; batch += 1) {
     const rows = sourceRows(await cloudflare.queryD1(
       config,
+      // d1scan:ignore 已知接受项（D1SCAN-001，见上方说明）：谓词含列比列，任何索引不可用；仅部署时运行，9506 行实测 24-41ms。
       "SELECT id, data, updated_at FROM items " +
         "WHERE status != 3 AND (content_text_updated_at != updated_at OR " +
         `content_text_revision != ${ITEM_CONTENT_TEXT_REVISION}) ` +
@@ -188,6 +189,7 @@ export async function normalizeItemSearchContent(
 
   const [remaining] = await cloudflare.queryD1(
     config,
+    // d1scan:ignore 收尾核对 COUNT：与上一条同谓词同口径（列比列，索引不可用），仅部署时运行一次，接受。
     "SELECT COUNT(*) AS count FROM items " +
       "WHERE status != 3 AND (content_text_updated_at != updated_at OR " +
       `content_text_revision != ${ITEM_CONTENT_TEXT_REVISION})`,

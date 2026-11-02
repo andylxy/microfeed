@@ -168,6 +168,7 @@ export interface ReviewQueueRow {
   updatedAt: string;
 }
 
+// d1scan:ignore 评审队列：review_status 走 items_review_status 索引区间（非全表扫描），TEMP B-TREE 只排 submitted 的队列行，输入受工作流天然约束。
 const SELECT_QUEUE = `SELECT id, data, review_status, updated_at
   FROM items WHERE review_status = 'submitted'
   ORDER BY updated_at ASC`;
