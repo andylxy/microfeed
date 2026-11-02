@@ -130,12 +130,13 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `key` | TEXT NOT NULL（PK 之一） | 分类内的键：IP + 路径、凭证 id、nonce、reqNo 摘要、userId… |
 | `count` | INTEGER NOT NULL DEFAULT 1 | 窗口内已用次数；一次性台账恒为 1 |
 | `expires_at_ms` | INTEGER NOT NULL | 计数器 = 窗口终点；台账 = 保留终点 |
+| `ext1`~`ext10` | TEXT NULL | 常备扩展槽位（0167 `ALTER TABLE ADD COLUMN` 补齐）：后续新增字段直接写槽位，不必每次改表 |
 
 > 主键 `(kind, key)`，索引 `ext_rate_limit_expires_idx`（`expires_at_ms`，清理与取最早过期行共用）。分类隔离由 schema 保证，不靠键名前缀。
 >
 > 两类语义共用一张表的依据只有一条：**一行在 `expires_at_ms` 之后无意义**。计数器在窗口翻转时原地把 `count` 重置为 1；台账插入即消费，`INSERT OR IGNORE` 的 `changes` 判首次。因此清理只有一条 `DELETE ... WHERE expires_at_ms < ?`，搭在写入路径上按 1% 采样。
 >
-> 分类参数唯一定义在 `src/server/rate-limit/kinds.ts`；窗口算术在 `window.ts`，插入即消费在 `once.ts`，清理在 `prune.ts`。本表取代 0030 / 0037 / 0059 / 0147 / 0156 五张表（0166 已 DROP）。
+> 分类参数唯一定义在 `src/server/rate-limit/kinds.ts`；窗口算术在 `window.ts`，插入即消费在 `once.ts`，清理在 `prune.ts`。本表取代 0030 / 0037 / 0059 / 0147 / 0156 五张表（0166 已 DROP）；`ext1`~`ext10` 常备槽位由 0167 补齐（分册 08 规则：运行态热表不豁免槽位）。
 >
 > App 内容端点的消费链路不变：Cache 标记先拦（被拒流量零 D1）→ 配额行在鉴权批次取回 → 版本门通过后单条 UPSERT。
 
@@ -600,7 +601,7 @@ erDiagram
 
 - **`username`**：0039 起是合法登录名之一（`username` 插件启用），不是可选展示字段。占位邮箱账号与用户名账号并存，登录入口先按用户名再按邮箱兜底。
 - **`signup_source`**：三值且建号后不可改（§6.2）。不能派生、不能二值化。
-- **`ext1`~`ext10`**：本册涉及的表大多没有这批备用列（`auth_user` 也没有）。新增字段直接建正式列，不要为了「省一次迁移」把语义塞进槽位。
+- **`ext1`~`ext10`**：本册涉及的表多为历史表，大多没有这批常备列（`auth_user` 也没有），未回填。按分册 08 规则：**新建表建表即预留；修改既有表缺则 `ALTER TABLE ADD COLUMN` 补齐；已存在则跳过**。新增字段写 ext 槽位（省后续改表），槽位用尽再建正式列。
 - **迁移自动执行**：本地 dev 启动时 `applyLocalMigrations`（`manage-cli/lib/cloudflare.ts`）幂等执行 `wrangler d1 migrations apply FEED_DB --local`，目录取 `wrangler.jsonc` 的 `migrations_dir`；远程需 deploy / promote。
 
 ## 8. 修改指引（改用户体系前必读）

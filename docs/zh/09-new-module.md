@@ -26,7 +26,7 @@ description: 在 microfeed 里新建一个功能模块的层分布、8 步清单
 ## 2. 新建模块的 9 步清单（按序执行）
 
 1. **建分支**：`git checkout -b feature/<module-kebab>`（type 取 `feature`/`fix`/`refactor`…；绝不在 `main` 上改）。
-2. **迁移**：新增 `migrations/0025_<module>.sql`（下一个号）。建表用 `CREATE TABLE IF NOT EXISTS`，主键 `VARCHAR/TEXT PRIMARY KEY`，带 `created_at`/`updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`；**预留 `ext1`~`ext10` 备用字段（按分册 08 类型映射）**；索引用 `CREATE INDEX IF NOT EXISTS <table>_<col> ON <table>(...)`；业务约束用 `CREATE TRIGGER IF NOT EXISTS` + `RAISE(ABORT, 'code')`；软删除用可空 `deleted_at`。**不要**改/删旧迁移。
+2. **迁移**：新增 `migrations/NNNN_<module>.sql`（下一个号，以 `migrations/` 现有最大编号为准，不写死具体数字）。建表用 `CREATE TABLE IF NOT EXISTS`，主键 `VARCHAR/TEXT PRIMARY KEY`，带 `created_at`/`updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`；**预留 `ext1`~`ext10` 常备槽位**（按分册 08：新建表建表即预留；修改表缺则 `ALTER TABLE ADD COLUMN` 补齐；已存在则跳过）；索引用 `CREATE INDEX IF NOT EXISTS <table>_<col> ON <table>(...)`；业务约束用 `CREATE TRIGGER IF NOT EXISTS` + `RAISE(ABORT, 'code')`；软删除用可空 `deleted_at`。**不要**改/删旧迁移。
 3. **服务端**：在 `src/server/<module>/` 写 Worker 侧逻辑（D1/R2/bindings/运行时）。只 import `src/shared/`。
 4. **查询设计（必查 · 全表扫描检测）**：写任何 D1 查询前，先确认所走索引，把**预计扫描行数与读取字节数**写清楚，避免全表扫描；出现全表扫描必须给出**量化修复方案**（当前扫描行数、当前读取字节数、修复后预计读取字节数、所走或需新增的索引定义）。规范见分册 08「D1 额度与全表扫描治理」。
 5. **API 契约**：在 `src/shared/ApiSchemas.ts` 用 Zod 定义可复用请求/响应 schema（`.meta({id, description, example})`）；在 `src/shared/OpenApiDocument.ts` 用 `createDocument` 登记每个公共操作（方法、路径、operationId、params、requestBody、responses、security）。**handler 与 OpenAPI 操作必须同步更新**。

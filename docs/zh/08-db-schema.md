@@ -16,8 +16,8 @@ description: microfeed 的 Cloudflare D1 数据库规范：迁移文件、建表
   - 时间戳：`created_at` / `updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`。
   - 软删除：可空 `deleted_at TIMESTAMP`，业务查询用 `deleted_at IS NULL` 过滤。
   - 灵活字段：常用 `data TEXT`（JSON 文本列）。
-  - 备用字段：**不采用 `ext1`~`ext10` 扩展槽位**。这条设想（预留 10 个类型化空列，承接后续新增字段、少做 `ALTER TABLE`）在仓库里一支迁移也没实现过——`grep -l "ext1 " migrations/*.sql` 命中 0 支，含最近四支建表迁移 `0153` / `0156` / `0162` / `0165`。理由：SQLite 的 `ALTER TABLE ADD COLUMN` 只改 schema、不重写已有行，代价与「往预留空槽里写值」同级；而空槽让每张表常驻 10 个恒为 NULL 的列，热表还要为它们付行宽。若将来某张表确定要高频加列，只对那一张表单独补槽位，不做全库统一。
-  - **运行态表例外**：按窗口或保留期过期的行（如 `ext_rate_limit`）不建 `created_at` / `updated_at`，也不建软删除列——它的生命周期由 `expires_at_ms` 一列表达，补时间戳只会给写热表多带两列负载。
+  - 备用字段：**常备 `ext1`~`ext10` 扩展槽位**。所有新建表建表即预留这 10 个可空类型化列；修改既有表时，若缺 `ext1`~`ext10`，本迁移用 `ALTER TABLE ADD COLUMN` 一并补齐；已存在则跳过。用途：后续新增字段直接写 ext 槽位，不必每次改表。现状：全仓 `migrations/` 目前 **0 支迁移**带 `ext1` 列（`grep -l "ext1" migrations/*.sql` 命中 0），既有多数表尚未回填——自本规则起，新建表即预留、修改表缺则补齐，历史表不强制一次性回填。
+  - **运行态表例外**：按窗口或保留期过期的行（如 `ext_rate_limit`）不建 `created_at` / `updated_at`，也不建软删除列——它的生命周期由 `expires_at_ms` 一列表达，补时间戳只会给写热表多带两列负载。**此例外仅豁免时间戳与软删除列，不豁免 `ext1`~`ext10` 常备槽位**：运行态热表同样按上方规则常备（`ext_rate_limit` 已由 0167 补齐）。
   - 索引：每条查询路径都建 `CREATE INDEX IF NOT EXISTS <table>_<col> ON <table>(<col>...)`。
   - 业务约束/上限：`CREATE TRIGGER IF NOT EXISTS ... BEFORE INSERT ... WHEN ... BEGIN SELECT RAISE(ABORT, '<code>'); END;`（如 `webhook_endpoint_limit_insert`，20 条上限）。
   - 状态枚举：`status TEXT NOT NULL DEFAULT 'active' CHECK (status IN (...))`，或 `TINYINT`。

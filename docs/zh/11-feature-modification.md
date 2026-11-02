@@ -13,7 +13,7 @@ description: 在 microfeed 里新增或修改一个功能的端到端处理流�
 
 1. **定位范围**：先确认改动跨哪几层——数据库（`migrations/`）、服务端（`src/server/`）、API 契约（`src/shared/`）、后台 UI（`src/components/admin/`）、路由（`src/pages/`）、文档（`docs/`）、测试（`tests/`）。能少动就少动。**涉及数据库时**：先**显示相关数据表字段**（读 `migrations/` 建表 SQL 或查 D1 schema，含 `ext1`~`ext10` 扩展槽位）、**说明各字段用途**，并**列出会受影响的**相关 **API 接口**（按分册 05 契约、08 数据库）。
 2. **建分支**：`git checkout -b <type>/<short-kebab-case>`（`feature` / `fix` / `refactor`…）。**绝不在 `main` 上改**。
-3. **数据库变更（如需）**：新增 `migrations/NNNN_<name>.sql`（下一个号），只追加、不改历史。建表/索引/触发器按分册 08 规范（**确保 `ext1`~`ext10` 存在**：新表建表即预留；**表已存在（含仅修改既有表）但缺 ext 时，本迁移必须 `ALTER TABLE ADD COLUMN` 一并补齐**；已存在则跳过——一次完成，后续扩展直接写 ext 槽位，不再每次改表）。
+3. **数据库变更（如需）**：新增 `migrations/NNNN_<name>.sql`（下一个号），只追加、不改历史。建表/索引/触发器按分册 08 规范（**确保 `ext1`~`ext10` 存在**：新表建表即预留；表已存在（含仅修改既有表）但缺 ext 时，本迁移必须 `ALTER TABLE ADD COLUMN` 一并补齐；已存在则跳过——一次完成，后续扩展直接写 ext 槽位，不再每次改表）。
 4. **服务端逻辑**：`src/server/<模块>/` 写 Worker 侧逻辑，只 import `src/shared/`。
 5. **查询设计（必查 · 全表扫描检测）**：写任何 D1 查询前，先确认所走索引，把**预计扫描行数与读取字节数**写清楚，避免全表扫描；出现全表扫描必须给出**量化修复方案**（当前扫描行数、当前读取字节数、修复后预计读取字节数、所走或需新增的索引定义）。规范见分册 08「D1 额度与全表扫描治理」。
 6. **API 契约**：在 `src/shared/ApiSchemas.ts` 用 Zod 定义 schema；在 `src/shared/OpenApiDocument.ts` 登记每个公共操作。**handler 与 OpenAPI 操作必须同步**；`openapi.json/yaml`、`llms*.txt`、Scalar **绝不手改**（由 `OPENAPI_DOCUMENT` 生成）。按分册 05。
