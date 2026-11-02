@@ -33,10 +33,13 @@
  *   5. 内联文件内字符串型 `const`（如 `citingCondition`、`TCM_CHAPTER_ORDER_SQL`），
  *      递归替换 3~4 层，否则会得到 `WHERE ?` 假阳性。
  *
- * fast-fail（AGENTS.md「行为」）：不捕获错误、不做兜底。读文件、COUNT(*)、
- * EXPLAIN、dbstat 全部直接执行，失败即在出错位置崩溃；无法静态规划的碎片由
- * {@link canPlan} 用确定性规则在前置判定中排除，并逐条列出计数，不静默吞掉。
- * 崩溃时设 `D1SCAN_TRACE=1` 可把每条待规划语句打到 stderr，直接定位出事语句。
+ * fast-fail（AGENTS.md「行为」）：读文件、COUNT(*)、dbstat 全部直接执行，失败即
+ * 在出错位置崩溃；无法静态规划的碎片由 {@link canPlan} 用确定性规则在前置判定中
+ * 排除，并逐条列出计数，不静默吞掉。唯独 `EXPLAIN QUERY PLAN` 的**准备阶段语法错误**
+ * 例外——它只发生在占位符落在名字/列清单等无法规划位置时（如 `INSERT INTO t (?)`），
+ * 这类碎片本就该按「无法静态规划」对待，故 catch 后归入 skipped 响亮计数，而非让整条
+ * 门禁崩溃、把其余发现全部藏起来。崩溃时设 `D1SCAN_TRACE=1` 可把每条待规划语句打到
+ * stderr，直接定位出事语句。
  * 字节口径依赖 SQLite 的 dbstat 虚拟表（node 内置 SQLite 已启用；若运行环境缺失，
  * 门禁就地报错，不降级为无字节口径）。
  *
@@ -230,6 +233,10 @@ function canPlan(stmt: string): boolean {
   if (WHERE_PLACEHOLDER_ONLY.test(stmt)) return false;
   if (/\b(?:FROM|JOIN|INTO|UPDATE|TABLE|INDEX|AS|SET)\s*["']?\?/iu.test(stmt)) return false;
   if (/INTO\s+[A-Za-z_]\w*\s*\([^)]*\?/iu.test(stmt)) return false;
+  // ③b INSERT/REPLACE 列清单里的 `?`（如 `INSERT INTO t (?) SELECT ?`）是名字位置，
+  // 表名可能带引号且 `?` 隔着表名与括号，上面的两式都拦不到；此处显式排掉，
+  // 否则 SQLite 在 EXPLAIN 准备阶段即报 `near "?": syntax error` 使整条门禁崩溃。
+  if (/\b(?:INSERT|REPLACE)\s+INTO\b[^(]*\([^)]*\?/iu.test(stmt)) return false;
   if (/\b(?:OLD|NEW)\s*\./iu.test(stmt)) return false;
   if (DANGLING_TAIL.test(stmt)) return false;
   if (hasBadPlaceholder(stmt)) return false;
@@ -251,6 +258,9 @@ function planSkipReason(stmt: string): string {
     return "动态名字位置（表名 / 列名 / 别名 / 赋值目标为占位符）";
   }
   if (/INTO\s+[A-Za-z_]\w*\s*\([^)]*\?/iu.test(stmt)) return "动态列清单（INTO <表>( 内为占位符）";
+  if (/\b(?:INSERT|REPLACE)\s+INTO\b[^(]*\([^)]*\?/iu.test(stmt)) {
+    return "INSERT/REPLACE 列清单为占位符（如 INSERT INTO t (?)），名字位置无法静态规划";
+  }
   if (DANGLING_TAIL.test(stmt)) return "语句不完整（以子句关键词 / 运算符收尾，拼接窗口截断）";
   if (hasBadPlaceholder(stmt)) return "占位符出现在名字位置或插值子句残留";
   return "圆括号不平衡（拼接窗口截断）";
@@ -474,10 +484,22 @@ function main(): void {
           continue;
         }
         if (trace) console.error(`D1SCAN-TRACE: ${blob.file}:${blob.line} ${stmt}`);
-        // 不捕获 prepare 的错误：解析不了说明这条语句静态分析给不出计划，必须让
-        // 人看到并决定是改语句还是显式写 `// d1scan:ignore <原因>` 豁免。静默记成
-        // 「跳过」会让门禁永远绿，等于把判据关掉。
-        const plan = db.prepare(`EXPLAIN QUERY PLAN ${stmt}`).all() as {detail: string}[];
+        // 占位符出现在名字 / 列清单 / 子句残留等无法静态规划的位置时，SQLite 在准备
+        // 阶段即报语法错误。这属于「无法静态规划」碎片，按 canPlan 同口径列入 skipped
+        // 并响亮计数，不中断整个门禁——否则一条坏语句会把其余全部发现藏起来，等价于
+        // 把判据关掉。canPlan 已前置排除已知坏位置，此处是未被覆盖时的兜底。
+        let plan: {detail: string}[];
+        try {
+          plan = db.prepare(`EXPLAIN QUERY PLAN ${stmt}`).all() as {detail: string}[];
+        } catch (e) {
+          skipped.push({
+            file: blob.file,
+            line: blob.line,
+            reason: `EXPLAIN 语法错误（占位符出现在名字/列清单等无法规划位置：${(e as Error).message}）`,
+            sql: stmt,
+          });
+          continue;
+        }
         statementsExamined++;
         const details = plan.map((r) => r.detail);
         // 收集「无索引的全表扫描」表与「索引全扫」，供大表加权判定。
