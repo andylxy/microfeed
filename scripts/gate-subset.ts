@@ -6,7 +6,7 @@
  *   2. check-migrations.ts            迁移命名 / 冻结 / 连续 / rollback 块
  *   3. check-server-layout.ts         src/server/ 顶层白名单
  *   4. check-endpoint-registration.ts 端点登记
- *   5. check-d1-scan.ts               D1 全表扫描（新增项，默认顾问模式）
+ *   5. check-d1-scan.ts               D1 全表扫描（发现即 FAIL；取证后按量化理由豁免）
  *
  *   编排器只覆盖上述 #1–5（快速 / 只读治理项）。技能范围另含「增补三检」
  *   （i18n 镜像 / typecheck / 组件测试，见 SKILL.md「增补三检运行方式与环境前提」），
@@ -17,9 +17,9 @@
  *     输出，输出统一量化报告（检查项 / 状态 / 量化指标）。
  *   - `--fix`：对任何 FAIL 的硬门禁尝试修复后重跑，最多 `MAX_ITER` 轮，直到全 PASS
  *     或无法自动修复为止（避免无限循环）；每轮修复后都会重跑验证，达到轮数上限时
- *     显式提示。D1 为顾问模式，永不计入 FAIL，其发现只量化展示 + 给出候选索引与
- *     A/B 实测口径；是否写成迁移由用户决定（项目允许按 0108+ 规范新增索引迁移，
- *     此处不自动写是自动修复范围的取舍）。
+ *     显式提示。D1 已转硬：对 check-d1-scan.ts 固定传 `--strict`，任何新发现（001/
+ *     002/003）都按 FAIL 阻断，提交前必须按 d1-full-scan-audit 流程取证——建索引
+ *     迁移、改查询，或给出量化依据后挂 `// d1scan:ignore <理由>` 豁免。
  *
  * 安全边界（以 AGENTS.md 为准）：本编排器不提交 git；需判断的修复只「给出方案」并
  * 暂停确认，只有确定性低风险项（如布局白名单新增）才自动应用。
@@ -39,7 +39,7 @@ interface GateDef {
   key: string;
   name: string;
   script: string;
-  /** 是否硬门禁：失败时计入 FAIL 并参与 --fix 循环。D1 为顾问项，false。 */
+  /** 是否硬门禁：失败时计入 FAIL 并参与 --fix 循环。D1 已随 2026-11 清零转硬。 */
   hard: boolean;
 }
 
@@ -48,7 +48,7 @@ const GATES: GateDef[] = [
   {key: "migrations", name: "迁移门禁", script: "check-migrations.ts", hard: true},
   {key: "layout", name: "布局门禁", script: "check-server-layout.ts", hard: true},
   {key: "endpoints", name: "端点门禁", script: "check-endpoint-registration.ts", hard: true},
-  {key: "d1scan", name: "D1 全表扫描", script: "check-d1-scan.ts", hard: false},
+  {key: "d1scan", name: "D1 全表扫描", script: "check-d1-scan.ts", hard: true},
 ];
 
 /** 需人工处理的硬门禁：key → 处理要点。自动修复只覆盖 layout（确定性低风险）。 */
@@ -57,6 +57,8 @@ const MANUAL_FIX_HINTS: Record<string, string> = {
   migrations:
     "核对 0108+ 编号连续、type 合法、data/cleanup 含 -- rollback: 块；0001-0107 文件名已冻结不可改。",
   endpoints: "将未登记 handler 归入 OpenApiDocument / access.ts 登记表（区分公开、豁免、AppBookRequest 三类）。",
+  d1scan:
+    "按 d1-full-scan-audit 流程取证：建索引迁移、改写查询，或给出量化依据后在 SQL 上方挂 // d1scan:ignore <理由>。",
 };
 
 interface GateResult {
@@ -70,7 +72,8 @@ interface GateResult {
 
 function runGate(def: GateDef): Promise<GateResult> {
   const scriptPath = path.join(repositoryRoot, "scripts", def.script);
-  const extraArgs = def.key === "d1scan" && process.argv.includes("--strict") ? ["--strict"] : [];
+  // D1 已转硬：对 check-d1-scan.ts 固定传 --strict，发现即 FAIL，不依赖调用方传参。
+  const extraArgs = def.key === "d1scan" ? ["--strict"] : [];
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["--import", "tsx", scriptPath, ...extraArgs], {
       cwd: repositoryRoot,

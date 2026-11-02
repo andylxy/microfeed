@@ -49,8 +49,9 @@
  * （测试库很小，用本地大表 schema 去 EXPLAIN 会产生误导性噪音；完整审计含 tests，
  * 仍由 d1-full-scan-audit 技能负责）。
  *
- * 用 `yarn d1scan:check` 运行。默认**顾问模式**：量化报告 + 列出发现，退出码 0，
- * 不打断 `yarn check`；加 `--strict` 转为硬性失败（代码库清理后再启用）。
+ * 用 `yarn d1scan:check` 运行（顾问模式，便于单跑查看量化报告）；加 `--strict`
+ * 转为硬性失败。`gate-subset` 编排器对 D1 固定传 `--strict`：库内发现已按量化依据
+ * 豁免清零，此后任何新发现都按 FAIL 阻断提交，取证口径见 d1-full-scan-audit 技能。
  * 机器可读的汇总行固定为 `D1SCAN-METRIC: key=value ...`，gate-subset 编排器解析该行，
  * 两脚本的耦合点就是这一行约定。
  */
