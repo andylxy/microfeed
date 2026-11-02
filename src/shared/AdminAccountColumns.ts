@@ -32,5 +32,5 @@ export const AUTH_USER_IMAGE_COLUMN = "image" as const;
  */
 export const ADMIN_CREATED_DEFAULTS = {banned: 0, emailVerified: 1} as const;
 
-/** `signup_source` 的取值集合，与 `SignupSource` 联合类型一致。 */
+/** 建号语句能写死的两个来源（邮箱注册那一档走 `email-signup.ts` 的 UPDATE）。 */
 export type AdminSignupSource = "admin" | "qq";

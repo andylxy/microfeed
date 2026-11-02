@@ -20,10 +20,26 @@
  * `signUpEmail` 不写 `username`（那是 username 插件的入口才管的事），默认
  * `emailVerified=0`。邮箱已验证是建号的前提，所以这里一次补上；username 撞车
  * 不属于致命错误（登录走邮箱），降级为只置 emailVerified。
+ *
+ * ## 来源与默认角色也在这里落
+ *
+ * `signup_source` 显式写 `'email'`（不吃列的 DEFAULT），新账号同时授予默认
+ * 只读角色（`DEFAULT_USER_ROLE` = `r_readonly`）——「注册成功即只读」是三条
+ * 建号路径的统一口径，不能只有后台建号一条有。授权与权限快照同批写。
  */
 
 import {createSignUpEnabledAuth} from "@/server/auth/better-auth";
 import {baseUsername, deriveUniqueUsername} from "@/server/app/email-register/username";
+import {grantDefaultRoleStatements} from "@/server/rbac/grant";
+
+/**
+ * 邮箱注册写死的来源 value。
+ *
+ * 不靠列的 DEFAULT `'email'`：默认值只是建表时的兜底，显式写下来才和另外两条
+ * 建号路径（`admin` / `qq`）同口径，也不会因为将来谁改了默认值而漂移。
+ * `signup_sources` 列表里这一项不允许被删除（见 `BUILTIN_SIGNUP_SOURCES`）。
+ */
+const EMAIL_SIGNUP_SOURCE = "email";
 
 export type EmailSignupResult =
   | {ok: true; userId: string}
@@ -71,16 +87,21 @@ export async function createVerifiedEmailUser(
 
   try {
     await env.FEED_DB.prepare(
-      "UPDATE auth_user SET username = ?, displayUsername = ?, emailVerified = 1 WHERE id = ?",
-    ).bind(username, displayName, userId).run();
+      "UPDATE auth_user SET username = ?, displayUsername = ?, emailVerified = 1, " +
+        "signup_source = ? WHERE id = ?",
+    ).bind(username, displayName, EMAIL_SIGNUP_SOURCE, userId).run();
   } catch (error) {
     // username 唯一索引冲突（与 deriveUniqueUsername 的检查之间存在并发窗口，
     // 概率极小）：账号已经建好，登录走邮箱不依赖 username，降级只置 emailVerified。
     console.error("[email-signup] 补写 username 失败，降级为只置 emailVerified:", error);
     await env.FEED_DB.prepare(
-      "UPDATE auth_user SET emailVerified = 1 WHERE id = ?",
-    ).bind(userId).run();
+      "UPDATE auth_user SET emailVerified = 1, signup_source = ? WHERE id = ?",
+    ).bind(EMAIL_SIGNUP_SOURCE, userId).run();
   }
+
+  // 每个新账号都落在默认只读角色上（与后台建号的兜底口径一致）；授权与权限快照
+  // 同批写，漏了快照这条授权不会生效（ADR-0053 的重算点之一）。
+  await env.FEED_DB.batch(grantDefaultRoleStatements(env.FEED_DB, userId));
 
   return {ok: true, userId};
 }

@@ -46,6 +46,9 @@ const WHITELIST = new Set([
   "openapi",
   "pages",
   "rbac",
+  // 限流：ext_rate_limit 常备槽位与窗口/单次/裁剪逻辑（0167 限流表合并），2026-11-02 补登。
+  // 该目录在 0167 落地时即已提交，白名单此前漏登，属既有缺口，非本次改动引入。
+  "rate-limit",
   "site-files",
   "tcm",
   "themes",

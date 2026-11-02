@@ -143,6 +143,7 @@ const C: readonly CatalogEntry[] = [
   ["GET", "/admin/ajax/rbac/user-devices", "system:user:manage"],
   ["POST", "/admin/ajax/rbac/user-device-revoke", "system:user:manage"],
   ["POST", "/admin/ajax/rbac/user-device-restore", "system:user:manage"],
+  ["PUT", "/admin/ajax/signup-sources", "system:user:manage"],
   // 设备（system:device:*）
   ["GET", "/admin/ajax/devices", "system:device:read"],
   ["POST", "/admin/ajax/devices/revoke", "system:device:manage"],

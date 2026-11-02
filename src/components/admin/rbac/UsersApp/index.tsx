@@ -1,7 +1,8 @@
-import {useState} from "react";
+import {Fragment, useState} from "react";
 import {
   ChevronRightIcon,
   PlusIcon,
+  Trash2Icon,
   UsersIcon,
 } from "lucide-react";
 
@@ -9,6 +10,8 @@ import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import AdminSelect from "@/components/admin/shared/AdminSelect";
+import AdminDialog from "@/components/admin/shared/AdminDialog";
 import LoginCredentialsPanel from "@/components/admin/LoginCredentialsPanel";
 import {
   PermissionBranchToggle,
@@ -29,32 +32,26 @@ import {
   DEFAULT_USER_ROLE,
   type RbacUser,
   type RbacUserBoard,
-  type SignupSource,
 } from "@/shared/Rbac";
+import {
+  BANNED_GROUP_VALUE,
+  BUILTIN_SIGNUP_SOURCES,
+  hasSignupSource,
+  isValidSignupSourceValue,
+  matchesSignupCategory,
+  type SignupSourceOption,
+} from "@/shared/SignupSource";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 
 interface Props {
   initialBoard: RbacUserBoard;
+  /** `settings` 里已配置的注册来源（`signup_sources`），左栏分组与详情下拉都读它。 */
+  initialSignupSources: SignupSourceOption[];
   /** The signed-in account, so the page can flag editing yourself. */
   currentUserId?: string;
 }
 
 const ROW_CLASS = "w-full rounded-[10px] px-3 py-2 text-left text-sm";
-
-/**
- * 手风琴的分类，按 `signup_source`（ADR-0014 §8）取值。「全部用户」是这些分类
- * 之上的静态树根，它本身不是分类，不参与过滤。
- */
-type CategoryKey = SignupSource;
-
-const CATEGORY_KEYS: CategoryKey[] = ["email", "qq", "admin"];
-
-/** 每个分类组头标签的 i18n 键。 */
-const CATEGORY_LABEL_KEY: Record<CategoryKey, string> = {
-  email: "rbac.userCategoryEmail",
-  qq: "rbac.userCategoryQq",
-  admin: "rbac.userCategoryAdmin",
-};
 
 /** 搜索框匹配的用户字段（名称 / 邮箱 / 用户名）。 */
 function userMatchesQuery(user: RbacUser, query: string): boolean {
@@ -79,27 +76,47 @@ async function parseError(response: Response, fallback: string): Promise<string>
  * management row). Without this page the RBAC layer is inert: roles can be
  * given permissions, but nothing could ever be given a role.
  */
-export default function UsersApp({initialBoard, currentUserId}: Props) {
+export default function UsersApp({
+  initialBoard,
+  initialSignupSources,
+  currentUserId,
+}: Props) {
   const {t} = useTranslation();
   const [board, setBoard] = useState(initialBoard);
   const [selectedId, setSelectedId] = useState(initialBoard.users[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
 
-  // 分类手风琴（ADR-0014 §8「四维判据」）：后台用户页按注册来源分组，根节点是
-  // 静态「全部用户」。null 表示全部分类折叠（默认态）。单层手风琴——展开一个
-  // 分类会收起其余。
-  const [openCategory, setOpenCategory] = useState<CategoryKey | null>(null);
+  // 分类手风琴：后台用户页按注册来源分组，根节点是静态「全部用户」。null 表示
+  // 全部分类折叠（默认态）。单层手风琴——展开一个分类会收起其余。
+  //
+  // 分组清单不是写死的三个枚举，而是 `settings` 的 `signup_sources`：在
+  // 「新建分组」弹层里增删改名后，左栏立刻按新清单重新分桶。列表之外没有
+  // 「其他」分组——建号链路写死的三项不允许删，仍有账号在用的来源也不允许删，
+  // 所以 `auth_user.signup_source` 恒在列表内。
+  const [signupSources, setSignupSources] = useState<SignupSourceOption[]>(initialSignupSources);
+  const sourceValues = signupSources.map((option) => option.value);
+  // 「已封禁账号」固定追加在末尾：成员由 `banned` 实时过滤，不进来源配置。
+  // 服务端读配置时会把「库里出现过、配置里没有」的来源一并补进来，所以这里
+  // 不需要再兜一个「其他」分组。
+  const categoryList = [...sourceValues, BANNED_GROUP_VALUE];
+  const categoryLabel = (category: string): string =>
+    category === BANNED_GROUP_VALUE
+      ? t("rbac.userGroupBanned")
+      : signupSources.find((option) => option.value === category)?.label ?? category;
+
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   const searchActive = search.trim().length > 0;
   const query = search.trim().toLowerCase();
 
-  const categoryUsers = (category: CategoryKey) =>
-    board.users.filter((entry) => entry.signupSource === category);
+  /** 分组 → 成员。`__banned__` 按 `banned` 过滤，来源分组排除已封禁账号。 */
+  const categoryUsers = (category: string) =>
+    board.users.filter((entry) => matchesSignupCategory(entry, category));
 
   // 搜索优先于手风琴：有查询词时每个分类只保留命中的用户，且只有含命中的
   // 分类被强制展开，无命中则整类收起（spec §9）。
-  const categoryVisibleUsers = (category: CategoryKey) => {
+  const categoryVisibleUsers = (category: string) => {
     const users = categoryUsers(category);
     return searchActive ? users.filter((entry) => userMatchesQuery(entry, query)) : users;
   };
@@ -111,7 +128,7 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   // 点一个分类：收起态则展开，已是展开态则全部收起（spec §2「再点已展开的
   // 组头 = 全折叠」）。
-  const toggleCategory = (category: CategoryKey) => {
+  const toggleCategory = (category: string) => {
     const next = openCategory === category ? null : category;
     setOpenCategory(next);
     if (next) {
@@ -147,6 +164,12 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
   const [resetOpen, setResetOpen] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+
+  // 「新建分组」弹层：来源列表的草稿副本，点保存才整表覆盖写。
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [draftSources, setDraftSources] = useState<SignupSourceOption[]>([]);
+  const [newSource, setNewSource] = useState({label: "", value: ""});
+  const [groupError, setGroupError] = useState<string | null>(null);
 
   // 详情面板始终显示当前展开分类下的账号；选中 id 被过滤掉时回退到第一个可见账号。
   const user = visibleUser;
@@ -245,10 +268,11 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
 
   const toggleBan = async () => {
     if (!user) return;
+    const banned = !user.banned;
     setSaving(true);
     try {
       const response = await fetch(ADMIN_URLS.ajaxRbacUserBan(), {
-        body: JSON.stringify({banned: !user.banned, userId: user.id}),
+        body: JSON.stringify({banned, userId: user.id}),
         headers: {"content-type": "application/json"},
         method: "POST",
       });
@@ -257,7 +281,12 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
         return;
       }
       setBoard(await response.json() as RbacUserBoard);
-      showToast(t("rbac.userRolesSaved"), "success");
+      // 解封只把标志置回：封禁时吊销的登录凭据不会自动复活，得如实告诉操作者，
+      // 否则下一句就是「解封了怎么还是登不上」。
+      showToast(
+        banned ? t("rbac.accountBanDone") : t("rbac.accountUnbanDone"),
+        "success",
+      );
     } catch {
       showToast(t("errors.rbac.banUserFailed"), "error");
     } finally {
@@ -442,6 +471,105 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
     }
   };
 
+  /** 单账号的注册来源：下拉即改即存，改完这个账号就落到另一个分组里。 */
+  const saveSignupSource = async (source: string) => {
+    if (!user || source === user.signupSource) return;
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxRbacUserProfile(), {
+        body: JSON.stringify({signupSource: source, userId: user.id}),
+        headers: {"content-type": "application/json"},
+        method: "POST",
+      });
+      if (!response.ok) {
+        showToast(
+          await parseError(response, t("errors.rbac.profileUpdateFailed")),
+          "error",
+        );
+        return;
+      }
+      setBoard(await response.json() as RbacUserBoard);
+      showToast(t("rbac.signupSourceSaved"), "success");
+    } catch {
+      showToast(t("errors.rbac.profileUpdateFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ---- 分组维护（`settings` 的 signup_sources） ----
+
+  const openGroupManager = () => {
+    setDraftSources(signupSources.map((option) => ({...option})));
+    setNewSource({label: "", value: ""});
+    setGroupError(null);
+    setGroupOpen(true);
+  };
+
+  const updateDraftLabel = (index: number, label: string) => {
+    setDraftSources((previous) =>
+      previous.map((option, at) => (at === index ? {...option, label} : option)));
+  };
+
+  const removeDraft = (index: number) => {
+    setDraftSources((previous) => previous.filter((_, at) => at !== index));
+  };
+
+  /** 新增一行草稿：先本地校验，通过才并入，失败给出对应文案。 */
+  const addDraft = () => {
+    const value = newSource.value.trim();
+    const label = newSource.label.trim();
+    // 值的合法性与重复判定都走 shared 的同一份实现（系统分组也在那里被排除）。
+    if (!isValidSignupSourceValue(value)) {
+      setGroupError("rbac.userGroupValueInvalid");
+      return;
+    }
+    if (!label) {
+      setGroupError("rbac.userGroupLabelInvalid");
+      return;
+    }
+    if (hasSignupSource(draftSources, value)) {
+      setGroupError("rbac.userGroupDuplicated");
+      return;
+    }
+    setDraftSources((previous) => [...previous, {label, value}]);
+    setNewSource({label: "", value: ""});
+    setGroupError(null);
+  };
+
+  /** 保存：整表覆盖写 settings，成功后用服务端返回的列表刷新左栏与下拉。 */
+  const saveDraft = async () => {
+    if (draftSources.length === 0) {
+      setGroupError("rbac.userGroupRequired");
+      return;
+    }
+    if (draftSources.some((option) => !option.label.trim())) {
+      setGroupError("rbac.userGroupLabelInvalid");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(ADMIN_URLS.ajaxSignupSources(), {
+        body: JSON.stringify({sources: draftSources}),
+        headers: {"content-type": "application/json"},
+        method: "PUT",
+      });
+      if (!response.ok) {
+        showToast(await parseError(response, t("rbac.userGroupSaveFailed")), "error");
+        return;
+      }
+      const data = (await response.json()) as {sources: SignupSourceOption[]};
+      setSignupSources(data.sources);
+      setGroupOpen(false);
+      setGroupError(null);
+      showToast(t("rbac.userGroupSaved"), "success");
+    } catch {
+      showToast(t("rbac.userGroupSaveFailed"), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-72">
@@ -466,7 +594,8 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
           </Button>
           <span className="flex-1" />
           <Button
-            onClick={() => showToast(t("rbac.userCategoryFixedTip"), "info")}
+            disabled={saving}
+            onClick={openGroupManager}
             size="sm"
             type="button"
             variant="outline"
@@ -494,10 +623,10 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
           </p>
         ) : (
           <ul className={cn("ml-3.5 flex flex-col gap-0.5 border-l pl-2")}>
-            {CATEGORY_KEYS.map((category) => {
+            {categoryList.map((category) => {
               const users = categoryVisibleUsers(category);
               const expanded = searchActive ? users.length > 0 : openCategory === category;
-              const label = t(CATEGORY_LABEL_KEY[category]);
+              const label = categoryLabel(category);
               return (
                 <li key={category}>
                   <div
@@ -548,6 +677,11 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                           </button>
                         </li>
                       ))}
+                      {users.length === 0 && (
+                        <li className="px-2 py-1 text-xs text-muted-foreground">
+                          {t("rbac.userGroupEmpty")}
+                        </li>
+                      )}
                     </ul>
                   )}
                 </li>
@@ -728,6 +862,27 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
                 </dd>
               </div>
             </dl>
+
+            {/* 注册来源：改它就等于把这个账号挪到另一个分组，所以即改即存。 */}
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="w-20 shrink-0 text-xs text-muted-foreground">
+                {t("rbac.signupSource")}
+              </span>
+              <div className="w-56">
+                <AdminSelect
+                  ariaLabel={t("rbac.signupSource")}
+                  disabled={saving}
+                  onChange={(option) => void saveSignupSource(option.value)}
+                  options={signupSources.map((option) => ({
+                    label: option.label,
+                    value: option.value,
+                  }))}
+                  value={
+                    signupSources.find((option) => option.value === user.signupSource) ?? null
+                  }
+                />
+              </div>
+            </div>
 
             <div className="mb-4 flex flex-col gap-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
@@ -997,6 +1152,122 @@ export default function UsersApp({initialBoard, currentUserId}: Props) {
           <p className="text-sm text-muted-foreground">{t("rbac.noUsers")}</p>
         )}
       </section>
+
+      {/* 分组维护弹层：与账号详情无关，挂在页面层，未选中账号时也能打开。 */}
+      <AdminDialog
+        onOpenChange={(next) => {
+          if (!next) setGroupOpen(false);
+        }}
+        open={groupOpen}
+        title={t("rbac.userGroupTitle")}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">
+            {t("rbac.userGroupDescription")}
+          </p>
+          <p className="rounded-md border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
+            {t("rbac.userGroupBannedNote")}
+          </p>
+
+          <div className="grid grid-cols-[7rem_1fr_auto] items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              {t("rbac.userGroupValueColumn")}
+            </span>
+            <span className="text-muted-foreground">
+              {t("rbac.userGroupLabelColumn")}
+            </span>
+            <span />
+            {draftSources.map((option, index) => {
+              // 建号链路把这三个 value 写死在 SQL 里，删了会让下一次注册造出
+              // 列表外的值；服务端也会拒，这里先把入口关掉。
+              const builtin = BUILTIN_SIGNUP_SOURCES.includes(option.value);
+              return (
+                <Fragment key={option.value}>
+                  <code className="truncate font-mono text-foreground">
+                    {option.value}
+                    {builtin && (
+                      <span className="ml-1 text-muted-foreground" title={t("rbac.userGroupBuiltinLocked")}>
+                        *
+                      </span>
+                    )}
+                  </code>
+                  <Input
+                    aria-label={t("rbac.userGroupLabelColumn")}
+                    className="h-8"
+                    disabled={saving}
+                    onChange={(event) => updateDraftLabel(index, event.target.value)}
+                    value={option.label}
+                  />
+                  <Button
+                    aria-label={t("rbac.userGroupRemove")}
+                    disabled={saving || builtin}
+                    onClick={() => removeDraft(index)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                  </Button>
+                </Fragment>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+            <Input
+              aria-label={t("rbac.userGroupValueColumn")}
+              className="h-8"
+              disabled={saving}
+              onChange={(event) =>
+                setNewSource((previous) => ({...previous, value: event.target.value}))}
+              placeholder={t("rbac.userGroupValuePlaceholder")}
+              value={newSource.value}
+            />
+            <Input
+              aria-label={t("rbac.userGroupLabelColumn")}
+              className="h-8"
+              disabled={saving}
+              onChange={(event) =>
+                setNewSource((previous) => ({...previous, label: event.target.value}))}
+              placeholder={t("rbac.userGroupLabelPlaceholder")}
+              value={newSource.label}
+            />
+            <Button
+              disabled={saving}
+              onClick={addDraft}
+              size="xs"
+              type="button"
+              variant="outline"
+            >
+              {t("rbac.userGroupAdd")}
+            </Button>
+          </div>
+
+          {groupError && (
+            <p className="text-xs text-destructive">{t(groupError)}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={saving}
+              onClick={() => setGroupOpen(false)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={saving}
+              onClick={saveDraft}
+              size="sm"
+              type="button"
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </div>
+      </AdminDialog>
     </div>
   );
 }

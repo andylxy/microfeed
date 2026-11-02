@@ -258,6 +258,30 @@ describe("register 建号", () => {
     expect(account?.providerId).toBe("credential");
   });
 
+  it("注册出来的账号来源写 'email'，并落在默认只读角色上", async () => {
+    const email = "source-and-role@example.com";
+    const code = await seedOtp(email);
+    await post(emailRegister, `${ORIGIN}/api/AppBookRequest/emailRegister`, {
+      email,
+      code,
+      password: PASSWORD,
+    });
+
+    const user = await db
+      .prepare("SELECT id, signup_source FROM auth_user WHERE email = ?")
+      .bind(email)
+      .first<{id: string; signup_source: string}>();
+    // 来源显式写，不吃列的 DEFAULT；左栏分组按这一列分桶。
+    expect(user?.signup_source).toBe("email");
+
+    const roles = await db
+      .prepare("SELECT role_id FROM ext_user_roles WHERE user_id = ? ORDER BY role_id")
+      .bind(user?.id)
+      .all<{role_id: string}>();
+    // 「注册成功即默认只读」：没有这条，新账号进后台什么都点不开。
+    expect((roles.results ?? []).map((row) => row.role_id)).toEqual(["r_readonly"]);
+  });
+
   it("注册出来的账号口令可被 better-auth 验证通过", async () => {
     const email = "can-login@example.com";
     const code = await seedOtp(email);

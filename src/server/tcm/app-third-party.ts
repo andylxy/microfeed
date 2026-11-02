@@ -25,6 +25,7 @@ import {
 import {PLACEHOLDER_EMAIL_DOMAIN} from "@/shared/AdminCredentials";
 import FeedDb from "@/server/feed/FeedDb";
 import {readStringField} from "@/server/http";
+import {grantDefaultRoleStatements} from "@/server/rbac/grant";
 import {accountIsBlocked} from "@/server/rbac/resolve";
 import {enforceLoginMethodsGates, readLoginMethodsConfigCached} from "@/server/app/login/config";
 
@@ -170,28 +171,36 @@ async function createQqUser(
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
 
-  const insert = await database.prepare(
-    // `signup_source` 显式写 'qq'（ADR-0014 D8 / I9）。必须显式写，不能靠迁移回填：
-    // 回填按 email 后缀推导，而用户一旦补了邮箱（bindEmailCommit）后缀就没了，
-    // 那时已无法证明这个账号当初是 QQ 建号（§6.2 回填时间窗）。
-    authUserInsertSql({
-      orIgnore: true,
-      signupSource: "qq",
-      withImage: true,
-      withUsername: true,
-    }),
-  ).bind(
-    id,
-    nickname || `qq_${openid}`,
-    email,
-    avatar || null,
-    now,
-    now,
-    username,
-    nickname || null,
-  ).run();
+  // 建号 + 默认只读角色同批：`INSERT OR IGNORE` 被忽略时（并发首登 / 重名），
+  // 那条 `SELECT ... FROM auth_user WHERE id = id` 查不到刚生成的 uuid，授权与
+  // 快照都是空操作，不会污染既有账号。
+  const results = await database.batch([
+    database.prepare(
+      // `signup_source` 显式写 'qq'（ADR-0014 D8 / I9）。必须显式写，不能靠迁移回填：
+      // 回填按 email 后缀推导，而用户一旦补了邮箱（bindEmailCommit）后缀就没了，
+      // 那时已无法证明这个账号当初是 QQ 建号（§6.2 回填时间窗）。
+      authUserInsertSql({
+        orIgnore: true,
+        signupSource: "qq",
+        withImage: true,
+        withUsername: true,
+      }),
+    ).bind(
+      id,
+      nickname || `qq_${openid}`,
+      email,
+      avatar || null,
+      now,
+      now,
+      username,
+      nickname || null,
+    ),
+    // 新账号一律落在默认只读角色上：与后台建号、邮箱注册同一口径。语句是
+    // `INSERT ... SELECT`，`INSERT OR IGNORE` 被忽略时天然空操作（见 grant.ts）。
+    ...grantDefaultRoleStatements(database, id),
+  ]);
 
-  if ((insert.meta?.changes ?? 0) === 0) {
+  if ((results[0]?.meta?.changes ?? 0) === 0) {
     // `INSERT OR IGNORE` 吞掉的是**任意**唯一约束冲突，不止 email：
     // email 保留原始大小写、username 走 toLowerCase()，两者不是一对一，同一 openid
     // 换头大小写时会出现「email 不冲突、username 冲突」→ 整行被忽略。所以回查必须

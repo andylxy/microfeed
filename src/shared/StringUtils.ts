@@ -453,6 +453,12 @@ export const ADMIN_URLS = {
   ajaxRbacRolePermissions: () =>
     adminUrl("ajax/rbac/role-permissions", browserAdminPath()),
   ajaxRbacUsers: () => adminUrl("ajax/rbac/users", browserAdminPath()),
+  /**
+   * 注册来源列表（`settings` 的 `signup_sources`）。只有 `PUT`：页面 SSR 直读，
+   * 客户端只在「管理分组」弹层保存时提交整份数组。
+   */
+  ajaxSignupSources: () =>
+    adminUrl("ajax/signup-sources", browserAdminPath()),
   ajaxRbacUserRoles: () => adminUrl("ajax/rbac/user-roles", browserAdminPath()),
   ajaxRbacRoles: () => adminUrl("ajax/rbac/roles", browserAdminPath()),
   ajaxRbacRoleName: () => adminUrl("ajax/rbac/role-name", browserAdminPath()),

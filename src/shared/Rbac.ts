@@ -66,12 +66,6 @@ export interface RbacBoard {
   roles: RbacBoardRole[];
 }
 
-/**
- * 注册来源——账号首次创建的方式（ADR-0014 §8）。创建后不可变；`admin` 涵盖
- * 后台侧的每个入口。
- */
-export type SignupSource = "email" | "qq" | "admin";
-
 /** One account, with the roles granted to it through `ext_user_roles`. */
 export interface RbacUser {
   banned: boolean;
@@ -80,10 +74,11 @@ export interface RbacUser {
   name: string;
   roles: string[];
   /**
-   * 注册来源——账号首次创建的方式。取 `email` / `qq` / `admin` 之一
-   * （ADR-0014 §8「注册来源」，不可变）。驱动后台用户页的分类手风琴。
+   * 注册来源——账号首次创建的方式，此后可在后台改。取值来自 `settings` 的
+   * `signup_sources` 列表（可由后台增删），因此是普通字符串而不是固定联合
+   * 类型；左栏分组按同一份列表分桶。
    */
-  signupSource: SignupSource;
+  signupSource: string;
   /**
    * Login username, present only for username accounts (email accounts have
    * none). `display_username` is preferred (keeps the original case), falling

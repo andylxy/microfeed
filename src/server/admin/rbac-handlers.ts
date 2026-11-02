@@ -21,6 +21,9 @@ import {
   credentialAccountStatement,
 } from "@/server/auth/account-insert";
 import {USER_OWNED_TABLES} from "./user-owned-tables";
+import {getSignupSources} from "@/server/auth/signup-source";
+import {grantRoleStatements} from "@/server/rbac/grant";
+import {hasSignupSource} from "@/shared/SignupSource";
 import {
   createLoginCredential,
   LoginCredentialLimitError,
@@ -70,7 +73,6 @@ import {
   type PermissionAudience,
   type RbacBoard,
   type RbacUserBoard,
-  type SignupSource,
 } from "@/shared/Rbac";
 import {
   audienceOf,
@@ -316,12 +318,16 @@ async function purgeRoleMembersAccess(
 
 /** Accounts, the roles granted to them, and the roles available to grant. */
 /**
- * 把原始 `auth_user.signup_source` 值收敛到已知集合（ADR-0014 §8）。
- * `null`（库没跑迁移 0157）与未知值都回退为 `"email"`，后台用户手风琴
- * 不会渲染出未映射的分类。
+ * 库里 `auth_user.signup_source` 原始值 → 界面取值。
+ *
+ * 来源列表可由后台增删，所以这里只兜 `null`（库没跑迁移 0157），不把未知值
+ * 收敛成 `"email"`——否则新加的分组会把成员全部报成「邮箱注册」。
  */
-function toSignupSource(raw: string | null): SignupSource {
-  return raw === "qq" || raw === "admin" ? raw : "email";
+function signupSourceOf(raw: string | null): string {
+  // 判定与返回值用同一个 trim 后的值：只 trim 来判空、却把带空白的原值下发，
+  // 那个账号会找不到任何分组（`" qq "` 与配置里的 `qq` 不是同一个字符串）。
+  const value = raw?.trim() ?? "";
+  return value || "email";
 }
 
 export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
@@ -370,11 +376,9 @@ export async function readRbacUsers(db: D1Database): Promise<RbacUserBoard> {
       id: row.id,
       name: row.name,
       roles: (byUser.get(row.id) ?? []).sort(),
-      // Fall back to "email" so a DB that never ran migration 0157 (no
-      // signup_source column yet) doesn't break the admin board. Anything
-      // outside the known set also collapses to "email" so the UI accordion
-      // never sees an unmapped category.
-      signupSource: toSignupSource(row.signup_source),
+      // 只兜 null（库没跑迁移 0157 时没有这一列）。未知值照原样下发——来源列表
+      // 可配置，收敛回 "email" 会把新加分组里的账号全部报成邮箱注册。
+      signupSource: signupSourceOf(row.signup_source),
       username: row.displayUsername ?? row.username ?? undefined,
     })),
   };
@@ -1239,14 +1243,8 @@ export const createAdminRbacUser: APIRoute = async ({locals, request}) => {
       timestamp,
       userId,
     }),
-    ...roleCodes.map((code) =>
-      env.FEED_DB.prepare(
-        "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
-      ).bind(userId, roleId(code)),
-    ),
-    // 上面刚写好角色分配，权限快照在同批里一并生成（ADR-0053）。缺了它，
-    // 新账号第一次进后台就是 403。
-    ...refreshUserSnapshotStatements(env.FEED_DB, userId),
+    // 角色授予 + 权限快照同批（ADR-0053）：缺了快照，新账号第一次进后台就是 403。
+    ...grantRoleStatements(env.FEED_DB, userId, roleCodes),
     auditStatement(env.FEED_DB, createAudit),
   ]);
   return jsonResponse(await readRbacUsers(env.FEED_DB));
@@ -1539,16 +1537,22 @@ export const resetAdminRbacUserPassword: APIRoute = async ({locals, request}) =>
 };
 
 /** 后台可改的资料列。SET 子句的键集合就是这张清单。 */
-type ProfileField = "displayUsername" | "email" | "name" | "username";
+type ProfileField =
+  | "displayUsername"
+  | "email"
+  | "name"
+  | "signup_source"
+  | "username";
 
 /**
- * Admin edit of an account's display name, email, and/or username.
+ * Admin edit of an account's display name, email, username, and/or signup source.
  *
- * 三个字段都直写 `auth_user`：只对实际提交的字段拼 SET 子句，没提交的列不动。
+ * 四个字段都直写 `auth_user`：只对实际提交的字段拼 SET 子句，没提交的列不动。
  * 邮箱唯一性在这里先查一次，好返回准确的 `emailTaken`（409），不必等写入抛错
  * 再翻译。用户名是单向门：只有用户名列出现之前建的账号可以被赋予一次，已有的
- * 用户名永不覆盖——登录解析就靠它。只改 `name`/`email`/`username`，不附带强制
- * 改密，与本地「首次登录不强制改密」的口径一致。
+ * 用户名永不覆盖——登录解析就靠它。注册来源只能取 `signup_sources` 配置里的
+ * value（左栏分组按这份列表分桶）。不附带强制改密，与本地「首次登录不强制
+ * 改密」的口径一致。
  */
 export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(locals, PERMISSION_CODES.SYSTEM_USER_MANAGE,
@@ -1556,7 +1560,13 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
   if (guard) return guard;
 
   const body = await request.json().catch(() => null) as
-    | {email?: unknown; name?: unknown; userId?: unknown; username?: unknown}
+    | {
+      email?: unknown;
+      name?: unknown;
+      signupSource?: unknown;
+      userId?: unknown;
+      username?: unknown;
+    }
     | null;
   const userId = parseRbacUserId(body);
   if (!userId) {
@@ -1567,7 +1577,15 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
   const rawUsername = typeof body?.username === "string"
     ? body.username.trim()
     : undefined;
-  if (rawEmail === undefined && rawName === undefined && rawUsername === undefined) {
+  const rawSignupSource = typeof body?.signupSource === "string"
+    ? body.signupSource.trim()
+    : undefined;
+  if (
+    rawEmail === undefined &&
+    rawName === undefined &&
+    rawSignupSource === undefined &&
+    rawUsername === undefined
+  ) {
     return localizedError(request, "errors.rbac.invalidUserAssignment", 400);
   }
   // 键限定在可改的四列：SET 子句照这里的键拼，键集合就是列白名单。
@@ -1617,6 +1635,15 @@ export const updateAdminRbacUserProfile: APIRoute = async ({locals, request}) =>
       return localizedError(request, "errors.rbac.emailTaken", 409);
     }
     data.email = email;
+  }
+  if (rawSignupSource !== undefined) {
+    // 来源只能在已配置的列表里选：左栏分组就是按这份列表分桶的，写进一个
+    // 未配置的值会让那个账号在左树里没有归属（只剩搜索能捞到）。
+    const sources = await getSignupSources(env.FEED_DB);
+    if (!hasSignupSource(sources, rawSignupSource)) {
+      return localizedError(request, "errors.rbac.invalidSignupSource", 400);
+    }
+    data.signup_source = rawSignupSource;
   }
   const assignments: string[] = [];
   const values: string[] = [];

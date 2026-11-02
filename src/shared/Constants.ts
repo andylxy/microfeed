@@ -23,6 +23,11 @@ export const SETTINGS_CATEGORIES = {
    * 只放非 secret 项——Resend API Key 走 Workers secret，永不进 DB。
    */
   MAIL_SETTINGS: 'mail_settings',
+  /**
+   * 后台用户页的分组列表（注册来源）。数据是 `[{value, label}]` 数组，
+   * 左栏分组与账号详情的来源下拉都从这里派生；可在「新建分组」弹层里增删。
+   */
+  SIGNUP_SOURCES: 'signup_sources',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;

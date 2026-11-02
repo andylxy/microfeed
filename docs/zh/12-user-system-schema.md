@@ -14,9 +14,9 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 
 - **认证引擎**：Better Auth（`emailAndPassword` + `username` / `passkey` / `oauthProvider` 三个插件），配置在 `src/server/auth/better-auth.ts`。admin 插件已移除（ADR-0054），`/api/auth/admin/*` 第二授权面不复存在。
 - **登录身份**：邮箱**或**用户名。`username` 插件已启用（0039），用户名 3–32 位、只含 `[a-zA-Z0-9_.]`，存小写。第三方登录（本期仅 QQ）走自研 `appThirdPartyLogin`（ADR-0013），**不使用** Better Auth 的 `socialProviders`，因此不写 `auth_account`。
-- **账号附属属性**：`signup_source`（三值 `email` / `qq` / `admin`，建号时写定，此后不改）、`email_usable`（生成列，占位邮箱判 0）、`username` / `displayUsername`。
+- **账号附属属性**：`signup_source`（建号时取 `email` / `qq` / `admin` 之一，此后可在后台改成任一已配置分组，见 §6.2）、`email_usable`（生成列，占位邮箱判 0）、`username` / `displayUsername`。
 - **RBAC 自研**（ADR-0052 判定引擎保持自研）：角色目录 `ext_roles` / 权限目录 `ext_permissions` / 角色授权 `ext_role_permissions` / 账号角色 `ext_user_roles` / 权限树 `ext_permission_nodes`，外加按账号物化的**权限快照** `ext_user_permissions`（ADR-0053）。详见 §5。
-- **迁移来源**：完整清单与逐条变更见 §7。本册涉及的迁移都在 `migrations/`，编号 0002–0165。
+- **迁移来源**：完整清单与逐条变更见 §7。本册涉及的迁移都在 `migrations/`，编号 0002–0170。
 - **本版本无 2FA / 备份码表。**
 
 ## 2. 账号与会话表
@@ -38,7 +38,7 @@ description: microfeed 用户体系（Better Auth + 自研 RBAC + 注册来源 +
 | `banExpires` | DATE | 封禁到期时间（NULL=永久）。**当前判定不读它**，只看 `banned` |
 | `username` | TEXT | 登录名之一（0039）。`UNIQUE` 索引，NULL 表示未设置 |
 | `displayUsername` | TEXT | 用户名的展示原样（保留输入大小写） |
-| `signup_source` | TEXT NOT NULL DEFAULT `'email'` | 注册来源，三值见 §6.2。建号后任何操作都不得修改 |
+| `signup_source` | TEXT NOT NULL DEFAULT `'email'` | 注册来源，建号时取三值之一（见 §6.2）；后台可在配置的分组列表里重新归类 |
 | `email_usable` | INTEGER 生成列（VIRTUAL） | `lower(email)` 以 `@oauth.local` 或 `@users.microfeed.local` 结尾记 0，否则 1。用来筛「能发信的账号」 |
 
 > 索引：`auth_user_username`（`username` 唯一）、`ix_auth_user_email_lower`（`lower(email)` 表达式索引，按邮箱查账号的兜底路径靠它，0158）、`ix_auth_user_email_usable`（`email_usable`）。
@@ -396,17 +396,51 @@ erDiagram
 
 > 索引：`ext_login_credentials_secret_hash`、`ext_login_credentials_user`。猜令牌的节流计数在 `ext_rate_limit` 的 `kind = 'login-failure'`（10 次 / 60s，登录成功即清空）。
 
-### 6.2 `signup_source` — 注册来源（三值，无后台开关）
+### 6.2 `signup_source` — 注册来源（分组可配置）
 
-- **列**：`auth_user.signup_source`，`NOT NULL DEFAULT 'email'`（0157）。
-- **三值固定**，代码侧是联合类型 `SignupSource = "email" | "qq" | "admin"`（`src/shared/Rbac.ts`）：
-  - `email` 邮件注册。better-auth `signUpEmail` 内部写库，只能吃列的 DEFAULT；
+- **列**：`auth_user.signup_source`，`NOT NULL DEFAULT 'email'`（0157）。列上**没有** CHECK 约束——可写入集合由后台配置决定，不由 schema 决定。
+- **建号时**只有三个来源，且都由代码显式写（不依赖列的 DEFAULT）：
+  - `email` 邮箱注册，`src/server/auth/email-signup.ts` 在补 username 的那条 UPDATE 里一并写；
   - `qq` QQ 首登建号，`src/server/tcm/app-third-party.ts` 的 `createQqUser` 显式写（首登建号 / 复用判定见 §6.4）；
   - `admin` 管理侧任意入口（`bootstrap.ts` / `password-setup.ts` / `rbac-handlers.ts`）。
-- **建号后任何操作都不得修改**（ADR-0014 I12）：补邮箱、绑定 QQ、解绑、提权都不动这一列。
+- **分组列表可配置**：`settings` 表 `category = 'signup_sources'` 的单行 JSON 数组
+  `[{value, label}]`，默认四档 `admin` / `email` / `qq` / `back`（`src/shared/SignupSource.ts`
+  的 `DEFAULT_SIGNUP_SOURCES`；`back` 是本部署手工写入、后经 0169 登记成正式分组的来源，
+  放在默认值里只为让「没有配置行」时左栏与实际分组一致，它不在内建集合、没人用时可以删）。
+  后台「用户」页的「新建分组」弹层可增删来源、改显示名，**整表覆盖**写入：
+  `PUT /admin/ajax/signup-sources`（只有 PUT——页面 SSR 直读配置，客户端只在保存时提交；
+  没有需要单独 GET 的调用方）。
+- **读时补全**：`getSignupSources` 返回「配置 ∪ 库里实际出现过的来源」。手工 SQL 写进
+  `auth_user.signup_source` 的值会被补成临时分组（label 用 value 本身），账号因此不会从
+  左栏消失。补全**不写库**；`0169` 已经把当时的越界值登记进配置（见下），所以现在这项
+  只是将来手工写入的兜底。该查询走 `ix_auth_user_signup_source`（0170），计划为
+  `SCAN auth_user USING COVERING INDEX`。
+- **两条保存闸门，保证新写入恒在列表内**：① `admin` / `email` / `qq` 是三条建号路径写死
+  在 SQL 里的 value（`BUILTIN_SIGNUP_SOURCES`），只能改显示名、不能删除；② 仍有账号在用
+  的来源不能删除（409，先让那些账号改到别的来源）。左栏**没有**「其他」兜底分组。
+- **越界值由 0169 登记，不抹数据**：迁移把「库里出现过、配置里没有」的来源追加进
+  `signup_sources`（`json_each` 合并，保住管理员排好的顺序与改过的显示名；坏配置跳过）。
+  0163 曾把它们统一改回 `email`，但操作者明确表示 `back` 是手工设置的，再抹一次就不可反推。
+- **「已封禁账号」是系统分组，不是来源**：固定追加在左栏末尾，成员由 `auth_user.banned`
+  实时过滤（`BANNED_GROUP_VALUE = "__banned__"`）。它不进 `signup_sources`——那一列的取值域
+  必须与 `auth_user.signup_source` 一致，混进一个布尔视图会让「来源」和「状态」混淆。
+  **来源分组排除已封禁账号**（`matchesSignupCategory`），账号在同一时刻只属于一个分组；
+  「全部用户」根仍列出全部。封禁即入组、解封即出组，因此它同时是被封禁账号的唯一入口。
+- **账号归属可改**：`updateAdminRbacUserProfile` 接受 `signupSource`，取值必须是当前配置
+  列表里的 `value`；改这一列就等于把账号挪到另一个分组。建号时的三值语义仍适用于
+  「账号是怎么来的」，但后台可以把账号重新归类。
 - 不能改成按 QQ 绑定行（`auth_account.providerId = 'qq'`，ADR-0055）是否存在派生——绑定那一刻值会翻转，注册来源就丢了。也不能只做二值：`@users.microfeed.local` 那类用户名账号既不是邮件注册，也无法发信。
-- **消费方**：后台用户页左树按它分组（`src/components/admin/rbac/UsersApp/index.tsx`），`RbacUser.signupSource` 直接读这一列。
-- **没有**「注册来源管理」配置项：`settings` 表里没有 `signup_sources` 分类，也没有 `ajax/signup-sources` 端点。要加档位只能改代码 + 迁移。
+- **消费方**：后台用户页左树按「配置 ∪ 补全」分组（`src/components/admin/rbac/UsersApp/index.tsx`），
+  `RbacUser.signupSource` 直接读这一列，类型是普通 `string`（不再是固定联合），否则新加的
+  分组会被收敛回 `email`。
+- **注册即只读**：三条非引导建号路径都在建号同批授予 `r_readonly`（`DEFAULT_USER_ROLE`）
+  并重算权限快照——后台建号（`rbac-handlers.ts`）、邮箱注册（`email-signup.ts`）、QQ 首登
+  （`app-third-party.ts`），统一走 `src/server/rbac/grant.ts`。安装引导与安装流程例外，
+  它们授予 `super_admin`。0169 对「0160 之后仍无任何角色」的存量账号重跑了一次同样的补授。
+- **与 ADR-0014 I12 的差异**：I12 写「建号后任何操作都不得修改 `signup_source`」。本仓放宽
+  为「后台可以在已配置的分组之间重新归类」，理由是该列现在驱动的是**分组视图**，不是账号
+  的来源证明；建号路径仍然只写三值，来源事实由 `auth_account(providerId='qq')`、`email_usable`
+  与建号日志各自保留。该 ADR 属 Android 仓，本册是这条差异在本仓的权威记录。
 
 ### 6.3 占位邮箱
 
@@ -513,6 +547,8 @@ erDiagram
 | `0163_data_clear_auth_user_role` | 清空 `auth_user.role`（admin 插件移除后的死列，ADR-0054） | 镜像废止 |
 | `0165_schema_unify_third_party_identity` | 建 `UNIQUE INDEX auth_account_provider_account` → 回填 QQ 绑定 → `DROP TABLE ext_user_oauth`（ADR-0055） | 第三方绑定统一入 `auth_account`；**部署不可回滚** |
 | `0166_schema_rate_limit_consolidation` | 建 `ext_rate_limit`（`kind` + `key` 复合主键）→ `DROP` 五张限流表（ADR-0056） | 限流与一次性台账共用一张表；**部署不可回滚** |
+| `0169_data_signup_source_register_and_default_role` | 把「库里出现、配置里没有」的来源登记进 `signup_sources`（`json_each` 合并，坏配置跳过）+ 给「无任何角色」的账号补 `r_readonly` | 越界值转正而不抹数据；补上 0160 之后经 QQ / 邮箱注册、当时无授予逻辑的账号 |
+| `0170_index_auth_user_signup_source` | `auth_user(signup_source)` 索引 | 用户页 SSR 的 `SELECT DISTINCT signup_source` 从全表扫描 + 临时 B-tree 变成覆盖索引扫描 |
 
 ### 7.2 RBAC 目录与授权
 
@@ -604,7 +640,7 @@ erDiagram
 **关键决策与背景**：
 
 - **`username`**：0039 起是合法登录名之一（`username` 插件启用），不是可选展示字段。占位邮箱账号与用户名账号并存，登录入口先按用户名再按邮箱兜底。
-- **`signup_source`**：三值且建号后不可改（§6.2）。不能派生、不能二值化。
+- **`signup_source`**：建号时三选一，此后可在后台重新归类（§6.2）。分组列表可配置，但写入值恒在列表内。
 - **`ext1`~`ext10`**：本册涉及的表多为历史表，大多没有这批常备列（`auth_user` 也没有），未回填。按分册 08 规则：**新建表建表即预留；修改既有表缺则 `ALTER TABLE ADD COLUMN` 补齐；已存在则跳过**。新增字段写 ext 槽位（省后续改表），槽位用尽再建正式列。
 - **迁移自动执行**：本地 dev 启动时 `applyLocalMigrations`（`manage-cli/lib/cloudflare.ts`）幂等执行 `wrangler d1 migrations apply FEED_DB --local`，目录取 `wrangler.jsonc` 的 `migrations_dir`；远程需 deploy / promote。
 
@@ -614,9 +650,9 @@ erDiagram
 - **加角色开关**：改 `ext_roles` 的列或语义时，同步 §5.4 的 9 个重算点与快照的两个布尔；只改一侧会出现「授权变了、快照没变」。
 - **改判定顺序**：只动 `src/server/rbac/guard.ts`，顺序即定论；`tests/worker/rbac.test.ts` 覆盖 401/403/428 三个分支。
 - **加账号字段**：优先确认是否已有槽位（本册表基本没有 ext 列）；确需新列则新增迁移，并在 §2 补一行字段说明。
-- **加注册来源档位**：三值写死在 `SignupSource` 联合类型里，没有后台开关、没有 `settings` 配置项、没有独立端点。要加一档得同时改 `SignupSource`（`src/shared/Rbac.ts`）、所有建号路径、用户页分组（`UsersApp`），并补一条迁移给存量行归类。
+- **加注册来源档位**：在后台用户页「新建分组」弹层里加一行（`value` + 显示名）即可，配置存 `settings` 的 `signup_sources`，端点 `PUT /admin/ajax/signup-sources`。三条建号路径写死的 `admin` / `email` / `qq` 不可删除；仍有账号在用的来源也不可删除。**不要**再改 `AdminSignupSource` 联合类型（它只描述建号语句能写死哪两档）。
 - **改 Better Auth 配置**：`src/server/auth/better-auth.ts`（插件、`emailAndPassword`、`additionalFields`）。启用 `socialProviders` 会改变第三方登录的存储位置（现在走 `auth_account` 的 `providerId='qq'` 行，ADR-0055），需同步 §2.3 / §2.10 与 §6.4。
 - **校验**：`git diff --check`；门禁（typecheck / test / docs:check / `yarn check`）按 AGENTS.md「最高指令：仅在手动触发时运行」，不自动跑。快照一致性另用 `scripts/check-permission-snapshot.ts` 在真实库上查。
-- **文件位置**：`migrations/`、`src/server/auth/`、`src/server/rbac/`、`src/shared/{Rbac,Constants,AdminCredentials}.ts`、`src/server/admin/rbac-handlers.ts`、`src/server/admin/pc-interfaces.ts`（接口 → 权限码登记表）、`src/components/admin/rbac/{UsersApp,RbacApp,RbacAuditApp,RoleManagerDialog}.tsx`、`src/pages/[adminPath]/users/index.astro`、`src/pages/[adminPath]/rbac/`。
+- **文件位置**：`migrations/`、`src/server/auth/`（含 `signup-source.ts`：来源配置的读写）、`src/server/rbac/`（含 `grant.ts`：建号时的角色授予）、`src/shared/{Rbac,Constants,AdminCredentials,SignupSource}.ts`、`src/server/admin/rbac-handlers.ts`、`src/server/admin/pc-interfaces.ts`（接口 → 权限码登记表）、`src/components/admin/rbac/{UsersApp,RbacApp,RbacAuditApp,RoleManagerDialog}.tsx`、`src/pages/[adminPath]/users/index.astro`、`src/pages/[adminPath]/rbac/`。
 
 > ER 图见同目录 `user-system-er.svg`，**只画 Better Auth 核心表与外键**（不含 RBAC 的 `ext_*` 表）。`auth_user` 与 RBAC 多角色桥接、`auth_account`（credential 行 + QQ 绑定行，ADR-0055）、`ext_login_credentials` App 令牌之间的完整关联见 §5.6 的 Mermaid ER 图。

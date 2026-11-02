@@ -5,6 +5,7 @@ import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
 import UsersApp from "@/components/admin/rbac/UsersApp";
 import AdminShell from "@/layouts/AdminShell.astro";
 import {readRbacUsers} from "@/server/admin/rbac-handlers";
+import {getSignupSources} from "@/server/auth/signup-source";
 import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 import {translate} from "@/shared/i18n";
@@ -21,6 +22,8 @@ if (denied) {
   return denied;
 }
 const board = await readRbacUsers(env.FEED_DB);
+// 左栏分组与账号详情的来源下拉都由这份配置派生（settings 的 signup_sources）。
+const signupSources = await getSignupSources(env.FEED_DB);
 ---
 
 <AdminShell
@@ -34,6 +37,7 @@ const board = await readRbacUsers(env.FEED_DB);
     client:only="react"
     currentUserId={Astro.locals.authUser?.id}
     initialBoard={board}
+    initialSignupSources={signupSources}
   >
     <AdminPageFallback slot="fallback" kind="list" />
   </UsersApp>
