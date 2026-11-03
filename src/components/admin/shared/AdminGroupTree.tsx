@@ -10,7 +10,8 @@ import {
 } from "@/components/admin/rbac/PermissionTreeNode";
 import {cn} from "@/lib/utils";
 
-/** 分组树叶子：固定两行——主行加可选的等宽说明行。 */
+/** 分组树叶子：固定两栏——主行加可选的说明行。`description` 不传（或空）则第二行留空，
+ *  组件不渲染该行；两栏装什么由调用方定（用户页=邮箱·角色数，书本页=作者）。 */
 export interface AdminTreeLeaf {
   id: string;
   label: string;
@@ -124,8 +125,10 @@ export function AdminGroupTree({
                           type="button"
                         >
                           <span className="block truncate">{leaf.label}</span>
-                          {leaf.description !== undefined && (
-                            <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+                          {/* 说明栏：不传「或空」都不渲染该行——让「没有值就整行留空」对
+                              undefined 和空串一致成立（doc 与实现对齐，别只挡 undefined）。 */}
+                          {!!leaf.description && (
+                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                               {leaf.description}
                             </span>
                           )}

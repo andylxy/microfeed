@@ -7,7 +7,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import {ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon} from "lucide-react";
+import {ArrowDownIcon, ArrowUpIcon, ChevronRightIcon, PencilIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
@@ -15,6 +15,7 @@ import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";
+import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {
   AdminCollectionError,
@@ -348,11 +349,26 @@ export default function BookInfoApp() {
   const [error, setError] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 右栏是否处于编辑态。false = 只读详情（Label），true = 表单可改。 */
+  const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState<BookInfoAdmin | null>(null);
   const [confirmingPurge, setConfirmingPurge] = useState<BookInfoAdmin | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const [form, setForm] = useState<BookInfoFormState>(EMPTY_FORM);
+  // 左栏树搜索（镜像 UsersApp）：有查询词时每组分只留命中书，含命中的组强制展开。
+  const [treeSearch, setTreeSearch] = useState("");
+  const searchActive = treeSearch.trim().length > 0;
+  const searchQuery = treeSearch.trim().toLowerCase();
+
+  /** 回到只读详情：退出编辑/新建、清空表单。`clearSelection` = 连选中的书一起清
+   *  （删除/物理删除后无书可看）；false = 保留选中、只退出表单（取消编辑回详情）。 */
+  const resetDetail = (clearSelection: boolean) => {
+    setCreating(false);
+    setEditing(false);
+    setForm(EMPTY_FORM);
+    if (clearSelection) setSelectedId(null);
+  };
 
   // 「分组管理」弹层：分组清单的草稿副本，点保存才整表覆盖写 settings。
   const [groupOpen, setGroupOpen] = useState(false);
@@ -400,19 +416,32 @@ export default function BookInfoApp() {
     }
   };
 
-  /** 左栏树：分组清单（settings，按 sort）。顶层节点「书籍分类」由 AdminGroupTree 的 root 承载。 */
+  /** 左栏树：分组清单（settings，按 sort）。顶层节点「书籍分类」由 AdminGroupTree 的 root 承载。
+   *  搜索态每组只留命中书（书名/编号/作者），且**没命中的组整组不传**——组件只渲染传入的
+   *  分组，所以不传 = 组头也不显示（需求①：命中组数 >0 才显示，=0 隐藏）；非搜索态给全量组。
+   *  叶子两栏（需求②）：label=书名，description=作者（无作者不传 → 第二行留空）。 */
   const treeGroups = useMemo(
-    () => groups.map((group) => ({
-      count: booksOf(group.key).length,
-      key: group.key,
-      label: group.label,
-      leaves: booksOf(group.key).map((book) => ({
-        description: `${book.bookNo} · ${book.author || "—"}`,
-        id: book.id,
-        label: book.bookName || t("bookInfo.untitled"),
-      })),
-    })),
-    [groups, booksOf, t],
+    () => groups.map((group) => {
+      const members = booksOf(group.key);
+      const visible = searchActive
+        ? members.filter((book) =>
+            (book.bookName || "").toLowerCase().includes(searchQuery)
+            || (book.bookNo || "").toLowerCase().includes(searchQuery)
+            || (book.author || "").toLowerCase().includes(searchQuery))
+        : members;
+      return {
+        count: members.length,
+        key: group.key,
+        label: group.label,
+        leaves: visible.map((book) => ({
+          ...(book.author ? {description: book.author} : {}),
+          id: book.id,
+          label: book.bookName || t("bookInfo.untitled"),
+        })),
+      };
+    // 搜索态丢弃零命中组（组头一并隐藏）；非搜索态保留全部组（含空组给 emptyLeafText 提示）。
+    }).filter((group) => !searchActive || group.leaves.length > 0),
+    [groups, booksOf, t, searchActive, searchQuery],
   );
 
   const load = useCallback(async () => {
@@ -454,32 +483,24 @@ export default function BookInfoApp() {
     [groupKeys],
   );
 
-  // 点分组头：手风琴单展开，展开即选中该组第一本书（镜像 UsersApp 语义）。
+  // 点分组头：手风琴单展开/收起，**只切换展开态、不自动选中该组任何一本书**（需求③：
+  // 自动选中会在右栏凭空打开一本，用户没点过；要打开就自己在树里点那本书）。
   const toggleGroup = (key: string) => {
-    const next = expandedKey === key ? null : key;
-    setExpandedKey(next);
-    if (next) {
-      const first = booksOf(next)[0];
-      setSelectedId(first?.id ?? null);
-      setCreating(false);
-      setForm(
-        first
-          ? formFromBook(first, resolveGroupOfDivision, divisionById)
-          : {...EMPTY_FORM, parentGroup: resolveGroupOfDivision(key)},
-      );
-    }
+    setExpandedKey(expandedKey === key ? null : key);
   };
 
+  /** 树里点一本书：只读详情。表单留空，编辑时才 formFromBook 填充。 */
   const selectLeaf = (id: string) => {
     const book = liveBooks.find((entry) => entry.id === id);
     if (!book) return;
-    setCreating(false);
     setSelectedId(book.id);
-    setForm(formFromBook(book, resolveGroupOfDivision, divisionById));
+    resetDetail(false);
   };
 
+  /** 左栏工具栏「新建」：清空选中，右栏出空白表单（编辑态）。 */
   const startCreate = () => {
     setCreating(true);
+    setEditing(true);
     setSelectedId(null);
     // 新建默认归到当前展开的分组；没有展开组则留空由操作者选。状态下拉默认取
     // 清单里 sort 最小的状态（hot_book NOT NULL，须有值）；父级第一层随当前分组。
@@ -495,10 +516,18 @@ export default function BookInfoApp() {
     });
   };
 
-  const cancel = () => {
+  /** 详情页「编辑」：把当前选中的书灌进表单，进入编辑态（需求 4）。 */
+  const startEdit = () => {
+    const book = selectedBook;
+    if (!book || book.isDeleted) return;
     setCreating(false);
-    setSelectedId(null);
-    setForm(EMPTY_FORM);
+    setEditing(true);
+    setForm(formFromBook(book, resolveGroupOfDivision, divisionById));
+  };
+
+  /** 取消：新建回退到未选中引导页；编辑回退到只读详情。 */
+  const cancel = () => {
+    resetDetail(!selectedBook);
   };
 
   const save = async () => {
@@ -522,7 +551,10 @@ export default function BookInfoApp() {
       const data = await response.json().catch(() => ({})) as Record<string, unknown>;
       if (!response.ok) throw new Error(String(data.error ?? t("bookInfo.saveFailed")));
       showToast(t("saveAction.saved"), "success");
-      setCreating(false);
+      // 保存成功回到只读详情：编辑保持在原书，新建选中新返回的那本（响应含 id）。
+      const savedId = selectedId ?? (typeof data.id === "string" ? data.id : null);
+      setSelectedId(savedId);
+      resetDetail(false);
       await load();
     } catch (saveError) {
       // 服务端错误是 i18n key（如 errors.bookInfo.invalidInput），直接翻译。
@@ -547,7 +579,7 @@ export default function BookInfoApp() {
       if (!response.ok) throw new Error(String(data.error ?? t("bookInfo.deleteFailed")));
       showToast(t("saveAction.saved"), "success");
       setConfirming(null);
-      if (selectedId === book.id) setSelectedId(null);
+      if (selectedId === book.id) resetDetail(true);
       await load();
     } catch (deleteError) {
       showToast(
@@ -572,7 +604,7 @@ export default function BookInfoApp() {
       showToast(t("bookInfo.purgeDone"), "success");
       setConfirmingPurge(null);
       setShowDeleted(false);
-      if (selectedId === book.id) setSelectedId(null);
+      if (selectedId === book.id) resetDetail(true);
       await load();
     } catch (purgeError) {
       showToast(
@@ -851,186 +883,295 @@ export default function BookInfoApp() {
     );
   }
 
+  /** 状态值 → 显示名（详情页 Label 用；游离值按原值回落）。普通函数、非 hook，
+   *  因为它位于 loading/error 早返回之后——早返回之后不能再调 hook（Rules of Hooks），
+   *  否则数据到位后的重渲染会比首次渲染多出 hook，React 卸载整棵岛 → 白屏。 */
+  const statusLabel = (value: number) =>
+    statuses.find((status) => status.value === value)?.label ?? String(value);
+  /** 父级 id → 显示名（详情页 Label 用；父级已软删/不存在则回落 id）。 */
+  const parentNameOf = (id: string | null) =>
+    id ? (books.find((book) => book.id === id)?.bookName || id) : "";
   const selectedBook = selectedId
-    ? liveBooks.find((book) => book.id === selectedId) ?? null
+    ? liveBooks.find((book) => book.id === selectedId)
+      ?? deletedBooks.find((book) => book.id === selectedId)
+      ?? null
     : null;
-  const expandedGroupBooks = expandedKey ? booksOf(expandedKey) : [];
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      {/* 左栏：分组树 + 分组/状态管理入口。分组、计数与成员过滤都在本组件算好传入，
-          AdminGroupTree 只渲染传入状态（约定不可改）。需求 1：宽屏冻结在视口顶，
-          树长时栏内自行滚动，不随右栏内容往上滚。 */}
-      <nav className="w-full shrink-0 self-start rounded-[14px] border bg-card p-2 shadow-xs lg:sticky lg:top-4 lg:max-h-[calc(100svh-6rem)] lg:w-72 lg:overflow-y-auto">
+    <>
+      {/* 两个页面级弹层（分组/状态维护）与选中书无关、未选中也能打开，挂在布局外，
+          与两栏布局并列。两栏壳（外层 flex + 左栏冻结卡 + 右栏主区）交给
+          AdminTreeNavLayout，本组件只提供 nav 与右栏内容（与 AdminGroupTree 同一分工：
+          布局与树都不认识业务）。 */}
+      <AdminTreeNavLayout
+        nav={
+          <>
+        {/* 左栏：分组树 + 新建/分组/状态管理入口。分组、计数与成员过滤都在本组件
+            算好传入，AdminGroupTree 只渲染传入状态（约定不可改）。宽屏冻结在视口顶，
+            树长时栏内自行滚动，不随右栏内容往上滚。 */}
+        <div className="p-1">
+          <Input
+            aria-label={t("bookInfo.searchAria")}
+            className="w-full"
+            onChange={(event) => setTreeSearch(event.target.value)}
+            placeholder={t("bookInfo.searchPlaceholder")}
+            value={treeSearch}
+          />
+        </div>
         <div className="flex items-center justify-end gap-2 px-1 pb-2">
           <Button
+            aria-label={t("bookInfo.statusManage")}
             disabled={saving}
             onClick={openStatusManager}
             size="sm"
+            title={t("bookInfo.statusManage")}
             type="button"
             variant="outline"
           >
-            <PlusIcon aria-hidden="true" />
             {t("bookInfo.statusManage")}
           </Button>
           <Button
+            aria-label={t("bookInfo.groupManage")}
             disabled={saving}
             onClick={openGroupManager}
             size="sm"
+            title={t("bookInfo.groupManage")}
             type="button"
             variant="outline"
           >
-            <PlusIcon aria-hidden="true" />
             {t("bookInfo.groupManage")}
+          </Button>
+          {/* 需求 2：「新建书本信息」放在「管理分组」右侧（justify-end 下最后渲染 =
+              最右）。文字缩短为「新建书本」避免溢出，保留实心主按钮样式。 */}
+          <Button
+            disabled={saving}
+            onClick={startCreate}
+            size="sm"
+            type="button"
+          >
+            {t("bookInfo.createBook")}
           </Button>
         </div>
         <AdminGroupTree
           emptyLeafText={t("bookInfo.groupEmpty")}
-          expandedKeys={expandedKey ? [expandedKey] : []}
+          emptyTreeText={searchActive ? t("bookInfo.searchNoResults") : undefined}
+          expandedKeys={
+            searchActive
+              ? treeGroups.filter((group) => group.leaves.length > 0).map((group) => group.key)
+              : expandedKey
+                ? [expandedKey]
+                : []
+          }
           groups={treeGroups}
           onSelectLeaf={selectLeaf}
           onToggleGroup={toggleGroup}
           root={{label: t("bookInfo.treeRoot"), count: liveBooks.length}}
           selectedLeafId={selectedId}
         />
-      </nav>
 
-      {/* 右栏：被选中分组的书列表 + 编辑表单。 */}
-      <section className="min-w-0 flex-1 space-y-4 rounded-[14px] border bg-card p-5 shadow-xs">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">
-            {expandedKey ? groupLabel(expandedKey) : t("bookInfo.title")}
-          </h2>
-          {expandedKey && !creating && (
-            <Button onClick={startCreate} type="button" variant="outline">
-              {t("bookInfo.newBookInfo")}
-            </Button>
-          )}
-        </div>
-
-        {!expandedKey && (
-          <p className="text-sm text-muted-foreground">{t("bookInfo.intro")}</p>
-        )}
-        {expandedKey && expandedGroupBooks.length === 0 && !creating && (
-          <p className="text-sm text-muted-foreground">{t("bookInfo.empty")}</p>
-        )}
-
-        {creating && (
-          <BookInfoForm
-            form={form}
-            groups={groups}
-            liveBooks={liveBooks}
-            selfId={null}
-            statuses={statuses}
-            onCancel={cancel}
-            onSave={() => void save()}
-            saving={saving}
-            setForm={setForm}
-            title={t("bookInfo.newBookInfo")}
-          />
-        )}
-
+        {/* 已软删的书不进树（树只导航存活书），折叠收在这里；选中后右栏给详情 +
+            「物理删除」。本模块无恢复，所以没有编辑入口。 */}
         {deletedBooks.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 border-t pt-2">
             <button
-              className={`rounded-full border px-3 py-1 text-sm ${showDeleted
-                ? "border-destructive text-destructive"
-                : "text-muted-foreground"}`}
+              className="flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm text-muted-foreground transition hover:text-foreground"
               onClick={() => setShowDeleted((current) => !current)}
               type="button"
             >
-              {t("bookInfo.deletedChip")}
-              <small className="ml-1 opacity-70">{deletedBooks.length}</small>
+              <span>
+                {t("bookInfo.deletedChip")}
+                <small className="ml-1 opacity-70">{deletedBooks.length}</small>
+              </span>
+              <ChevronRightIcon
+                aria-hidden="true"
+                className={`size-4 transition-transform ${showDeleted ? "rotate-90" : ""}`}
+              />
             </button>
-          </div>
-        )}
-
-        {showDeleted && (
-          <p className="text-xs text-muted-foreground">{t("bookInfo.purgeHint")}</p>
-        )}
-
-        {(showDeleted ? deletedBooks : expandedGroupBooks).length > 0 && (
-          <div className="rounded-lg border">
-            {(showDeleted ? deletedBooks : expandedGroupBooks).map((book) => {
-              const isSelected = !showDeleted && selectedId === book.id;
-              return (
-                <div
-                  className={isSelected ? "" : "border-b last:border-b-0"}
-                  key={book.id}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {book.bookName || t("bookInfo.untitled")}
-                        </span>
-                        {!book.isEnable && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                            {t("bookInfo.isEnableLabel")} ✕
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {t("bookInfo.bookNoLabel")}: {book.bookNo}
-                        {" · "}
-                        {book.author || "—"}
-                        {" · "}
-                        {groupLabel(book.caseDivision)}
-                        {book.chengShu ? ` · ${book.chengShu}` : ""}
-                      </div>
+            {showDeleted && (
+              <div className="space-y-1">
+                <p className="px-3 pb-1 text-xs text-muted-foreground">
+                  {t("bookInfo.purgeHint")}
+                </p>
+                {deletedBooks.map((book) => {
+                  const isSelected = selectedId === book.id;
+                  return (
+                    <div
+                      className={`flex items-center justify-between gap-2 rounded-[10px] px-3 py-2 text-sm ${isSelected
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                      key={book.id}
+                    >
+                      <button
+                        className="min-w-0 flex-1 truncate text-left"
+                        onClick={() => {
+                          setSelectedId(book.id);
+                          resetDetail(false);
+                        }}
+                        type="button"
+                      >
+                        {book.bookName || t("bookInfo.untitled")}
+                      </button>
+                      <Button
+                        aria-label={t("bookInfo.purgeAction")}
+                        disabled={saving}
+                        onClick={() => setConfirmingPurge(book)}
+                        size="icon"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2Icon aria-hidden="true" />
+                      </Button>
                     </div>
-                    {!isSelected && (
-                      <div className="flex gap-2">
-                        {book.isDeleted ? (
-                          <Button
-                            onClick={() => setConfirmingPurge(book)}
-                            size="sm"
-                            type="button"
-                            variant="destructive"
-                          >
-                            {t("bookInfo.purgeAction")}
-                          </Button>
-                        ) : (
-                          <>
-                            <Button
-                              onClick={() => selectLeaf(book.id)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              {t("bookInfo.editBookInfo")}
-                            </Button>
-                            <Button
-                              onClick={() => setConfirming(book)}
-                              size="sm"
-                              type="button"
-                              variant="destructive"
-                            >
-                              {t("bookInfo.deleteAction")}
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+          </>
+        }
+      >
+      {/* 右栏：选中书的只读详情（Label + 值）；点「编辑」或左栏「新建」才换成表单。
+          未选中且非新建/编辑时右栏留空——不显示任何说明性提示（需求①）。 */}
+      <section className="space-y-4 rounded-[14px] border bg-card p-5 shadow-xs">
+        {selectedBook && !editing && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">
+                {selectedBook.bookName || t("bookInfo.untitled")}
+              </h2>
+              <div className="flex gap-2">
+                {selectedBook.isDeleted ? (
+                  <Button
+                    disabled={saving}
+                    onClick={() => setConfirmingPurge(selectedBook)}
+                    type="button"
+                    variant="destructive"
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                    {t("bookInfo.purgeAction")}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      onClick={startEdit}
+                      type="button"
+                      variant="outline"
+                    >
+                      <PencilIcon aria-hidden="true" />
+                      {t("bookInfo.editAction")}
+                    </Button>
+                    <Button
+                      disabled={saving}
+                      onClick={() => setConfirming(selectedBook)}
+                      type="button"
+                      variant="destructive"
+                    >
+                      <Trash2Icon aria-hidden="true" />
+                      {t("bookInfo.deleteAction")}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.nameLabel")}</dt>
+                <dd className="text-sm font-medium">
+                  {selectedBook.bookName || t("bookInfo.untitled")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.bookNoLabel")}</dt>
+                <dd className="text-sm">{selectedBook.bookNo}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.caseDivisionLabel")}</dt>
+                <dd className="text-sm">
+                  {groupLabel(selectedBook.caseDivision)}
+                  {!groupKeys.has(selectedBook.caseDivision) && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({selectedBook.caseDivision})
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.authorLabel")}</dt>
+                <dd className="text-sm">{selectedBook.author || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.chengShuLabel")}</dt>
+                <dd className="text-sm">{selectedBook.chengShu || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.chapterLabel")}</dt>
+                <dd className="text-sm">{selectedBook.chapter ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.caseTagLabel")}</dt>
+                <dd className="text-sm">{selectedBook.caseTag || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.hotBookLabel")}</dt>
+                <dd className="text-sm">{statusLabel(selectedBook.hotBook)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.isEnableLabel")}</dt>
+                <dd className="text-sm">
+                  {selectedBook.isEnable
+                    ? t("bookInfo.enableOn")
+                    : t("bookInfo.enableOff")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.parentIdLabel")}</dt>
+                <dd className="text-sm">
+                  {selectedBook.parentId
+                    ? (parentNameOf(selectedBook.parentId) || selectedBook.parentId)
+                    : t("bookInfo.parentTop")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("bookInfo.orgIdLabel")}</dt>
+                <dd className="text-sm">{selectedBook.orgId ?? "—"}</dd>
+              </div>
+              {selectedBook.imageUrl && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">{t("bookInfo.imageUrlLabel")}</dt>
+                  <dd className="text-sm">
+                    <img
+                      alt={selectedBook.bookName || t("bookInfo.untitled")}
+                      className="max-h-48 rounded border"
+                      src={selectedBook.imageUrl}
+                    />
+                  </dd>
                 </div>
-              );
-            })}
+              )}
+              {selectedBook.comment && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">{t("bookInfo.commentLabel")}</dt>
+                  <dd className="whitespace-pre-wrap text-sm">{selectedBook.comment}</dd>
+                </div>
+              )}
+            </dl>
           </div>
         )}
 
-        {selectedBook && !creating && (
+        {/* 表单只在新手新建或编辑一本存活书时出现；编辑已软删书不给入口。 */}
+        {(creating || (editing && selectedBook && !selectedBook.isDeleted)) && (
           <BookInfoForm
             form={form}
             groups={groups}
             liveBooks={liveBooks}
-            selfId={selectedBook.id}
+            selfId={creating ? null : selectedBook?.id ?? null}
             statuses={statuses}
             onCancel={cancel}
             onSave={() => void save()}
             saving={saving}
             setForm={setForm}
-            title={t("bookInfo.editBookInfo")}
+            title={creating ? t("bookInfo.newBookInfo") : t("bookInfo.editBookInfo")}
           />
         )}
 
@@ -1084,6 +1225,7 @@ export default function BookInfoApp() {
           </div>
         )}
       </section>
+      </AdminTreeNavLayout>
 
       {/* 分组管理弹层：与选中书无关，挂在页面层，未选中也能打开。草稿副本 +
           点保存先改派再整表覆盖写。 */}
@@ -1361,6 +1503,6 @@ export default function BookInfoApp() {
           </div>
         </div>
       </AdminDialog>
-    </div>
+    </>
   );
 }

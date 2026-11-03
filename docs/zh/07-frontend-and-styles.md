@@ -23,3 +23,6 @@ description: microfeed 前端组件规范（shadcn/ui、cn、渐进迁移）与�
 
 - **AdminGroupTree（分组树）**——数据源驱动的两层分组导航，接入契约与数据整理示例见
   `docs/zh/admin-group-tree.md`；命中「分组树 / AdminGroupTree」时在加载本册后按需续读该附录。
+- **AdminTreeNavLayout（树形导航两栏布局）**——「左树形导航 + 右主区」页面的容器壳，接入契约与
+  使用示例见 `docs/zh/admin-tree-nav-layout.md`；命中「两栏 / 布局 / 左树右详情 /
+  AdminTreeNavLayout」时在加载本册后按需续读该附录。

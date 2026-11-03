@@ -100,6 +100,13 @@ handler 层也会先拦成干净 400。
   分组（ADR-0058 红线不破）。
 - **顶层节点「书籍分类」**：左栏树顶部渲染一个总览根行（`AdminGroupTree` 的 `root`
   prop，label = 字段名「书籍分类」，badge = 全部存活书数），不参与分组过滤。
+- **叶子两栏**：每本书在树里占固定两栏——`label` = 书名（无书名回落「未命名书本信息」），
+  `description` = 作者；**无作者就不传 `description`，第二栏整行留空**（组件对空/缺
+  `description` 不渲染该行）。原「`book_no` · 作者」合并行已拆开，`book_no` 不再进树。
+- **搜索过滤留在页面**：左栏搜索按 书名/编号/作者 匹配；搜索态只把**有命中的分组**传进
+  `groups`，零命中分组的组头一并隐藏（命中组数 >0 才显示，=0 隐藏）；全部分组都无命中时
+  由 `emptyTreeText`（「无匹配书本」）接管整树。非搜索态传全量分组，空分组仍显示并给
+  `emptyLeafText` 提示。徽章 `count` 恒为该组全量书数，与搜索命中的 `leaves` 口径有意不同。
 - **删组先改派**：`case_division` NOT NULL，删分组前必须把该组书整批改派到另一组
   （`POST …/reassign`，`UPDATE book_info SET case_division=… WHERE case_division=…`，
   走 `book_info_case_division` 索引）。

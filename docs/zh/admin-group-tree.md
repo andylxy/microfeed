@@ -21,7 +21,7 @@
 ```tsx
 // src/components/admin/shared/AdminGroupTree.tsx
 
-/** 分组树叶子：固定两行——主行加可选的等宽说明行。 */
+/** 分组树叶子：固定两栏——主行加可选的说明行。`description` 不传（或空）则第二行留空。 */
 export interface AdminTreeLeaf {
   id: string;
   label: string;
@@ -212,7 +212,7 @@ expandedKeys={
 1. **页面持有状态**：`openCategory`（或等价的展开键）与 `selectedId`，用 `useState`（或地址，如卷看板那样的 URL 态）——不要让组件管。
 2. **两个成员口径**：有搜索/过滤的页面定义 `xxxUsers`（全量，喂 `count`）与 `xxxVisibleUsers`（可见，喂 `leaves`）；没有过滤就共用一个。
 3. **分组清单**：业务分组 + 需要的系统分组（固定追加，如已封禁账号），`key` 在树内唯一。
-4. **叶子两行**：`label` 主行、`description` 可选说明行（等宽小字，超长自动截断）；要展示更多内容时先考虑塞进这两行，不要扩组件契约。
+4. **叶子两栏**：`label` 主行、`description` 可选说明行（小字，超长自动截断；不传或为空则第二行整行留空）；要展示更多内容时先考虑塞进这两栏，不要扩组件契约。
 5. **展开规则**：手风琴 = 传单键数组；需要多分组同时展开（如搜索）= 传多键数组；`onToggleGroup` 里自己写「再点已展开 = 全收起」。
 6. **点分组是否联动选中**：页面语义（用户页是「换组自动选中该组第一个成员」），写在 `onToggleGroup` 里。
 7. **空态文案**：两级空态按 §6 区分，文案走 i18n。
