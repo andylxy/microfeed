@@ -67,6 +67,9 @@ export const SNAPSHOT_TABLES = {
     // 但恢复流程没有重算步骤，漏了它会让恢复后的站点所有人进不了后台
     // （读侧查不到快照行即无权限）。所以整表随快照走。
     "ext_user_permissions",
+    // 独立「书本信息」表（migration 0171，ADR-0058）。用户自建内容，恢复后的
+    // 站点要保留；与既有 channels/items 书机制解耦，不依赖其它 ext_* 表。
+    "book_info",
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log

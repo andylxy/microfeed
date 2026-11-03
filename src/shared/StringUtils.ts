@@ -446,6 +446,17 @@ export const ADMIN_URLS = {
   ajaxBook: (id: string) => adminUrl(`ajax/books/${id}`, browserAdminPath()),
   ajaxBookPurge: (id: string) =>
     adminUrl(`ajax/books/${id}/purge`, browserAdminPath()),
+  ajaxBookInfo: () => adminUrl("ajax/book-info", browserAdminPath()),
+  ajaxBookInfoItem: (id: string) =>
+    adminUrl(`ajax/book-info/${id}`, browserAdminPath()),
+  ajaxBookInfoPurge: (id: string) =>
+    adminUrl(`ajax/book-info/${id}/purge`, browserAdminPath()),
+  ajaxBookInfoGroups: () =>
+    adminUrl("ajax/book-info/groups", browserAdminPath()),
+  ajaxBookInfoReassign: () =>
+    adminUrl("ajax/book-info/reassign", browserAdminPath()),
+  ajaxBookInfoStatuses: () =>
+    adminUrl("ajax/book-info/statuses", browserAdminPath()),
   ajaxBookStatuses: () =>
     adminUrl("ajax/book-statuses", browserAdminPath()),
   ajaxBookStatus: (code: number) =>

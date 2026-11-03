@@ -8,6 +8,7 @@
 | 小说领域 | microfeed 实体 | 存储落点 | 说明 |
 |---|---|---|---|
 | **Book（书）** | Channel | `channels.data` JSON | `title`/`description`/`icon`/`authors`/`language` + `_microfeed` |
+| **BookInfo（书本信息）** | 新建表 | `book_info` | 参考 `vol.api.sqlsugar` 的 `BookInfo` 实体镜像：`book_name`/`author`/`chapter`/`cheng_shu`/`case_division`/`case_tag`/`book_no`/`image_url`/`hot_book`/`parent_id`/`comment`/`org_id`/`is_enable`。**≠ Book（书）**：不与 `channels`/`items` 耦合，独立自持，见 [ADR-0058](adr/0058-standalone-book-info-module.md) |
 | **Chapter（章）** | Item | `items.data` JSON | `title`/`content_html`/`date_published`/`status` + `_microfeed` |
 | **Volume（卷）** | Item 上的标签 | `_microfeed.volume`（字符串） | 无独立实体，靠聚合 UI 管理 |
 | **Shelf / 书主页** | Channel 列表 | 首页 feed | 主题模板渲染 |
@@ -16,6 +17,12 @@
 | **Audit Record（留痕）** | 新建表 | `ext_content_audit` | 存修改前后 `data` JSON 快照 |
 | **Report（举报）** | 新建表 | `ext_content_report` | 读者举报落库 |
 | **Tag / 标签** | **同 Category** | `ext_category` | 只是 Category 的**对外叫法**（如 内经类 / 本草 / 伤寒 / 东方玄幻），**不是独立实体**，勿新建 tags 表 |
+
+### 语言区分（容易混的一对）
+
+- **Book（书）**：microfeed 既有内容链路的书 = `channels` 行，章节挂 `items.book_id`。它承载发布/阅读/统计。
+- **BookInfo（书本信息）**：参考模型镜像，`book_info` 自持表，只描述「一本书的元信息」，**不承载发布/阅读链路**。
+- _Avoid_: 用「书本信息」指代 `channels` 书、用「书」指代 `book_info` 行；两者是不同概念，混用会让迁移与读写目标错位。
 
 ## 扩展口袋
 

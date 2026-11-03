@@ -26,6 +26,19 @@ const C: readonly CatalogEntry[] = [
   ["POST", "/admin/ajax/books", "content:book:create"],
   ["PUT", "/admin/ajax/books/[bookId]", "content:book:update"],
   ["DELETE", "/admin/ajax/books/[bookId]", "content:book:delete"],
+  // 书本信息（content:book:*，独立表 book_info，ADR-0058——复用书码，不加新码）
+  ["GET", "/admin/ajax/book-info", "content:book:read"],
+  ["POST", "/admin/ajax/book-info", "content:book:create"],
+  ["PUT", "/admin/ajax/book-info/[bookInfoId]", "content:book:update"],
+  ["DELETE", "/admin/ajax/book-info/[bookInfoId]", "content:book:delete"],
+  ["DELETE", "/admin/ajax/book-info/[bookInfoId]/purge", "content:book:delete"],
+  // 分组清单与改派（ADR-0059——settings 独立分组，复用书码，不加新码）
+  ["GET", "/admin/ajax/book-info/groups", "content:book:read"],
+  ["PUT", "/admin/ajax/book-info/groups", "content:book:update"],
+  ["POST", "/admin/ajax/book-info/reassign", "content:book:update"],
+  // 状态清单（迁移 0173/0174——settings 独立状态，复用书码，不加新码）
+  ["GET", "/admin/ajax/book-info/statuses", "content:book:read"],
+  ["PUT", "/admin/ajax/book-info/statuses", "content:book:update"],
   // 分类（content:category:*）
   ["GET", "/admin/ajax/categories", "content:category:read"],
   ["GET", "/admin/ajax/categories/[categoryId]", "content:category:read"],

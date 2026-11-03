@@ -28,6 +28,18 @@ export const SETTINGS_CATEGORIES = {
    * 左栏分组与账号详情的来源下拉都从这里派生；可在「新建分组」弹层里增删。
    */
   SIGNUP_SOURCES: 'signup_sources',
+  /**
+   * 后台「书本信息」页的分组列表（ADR-0059）。数据是 `{groups:[{key,label,sort}]}`
+   * 对象，左栏 AdminGroupTree 的分组从这里派生；书的归属是自身 `case_division`
+   * （= 分组 `key`）。可在「新建分组」弹层里增删改名排序。
+   */
+  BOOK_GROUPS: 'book_groups',
+  /**
+   * 后台「书本信息」页的状态清单（ADR-0058：迁移 0173/0174）。数据是
+   * `{statuses:[{value,label,sort}]}` 对象，状态下拉与校验从这里派生；书的
+   * `hot_book`（NOT NULL）存的是状态 `value`。可在「状态管理」弹层里增删改名排序。
+   */
+  BOOK_INFO_STATUSES: 'book_info_statuses',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -202,6 +214,7 @@ export const ADMIN_MENU_CODES = {
   PAGES: 'pages',
   CATEGORIES: 'categories',
   BOOKS: 'books',
+  BOOK_INFO: 'book_info',
   BOOK_STATUSES: 'book_statuses',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
