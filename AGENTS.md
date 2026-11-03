@@ -75,13 +75,7 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 
 ## 新增功能 / 模块：先查重，再扩展，最后才新建
 
-**动手写新代码前必走三步，跳第 1 步就开写不允许。全文见 09 册 §0。**
-
-1. **查重（给证据）**：数据模型（`migrations/`）、服务端（`src/server/`、`src/shared/`）、后台 UI、权限面四层都看，结论要点名具体文件，不能只说「查过了没有」。
-2. **优先扩展**：四条同时满足才允许——老调用点行为不变、既有测试不改、不新增 `if (isXxx)` 特例分支、权限与数据兼容（不加必填列，D1 加列须可空或带默认）。
-3. **不能附加才新建**：说清**哪条约束挡住了**，不是「新写一份更快」。新建按 09 册 10 步清单。
-
-重复实现会让数据模型分叉、两套逻辑各自演化，日后合并成本远高于当初扩展。
+**动手写新代码前必走三步（查重给证据 → 优先扩展 → 不能附加才新建），跳第 1 步就开写不允许**；三步判定细节与 10 步新建清单见 09 册 §0。重复实现会让数据模型分叉，日后合并成本远高于当初扩展。
 
 ## 触发词路由（先路由，再动手）
 
@@ -92,7 +86,7 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 | 部署 / 实例 / 快照 / 销毁 / 域名 / Access / 内置登录 | `deploy-microfeed` |
 | 主题 init / export / fork / 检查 | `export-microfeed-theme` |
 | 内容 增删改查 / 上传媒体 | `manage-microfeed-content` |
-| **加 / 改 / 删权限码** | 读 14 册（生成器用法）+ 本文件下方四步 |
+| **加 / 改 / 删权限码** | 读 14 册（生成器用法 + 加码四步） |
 | **加后台页面 / 加模块** | 读 09 册 §3「新页面要不要新权限码」，**别默认要加码** |
 | **新功能 / 新模块 / 改功能（动手前）** | 读 09 册 §0：先查重、再扩展、最后才新建 |
 | 分析项目 / 文档在哪 / 数据库 / API 规范 / 新建模块 | 加载下方对应**分册** |
@@ -107,7 +101,7 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 | 04 | 主题初始化、主题导出、主题 fork、主题检查、开发主题、主题仓库、安装主题 | 主题仓库 | `docs/zh/04-theme-repos.md` |
 | 05 | API、接口、OpenAPI、契约、schema、鉴权、Bearer、端点、生成 openapi/llms | API 契约与文档 | `docs/zh/05-api-contract.md` |
 | 06 | 内容管理、发布内容、创建/更新/删除条目、上传媒体、图片/音频/视频、CLI | 内容管理 CLI | `docs/zh/06-content-cli.md` |
-| 07 | 前端、组件、UI、shadcn、样式、光标、禁用、无障碍、组件库 | 前端组件与交互样式 | `docs/zh/07-frontend-and-styles.md` |
+| 07 | 前端、组件、UI、shadcn、样式、光标、禁用、无障碍、组件库、分组树、AdminGroupTree | 前端组件与交互样式 | `docs/zh/07-frontend-and-styles.md` |
 | 08 | 数据库、表结构、建表、迁移、索引、触发器、D1、schema、ALTER、D1 额度、全表扫描、查询优化、索引优化 | 数据库规范 | `docs/zh/08-db-schema.md` |
 | 09 | 新建模块、新功能、新资源、怎么开始、目录和文件规划、注意事项、新增页面、页面守卫、要不要加权限码 | 新建模块（含新页面权限判定） | `docs/zh/09-new-module.md` |
 | 10 | 项目文档在哪、怎么看文档、docs 目录、文档站、ADR、规则放哪 | 文档位置与查看 | `docs/zh/10-docs-view.md` |
@@ -116,6 +110,11 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 | 13 | 链路、中间件、关卡、请求流程、鉴权流程、权限判定、401、403、426、429、防重放、限流、版本门、配额、guard、middleware | 请求链路与关卡 | `docs/zh/13-request-pipeline.md` |
 | 14 | 授权模型、权限码、加权限码、rbac:gen、rbac:check、rbac-catalog、seed.ts 标记区、RbacPermissionDocs、ext_user_roles、ext_user_permissions、权限快照、权限树、快照重算、permissionId、级联 | 授权数据模型 + 权限码生成器 | `docs/zh/14-authorization-data-model.md` |
 
+> 已完成 / 作废的工作记录与历史提案统一放 `docs/zh/archive/`（`role-extension-plan.md`、
+> `user-system-optimization-spec.md`、`2026-11-02-admin-user-groups.md`），不索引、不路由；
+> 现行规范以对应分册（12 / 13 / 14 册）与 ADR 为准。组件使用指南（AdminGroupTree 分组树）
+> 挂在 07 册下作附录：`docs/zh/admin-group-tree.md`，由 07 册正文指针进入。
+
 ## 如何加载分册
 
 当用户意图命中某分册触发词时，用 `Read` 工具把对应路径读入上下文并遵循它。若意图是**只读**分析/解释/状态报告，
@@ -123,17 +122,4 @@ microfeed 是一个自托管在 Cloudflare 上的智能体化 CMS（Workers + D1
 
 ## 加页面 / 加模块 ≠ 加权限码
 
-**命中则读 09 册 §3**（判定表与两把锁在那里）。骨架只留三条硬约束：
-
-- **别默认新页面就要新码**：35 个后台页面只用 20 个码，详情页 / 新建页复用列表页的码是惯例。
-- **新增页面必做的是登记，不是生成**：`requirePagePermission` 之后在 `src/shared/AdminPageGuards.ts` 加「路由 → 码」，否则 `admin-page-guards` 测试红。
-- **守卫码 ≠ 侧栏节点**：前者管能不能打开，`ext_permission_nodes` 管侧栏显示在哪；缺一个就是「直链可开但侧栏没有」或「看得见却 403」。
-
-### 确实要加码时：四步（细节见 14 册）
-
-1. **人**：`Constants.ts` 的 `PERMISSION_CODES` 加一行。
-2. **机器**：`yarn rbac:gen` —— 重铺 `seed.ts` 标记区（**区内只放条目、不写注释**，说明写区外 `CATALOG_NOTES` 或 `RbacPermissionDocs.ts`），并新建 `NNNN_data_seed_<slug>_permission.sql`（只写 `ext_permissions`，**不写节点行**）。
-3. **人**：把标记区那条 `name: ""` 填成短名，**再跑一次**（缺短名会跳过生成迁移）。
-4. **人**：补 `RbacPermissionDocs.ts` 长说明。
-
-`yarn rbac:check` 只读比对，报「seed 不同步 / 码无迁移 / 短名为空 / 缺长说明」，已进 `yarn check` 链；`rbac:gen` 缺短名时**退出码为 0**。
+**别默认新页面就要新码**（35 页只用 20 码，详情 / 新建页复用列表页码是惯例）；**新增页面必做的是登记不是生成**（`AdminPageGuards.ts` 加「路由 → 码」，否则 `admin-page-guards` 测试红）；**守卫码 ≠ 侧栏节点**（前者管能不能打开，`ext_permission_nodes` 管侧栏显示在哪）。判定表与两把锁见 09 册 §3；确实要加码时的四步（`Constants` 加行 → `rbac:gen` 两次 → 补长说明）细节见 14 册。
