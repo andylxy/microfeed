@@ -40,10 +40,6 @@ export interface BookInfoAdmin {
   imageUrl: string;
   /** HotBook 状态（NOT NULL，取值 = 状态清单 `BookInfoStatus.value`） */
   hotBook: number;
-  /** ParentId 父级（逻辑自引用，microfeed 惯例无外键） */
-  parentId: string | null;
-  /** OrgId 书籍性质（列位保留，无组织模块） */
-  orgId: number | null;
   /** IsEnable 启用 */
   isEnable: boolean;
   /** Comment 备注 */
@@ -66,8 +62,6 @@ export interface BookInfoInput {
   bookNo: string;
   imageUrl?: string | null;
   hotBook: number;
-  parentId?: string | null;
-  orgId?: number | null;
   isEnable?: boolean;
   comment?: string | null;
 }

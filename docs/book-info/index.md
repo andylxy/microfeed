@@ -33,14 +33,12 @@ description: 独立于作品频道的「书本信息」表（ADR-0058），后�
 | `book_no` | `TEXT NOT NULL DEFAULT ''` | `BookNo` | 书本编号（迁移 0173 起为文本） |
 | `image_url` | `VARCHAR(255)` | `ImageUrl` | 封面 |
 | `hot_book` | `INTEGER NOT NULL DEFAULT 0` | `HotBook` | 状态（迁移 0173 起 NOT NULL，取值 = 状态清单 `value`，见「状态清单」） |
-| `parent_id` | `VARCHAR(11)` | `ParentId` | 父级（逻辑自引用，无外键） |
-| `org_id` | `INTEGER` | `OrgId` | 书籍性质（列位保留，无组织模块） |
 | `is_enable` | `INTEGER NOT NULL DEFAULT 1` | `IsEnable` | 启用 |
 | `comment` | `VARCHAR(255)` | `Comment` | 备注 |
 
 常备列：`created_at` / `updated_at` / `deleted_at`（软删）+ `ext1`~`ext10`。
 
-索引：`book_info_book_name` / `book_info_parent_id` / `book_info_is_enable` / `book_info_case_division`。
+索引：`book_info_book_name` / `book_info_is_enable` / `book_info_case_division`。
 
 读代价（09 册步 4）：看板 `loadBookInfoBoard` 走 `SELECT * FROM book_info
 ORDER BY book_name ASC, id ASC`，是有意为之的**整表读**——看板本就要列出全部行
@@ -50,10 +48,6 @@ ORDER BY book_name ASC, id ASC`，是有意为之的**整表读**——看板本
 常备列，单行远小于 4KB 页）。本表是**后台录入的用户内容**，行数以人工录入速度
 增长（非导入/抓取），量级可控；若日后单表行数显著增长，应改分页
 （`normalizeAdminItemListLimit(webSettings.itemsPerPage)`）而非全量返回。
-
-业务约束：`parent_id = id` 被迁移 0171 的两条触发器
-（`book_info_no_self_parent_ins` / `_upd`）拦截（`RAISE 'book_info_self_parent'`），
-handler 层也会先拦成干净 400。
 
 ## 后台端点
 
@@ -82,8 +76,6 @@ handler 层也会先拦成干净 400。
 - **物删**（`DELETE /…/[bookInfoId]/purge`）：只删**已经软删**的行，不可恢复；
   未软删按 `purgeNeedsDelete`（409）拒，不存在按 `notFound`（404）报。
 - 本模块暂未提供恢复；已软删行只能物删。
-- `parent_id` 是逻辑自引用（无外键），物删**不级联**子行——孤儿归属超出模块范围，
-  由使用方自行保证层级完整性。
 
 ## 分组树（ADR-0059）
 
@@ -122,8 +114,7 @@ handler 层也会先拦成干净 400。
 
 迁移 0173 把 `hot_book` 从可空整数改成 **NOT NULL 状态列**（`DEFAULT 0`），取值 =
 状态清单 `value`（公开=0/隐藏=1/会员=2，迁移 0174 播种默认三项）。编辑表单里
-「状态」是下拉（项目 `AdminSelect`，非原生 select），「父级」是「分组 → 书」两层
-`AdminSelect` 联动（先选父级所在分组，再从该组存活书里选一本，候选排除自身防自引用）。
+「状态」是下拉（项目 `AdminSelect`，非原生 select）。
 
 - **状态清单存 `settings` 表一行**（`category='book_info_statuses'`，`data` 为 JSON
   `{statuses:[{value,label,sort}]}`），独立管理、整表覆盖写——与分组（`book_groups`）
@@ -140,8 +131,10 @@ handler 层也会先拦成干净 400。
 - 迁移 0173 是 SQLite **改列型 12 步表重建**（建新表 → 复制 → 删旧 → 重命名 → 重建
   索引/触发器）：`case_tag`/`book_no` INTEGER→TEXT、`hot_book` 可空→NOT NULL DEFAULT 0
   （历史 NULL 行回填成 0）；排序键从 `book_no` 换 `book_name`，故补
-  `book_info_book_name` 索引、不再重建旧 `book_info_book_no` 索引；
-  `book_info_no_self_parent_*` 两条触发器随旧表 DROP 一并消失，重建。
+  `book_info_book_name` 索引、不再重建旧 `book_info_book_no` 索引。
+- 迁移 0176 同款表重建**删掉 `parent_id`/`org_id`** 两列与 `book_info_parent_id`
+  索引；`book_info_no_self_parent_*` 两条触发器随旧表 DROP 一并消失、不再重建
+  （没有父级列，自引用约束失去意义）。
 
 ## 代码位置
 
@@ -155,4 +148,6 @@ handler 层也会先拦成干净 400。
 - 页面与端点：`src/pages/[adminPath]/book-info/`、`src/pages/[adminPath]/ajax/book-info/`
 - 迁移：`0171_seed_book_info.sql`（表）、`0172_seed_book_info_groups.sql`（默认分组快照 +
   `book_info_case_division` 索引）、`0173_schema_book_info_text_columns.sql`（文本列 +
-  状态 NOT NULL + 排序键改 book_name）、`0174_seed_book_info_statuses.sql`（默认状态三项）
+  状态 NOT NULL + 排序键改 book_name）、`0174_seed_book_info_statuses.sql`（默认状态三项）、
+  `0175_seed_book_info_rows.sql`（默认书本数据）、`0176_schema_book_info_drop_parent_org.sql`
+  （删 `parent_id`/`org_id`）

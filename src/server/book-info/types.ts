@@ -53,8 +53,6 @@ export interface BookInfoRow {
   book_no: string;
   image_url: string | null;
   hot_book: number;
-  parent_id: string | null;
-  org_id: number | null;
   is_enable: number;
   comment: string | null;
   created_at: string | null;

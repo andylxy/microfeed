@@ -34,10 +34,9 @@ import {
 } from "@/shared/BookInfo";
 
 /**
- * 书本信息表单状态。`chapter`/`orgId` 以字符串承载（数字输入框可自由编辑），
+ * 书本信息表单状态。`chapter` 以字符串承载（数字输入框可自由编辑），
  * `caseTag`/`bookNo` 迁移 0173 起是文本列，直接用字符串；`hotBook` 是状态下拉的
- * 取值（十进制字符串，提交时转 number）。`parentGroup` 只服务「分组→书」两层选
- * 父级的第一层（提交不带它），`parentId` 是第二层选出的书 id。
+ * 取值（十进制字符串，提交时转 number）。
  */
 interface BookInfoFormState {
   bookName: string;
@@ -49,9 +48,6 @@ interface BookInfoFormState {
   bookNo: string;
   imageUrl: string;
   hotBook: string;
-  parentGroup: string;
-  parentId: string;
-  orgId: string;
   isEnable: boolean;
   comment: string;
 }
@@ -66,22 +62,13 @@ const EMPTY_FORM: BookInfoFormState = {
   bookNo: "",
   imageUrl: "",
   hotBook: "",
-  parentGroup: "",
-  parentId: "",
-  orgId: "",
   isEnable: true,
   comment: "",
 };
 
 function formFromBook(
   book: BookInfoAdmin,
-  resolveGroupOfDivision: (division: string) => string,
-  divisionOfBook: (id: string) => string | undefined,
 ): BookInfoFormState {
-  // 父级第一层默认落到父级书所在的分组（父级书不在则落到编辑中书自己的分组）。
-  const parentDivision = book.parentId
-    ? divisionOfBook(book.parentId) ?? book.caseDivision
-    : book.caseDivision;
   return {
     bookName: book.bookName,
     chapter: book.chapter == null ? "" : String(book.chapter),
@@ -92,9 +79,6 @@ function formFromBook(
     bookNo: book.bookNo,
     imageUrl: book.imageUrl,
     hotBook: String(book.hotBook),
-    parentGroup: resolveGroupOfDivision(parentDivision),
-    parentId: book.parentId ?? "",
-    orgId: book.orgId == null ? "" : String(book.orgId),
     isEnable: book.isEnable,
     comment: book.comment,
   };
@@ -111,8 +95,6 @@ function formToPayload(form: BookInfoFormState): Record<string, unknown> {
     bookNo: form.bookNo.trim(),
     imageUrl: form.imageUrl.trim() || null,
     hotBook: Number(form.hotBook),
-    parentId: form.parentId.trim() || null,
-    orgId: form.orgId.trim() === "" ? null : Number(form.orgId),
     isEnable: form.isEnable,
     comment: form.comment.trim() || null,
   };
@@ -136,8 +118,6 @@ function BookInfoForm({
   saving,
   groups,
   statuses,
-  liveBooks,
-  selfId,
   onSave,
   onCancel,
   title,
@@ -149,10 +129,6 @@ function BookInfoForm({
   groups: BookInfoGroup[];
   /** 状态清单（settings）——状态下拉的默认数据源。 */
   statuses: BookInfoStatus[];
-  /** 存活书（排除已软删）——选父级第二层的候选池。 */
-  liveBooks: BookInfoAdmin[];
-  /** 当前编辑的书 id——选父级时排除自身（防自引用）。新建时为 null。 */
-  selfId: string | null;
   onSave: () => void;
   onCancel: () => void;
   title: string;
@@ -186,39 +162,16 @@ function BookInfoForm({
   const selectedStatus = statusOptions.find(
     (option) => option.value === form.hotBook,
   ) ?? null;
-
-  // 父级 = 「分组 → 书」两层选。第一层选分组，第二层从该组存活书里选一本书作
-  // 父级，候选排除自身（自引用由 handler/触发器再拦一道）。
-  const parentGroupOptions = useMemo(
-    () => groups.map((group) => ({label: group.label, value: group.key})),
-    [groups],
-  );
-  const selectedParentGroup = parentGroupOptions.find(
-    (option) => option.value === form.parentGroup,
-  ) ?? null;
-  const parentOptions = useMemo(() => {
-    const inGroup = liveBooks.filter(
-      (book) => book.caseDivision === form.parentGroup);
-    return inGroup
-      .filter((book) => book.id !== selfId)
-      .map((book) => ({
-        label: book.bookName || t("bookInfo.untitled"),
-        value: book.id,
-      }));
-  }, [liveBooks, form.parentGroup, selfId, t]);
-  const selectedParent = parentOptions.find(
-    (option) => option.value === form.parentId,
-  ) ?? null;
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      <h3 className="font-medium">{title}</h3>
+    <div className="space-y-4 rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
+      <h2 className="text-lg font-semibold">{title}</h2>
       <AdminInput
         label={t("bookInfo.nameLabel")}
         onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
           set("bookName", event.target.value)}
         value={form.bookName}
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* 书本编号 / 内容标签：迁移 0173 起为文本列，去 number 输入。 */}
         <AdminInput
           label={t("bookInfo.bookNoLabel")}
@@ -248,77 +201,48 @@ function BookInfoForm({
           value={selectedStatus}
         />
       </div>
-      <AdminInput
-        label={t("bookInfo.authorLabel")}
-        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-          set("author", event.target.value)}
-        value={form.author}
-      />
-      <AdminInput
-        label={t("bookInfo.chengShuLabel")}
-        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-          set("chengShu", event.target.value)}
-        value={form.chengShu}
-      />
-      {/* 书籍分类 = 分组键（ADR-0059）：改成哪个组，这本书就归到左栏哪个分组。 */}
-      <AdminSelect
-        ariaLabel={t("bookInfo.caseDivisionLabel")}
-        label={t("bookInfo.caseDivisionLabel")}
-        onChange={(option) => set("caseDivision", option.value)}
-        options={divisionOptions}
-        value={selectedDivision}
-      />
-      <AdminInput
-        label={t("bookInfo.imageUrlLabel")}
-        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-          set("imageUrl", event.target.value)}
-        value={form.imageUrl}
-      />
-      {/* 父级 = 「分组 → 书」两层（需求 4）：先选父级所在分组，再从该组选书。
-          换分组即清空已选父级书（旧父级不在新组），避免留下跨组悬空引用。 */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <AdminSelect
-          ariaLabel={t("bookInfo.parentGroupLabel")}
-          label={t("bookInfo.parentGroupLabel")}
-          onChange={(option) =>
-            setForm((current) => ({
-              ...current,
-              parentGroup: option.value,
-              parentId: "",
-            }))}
-          options={parentGroupOptions}
-          value={selectedParentGroup}
+      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <AdminInput
+          label={t("bookInfo.authorLabel")}
+          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            set("author", event.target.value)}
+          value={form.author}
         />
+        <AdminInput
+          label={t("bookInfo.chengShuLabel")}
+          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            set("chengShu", event.target.value)}
+          value={form.chengShu}
+        />
+        {/* 书籍分类 = 分组键（ADR-0059）：改成哪个组，这本书就归到左栏哪个分组。 */}
         <AdminSelect
-          ariaLabel={t("bookInfo.parentIdLabel")}
-          label={t("bookInfo.parentIdLabel")}
-          disabled={parentOptions.length === 0}
-          emptyText={t("bookInfo.parentEmpty")}
-          onChange={(option) => set("parentId", option.value)}
-          options={parentOptions}
-          placeholder={t("bookInfo.parentIdHint")}
-          value={selectedParent}
+          ariaLabel={t("bookInfo.caseDivisionLabel")}
+          label={t("bookInfo.caseDivisionLabel")}
+          onChange={(option) => set("caseDivision", option.value)}
+          options={divisionOptions}
+          value={selectedDivision}
+        />
+        <AdminInput
+          label={t("bookInfo.imageUrlLabel")}
+          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            set("imageUrl", event.target.value)}
+          value={form.imageUrl}
         />
       </div>
-      <AdminInput
-        label={t("bookInfo.orgIdLabel")}
-        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-          set("orgId", event.target.value)}
-        placeholder={t("bookInfo.orgIdHint")}
-        value={form.orgId}
-      />
-      <AdminSwitch
-        checked={form.isEnable}
-        label={t("bookInfo.isEnableLabel")}
-        onCheckedChange={(checked) => set("isEnable", checked)}
-      />
-      <AdminInput
-        label={t("bookInfo.commentLabel")}
-        onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-          set("comment", event.target.value)}
-        value={form.comment}
-      />
-      <div className="flex gap-2">
+      <div className="mt-5 space-y-4">
+        <AdminSwitch
+          checked={form.isEnable}
+          label={t("bookInfo.isEnableLabel")}
+          onCheckedChange={(checked) => set("isEnable", checked)}
+        />
+        <AdminInput
+          label={t("bookInfo.commentLabel")}
+          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            set("comment", event.target.value)}
+          value={form.comment}
+        />
+      </div>
+      <div className="mt-5 flex gap-2">
         <Button disabled={saving} onClick={onSave} type="button">
           {t("bookInfo.saveAction")}
         </Button>
@@ -472,17 +396,6 @@ export default function BookInfoApp() {
     void load();
   }, [load]);
 
-  /** 书 id → 所在书籍分类（选父级第一层默认值用；已软删书不在候选，故查全量 books）。 */
-  const divisionById = useCallback(
-    (id: string) => books.find((book) => book.id === id)?.caseDivision,
-    [books],
-  );
-  /** 书籍分类 → 分组 key（必填；不在清单的历史游离值按原值回落显示）。 */
-  const resolveGroupOfDivision = useCallback(
-    (division: string) => (groupKeys.has(division) ? division : ""),
-    [groupKeys],
-  );
-
   // 点分组头：手风琴单展开/收起，**只切换展开态、不自动选中该组任何一本书**（需求③：
   // 自动选中会在右栏凭空打开一本，用户没点过；要打开就自己在树里点那本书）。
   const toggleGroup = (key: string) => {
@@ -503,16 +416,13 @@ export default function BookInfoApp() {
     setEditing(true);
     setSelectedId(null);
     // 新建默认归到当前展开的分组；没有展开组则留空由操作者选。状态下拉默认取
-    // 清单里 sort 最小的状态（hot_book NOT NULL，须有值）；父级第一层随当前分组。
+    // 清单里 sort 最小的状态（hot_book NOT NULL，须有值）。
     const defaultStatus = [...statuses]
       .sort((a, b) => a.sort - b.sort || a.value - b.value)[0];
     setForm({
       ...EMPTY_FORM,
       caseDivision: expandedKey ?? "",
       hotBook: defaultStatus == null ? "" : String(defaultStatus.value),
-      parentGroup: expandedKey
-        ? resolveGroupOfDivision(expandedKey)
-        : "",
     });
   };
 
@@ -522,7 +432,7 @@ export default function BookInfoApp() {
     if (!book || book.isDeleted) return;
     setCreating(false);
     setEditing(true);
-    setForm(formFromBook(book, resolveGroupOfDivision, divisionById));
+    setForm(formFromBook(book));
   };
 
   /** 取消：新建回退到未选中引导页；编辑回退到只读详情。 */
@@ -888,9 +798,6 @@ export default function BookInfoApp() {
    *  否则数据到位后的重渲染会比首次渲染多出 hook，React 卸载整棵岛 → 白屏。 */
   const statusLabel = (value: number) =>
     statuses.find((status) => status.value === value)?.label ?? String(value);
-  /** 父级 id → 显示名（详情页 Label 用；父级已软删/不存在则回落 id）。 */
-  const parentNameOf = (id: string | null) =>
-    id ? (books.find((book) => book.id === id)?.bookName || id) : "";
   const selectedBook = selectedId
     ? liveBooks.find((book) => book.id === selectedId)
       ?? deletedBooks.find((book) => book.id === selectedId)
@@ -1125,18 +1032,6 @@ export default function BookInfoApp() {
                     : t("bookInfo.enableOff")}
                 </dd>
               </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("bookInfo.parentIdLabel")}</dt>
-                <dd className="text-sm">
-                  {selectedBook.parentId
-                    ? (parentNameOf(selectedBook.parentId) || selectedBook.parentId)
-                    : t("bookInfo.parentTop")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("bookInfo.orgIdLabel")}</dt>
-                <dd className="text-sm">{selectedBook.orgId ?? "—"}</dd>
-              </div>
               {selectedBook.imageUrl && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">{t("bookInfo.imageUrlLabel")}</dt>
@@ -1164,8 +1059,6 @@ export default function BookInfoApp() {
           <BookInfoForm
             form={form}
             groups={groups}
-            liveBooks={liveBooks}
-            selfId={creating ? null : selectedBook?.id ?? null}
             statuses={statuses}
             onCancel={cancel}
             onSave={() => void save()}

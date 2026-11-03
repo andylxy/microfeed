@@ -15,7 +15,6 @@ import {
   createBookInfoHandler,
   deleteBookInfoHandler,
   purgeBookInfoHandler,
-  updateBookInfoHandler,
 } from "@/server/book-info/handlers";
 import type {
   BookInfoDb,
@@ -69,10 +68,19 @@ function asD1(db: SqliteBookInfoDb): D1Database {
   return db as unknown as D1Database;
 }
 
-/** 镜像迁移 0171 + 0173 的 `book_info` DDL（含自引用触发器），供端口级往返测试。 */
+/** 镜像迁移 0001 + 0173 + 0176 的 DDL（0176 删了 `parent_id`/`org_id` 及
+ *  自引用触发器），供端口级往返测试。`settings` 表必带：create/update handler
+ *  会经 `loadBookStatuses` 走 settings 通道校验 `hot_book`，缺表会抛
+ *  `no such table` 而非业务 400。 */
 function emptyDatabase(): SqliteBookInfoDb {
   const database = new DatabaseSync(":memory:");
   database.exec(`
+    CREATE TABLE settings (
+      category VARCHAR(20) PRIMARY KEY,
+      data TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE book_info (
       id              VARCHAR(11) PRIMARY KEY,
       book_name       VARCHAR(255) NOT NULL,
@@ -84,8 +92,6 @@ function emptyDatabase(): SqliteBookInfoDb {
       book_no         TEXT NOT NULL DEFAULT '',
       image_url       VARCHAR(255),
       hot_book        INTEGER NOT NULL DEFAULT 0,
-      parent_id       VARCHAR(11),
-      org_id          INTEGER,
       is_enable       INTEGER NOT NULL DEFAULT 1,
       comment         VARCHAR(255),
       created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -94,18 +100,6 @@ function emptyDatabase(): SqliteBookInfoDb {
       ext1 VARCHAR(255), ext2 VARCHAR(255), ext3 VARCHAR(255), ext4 VARCHAR(255), ext5 VARCHAR(255),
       ext6 VARCHAR(255), ext7 VARCHAR(255), ext8 VARCHAR(255), ext9 VARCHAR(255), ext10 VARCHAR(255)
     );
-    CREATE TRIGGER book_info_no_self_parent_ins
-    BEFORE INSERT ON book_info
-    WHEN NEW.parent_id IS NOT NULL AND NEW.parent_id = NEW.id
-    BEGIN
-      SELECT RAISE(ABORT, 'book_info_self_parent');
-    END;
-    CREATE TRIGGER book_info_no_self_parent_upd
-    BEFORE UPDATE OF parent_id ON book_info
-    WHEN NEW.parent_id IS NOT NULL AND NEW.parent_id = NEW.id
-    BEGIN
-      SELECT RAISE(ABORT, 'book_info_self_parent');
-    END;
   `);
   return new SqliteBookInfoDb(database);
 }
@@ -205,24 +199,13 @@ describe("book_info store round-trip", () => {
 
   it("board sorts by book_name (text book_no no longer sorts numerically)", async () => {
     const db = emptyDatabase();
-    await createBookInfo(db, "bookinfo002", {bookName: "丙", bookNo: "2", caseDivision: "分", hotBook: 0});
-    await createBookInfo(db, "bookinfo001", {bookName: "甲", bookNo: "10", caseDivision: "分", hotBook: 0});
-    await createBookInfo(db, "bookinfo003", {bookName: "乙", bookNo: "9", caseDivision: "分", hotBook: 0});
+    // ASCII 书名：SQLite 默认 BINARY 排序按 UTF-8 字节序，与生产 D1 同口径。
+    // book_no 故意乱序（2/10/9），证明排序键是 book_name 而非 book_no 的数值。
+    await createBookInfo(db, "bookinfo002", {bookName: "Book-C", bookNo: "2", caseDivision: "分", hotBook: 0});
+    await createBookInfo(db, "bookinfo001", {bookName: "Book-A", bookNo: "10", caseDivision: "分", hotBook: 0});
+    await createBookInfo(db, "bookinfo003", {bookName: "Book-B", bookNo: "9", caseDivision: "分", hotBook: 0});
     const board = await loadBookInfoBoard(db);
-    expect(board.map((row) => row.bookName)).toEqual(["甲", "乙", "丙"]);
-  });
-});
-
-describe("book_info self-parent trigger", () => {
-  it("rejects a row whose parent_id equals its own id on insert", async () => {
-    const db = emptyDatabase();
-    const statement = db.prepare(
-      "INSERT INTO book_info (id, book_name, case_division, book_no, parent_id) " +
-        "VALUES (?, ?, ?, ?, ?)",
-    );
-    await expect(
-      statement.bind("same1", "自引用", "分", "1", "same1").run(),
-    ).rejects.toThrow(/book_info_self_parent/u);
+    expect(board.map((row) => row.bookName)).toEqual(["Book-A", "Book-B", "Book-C"]);
   });
 });
 
@@ -312,19 +295,6 @@ describe("bookInfo Zod schemas", () => {
 });
 
 describe("book_info handlers", () => {
-  it("update handler refuses a parent pointing at itself", async () => {
-    const db = emptyDatabase();
-    const created = await createBookInfo(db, "bookinfo006", {
-      bookName: "药性赋",
-      bookNo: "6",
-      caseDivision: "分",
-      hotBook: 0,
-    });
-    await expect(
-      updateBookInfoHandler(db, asD1(db), created.id, {parentId: created.id}),
-    ).rejects.toMatchObject({status: 400});
-  });
-
   it("delete handler 404s on a missing id", async () => {
     const db = emptyDatabase();
     await expect(

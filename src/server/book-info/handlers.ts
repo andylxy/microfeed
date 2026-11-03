@@ -4,9 +4,6 @@
  * 与 `book-handlers.ts` 同构：Zod 校验请求体，然后交给 `store.ts`（纯读写）。
  * 5 个 handler 对应后台 5 条 ajax 路由（看板/新建/更新/软删/物删），
  * 无公共 api/v1——模块只给后台用（ADR-0058 决策 5）。
- *
- * 自引用（parent_id = id）在 handler 层拦成干净 400；迁移 0171 的触发器
- * `book_info_no_self_parent_*` 是兜底，防止绕过 handler 的直写。
  */
 
 import {z} from "zod";
@@ -67,8 +64,6 @@ export const bookInfoCreateSchema = z.object({
   bookNo: bookNoField,
   imageUrl: nullableText(255),
   hotBook: hotBookField,
-  parentId: z.string().trim().length(11).nullable().optional(),
-  orgId: optionalInt,
   isEnable: z.boolean().optional(),
   comment: nullableText(255),
 });
@@ -176,13 +171,8 @@ export async function createBookInfoHandler(
 ): Promise<BookInfoAdmin> {
   const parsed = bookInfoCreateSchema.safeParse(body);
   if (!parsed.success) throw new AppError(BOOK_INFO_ERRORS.invalidInput, 400);
-  // id 在这里生成（store 保持纯读写），因此自引用校验能与 update 路径
-  // 对称：parent_id = id 先拦成干净 400，触发器 book_info_no_self_parent_*
-  // 只兜底绕过 handler 的直写。
+  // id 在这里生成（store 保持纯读写）。
   const id = randomShortUUID();
-  if (parsed.data.parentId === id) {
-    throw new AppError(BOOK_INFO_ERRORS.invalidInput, 400);
-  }
   assertHotBookInStatuses(parsed.data.hotBook, await loadBookStatuses(groupsDb));
   return createBookInfo(db, id, parsed.data);
 }
@@ -197,11 +187,6 @@ export async function updateBookInfoHandler(
   const parsed = bookInfoUpdateSchema.safeParse(body);
   if (!parsed.success) throw new AppError(BOOK_INFO_ERRORS.invalidInput, 400);
   if (Object.keys(parsed.data).length === 0) {
-    throw new AppError(BOOK_INFO_ERRORS.invalidInput, 400);
-  }
-  // 自引用：parent_id = id 由迁移触发器兜底（RAISE 'book_info_self_parent'），
-  // 这里先拦成干净 400，避免直查 SQLite 错误。
-  if (parsed.data.parentId === id) {
     throw new AppError(BOOK_INFO_ERRORS.invalidInput, 400);
   }
   if (parsed.data.hotBook !== undefined) {

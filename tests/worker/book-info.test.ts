@@ -53,20 +53,6 @@ describe("book_info over the real D1", () => {
     });
   });
 
-  it("update handler refuses a parent pointing at itself", async () => {
-    const created = await createBookInfoHandler(db, groupsDb, {
-      bookName: "自引用书名",
-      bookNo: "4243",
-      caseDivision: "划分",
-      hotBook: 0,
-    });
-    await expect(
-      updateBookInfoHandler(db, groupsDb, created.id, {parentId: created.id}),
-    ).rejects.toMatchObject({status: 400});
-    await deleteBookInfoHandler(db, created.id);
-    await purgeBookInfoHandler(db, created.id);
-  });
-
   it("rejects a hot_book value outside the seeded status list", async () => {
     await expect(
       createBookInfoHandler(db, groupsDb, {

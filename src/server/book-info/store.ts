@@ -7,9 +7,7 @@
  * 删除分两步（与 `purgeAdminBook` 同口径）：
  * - `deleteBookInfo`（软删）只写 `deleted_at`，行保留，误删可恢复思路在——
  *   但本模块暂无 restore，看板用 `isDeleted` 区分，已软删行只给物删；
- * - `purgeBookInfo`（物删）只删**已经软删**的行，不可恢复，且不级联
- *   `parent_id` 子行（`parent_id` 是逻辑自引用、无外键，孤儿归属超出本票范围，
- *   见 docs/book-info/index.md）。
+ * - `purgeBookInfo`（物删）只删**已经软删**的行，不可恢复（见 docs/book-info/index.md）。
  */
 
 import type {BookInfoDb} from "./types";
@@ -20,10 +18,6 @@ import type {
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
-}
-
-function nullableText(value: unknown): string | null {
-  return value == null ? null : asText(value);
 }
 
 function toInt(value: unknown, fallback: number): number {
@@ -58,8 +52,6 @@ function rowToAdmin(row: Record<string, unknown>): BookInfoAdmin {
     bookNo: asText(row.book_no),
     imageUrl: asText(row.image_url),
     hotBook: toInt(row.hot_book, 0),
-    parentId: nullableText(row.parent_id),
-    orgId: nullableInt(row.org_id),
     isEnable: toInt(row.is_enable, 1) === 1,
     comment: asText(row.comment),
     isDeleted: row.deleted_at != null,
@@ -92,7 +84,7 @@ export async function getBookInfo(
   return rowToAdmin(row);
 }
 
-/** 新建。`id` 由 handler 生成并已做过自引用校验（见 handlers.ts）。
+/** 新建。`id` 由 handler 生成并已做过校验（见 handlers.ts）。
  *  `isEnable` 布尔 → `is_enable` 1/0；`hot_book` 是状态值（NOT NULL，handler 已
  *  校验在状态清单内）；空串可空字段写 null。 */
 export async function createBookInfo(
@@ -104,9 +96,9 @@ export async function createBookInfo(
   await db.prepare(
     "INSERT INTO book_info " +
       "(id, book_name, chapter, author, cheng_shu, case_division, case_tag, " +
-      " book_no, image_url, hot_book, parent_id, org_id, is_enable, comment, " +
+      " book_no, image_url, hot_book, is_enable, comment, " +
       " created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ).bind(
     id,
     input.bookName,
@@ -118,8 +110,6 @@ export async function createBookInfo(
     input.bookNo,
     input.imageUrl || null,
     input.hotBook,
-    input.parentId || null,
-    input.orgId ?? null,
     input.isEnable === false ? 0 : 1,
     input.comment || null,
     ts,
@@ -159,10 +149,6 @@ export async function updateBookInfo(
     ? current.imageUrl
     : patch.imageUrl ?? "";
   const hotBook = patch.hotBook ?? current.hotBook;
-  const parentId = patch.parentId === undefined
-    ? current.parentId
-    : patch.parentId ?? null;
-  const orgId = patch.orgId === undefined ? current.orgId : patch.orgId;
   const isEnable = patch.isEnable ?? current.isEnable;
   const comment = patch.comment === undefined
     ? current.comment
@@ -171,7 +157,7 @@ export async function updateBookInfo(
     "UPDATE book_info SET " +
       "book_name = ?, chapter = ?, author = ?, cheng_shu = ?, " +
       "case_division = ?, case_tag = ?, book_no = ?, image_url = ?, " +
-      "hot_book = ?, parent_id = ?, org_id = ?, is_enable = ?, comment = ?, " +
+      "hot_book = ?, is_enable = ?, comment = ?, " +
       "updated_at = ? " +
       "WHERE id = ?",
   ).bind(
@@ -184,8 +170,6 @@ export async function updateBookInfo(
     bookNo,
     imageUrl || null,
     hotBook,
-    parentId || null,
-    orgId ?? null,
     isEnable ? 1 : 0,
     comment || null,
     nowIso(),

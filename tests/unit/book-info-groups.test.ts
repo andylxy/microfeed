@@ -84,8 +84,6 @@ function emptyDatabase(): SqliteDb {
       book_no         TEXT NOT NULL DEFAULT '',
       image_url       VARCHAR(255),
       hot_book        INTEGER NOT NULL DEFAULT 0,
-      parent_id       VARCHAR(11),
-      org_id          INTEGER,
       is_enable       INTEGER NOT NULL DEFAULT 1,
       comment         VARCHAR(255),
       created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
