@@ -82,6 +82,10 @@ export const SNAPSHOT_TABLES = {
     // 并行共存，不依赖其它 ext_* 表。两表互相逻辑引用，须同批随快照走。
     "book_chapter",
     "book_chapter_body",
+    // 独立「药材别名」表（migration 0183，ADR-0064）。用户自建内容，恢复后的站点
+    // 要保留；与既有「层层叠加」的别名链路（items 口袋字段 / ext_tcm_aliases /
+    // getDerivedYaoAliases / GetAliaZhongYao）并行共存，不依赖其它 ext_* 表。
+    "yao_alia",
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log

@@ -392,6 +392,33 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     gates: ["页面 /term（维护入口）", "名词条目接口的写分支"],
     caveats: ["默认授予 editor / readonly。"],
   },
+  "content:yao-alia:read": {
+    summary:
+      "查看药材别名看板。看板按正名分组列出别名（别名 → 正名）；没有这个码，/yao-alia 页会 403。",
+    gates: [
+      "页面 /yao-alia — 药材别名看板，进入即校验",
+      "接口 /ajax/yao-alia（GET）— 别名看板查询（含已软删行）",
+    ],
+    caveats: [
+      "默认授予 editor / readonly。",
+      "与 content:yao-alia:manage 分开授权：只有查看权时能看分组清单，不能新建、改、删。",
+      "本码专属独立模块 yao_alia（ADR-0064），与旧 /admin/aliases/ 的 content:alias:* 授权边界独立。",
+    ],
+  },
+  "content:yao-alia:manage": {
+    summary: "维护药材别名（新建、编辑、软删、物删）。",
+    gates: [
+      "接口 /ajax/yao-alia（POST）— 新建别名",
+      "接口 /ajax/yao-alia/{yaoAliaId}（PUT）— 编辑别名（改名会即时重算左栏分组）",
+      "接口 /ajax/yao-alia/{yaoAliaId}（DELETE）— 软删别名",
+      "接口 /ajax/yao-alia/{yaoAliaId}/purge（DELETE）— 物删别名（只对已软删行开放）",
+    ],
+    caveats: [
+      "默认授予 editor / readonly。",
+      "别名唯一：软删行仍占用该唯一键，要复用同名别名须先物删该行。",
+      "通常要先有 content:yao-alia:read，才能在分组清单里定位到要编辑的别名。",
+    ],
+  },
 
   // ── system · 设备 / 版本 / 日志 / 公告 ──────────────────────
   "system:device:read": {

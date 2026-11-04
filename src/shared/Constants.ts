@@ -230,6 +230,10 @@ export const ADMIN_MENU_CODES = {
   // 独立「书本卷章」页（ADR-0062）。侧栏行由页面节点 `page_book_chapter` 驱动，
   // 与 MING_CI / ZHONG_YAO 同款：本键只用于 `activeNavItem` 高亮，非权限。
   BOOK_CHAPTER: 'book_chapter',
+  // 独立「药材别名」页（ADR-0064）。侧栏行由页面节点 `page_yao_alia` 驱动，
+  // `menuCodeFromNodeCode` 去前缀得 `yao_alia`，即本菜单码。本键只用于
+  // `activeNavItem` 高亮；授权走专属码 `content:yao-alia:*`，不复用 `content:alias:*`。
+  YAO_ALIA: 'yao_alia',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
   API: 'api',
@@ -322,6 +326,11 @@ export const PERMISSION_CODES = {
   // `content:book-chapter:*` 与路由 `book-chapter` 同源、授权边界独立。
   CONTENT_BOOK_CHAPTER_READ: 'content:book-chapter:read',
   CONTENT_BOOK_CHAPTER_MANAGE: 'content:book-chapter:manage',
+  // 独立「药材别名」模块（ADR-0064）。不复用 `content:alias:*`（旧 /admin/aliases/
+  // 页占用）、`content:yao:*`（yao/zhongyao 占用）也不复用 `content:book:*`；
+  // `content:yao-alia:*` 与路由 `yao-alia` 同源、授权边界独立。
+  CONTENT_YAO_ALIA_READ: 'content:yao-alia:read',
+  CONTENT_YAO_ALIA_MANAGE: 'content:yao-alia:manage',
   // Device management + app version/rollout administration. Both boards live
   // under the operations group (`group_operations`, migration 0089) and are
   // admin-only: `:read` opens the board, `:manage` unlocks revoke/restore and

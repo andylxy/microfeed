@@ -8,6 +8,7 @@ const docs = defineCollection({
     pattern: [
       "index.mdx",
       "book-info/**/*.md",
+      "yao-alia/**/*.md",
       "manage-cli.md",
       "microfeed-cli.md",
       "theme-kit-cli.md",

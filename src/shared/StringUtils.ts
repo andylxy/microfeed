@@ -472,6 +472,12 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/zhongyao/${id}`, browserAdminPath()),
   ajaxZhongYaoPurge: (id: string) =>
     adminUrl(`ajax/zhongyao/${id}/purge`, browserAdminPath()),
+  // 独立「药材别名」模块（ADR-0064）：分组纯 UI 派生，无 groups/reassign 端点。
+  ajaxYaoAlia: () => adminUrl("ajax/yao-alia", browserAdminPath()),
+  ajaxYaoAliaItem: (id: string) =>
+    adminUrl(`ajax/yao-alia/${id}`, browserAdminPath()),
+  ajaxYaoAliaPurge: (id: string) =>
+    adminUrl(`ajax/yao-alia/${id}/purge`, browserAdminPath()),
   // 独立「书本卷章」模块（ADR-0062）：卷章 CRUD + 正文 CRUD（正文按卷章窄范围取）。
   ajaxBookChapter: () => adminUrl("ajax/book-chapter", browserAdminPath()),
   ajaxBookChapterItem: (chapterId: string) =>

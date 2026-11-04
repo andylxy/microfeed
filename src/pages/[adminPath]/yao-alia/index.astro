@@ -1,0 +1,35 @@
+---
+import YaoAliaApp from "@/components/admin/yao-alia/YaoAliaApp";
+import AdminPageFallback from "@/components/admin/AdminPageFallback.astro";
+import AdminShell from "@/layouts/AdminShell.astro";
+import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
+import {adminLanguageFromRequest} from "@/shared/AdminLanguage";
+import {translate} from "@/shared/i18n";
+import {requirePagePermission} from "@/server/rbac/page-guard";
+
+// 独立「药材别名」页（ADR-0064）：自持 `yao_alia` 一张表，按正名分组维护别名。
+// 与既有 /aliases/ 三态看板（items 派生 + ext_tcm_aliases 覆盖/隐藏 + App 端点缓存）
+// 完全解耦——两套别名模型并行共存，故用专属码 content:yao-alia:read 做页面守卫。
+const adminLanguage = adminLanguageFromRequest(Astro.request);
+const {feedContent, onboardingResult} = Astro.locals;
+if (!feedContent || !onboardingResult) {
+  throw new Error(translate("errors.general.adminContextUninitialized", adminLanguage));
+}
+
+const denied = requirePagePermission(Astro.locals, PERMISSION_CODES.CONTENT_YAO_ALIA_READ, adminLanguage);
+if (denied) {
+  return denied;
+}
+---
+
+<AdminShell
+  activeNavItem={ADMIN_MENU_CODES.YAO_ALIA}
+  documentTitle={translate("pageDocumentTitle.yaoAlia", adminLanguage)}
+  {feedContent}
+  {onboardingResult}
+  pageTitle={translate("pageTitle.yaoAlia", adminLanguage)}
+>
+  <YaoAliaApp client:only="react">
+    <AdminPageFallback slot="fallback" kind="list" />
+  </YaoAliaApp>
+</AdminShell>

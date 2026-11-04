@@ -96,6 +96,8 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:term:manage", name: "名词维护"},
   {code: "content:book-chapter:read", name: "书本卷章查看"},
   {code: "content:book-chapter:manage", name: "书本卷章维护"},
+  {code: "content:yao-alia:read", name: "药材别名查看"},
+  {code: "content:yao-alia:manage", name: "药材别名维护"},
   {code: "system:device:read", name: "设备查看"},
   {code: "system:device:manage", name: "设备管理"},
   {code: "system:app-version:read", name: "版本查看"},
@@ -173,6 +175,11 @@ const EDITOR_PERMISSIONS: readonly string[] = [
   // `content:book-chapter:*` 与小说章节 `content:chapter:*` 授权边界独立。
   "content:book-chapter:read",
   "content:book-chapter:manage",
+  // 药材别名（ADR-0064）：与中药/名词 board 同性质——别名的增删改是内容编辑工作，
+  // editor 已有等价能力。专属码 `content:yao-alia:*` 与旧 /admin/aliases/ 的
+  // `content:alias:*`、与 `content:yao:*` 授权边界均独立，两套模型并行共存。
+  "content:yao-alia:read",
+  "content:yao-alia:manage",
   // App 自身要用的两个能力码（migration 0119）。与 `app:search:*` /
   // `app:mingci:view` 不同 —— 那两个由运营按需手工授权，这两个**默认授予**：
   // `/api/app/version` 是 App 每次启动的升级检查，`/api/app/announcements`
