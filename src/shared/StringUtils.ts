@@ -457,6 +457,15 @@ export const ADMIN_URLS = {
     adminUrl("ajax/book-info/reassign", browserAdminPath()),
   ajaxBookInfoStatuses: () =>
     adminUrl("ajax/book-info/statuses", browserAdminPath()),
+  ajaxMingCi: () => adminUrl("ajax/ming-ci", browserAdminPath()),
+  ajaxMingCiItem: (id: string) =>
+    adminUrl(`ajax/ming-ci/${id}`, browserAdminPath()),
+  ajaxMingCiPurge: (id: string) =>
+    adminUrl(`ajax/ming-ci/${id}/purge`, browserAdminPath()),
+  ajaxMingCiGroups: () =>
+    adminUrl("ajax/ming-ci/groups", browserAdminPath()),
+  ajaxMingCiReassign: () =>
+    adminUrl("ajax/ming-ci/reassign", browserAdminPath()),
   ajaxBookStatuses: () =>
     adminUrl("ajax/book-statuses", browserAdminPath()),
   ajaxBookStatus: (code: number) =>

@@ -37,6 +37,10 @@ const WHITELIST = new Set([
   // 与既有 channels/items 书机制完全解耦。2026-11-03 新增，与 `mail`/`cloud-usage`
   // 先例同为特性目录。
   "book-info",
+  // 独立「名词」模块（ADR-0060）：自持 `ming_ci` 表的纯读写层 + handler，
+  // 与既有 items/channels 名词机制并行共存、不迁移（决策 2）。2026-11-04 新增，
+  // 与 `book-info` 先例同为特性目录。
+  "ming-ci",
   "cache",
   // Cloudflare 使用情况看板（D1 / R2 / Workers 只读转发）的限额常量、R2 操作分级、
   // Token 密文存取与官方接口客户端。2026-10-18 新增，与 `webhooks` 先例同为特性目录。

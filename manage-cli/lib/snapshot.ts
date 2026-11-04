@@ -70,6 +70,9 @@ export const SNAPSHOT_TABLES = {
     // 独立「书本信息」表（migration 0171，ADR-0058）。用户自建内容，恢复后的
     // 站点要保留；与既有 channels/items 书机制解耦，不依赖其它 ext_* 表。
     "book_info",
+    // 独立「名词」表（migration 0177，ADR-0060）。用户自建内容，恢复后的站点
+    // 要保留；与既有 items/channels 名词机制解耦，不依赖其它 ext_* 表。
+    "ming_ci",
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log

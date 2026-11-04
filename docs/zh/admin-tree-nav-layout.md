@@ -50,19 +50,20 @@ interface AdminTreeNavLayoutProps {
    `books` = 书列表，每本带 `caseDivision` = 所属分组 key、`bookName`、`author`、`isDeleted`）。
 2. **拆存活 / 软删** → `liveBooks = books.filter(b => !b.isDeleted)`、
    `deletedBooks = books.filter(b => b.isDeleted)`。树只导航存活书，软删的另收折叠区。
-3. **映射成 `AdminTreeGroup[]`** → 每个分组算出「全量计数 + 可见叶子」。叶子两栏：
-   `label` = 书名、`description` = 作者（无作者不传 → 第二栏留空）。搜索态只留命中书、
-   且零命中分组整组不传（组件不渲染没传入的组）。
+3. **映射成 `AdminTreeGroup[]`** → 每个分组算出「计数徽章 + 可见叶子」，两者**同口径**——都来自
+   过滤后的 `visible`，所以徽章数永远等于该组实际显示的叶子数。叶子两栏：`label` = 书名、
+   `description` = 作者（无作者不传 → 第二栏留空）。搜索态只留命中书、且零命中分组整组不传
+   （组件不渲染没传入的组）。
 
 ```tsx
 const treeGroups = useMemo(
   () => groups.map((group) => {
-    const members = booksOf(group.key);                    // 该组全量存活书（喂 count 徽章）
+    const members = booksOf(group.key);                    // 该组全量存活书
     const visible = searchActive
       ? members.filter((book) => /* 书名/编号/作者命中 */)
-      : members;                                            // 可见叶子（喂 leaves）
+      : members;                                            // 过滤后的可见集：喂 count 徽章 + leaves
     return {
-      count: members.length,                               // 徽章：全量口径
+      count: visible.length,                               // 徽章：搜索态=命中数（与 leaves 一致）；非搜索态=全量
       key: group.key,
       label: group.label,
       leaves: visible.map((book) => ({
@@ -157,7 +158,29 @@ const treeGroups = useMemo(
 6. **弹层挂布局外 + 根用片段**：见 §7 第 1、2 条。
 7. **不往组件里加业务分支**：见 §7 第 7 条。
 
-## 9. 文件与提交
+## 9. 表单卡片间距范式
+
+右栏卡片内部（表单 / 详情）的间距**共用一套 Tailwind class**，参考源 `/admin/items/new/`，
+完整规范见 `docs/zh/07-frontend-and-styles.md`「管理后台卡片间距范式」节。速查：
+
+| 用途 | class |
+|---|---|
+| 卡片容器 | `rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs` |
+| 区块标题 | `<h2 className="text-lg font-semibold">` |
+| **每个顶层字段（独立块）** | `<div className="mt-5">…字段…</div>`（每字段单独 20px 节奏，与 `/admin/items/new/` 一致） |
+| 字段网格 | `<div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">` |
+| 按钮行 | `<div className="mt-5 flex gap-2">` |
+| 破坏性告警小卡 | `rounded-lg border-destructive p-4`（独立保留，不套卡片范式） |
+
+**节奏要点**：`/admin/items/new/` 的写法是**每个字段各包一层 `<div className="mt-5">`**，而非把多个字段塞进一个
+`space-y-4` 组。这样无论字段是「标签在上、控件在下」的 `AdminInput`/`AdminSelect`，还是「开关+标签横向并排」的
+`AdminSwitch`，都拿到**统一、均匀**的 20px 上间距，不会因组件内部布局差异而显出节奏断层。`space-y-4` 只用于
+**自包含子块内部**（如破坏性小卡里的元素、弹层里的列表行），不要拿它替代顶层字段的 `mt-5`。
+
+**禁用**：`rounded-lg border p-4`（旧卡片）、`<h3 className="font-medium">`（标题太浅）、
+`sm:grid-cols-2`（断点太早）、用 `space-y-4` 组包顶层字段（节奏与 items/new 不一致）。
+
+## 10. 文件与提交
 
 - 组件：`src/components/admin/shared/AdminTreeNavLayout.tsx`
 - 首个消费者（示例出处）：`src/components/admin/book-info/BookInfoApp.tsx`

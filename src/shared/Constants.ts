@@ -40,6 +40,12 @@ export const SETTINGS_CATEGORIES = {
    * `hot_book`（NOT NULL）存的是状态 `value`。可在「状态管理」弹层里增删改名排序。
    */
   BOOK_INFO_STATUSES: 'book_info_statuses',
+  /**
+   * 后台「名词」页的分组清单（ADR-0060）。数据是 `{groups:[{key,label,sort}]}`
+   * 对象，左栏 AdminGroupTree 的分组从这里派生；名词的归属是自身 `ming_ci_type`
+   * （= 分组 `key`）。可在「新建分组」弹层里增删改名排序。
+   */
+  MINGCI_GROUPS: 'mingci_groups',
 };
 
 export const DEFAULT_ITEMS_PER_PAGE = 20;
@@ -216,6 +222,7 @@ export const ADMIN_MENU_CODES = {
   BOOKS: 'books',
   BOOK_INFO: 'book_info',
   BOOK_STATUSES: 'book_statuses',
+  MING_CI: 'ming_ci',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
   API: 'api',

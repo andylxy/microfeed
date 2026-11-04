@@ -343,6 +343,8 @@ export default function BookInfoApp() {
   /** 左栏树：分组清单（settings，按 sort）。顶层节点「书籍分类」由 AdminGroupTree 的 root 承载。
    *  搜索态每组只留命中书（书名/编号/作者），且**没命中的组整组不传**——组件只渲染传入的
    *  分组，所以不传 = 组头也不显示（需求①：命中组数 >0 才显示，=0 隐藏）；非搜索态给全量组。
+   *  徽章 count = visible.length：搜索态跟随命中数（与该组 leaves 一致），非搜索态 visible
+   *  即全量 members，徽章仍是全量口径。
    *  叶子两栏（需求②）：label=书名，description=作者（无作者不传 → 第二行留空）。 */
   const treeGroups = useMemo(
     () => groups.map((group) => {
@@ -354,7 +356,7 @@ export default function BookInfoApp() {
             || (book.author || "").toLowerCase().includes(searchQuery))
         : members;
       return {
-        count: members.length,
+        count: visible.length,
         key: group.key,
         label: group.label,
         leaves: visible.map((book) => ({

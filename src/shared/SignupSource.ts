@@ -119,6 +119,27 @@ export function removedSources(
 }
 
 /**
+ * 一次给全「这次保存会删掉什么」：删掉的来源 + 其中内建来源 + 仍有账号在用的来源。
+ *
+ * 只是 `removedSources` + `classifyRemovedSources` 的组合——先算一次 `removed`，
+ * 再拿它去分类，避免调用方各算一遍。调用方（后台保存端点）按 `builtinRemoved` /
+ * `inUse` 是否为空决定状态码：内建来源不可删、账号在用要提示。
+ */
+export function checkSignupSourceRemoval(
+  current: readonly SignupSourceOption[],
+  next: readonly SignupSourceOption[],
+  usage: Readonly<Record<string, number>>,
+): {
+  removed: string[];
+  builtinRemoved: string[];
+  inUse: {count: number; value: string}[];
+} {
+  const removed = removedSources(current, next);
+  const {builtinRemoved, inUse} = classifyRemovedSources(removed, usage);
+  return {removed, builtinRemoved, inUse};
+}
+
+/**
  * 一个账号在不在某个分组里。
  *
  * 来源分组**排除已封禁账号**：封禁之后它只出现在「已封禁账号」里，一个账号
