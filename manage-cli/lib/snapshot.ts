@@ -73,6 +73,15 @@ export const SNAPSHOT_TABLES = {
     // 独立「名词」表（migration 0177，ADR-0060）。用户自建内容，恢复后的站点
     // 要保留；与既有 items/channels 名词机制解耦，不依赖其它 ext_* 表。
     "ming_ci",
+    // 独立「本草」表（migration 0180，ADR-0061）。用户自建内容，恢复后的站点要
+    // 保留；与既有 items/channels 中药机制（tcm_kind='yao'）并行共存，不依赖
+    // 其它 ext_* 表。
+    "zhong_yao",
+    // 独立「书本卷章」两表（migration 0182/0183，ADR-0062）。用户自建卷章目录
+    // 与其正文，恢复后的站点要保留；与既有 items-卷章机制（tcm_kind='chapter'）
+    // 并行共存，不依赖其它 ext_* 表。两表互相逻辑引用，须同批随快照走。
+    "book_chapter",
+    "book_chapter_body",
     // Signed-API credential + audit tables (migrations 0032 and 0034). The owner
     // map links each API key to its user and is credential identity data, so a
     // restored site must keep it or the keys come back orphaned. The access log

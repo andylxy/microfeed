@@ -223,6 +223,13 @@ export const ADMIN_MENU_CODES = {
   BOOK_INFO: 'book_info',
   BOOK_STATUSES: 'book_statuses',
   MING_CI: 'ming_ci',
+  // 独立「本草」页（ADR-0061）。侧栏行由页面节点 `page_zhong_yao` 驱动，
+  // `menuCodeFromNodeCode` 去前缀得 `zhong_yao`，即本菜单码（与 MING_CI 同款）。
+  // 复用既有 `content:yao:*` 权限码，本键只用于 `activeNavItem` 高亮，非权限。
+  ZHONG_YAO: 'zhong_yao',
+  // 独立「书本卷章」页（ADR-0062）。侧栏行由页面节点 `page_book_chapter` 驱动，
+  // 与 MING_CI / ZHONG_YAO 同款：本键只用于 `activeNavItem` 高亮，非权限。
+  BOOK_CHAPTER: 'book_chapter',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
   API: 'api',
@@ -310,6 +317,11 @@ export const PERMISSION_CODES = {
   CONTENT_YAO_MANAGE: 'content:yao:manage',
   CONTENT_TERM_READ: 'content:term:read',
   CONTENT_TERM_MANAGE: 'content:term:manage',
+  // 独立「书本卷章」模块（ADR-0062 决策 8）。不复用 `content:chapter:*`
+  // （已被小说章节机制占用）也不复用 `content:book:*`（book-info 占用）；
+  // `content:book-chapter:*` 与路由 `book-chapter` 同源、授权边界独立。
+  CONTENT_BOOK_CHAPTER_READ: 'content:book-chapter:read',
+  CONTENT_BOOK_CHAPTER_MANAGE: 'content:book-chapter:manage',
   // Device management + app version/rollout administration. Both boards live
   // under the operations group (`group_operations`, migration 0089) and are
   // admin-only: `:read` opens the board, `:manage` unlocks revoke/restore and

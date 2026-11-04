@@ -658,6 +658,19 @@ function main(): void {
     report(f.file, f.rule, f.message, f.line);
   }
 
+  const verdict = flags.length === 0 ? "OK" : `ADVISORY(${flags.length} 项待处理)`;
+  console.log(
+    `D1SCAN: ${verdict} —— 大表全表扫描 ${scan001.length} 处、索引全扫 ${scan003.length} 处、` +
+      `TEMP B-TREE ${tempBtree} 处，累计将被全扫的行数 ${totalScannedRows}、字节 ${totalScannedBytes}。`,
+  );
+  // 机器可读汇总行必须早于任何 process.exit（含 --strict 的 finish()）输出，否则
+  // gate-subset 编排器拿不到 D1SCAN-METRIC 而假性 FAIL（指标解析失败，非真实违规）。
+  console.log(
+    `D1SCAN-METRIC: files=${files.length} stmts=${statementsExamined} skipped=${skipped.length} ` +
+      `scan001=${scan001.length} scan003=${scan003.length} scan002=${tempBtree} ` +
+      `rows=${totalScannedRows} bytes=${totalScannedBytes} small=${seenSmall.length}`,
+  );
+
   const strict = process.argv.includes("--strict");
   if (strict && flags.length > 0) {
     finish("D1 full-table-scan");
@@ -677,16 +690,6 @@ function main(): void {
       );
     }
   }
-  const verdict = flags.length === 0 ? "OK" : `ADVISORY(${flags.length} 项待处理)`;
-  console.log(
-    `D1SCAN: ${verdict} —— 大表全表扫描 ${scan001.length} 处、索引全扫 ${scan003.length} 处、` +
-      `TEMP B-TREE ${tempBtree} 处，累计将被全扫的行数 ${totalScannedRows}、字节 ${totalScannedBytes}。`,
-  );
-  console.log(
-    `D1SCAN-METRIC: files=${files.length} stmts=${statementsExamined} skipped=${skipped.length} ` +
-      `scan001=${scan001.length} scan003=${scan003.length} scan002=${tempBtree} ` +
-      `rows=${totalScannedRows} bytes=${totalScannedBytes} small=${seenSmall.length}`,
-  );
   if (flags.length > 0) {
     console.log("D1SCAN: 加 --strict 可将其转为硬性失败；候选索引与 A/B 实测方法见 microfeed-gate-subset 技能。");
   }

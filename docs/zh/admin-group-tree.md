@@ -1,10 +1,12 @@
-# AdminGroupTree 使用指南：数据源驱动的两层分组导航
+# AdminGroupTree 使用指南：数据源驱动的分层分组导航
 
-> 适用对象：要在管理后台页面左栏放「分组 → 成员」两层导航的新页面。
+> 适用对象：要在管理后台页面左栏放「分组 → 成员」两层导航，或「分组 → 子分组 → 成员」等更深层级导航的新页面。
 > 组件位置：`src/components/admin/shared/AdminGroupTree.tsx`（与 `AdminSelect` / `AdminDialog` 同层）。
-> 术语依据：CONTEXT.md「**分组树**」——总览根行不参与过滤，分组徽章恒显全量数；分组怎么划、成员怎么过滤由页面自己决定，控件只统一展开与选中的交互。
+> 术语依据：CONTEXT.md「**分组树**」——总览根行不参与过滤，分组徽章由页面给定；分组怎么划、成员怎么过滤由页面自己决定，控件只统一展开与选中的交互。
 
-组件只有一个消费者时的形态就是本文所有示例的出处：用户管理页 `src/components/admin/rbac/UsersApp/index.tsx`（注册来源分组 → 账号）。本文不引入任何假设场景，所有代码均摘自该页面的实际提交（`848469c`）。
+组件只有一个消费者时的形态就是本文 §1–§8 所有示例的出处：用户管理页 `src/components/admin/rbac/UsersApp/index.tsx`（注册来源分组 → 账号）。§9 是三层树的实际消费者 `BookChapterApp`（书籍分类 → 书名 → 卷章，ADR-0063）。本文不引入任何假设场景，所有代码均摘自页面的实际提交。
+
+**默认仍是两层**：分组不传 `subgroups` 时行为与扩展前逐字节一致（用户页、书本信息页、名词页、用户管理页均无需改动）。只有显式传 `subgroups` 的分支才下钻一层。
 
 ---
 
@@ -29,7 +31,7 @@ export interface AdminTreeLeaf {
 }
 
 /**
- * 分组树分组：`count` 是徽章显示的全量数，`leaves` 由调用方按自己的
+ * 分组树分组：`count` 是徽章显示的数，`leaves` 由调用方按自己的
  * 过滤口径给（如搜索命中行）——两者可以不同，组件不做任何过滤。
  */
 export interface AdminTreeGroup {
@@ -37,12 +39,18 @@ export interface AdminTreeGroup {
   label: string;
   count: number;
   leaves: AdminTreeLeaf[];
+  /** 可选子分组：传了则该节点展开后渲染子分组而非叶子，可继续嵌套。
+   *  不传 = 两层（分组 → 叶子）；传了 = 三层或更深。 */
+  subgroups?: AdminTreeGroup[];
+  /** 该节点展开后没有成员时的提示；不传则回落 props.emptyLeafText。 */
+  emptyText?: string;
 }
 
 interface AdminGroupTreeProps {
   /** 数据源：分组、计数与成员过滤全部由调用方算好传入。 */
   groups: AdminTreeGroup[];
-  /** 展开的分组键集合。手风琴单展开由调用方只传一个键表达；搜索态可传多个。 */
+  /** 展开的分组键集合。手风琴单展开由调用方只传一个键表达；搜索态可传多个。
+   *  多层树把各层的键放同一个数组，故整棵树内键必须唯一（调用方加前缀隔离）。 */
   expandedKeys: readonly string[];
   selectedLeafId: string | null;
   onToggleGroup: (key: string) => void;
@@ -54,6 +62,7 @@ interface AdminGroupTreeProps {
   /**
    * `emptyTreeText` 已传且所有分组都无可见叶子时，整列表替换成的提示文案
    * （如搜索无结果）。文案由调用方决定何时给——组件不认识「搜索」这个概念。
+   * 多层树会递归下钻到子分组再判定，不会因顶层 `leaves` 为空而误判。
    */
   emptyTreeText?: string;
 }
@@ -200,12 +209,15 @@ expandedKeys={
 
 ## 6. 两个空态的区别
 
-| Prop | 触发条件 | 渲染位置 | 用户页的用途 |
+| Prop / 字段 | 触发条件 | 渲染位置 | 用户页的用途 |
 |---|---|---|---|
-| `emptyLeafText` | 某个**已展开**分组的 `leaves` 为空 | 该分组列表内的一行小字 | `rbac.userGroupEmpty`（这个分组还没有账号） |
-| `emptyTreeText` | 该 prop **已传** 且 **所有分组** `leaves` 全空 | 整棵列表被替换成一个提示段 | `rbac.userCategoryNoResults`（搜索无结果） |
+| `emptyLeafText` | 某个**已展开**分组的 `leaves` 为空，且该节点没有自己的 `emptyText` | 该分组列表内的一行小字 | `rbac.userGroupEmpty`（这个分组还没有账号） |
+| `AdminTreeGroup.emptyText` | 同上，但按节点覆盖；多层树各层语义不同时用 | 该节点列表内的一行小字 | 三层树里分类层用「这个分类下还没有书本」 |
+| `emptyTreeText` | 该 prop **已传** 且 **整棵树递归后**无任何可见叶子 | 整棵列表被替换成一个提示段 | `rbac.userCategoryNoResults`（搜索无结果） |
 
 `emptyTreeText` 何时传由页面决定——组件不认识「搜索」这个概念。用户页只在 `searchActive` 时传；正常态即使全部分组为空（如零账号的新站）也不传，树照常渲染（收起态看不到任何空态，与迁移前行为一致）。
+
+多层树的空态判定是**递归**的：`hasVisibleLeaves(group)` 遇到 `subgroups` 就下钻到子组，只有走到真正的叶子层才用 `leaves.length` 判定。所以三层树的顶层 `leaves` 可以放心给空数组，不会出现「明明有卷章却显示整树无结果」。
 
 ## 7. 新页面接入检查清单
 
@@ -215,12 +227,33 @@ expandedKeys={
 4. **叶子两栏**：`label` 主行、`description` 可选说明行（小字，超长自动截断；不传或为空则第二行整行留空）；要展示更多内容时先考虑塞进这两栏，不要扩组件契约。
 5. **展开规则**：手风琴 = 传单键数组；需要多分组同时展开（如搜索）= 传多键数组；`onToggleGroup` 里自己写「再点已展开 = 全收起」。
 6. **点分组是否联动选中**：页面语义（用户页是「换组自动选中该组第一个成员」），写在 `onToggleGroup` 里。
-7. **空态文案**：两级空态按 §6 区分，文案走 i18n。
-8. **不往组件里加业务分支**：需要新形态（第三行叶子、行内按钮、多选……）时，先回到契约层面讨论，不按页面名做 if。
+7. **空态文案**：两级空态按 §6 区分，文案走 i18n；多层树给不同层的节点传各自的 `emptyText`。
+8. **不往组件里加业务分支**：层级深度靠 `subgroups` 数据表达，不要按页面名做 if。需要别的新形态（第三行叶子、行内按钮、多选……）时，先回到契约层面讨论。
 
 ## 8. 文件与提交
 
 - 组件：`src/components/admin/shared/AdminGroupTree.tsx`
-- 首个消费者（所有示例出处）：`src/components/admin/rbac/UsersApp/index.tsx`
+- 首个消费者（§1–§7 示例出处）：`src/components/admin/rbac/UsersApp/index.tsx`
 - 树原语（未搬动，组件按 import 复用）：`src/components/admin/rbac/PermissionTreeNode.tsx`
 - 引入提交：`848469c refactor(admin): 用户页左栏分组树抽为数据源驱动的 AdminGroupTree`
+
+## 9. 三层树：书本卷章页（ADR-0063）
+
+`BookChapterApp` 是唯一给分组传 `subgroups` 的消费者。三层数据全部由看板一次返回后在页面侧派生，链路是 `book_chapter.source_book_id → book_info.id → case_division → settings.book_groups.key`：
+
+| 层 | 节点 | 数据来源 | 键 |
+|---|---|---|---|
+| 总览根行 | `root`「书本卷章」 | `liveChapters.length` | 不参与过滤、不可展开 |
+| 第一层 | 书籍分类 | `board.groups`（settings 清单，按 sort） | `cat:<group.key>` |
+| 第二层 | 书名 | `board.sourceBooks`，按 `caseDivision` 归入分类 | `book:<book.id>` |
+| 第三层 | 卷章叶子 | `board.chapters`，按 `sourceBookId` 归入书 | 卷章 `id`（`selectedLeafId`） |
+
+要点：
+
+- **键前缀隔离**：分类 slug 与 11 位书 id 理论上不撞，但两层键进同一个 `expandedKeys` 数组，仍显式加 `cat:` / `book:` 前缀，避免将来分组键改成数字后撞车。
+- **两层手风琴**：页面持有 `expandedCategoryKey` / `expandedBookKey` 两个 state；点分类只切分类并收起上一本书，点书只切书。搜索态不手风琴，直接把所有命中分支的键全传进去。
+- **徽章同口径**：三层徽章都数「该节点下可见卷章数」，与 root 的 445 一致；搜索态跟随命中数。分类节点的 `count` 是它所有 `subgroups.count` 之和。
+- **空态分层**：分类节点给 `emptyText`（「这个分类下还没有书本」），书节点不传、回落 `emptyLeafText`（「这本书下还没有卷章」）。非搜索态保留全部分类与全部书——12 本里 2 本没有卷章，展开该节点就能看到空态，而不是整节点消失。
+- **搜索覆盖三层**：命中判定看卷章标题 / 序号 / 分节号，也看书名与分类名；命中书名或分类名时该分支的卷章整批可见，`searchPlaceholder` 与口径一致（「搜索分类、书名、卷章…」）。
+- **兜底桶分两种**：书没命中任何 settings 分类时保留原名，挂在合成分类「未分类」下；卷章没命中来源书（`sourceBookId` 为空，或指向已软删/不存在的书）时归入「未归属书本」节点。悬空引用必须并入后者，否则该卷章没有书节点可挂、被静默丢弃，root 数就会大于各级徽章之和。生产数据实测 0 条，只为宽松引用留后路。
+- **两层页面零改动**：`BookInfoApp` / `MingCiApp` / `UsersApp` 都不传 `subgroups`，走组件的叶子分支，渲染结果与扩展前一致。

@@ -466,6 +466,24 @@ export const ADMIN_URLS = {
     adminUrl("ajax/ming-ci/groups", browserAdminPath()),
   ajaxMingCiReassign: () =>
     adminUrl("ajax/ming-ci/reassign", browserAdminPath()),
+  // 独立「本草」模块（ADR-0061）：无分组，故无 groups/reassign 端点。
+  ajaxZhongYao: () => adminUrl("ajax/zhongyao", browserAdminPath()),
+  ajaxZhongYaoItem: (id: string) =>
+    adminUrl(`ajax/zhongyao/${id}`, browserAdminPath()),
+  ajaxZhongYaoPurge: (id: string) =>
+    adminUrl(`ajax/zhongyao/${id}/purge`, browserAdminPath()),
+  // 独立「书本卷章」模块（ADR-0062）：卷章 CRUD + 正文 CRUD（正文按卷章窄范围取）。
+  ajaxBookChapter: () => adminUrl("ajax/book-chapter", browserAdminPath()),
+  ajaxBookChapterItem: (chapterId: string) =>
+    adminUrl(`ajax/book-chapter/${chapterId}`, browserAdminPath()),
+  ajaxBookChapterPurge: (chapterId: string) =>
+    adminUrl(`ajax/book-chapter/${chapterId}/purge`, browserAdminPath()),
+  ajaxBookChapterBodies: (chapterId: string) =>
+    adminUrl(`ajax/book-chapter/${chapterId}/bodies`, browserAdminPath()),
+  ajaxBookChapterBodyItem: (bodyId: string) =>
+    adminUrl(`ajax/book-chapter/body/${bodyId}`, browserAdminPath()),
+  ajaxBookChapterBodyPurge: (bodyId: string) =>
+    adminUrl(`ajax/book-chapter/body/${bodyId}/purge`, browserAdminPath()),
   ajaxBookStatuses: () =>
     adminUrl("ajax/book-statuses", browserAdminPath()),
   ajaxBookStatus: (code: number) =>

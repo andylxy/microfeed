@@ -48,6 +48,23 @@ ORDER BY ming_ci_no ASC, id ASC`，是有意为之的**整表读**——看板�
 （种子 17 行，非抓取），量级可控；若日后单表行数显著增长，应改分页
 （`normalizeAdminItemListLimit(webSettings.itemsPerPage)`）而非全量返回。
 
+## 默认数据（种子迁移）
+
+ming-ci 的「出厂默认数据」全部通过**迁移 seed 固化**，部署到其他位置（任何执行过这些迁移的 D1 环境）自动 apply，无需手动录入，且与 book-info 模块范式一致：
+
+| 迁移 | 种子内容 | 幂等 |
+|---|---|---|
+| `0177_seed_ming_ci.sql` | 建表 `ming_ci` + 索引（`ming_ci_no_unique` 等）+ 权限页面节点 `page_ming_ci` | `CREATE TABLE/INDEX IF NOT EXISTS`、`INSERT OR IGNORE` |
+| `0178_seed_ming_ci_groups.sql` | `settings.mingci_groups` 4 个默认分组：医理 `yili` / 药理 `yaoli` / 易理 `zhouyi` / 通用 `tongyong`（对 `ctwh/BeiMingCi.sql` 的一次性冻结快照，运行时不依赖源表） | `INSERT OR IGNORE`（category 主键） |
+| `0179_seed_ming_ci_rows.sql` | 17 行默认名词（来自 `ctwh/BeiMingCi.sql` 冻结快照，id 为真 `tcmId` 隔离进程预计算的确定性 11 位短 id） | `INSERT OR IGNORE`（id 主键） |
+
+要点：
+- **幂等可重放**：全部 `IF NOT EXISTS` / `OR IGNORE`，重复 apply 或部署到新位置安全，已存在行不覆盖。
+- **默认数据 vs 用户数据分离**：种子行 `ming_ci_no` 占 0–16；用户新建走 `MAX(no)+1` 事务（`ming_ci_no_unique` 冲突 fail-fast），不会与种子撞号。
+- **分组默认值在迁移里，不在代码硬编码**：`shared/MingCi.ts` 只定义分组 schema 形状（`mingCiGroupSchema`），4 个分组的实际值只写在 `0178`；改分组请走后台「管理分组」或 `PUT /groups`，不要手改迁移。
+- **源数据来源**：`ctwh/` 下 `BeiMingCi.sql` 等是开发期源数据，不随部署；种子值已冻结进迁移，后续源表与种子各自独立演化（ADR-0060 决策 4）。
+- **部署验证**：目标位置执行 `wrangler d1 migrations apply`（或对应部署流水线）后，`ming_ci` 表与 `settings.mingci_groups` 即自带上述默认数据；可用 `SELECT COUNT(*) FROM ming_ci;`（应为 17）与 `SELECT data FROM settings WHERE category='mingci_groups';` 核对。
+
 ## 后台端点
 
 模块只给后台用，无公共 api/v1（ADR-0060 决策 7）。7 条 ajax 端点（全部复用

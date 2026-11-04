@@ -42,6 +42,14 @@ const WHITELIST = new Set([
   // 与 `book-info` 先例同为特性目录。
   "ming-ci",
   "cache",
+  // 独立「本草」模块（ADR-0061）：自持 `zhong_yao` 表的纯读写层 + handler，
+  // 与既有 items/channels 中药机制（tcm_kind='yao'）并行共存、不迁移（决策 2）。
+  // 2026-11-05 新增，与 `book-info`/`ming-ci` 先例同为特性目录。
+  "zhong-yao",
+  // 独立「书本卷章」模块（ADR-0062）：自持 `book_chapter`/`book_chapter_body`
+  // 两表的纯读写层 + handler，与既有 items 卷章机制（tcm_kind='chapter'）并行
+  // 共存、不迁移（决策 1）。2026-11-04 新增，与 `book-info`/`ming-ci` 先例同为特性目录。
+  "book-chapter",
   // Cloudflare 使用情况看板（D1 / R2 / Workers 只读转发）的限额常量、R2 操作分级、
   // Token 密文存取与官方接口客户端。2026-10-18 新增，与 `webhooks` 先例同为特性目录。
   "cloud-usage",

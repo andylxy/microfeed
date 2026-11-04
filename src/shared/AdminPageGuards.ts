@@ -32,6 +32,8 @@ export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
   audit: PERMISSION_CODES.CONTENT_AUDIT_READ,
   "audit/[itemId]": PERMISSION_CODES.CONTENT_AUDIT_READ,
   "book-info": PERMISSION_CODES.CONTENT_BOOK_READ,
+  // 独立「书本卷章」页（ADR-0062）：专属码，与小说章节 `content:chapter:*` 分开。
+  "book-chapter": PERMISSION_CODES.CONTENT_BOOK_CHAPTER_READ,
   "ming-ci": PERMISSION_CODES.CONTENT_TERM_READ,
   "book-statuses": PERMISSION_CODES.CONTENT_BOOK_STATUS_MANAGE,
   books: PERMISSION_CODES.CONTENT_BOOK_READ,
@@ -68,4 +70,7 @@ export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
   "webhooks/endpoints": PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE,
   "webhooks/events": PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE,
   yao: PERMISSION_CODES.CONTENT_YAO_READ,
+  // 独立「本草」页（ADR-0061）。复用既有 content:yao:* 码（决策 7），与 items-中药
+  // （tcm_kind='yao'，路由 yao）并行共存、互不迁移；路由名 zhongyao 与 items-中药区分。
+  zhongyao: PERMISSION_CODES.CONTENT_YAO_READ,
 };
