@@ -55,6 +55,11 @@ const WHITELIST = new Set([
   // 并行共存、不迁移（决策 1/2）。2026-11-05 新增，与 `book-info`/`ming-ci`/
   // `zhong-yao` 先例同为特性目录。
   "yao-alia",
+  // 独立「方剂」模块（ADR-0065）：自持 `fang_yao`/`fang_yao_body` 两表的纯读写层
+  // + handler，与既有 items 方剂机制（legacy fangs 页 / tcm_kind）并行共存、不迁移
+  // （决策 1）。2026-11-05 新增，与 `book-info`/`ming-ci`/`zhong-yao`/`book-chapter`/
+  // `yao-alia` 先例同为特性目录。
+  "fang-yao",
   // Cloudflare 使用情况看板（D1 / R2 / Workers 只读转发）的限额常量、R2 操作分级、
   // Token 密文存取与官方接口客户端。2026-10-18 新增，与 `webhooks` 先例同为特性目录。
   "cloud-usage",

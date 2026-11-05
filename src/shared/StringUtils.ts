@@ -490,6 +490,18 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/book-chapter/body/${bodyId}`, browserAdminPath()),
   ajaxBookChapterBodyPurge: (bodyId: string) =>
     adminUrl(`ajax/book-chapter/body/${bodyId}/purge`, browserAdminPath()),
+  // 独立「方剂」模块（ADR-0065）：方剂 CRUD + 组成 CRUD（组成按方剂窄范围取）。
+  ajaxFangYao: () => adminUrl("ajax/fang-yao", browserAdminPath()),
+  ajaxFangYaoItem: (fangId: string) =>
+    adminUrl(`ajax/fang-yao/${fangId}`, browserAdminPath()),
+  ajaxFangYaoPurge: (fangId: string) =>
+    adminUrl(`ajax/fang-yao/${fangId}/purge`, browserAdminPath()),
+  ajaxFangYaoBodies: (fangId: string) =>
+    adminUrl(`ajax/fang-yao/${fangId}/bodies`, browserAdminPath()),
+  ajaxFangYaoBodyItem: (bodyId: string) =>
+    adminUrl(`ajax/fang-yao/body/${bodyId}`, browserAdminPath()),
+  ajaxFangYaoBodyPurge: (bodyId: string) =>
+    adminUrl(`ajax/fang-yao/body/${bodyId}/purge`, browserAdminPath()),
   ajaxBookStatuses: () =>
     adminUrl("ajax/book-statuses", browserAdminPath()),
   ajaxBookStatus: (code: number) =>

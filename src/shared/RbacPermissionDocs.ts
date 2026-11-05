@@ -419,6 +419,37 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
       "通常要先有 content:yao-alia:read，才能在分组清单里定位到要编辑的别名。",
     ],
   },
+  "content:fang-yao:read": {
+    summary:
+      "查看方剂看板。看板按源书分组列出方剂（源书 → 方）；没有这个码，/fang-yao 页会 403。",
+    gates: [
+      "页面 /fang-yao — 方剂看板，进入即校验",
+      "接口 /ajax/fang-yao（GET）— 方剂看板查询（含已软删行）",
+      "接口 /ajax/fang-yao/{fangId}/bodies（GET）— 某方剂的组成列表",
+    ],
+    caveats: [
+      "默认授予 editor / readonly。",
+      "与 content:fang-yao:manage 分开授权：只有查看权时能看分组清单，不能新建、改、删。",
+      "本码专属独立模块 fang_yao（ADR-0065），与 legacy fangs 页的 content:fang:* 授权边界独立。",
+    ],
+  },
+  "content:fang-yao:manage": {
+    summary: "维护方剂（新建、编辑、软删、物删）与其组成。",
+    gates: [
+      "接口 /ajax/fang-yao（POST）— 新建方剂",
+      "接口 /ajax/fang-yao/{fangId}（PUT）— 编辑方剂",
+      "接口 /ajax/fang-yao/{fangId}（DELETE）— 软删方剂",
+      "接口 /ajax/fang-yao/{fangId}/purge（DELETE）— 物删方剂（只对已软删行开放；有组成时 409）",
+      "接口 /ajax/fang-yao/{fangId}/bodies（POST）— 新建组成",
+      "接口 /ajax/fang-yao/body/{bodyId}（PUT / DELETE）— 编辑 / 软删组成",
+      "接口 /ajax/fang-yao/body/{bodyId}/purge（DELETE）— 物删组成",
+    ],
+    caveats: [
+      "默认授予 editor / readonly。",
+      "fang_no 系统托管（组内 MAX+1），绝不复用源 FangNo（ADR-0065 P1 甲）。",
+      "通常要先有 content:fang-yao:read，才能在分组清单里定位到要编辑的方剂。",
+    ],
+  },
 
   // ── system · 设备 / 版本 / 日志 / 公告 ──────────────────────
   "system:device:read": {

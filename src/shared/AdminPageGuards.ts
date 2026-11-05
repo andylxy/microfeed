@@ -73,6 +73,9 @@ export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
   // 独立「药材别名」页（ADR-0064）。专属码，与旧 /admin/aliases/ 的 content:alias:*
   // 及 items-中药的 content:yao:* 授权边界均独立；路由名 yao-alia。
   "yao-alia": PERMISSION_CODES.CONTENT_YAO_ALIA_READ,
+  // 独立「方剂」页（ADR-0065）。专属码 content:fang-yao:*，与既有 items-方剂
+  // （路由 fangs / content:fang:*）授权边界独立；路由名 fang-yao。
+  "fang-yao": PERMISSION_CODES.CONTENT_FANG_YAO_READ,
   // 独立「本草」页（ADR-0061）。复用既有 content:yao:* 码（决策 7），与 items-中药
   // （tcm_kind='yao'，路由 yao）并行共存、互不迁移；路由名 zhongyao 与 items-中药区分。
   zhongyao: PERMISSION_CODES.CONTENT_YAO_READ,

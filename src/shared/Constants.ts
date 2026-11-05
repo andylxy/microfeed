@@ -234,6 +234,11 @@ export const ADMIN_MENU_CODES = {
   // `menuCodeFromNodeCode` 去前缀得 `yao_alia`，即本菜单码。本键只用于
   // `activeNavItem` 高亮；授权走专属码 `content:yao-alia:*`，不复用 `content:alias:*`。
   YAO_ALIA: 'yao_alia',
+  // 独立「方剂」页（ADR-0065）。侧栏行由页面节点 `page_fang_yao` 驱动，
+  // `menuCodeFromNodeCode` 去前缀得 `fang_yao`，即本菜单码。本键只用于
+  // `activeNavItem` 高亮；授权走专属码 `content:fang-yao:*`，不复用 legacy
+  // fangs 页的 `content:fang:*`。
+  FANG_YAO: 'fang_yao',
   VOLUMES: 'volumes',
   SITE_FILES: 'site_files',
   API: 'api',
@@ -331,6 +336,11 @@ export const PERMISSION_CODES = {
   // `content:yao-alia:*` 与路由 `yao-alia` 同源、授权边界独立。
   CONTENT_YAO_ALIA_READ: 'content:yao-alia:read',
   CONTENT_YAO_ALIA_MANAGE: 'content:yao-alia:manage',
+  // 独立「方剂」模块（ADR-0065 决策 8）。不复用 legacy fangs 页的 `content:fang:*`、
+  // `content:chapter:*`（小说章节）、`content:book:*`（book-info）也不复用
+  // `content:yao:*`（中药）；`content:fang-yao:*` 与路由 `fang-yao` 同源、授权边界独立。
+  CONTENT_FANG_YAO_READ: 'content:fang-yao:read',
+  CONTENT_FANG_YAO_MANAGE: 'content:fang-yao:manage',
   // Device management + app version/rollout administration. Both boards live
   // under the operations group (`group_operations`, migration 0089) and are
   // admin-only: `:read` opens the board, `:manage` unlocks revoke/restore and
