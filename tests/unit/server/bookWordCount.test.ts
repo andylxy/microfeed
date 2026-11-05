@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "../support/sqlite-statement";
 import {
   bookWordCounts,
   chapterWordCount,
@@ -10,29 +11,7 @@ import {
   type WordCountDbPreparedStatement,
 } from "@/server/feed/bookWordCount";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements WordCountDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): WordCountDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<{results: Record<string, unknown>[]}> {
-    return {results: this.statement.all(...this.values) as Record<string, unknown>[]};
-  }
-
-  async run(): Promise<unknown> {
-    return this.statement.run(...this.values);
-  }
-}
 
 class SqliteDb implements WordCountDb {
   constructor(readonly raw: DatabaseSync) {}

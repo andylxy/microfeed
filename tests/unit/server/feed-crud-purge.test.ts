@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it, vi} from "vitest";
 
+import {SqliteStatement} from "../support/sqlite-statement";
 import FeedCrudManager from "@/server/feed/FeedCrudManager";
 
 // 模块级 spy：观测分派目标（桶函数在 Workers 测试池外不可用，node:sqlite
@@ -21,35 +22,7 @@ import {
  * 调用方稍后提交）在缓冲期不分派；提交后调用 `purgeAppContentCaches` 按
  * 提交后的行归属分派——条文改挂新章时清**新**章所属桶并清中药两桶。
  */
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement {
-  private values: SqlInputValue[] = [];
-  constructor(
-    private readonly database: DatabaseSync,
-    private readonly sql: string,
-  ) {}
-  bind(...values: unknown[]): SqliteStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-  async all() {
-    return {
-      results: this.database.prepare(this.sql).all(...this.values) as
-        Record<string, unknown>[],
-      success: true,
-    };
-  }
-  async first() {
-    return (this.database.prepare(this.sql).get(...this.values) as
-      | Record<string, unknown>
-      | undefined) ?? null;
-  }
-  async run() {
-    this.database.prepare(this.sql).run(...this.values);
-    return {results: [], success: true};
-  }
-}
 
 function makeCrud(database: DatabaseSync): FeedCrudManager {
   const feedDb = {

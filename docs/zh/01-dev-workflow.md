@@ -13,6 +13,7 @@ description: microfeed 仓库的开发流程：分支、改动范围、测试原
 - **不要直接在 `main` 上改动**。创建或沿用聚焦分支，命名为 `<type>/<short-kebab-case>`，`type` 取 `feature` / `fix` / `docs` / `refactor` / `test` / `ci` / `chore`。已有但不合命名的分支，若已包含本次工作可继续沿用。
 - **保留不相关的改动**。不要用 `stash` / `reset` / `discard` / `stage` 去“清理”分支；必要时用独立 worktree。
 - **不要**添加无意义的单元测试，也不要写仅复述实现的测试。新测试应聚焦有意义的行为、回归、公共契约；不要为了覆盖率而加测试。
+- **单测需要 D1 端口替身时，统一复用 `tests/unit/support/sqlite-statement.ts` 的 `SqliteStatement`**（超集签名，覆盖 12 个 `*DbPreparedStatement` 端口），不要在每个测试文件里手写一份；各模块的 `emptyDatabase()` 建表 DDL 与 `implements XxxDb` 包装类仍留在各自文件——DDL 是模块 schema 真源，包装类是端口漂移的编译期哨兵。20 份手写副本收成一份后净减约 540 行，端口签名此后只有一处可改。
 - 发布前：只提交本次范围的文件，用简洁的祈使句标题提交，并在 GitHub 鉴权可用时向 `microfeed/microfeed` 开一个 draft PR。`git diff --check` 与 `yarn check` 的执行时机归 AGENTS.md「最高指令：门禁仅在手动触发时运行」。
 - 编辑并测试完后，**停掉你启动的所有开发服务器**，确认每个进程都已退出，让别人可以无端口冲突地 `yarn dev`；**不要停你没启动的服务器**。
 - **`.vite` 缓存异常**：dev server 或构建行为异常、疑似 Vite 缓存损坏时，删除 `node_modules/.vite`（被 `node_modules/` 忽略，不影响提交）后重启 `yarn dev` 重新生成；不要手动改缓存文件。

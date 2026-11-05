@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "./support/sqlite-statement";
 import {
   BOOK_CHAPTER_ERRORS,
   createBookChapterBodyHandler,
@@ -16,7 +17,6 @@ import {
 } from "@/server/book-chapter/handlers";
 import type {
   BookChapterDb,
-  BookChapterDbAllResult,
   BookChapterDbPreparedStatement,
 } from "@/server/book-chapter/types";
 // 建表/编辑 schema 真源在 shared（handlers 也从这里 import），测试直取真源。
@@ -27,37 +27,7 @@ import {
 import {AppError} from "@/shared/errors";
 import {ADMIN_MENU_CODES, PERMISSION_CODES} from "@/shared/Constants";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements BookChapterDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): BookChapterDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<BookChapterDbAllResult> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 class SqliteBookChapterDb implements BookChapterDb {
   constructor(private readonly database: DatabaseSync) {}

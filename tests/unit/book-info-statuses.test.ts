@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "./support/sqlite-statement";
 import {
   loadBookStatuses,
   saveBookStatuses,
@@ -15,37 +16,7 @@ import type {
 } from "@/server/book-info/types";
 import type {BookInfoStatus} from "@/shared/BookInfo";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements BookInfoDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): BookInfoDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all() {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 /**
  * 内存库：镜像 `settings`（0001），供状态 IO 做端口级往返。状态读写吃

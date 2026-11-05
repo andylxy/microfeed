@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "../support/sqlite-statement";
 import {
   createAdminBook,
   deleteAdminBook,
@@ -12,41 +13,10 @@ import {
   readBookStatusCode,
   updateAdminBook,
   type BookDb,
-  type BookDbAllResult,
   type BookDbPreparedStatement,
 } from "@/server/feed/extBook";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements BookDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): BookDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<BookDbAllResult> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 class SqliteBookDb implements BookDb {
   constructor(private readonly database: DatabaseSync) {}

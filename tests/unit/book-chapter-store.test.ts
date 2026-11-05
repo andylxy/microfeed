@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "./support/sqlite-statement";
 import {
   countBodiesByChapter,
   createBookChapter,
@@ -18,41 +19,10 @@ import {
 } from "@/server/book-chapter/store";
 import type {
   BookChapterDb,
-  BookChapterDbAllResult,
   BookChapterDbPreparedStatement,
 } from "@/server/book-chapter/types";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements BookChapterDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): BookChapterDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<BookChapterDbAllResult> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 class SqliteBookChapterDb implements BookChapterDb {
   constructor(private readonly database: DatabaseSync) {}

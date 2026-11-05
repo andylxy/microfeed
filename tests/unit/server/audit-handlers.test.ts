@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "../support/sqlite-statement";
 import {
   listAuditChaptersHandler,
   listAuditTrailHandler,
@@ -12,38 +13,7 @@ import type {
   AuditDbPreparedStatement,
 } from "@/server/feed/extContentAudit";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements AuditDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): AuditDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<{results: Record<string, unknown>[]; success: boolean}> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-      success: true,
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{results: Record<string, unknown>[]; success: boolean}> {
-    this.statement.run(...this.values);
-    return {results: [], success: true};
-  }
-}
 
 class SqliteAuditDb implements AuditDb {
   constructor(private readonly database: DatabaseSync) {}

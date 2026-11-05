@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "./support/sqlite-statement";
 import {
   createYaoAlia,
   getYaoAlia,
@@ -11,41 +12,10 @@ import {
 } from "@/server/yao-alia/store";
 import type {
   YaoAliaDb,
-  YaoAliaDbAllResult,
   YaoAliaDbPreparedStatement,
 } from "@/server/yao-alia/types";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements YaoAliaDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): YaoAliaDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<YaoAliaDbAllResult> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 class SqliteYaoAliaDb implements YaoAliaDb {
   constructor(private readonly database: DatabaseSync) {}
@@ -127,7 +97,7 @@ describe("yao_alia store round-trip", () => {
     await createYaoAlia(db, "ya0000000a3", {bieMing: "桂", yaoName: "桂枝"});
     const board = await loadYaoAliaBoard(db);
     expect(board.map((row) => row.bieMing)).toEqual(["枣", "术", "桂"]);
-    expect(board.map((row) => row.yaoAliaNo)).toEqual([0, 1, 2]);
+    expect(board.map((row) => row.yaoAliaNo)).toEqual([1, 2, 3]);
   });
 
   it("keeps several aliases under one canonical name (name is not UNIQUE)", async () => {

@@ -1,6 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {describe, expect, it} from "vitest";
 
+import {SqliteStatement} from "../support/sqlite-statement";
 import {
   countChannelsByStatus,
   createBookStatus,
@@ -12,7 +13,6 @@ import {
   nextBookStatusCode,
   updateBookStatus,
   type BookStatusDb,
-  type BookStatusDbAllResult,
   type BookStatusDbPreparedStatement,
 } from "@/server/feed/extBookStatus";
 import {
@@ -23,37 +23,7 @@ import {
 import {AppError} from "@/shared/errors";
 import {BOOK_STATUS_COLOR_PATTERN} from "@/shared/ExtBook";
 
-type SqlInputValue = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-class SqliteStatement implements BookStatusDbPreparedStatement {
-  private readonly statement: ReturnType<DatabaseSync["prepare"]>;
-  private values: SqlInputValue[] = [];
-
-  constructor(database: DatabaseSync, query: string) {
-    this.statement = database.prepare(query);
-  }
-
-  bind(...values: unknown[]): BookStatusDbPreparedStatement {
-    this.values = values as SqlInputValue[];
-    return this;
-  }
-
-  async all(): Promise<BookStatusDbAllResult> {
-    return {
-      results: this.statement.all(...this.values) as Record<string, unknown>[],
-    };
-  }
-
-  async first(): Promise<Record<string, unknown> | null> {
-    return (this.statement.get(...this.values) as Record<string, unknown> | undefined)
-      ?? null;
-  }
-
-  async run(): Promise<{success: boolean}> {
-    this.statement.run(...this.values);
-    return {success: true};
-  }
-}
 
 class SqliteBookStatusDb implements BookStatusDb {
   constructor(private readonly database: DatabaseSync) {}
