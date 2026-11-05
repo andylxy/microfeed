@@ -181,24 +181,22 @@ export default function YaoAliaApp() {
     }));
   }, [liveEntries]);
 
-  /** 树节点：搜索态每组只留命中别名（别名/正名/序号），没命中的组整组不传。
+  /** 树节点：搜索态每组只留命中别名（别名/正名），没命中的组整组不传。
    *  徽章 count = visible.length（与该组 leaves 一致）。
-   *  叶子两栏：label = 别名，description = 序号（正名已是组头，不再重复）。 */
+   *  叶子只给 label = 别名一栏——序号是纯内部排序键，后台不展示也不参与搜索。 */
   const treeGroups = useMemo(
     () => nameGroups
       .map((group) => {
         const visible = searchActive
           ? group.members.filter((entry) =>
               entry.bieMing.toLowerCase().includes(searchQuery)
-              || entry.yaoName.toLowerCase().includes(searchQuery)
-              || String(entry.yaoAliaNo).includes(searchQuery))
+              || entry.yaoName.toLowerCase().includes(searchQuery))
           : group.members;
         return {
           count: visible.length,
           key: group.key,
           label: group.name || t("yaoAlia.untitled"),
           leaves: visible.map((entry) => ({
-            description: `#${entry.yaoAliaNo}`,
             id: entry.id,
             label: entry.bieMing || t("yaoAlia.untitled"),
           })),
@@ -512,10 +510,6 @@ export default function YaoAliaApp() {
               <div>
                 <dt className="text-xs text-muted-foreground">{t("yaoAlia.yaoNameLabel")}</dt>
                 <dd className="text-sm">{selectedEntry.yaoName || "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">{t("yaoAlia.noLabel")}</dt>
-                <dd className="text-sm">{selectedEntry.yaoAliaNo}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">{t("yaoAlia.isEnableLabel")}</dt>

@@ -2203,7 +2203,6 @@ export const en = {
     createYaoAlia: "New alias",
     bieMingLabel: "Alias",
     yaoNameLabel: "Canonical name",
-    noLabel: "No.",
     isEnableLabel: "Enabled",
     enableOn: "Enabled",
     enableOff: "Disabled",

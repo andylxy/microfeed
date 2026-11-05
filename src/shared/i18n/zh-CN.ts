@@ -2187,7 +2187,6 @@ export const zhCN: TranslationKey = {
     createYaoAlia: "新建别名",
     bieMingLabel: "别名",
     yaoNameLabel: "正名",
-    noLabel: "序号",
     isEnableLabel: "启用",
     enableOn: "启用",
     enableOff: "停用",
