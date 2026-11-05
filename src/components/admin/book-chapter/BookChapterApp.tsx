@@ -11,15 +11,16 @@ import {ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
+import AdminDialog from "@/components/admin/shared/AdminDialog";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
 import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";
 import type {AdminTreeGroup} from "@/components/admin/shared/AdminGroupTree";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
+import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
+import AdminTextarea from "@/components/admin/shared/AdminTextarea";
 import {Button} from "@/components/ui/button";
-import {Input} from "@/components/ui/input";
-import {Textarea} from "@/components/ui/textarea";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
   BookChapterAdmin,
@@ -79,6 +80,15 @@ const NO_BOOK_KEY = "__none__";
 const CATEGORY_KEY_PREFIX = "cat:";
 const BOOK_KEY_PREFIX = "book:";
 
+/**
+ * 正文弹层的自适应尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：
+ * 宽度按视口缩放、上限 48rem；高度由内容撑开，`dvh` 上限防超屏（移动端地址栏
+ * 收起时比 `vh` 准）。`sm/lg:max-w-none` 清掉默认与 `DialogContent` 基础的固定
+ * 宽度档位，否则 576px 上限会让 `w-[min(...)]` 失效。其余弹层不传，行为不变。
+ */
+const BODY_DIALOG_CONTENT_CLASS =
+  "w-[min(90vw,48rem)] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] sm:max-w-none lg:max-w-none";
+
 function formFromChapter(chapter: BookChapterAdmin): ChapterFormState {
   return {
     chapterHeader: chapter.chapterHeader,
@@ -109,10 +119,10 @@ function chapterToPayload(form: ChapterFormState): Record<string, unknown> {
   };
 }
 
+/** 正文载荷。序号（receipt_no）系统托管：新建不传（后端取卷章内 MAX+1）、
+ *  编辑不传（后端保持原值），故这里一律不带 receiptNo。文本原样，不 trim。 */
 function bodyToPayload(form: BodyFormState): Record<string, unknown> {
-  const receipt = Number(form.receiptNo);
   return {
-    ...(Number.isFinite(receipt) && receipt >= 0 ? {receiptNo: receipt} : {}),
     sectionText: form.sectionText,
     sectionNote: form.sectionNote === "" ? null : form.sectionNote,
     fangJi: form.fangJi === "" ? null : form.fangJi,
@@ -141,12 +151,14 @@ function bencaoLevelText(
   return level;
 }
 
-/** 卷章表单：新建置顶渲染，编辑在右栏展开。 */
+/** 卷章表单：新建置顶渲染，编辑在右栏展开。`creating` 区分新建/编辑——
+ *  编辑时来源书与源分节号锁定不可改（需求：这两个字段只在新建时定）。 */
 function ChapterForm({
   form,
   setForm,
   saving,
   sourceBooks,
+  creating,
   onSave,
   onCancel,
   title,
@@ -155,6 +167,7 @@ function ChapterForm({
   setForm: Dispatch<SetStateAction<ChapterFormState>>;
   saving: boolean;
   sourceBooks: BookChapterSourceBook[];
+  creating: boolean;
   onSave: () => void;
   onCancel: () => void;
   title: string;
@@ -162,19 +175,30 @@ function ChapterForm({
   const {t} = useTranslation();
   const set = (key: keyof ChapterFormState, value: string | boolean) =>
     setForm((current) => ({...current, [key]: value}));
-  // 来源书下拉：空串 = 未归属书本（nullable）。当前值不在下拉里（来源书被删悬空）
-  // 时把原 id 并入选项，逼着操作者显式改选或清空。
+  // 来源书下拉：数据源是书本信息（book_info）动态获取，去掉「未归属书本」空串
+  // 兜底项；book_no 为空的书（如「中药」「名词」）也不进下拉——它们没有可追溯
+  // 的书本编号，选了也无法预填源分节号。当前值不在下拉里（来源书被软删，或该书
+  // book_no 后来被清空）时把原 id 并入选项，保证编辑锁定态仍能显示原归属。
   const sourceOptions = useMemo(() => {
-    const base = [
-      {label: t("bookChapter.noSourceBook"), value: ""},
-      ...sourceBooks.map((book) => ({label: book.bookName, value: book.id})),
-    ];
+    const base = sourceBooks
+      .filter((book) => book.bookNo.trim() !== "")
+      .map((book) => ({label: book.bookName, value: book.id}));
     const current = form.sourceBookId.trim();
     if (current && !base.some((option) => option.value === current)) {
       return [...base, {label: current, value: current}];
     }
     return base;
-  }, [sourceBooks, t, form.sourceBookId]);
+  }, [sourceBooks, form.sourceBookId]);
+  // 选来源书时把该书编号预填进源分节号（可改）。编辑态字段锁定，不触发预填。
+  const onSourceBookChange = (option: {value: string}) => {
+    const book = sourceBooks.find((entry) => entry.id === option.value);
+    const section = book ? book.bookNo : "";
+    setForm((current) => ({
+      ...current,
+      sourceBookId: option.value,
+      chapterSection: creating ? section : current.chapterSection,
+    }));
+  };
   const selectedSource = sourceOptions.find(
     (option) => option.value === form.sourceBookId,
   ) ?? null;
@@ -192,12 +216,14 @@ function ChapterForm({
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <AdminSelect
           ariaLabel={t("bookChapter.sourceBookLabel")}
+          disabled={!creating}
           label={t("bookChapter.sourceBookLabel")}
-          onChange={(option) => set("sourceBookId", option.value)}
+          onChange={onSourceBookChange}
           options={sourceOptions}
           value={selectedSource}
         />
         <AdminInput
+          disabled={!creating}
           label={t("bookChapter.chapterSectionLabel")}
           onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
             set("chapterSection", event.target.value)}
@@ -226,63 +252,65 @@ function ChapterForm({
   );
 }
 
-/** 正文表单。多行文本用 textarea，**原样提交不 trim**。 */
+/** 正文表单，作为 `AdminDialog` 的内容（卡片与标题由弹层提供）。
+ *  多行文本用 textarea，**原样提交不 trim**。`creating` 区分新建/编辑——
+ *  序号（receipt_no）一律由系统给：新建自动 `MAX(receipt_no)+1`、编辑锁死
+ *  不可改，故该输入框始终禁用（新建留空占位，编辑显示原值）。 */
 function BodyForm({
   form,
   setForm,
   saving,
+  creating,
   onSave,
   onCancel,
-  title,
 }: {
   form: BodyFormState;
   setForm: Dispatch<SetStateAction<BodyFormState>>;
   saving: boolean;
+  creating: boolean;
   onSave: () => void;
   onCancel: () => void;
-  title: string;
 }) {
   const {t} = useTranslation();
   const set = (key: keyof BodyFormState, value: string | boolean) =>
     setForm((current) => ({...current, [key]: value}));
   return (
-    <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-      <h3 className="text-base font-semibold">{title}</h3>
-      <div className="mt-4">
+    <div>
+      <div>
+        {/* 序号系统托管：新建由后端取卷章内 MAX+1，编辑锁死。禁用框给出
+            「自动生成」提示，避免操作者误以为漏填。 */}
         <AdminInput
+          disabled
           label={t("bookChapter.bodyReceiptLabel")}
-          onChange={(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-            set("receiptNo", event.target.value)}
+          placeholder={creating ? t("bookChapter.bodyReceiptAuto") : undefined}
           value={form.receiptNo}
         />
       </div>
       <div className="mt-4">
-        <label className="w-full">
-          <div className="mb-2 text-sm font-semibold text-foreground">
-            {t("bookChapter.bodyTextLabel")}
-          </div>
-          <Textarea
-            className="w-full text-sm"
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              set("sectionText", event.target.value)}
-            rows={14}
-            value={form.sectionText}
-          />
-        </label>
+        {/* 正文普遍是单行短文本（中位 37 字），注释 82% 为空、非空时反而很长
+            （p90 328 字 / 9 行）。故复用 AdminTextarea 的 field-sizing: content
+            按内容增高，min/maxRows 定上下限，不再写死 14 / 6 行。
+            `min-h-12` 覆盖 Textarea 基础的 min-h-24（96px），让 2 行下限生效。 */}
+        <AdminTextarea
+          customCss="min-h-12 text-sm"
+          label={t("bookChapter.bodyTextLabel")}
+          maxRows={12}
+          minRows={2}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+            set("sectionText", event.target.value)}
+          value={form.sectionText}
+        />
       </div>
       <div className="mt-4">
-        <label className="w-full">
-          <div className="mb-2 text-sm font-semibold text-foreground">
-            {t("bookChapter.bodyNoteLabel")}
-          </div>
-          <Textarea
-            className="w-full text-sm"
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              set("sectionNote", event.target.value)}
-            rows={6}
-            value={form.sectionNote}
-          />
-        </label>
+        <AdminTextarea
+          customCss="min-h-12 text-sm"
+          label={t("bookChapter.bodyNoteLabel")}
+          maxRows={18}
+          minRows={2}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+            set("sectionNote", event.target.value)}
+          value={form.sectionNote}
+        />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <AdminInput
@@ -491,10 +519,8 @@ export default function BookChapterApp() {
               count: visible.length,
               key: `${BOOK_KEY_PREFIX}${book.key}`,
               label: book.label,
+              // 第二行留空：树只导航卷章标题，序号与源分节号在右栏详情看。
               leaves: visible.map((chapter) => ({
-                ...(chapter.chapterSection
-                  ? {description: `${t("bookChapter.chapterNoLabel")} ${chapter.chapterNo} · ${chapter.chapterSection}`}
-                  : {description: `${t("bookChapter.chapterNoLabel")} ${chapter.chapterNo}`}),
                 id: chapter.id,
                 label: chapter.chapterHeader || t("bookChapter.untitled"),
               })),
@@ -619,7 +645,8 @@ export default function BookChapterApp() {
     resetDetail(false);
   };
 
-  /** 新建时把「当前展开的书」预填成来源书，省一次下拉；未展开 / 兜底桶不预填。 */
+  /** 新建时把「当前展开的书」预填成来源书，并同步预填该书编号到源分节号，
+   *  省一次下拉与手填；未展开 / 兜底桶不预填（章节号留空，可后续手填）。 */
   const startCreate = () => {
     setCreating(true);
     setEditing(true);
@@ -627,7 +654,12 @@ export default function BookChapterApp() {
     const preset = expandedBookKey && expandedBookKey !== `${BOOK_KEY_PREFIX}${NO_BOOK_KEY}`
       ? expandedBookKey.slice(BOOK_KEY_PREFIX.length)
       : "";
-    setForm({...EMPTY_CHAPTER_FORM, sourceBookId: preset});
+    const presetBook = sourceBooks.find((book) => book.id === preset);
+    setForm({
+      ...EMPTY_CHAPTER_FORM,
+      sourceBookId: preset,
+      chapterSection: presetBook ? presetBook.bookNo : "",
+    });
   };
 
   const startEdit = () => {
@@ -841,17 +873,17 @@ export default function BookChapterApp() {
   const deletedBodies = bodies.filter((body) => body.isDeleted);
 
   return (
-    <AdminTreeNavLayout
-      nav={
+    <>
+      <AdminTreeNavLayout
+        nav={
         <>
           {/* 左栏：搜索 + 新建 + 「分类 → 书名 → 卷」三层树。三层的分组、
               计数与过滤都在本组件算好传入，AdminGroupTree 只渲染传入状态
               （约定不可改）；空分类与空书在非搜索态也保留，展开给空态提示。 */}
           <div className="p-1">
-            <Input
-              aria-label={t("bookChapter.searchAria")}
-              className="w-full"
-              onChange={(event) => setTreeSearch(event.target.value)}
+            <AdminTreeSearchInput
+              ariaLabel={t("bookChapter.searchAria")}
+              onValueChange={setTreeSearch}
               placeholder={t("bookChapter.searchPlaceholder")}
               value={treeSearch}
             />
@@ -937,8 +969,8 @@ export default function BookChapterApp() {
             </div>
           )}
         </>
-      }
-    >
+        }
+      >
       {/* 右栏：选中卷章的只读详情 + 正文列表；点「编辑」或左栏「新建」才换成表单。 */}
       <section className="space-y-4 rounded-[14px] border bg-card p-5 shadow-xs">
         {selectedChapter && !editing && (
@@ -992,10 +1024,6 @@ export default function BookChapterApp() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">{t("bookChapter.chapterSectionLabel")}</dt>
-                <dd className="text-sm">{selectedChapter.chapterSection ?? "—"}</dd>
-              </div>
-              <div>
                 <dt className="text-xs text-muted-foreground">{t("bookChapter.isEnableLabel")}</dt>
                 <dd className="text-sm">
                   {selectedChapter.isEnable
@@ -1029,19 +1057,6 @@ export default function BookChapterApp() {
               )}
               {!bodyLoading && !bodyError && liveBodies.length === 0 && (
                 <p className="mt-2 text-sm text-muted-foreground">{t("bookChapter.bodiesEmpty")}</p>
-              )}
-
-              {(bodyCreating || bodyEditingId) && (
-                <div className="mt-3">
-                  <BodyForm
-                    form={bodyForm}
-                    onCancel={cancelBody}
-                    onSave={() => void saveBody()}
-                    saving={saving}
-                    setForm={setBodyForm}
-                    title={bodyCreating ? t("bookChapter.newBody") : t("bookChapter.editBody")}
-                  />
-                </div>
               )}
 
               <ul className="mt-3 space-y-2">
@@ -1203,6 +1218,7 @@ export default function BookChapterApp() {
         {/* 表单只在新手新建或编辑一条存活卷章时出现；编辑已软删卷章不给入口。 */}
         {(creating || (editing && selectedChapter && !selectedChapter.isDeleted)) && (
           <ChapterForm
+            creating={creating}
             form={form}
             onCancel={cancel}
             onSave={() => void save()}
@@ -1263,6 +1279,28 @@ export default function BookChapterApp() {
           </div>
         )}
       </section>
-    </AdminTreeNavLayout>
+      </AdminTreeNavLayout>
+
+      {/* 正文编辑/新建弹层：按组件指南 §7 挂在布局之外，避免被左栏卡片裁剪或
+          随栏滚动。关闭复用 cancelBody，保存中禁关（closeDisabled）。 */}
+      <AdminDialog
+        closeDisabled={saving}
+        contentClassName={BODY_DIALOG_CONTENT_CLASS}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) cancelBody();
+        }}
+        open={bodyCreating || bodyEditingId !== null}
+        title={bodyCreating ? t("bookChapter.newBody") : t("bookChapter.editBody")}
+      >
+        <BodyForm
+          creating={bodyCreating}
+          form={bodyForm}
+          onCancel={cancelBody}
+          onSave={() => void saveBody()}
+          saving={saving}
+          setForm={setBodyForm}
+        />
+      </AdminDialog>
+    </>
   );
 }

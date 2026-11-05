@@ -13,13 +13,13 @@ import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
+import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {
   AdminCollectionError,
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
-import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {
@@ -397,10 +397,9 @@ export default function ZhongYaoApp() {
         {/* 左栏：搜索 + 平铺条目列表 + 新建。宽屏冻结在视口顶，
             列表长时栏内自行滚动，不随右栏内容往上滚。 */}
         <div className="p-1">
-          <Input
-            aria-label={t("zhongYao.searchAria")}
-            className="w-full"
-            onChange={(event) => setListSearch(event.target.value)}
+          <AdminTreeSearchInput
+            ariaLabel={t("zhongYao.searchAria")}
+            onValueChange={setListSearch}
             placeholder={t("zhongYao.searchPlaceholder")}
             value={listSearch}
           />

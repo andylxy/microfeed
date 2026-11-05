@@ -2,11 +2,13 @@
 
 > 适用对象：要在管理后台页面左栏放「分组 → 成员」两层导航，或「分组 → 子分组 → 成员」等更深层级导航的新页面。
 > 组件位置：`src/components/admin/shared/AdminGroupTree.tsx`（与 `AdminSelect` / `AdminDialog` 同层）。
-> 术语依据：CONTEXT.md「**分组树**」——总览根行不参与过滤，分组徽章由页面给定；分组怎么划、成员怎么过滤由页面自己决定，控件只统一展开与选中的交互。
+> 术语依据：`docs/zh/07-frontend-and-styles.md` 附录的「分组树 / AdminGroupTree」条目——总览根行不参与过滤，分组徽章由页面给定；分组怎么划、成员怎么过滤由页面自己决定，控件只统一展开与选中的交互。
 
 组件只有一个消费者时的形态就是本文 §1–§8 所有示例的出处：用户管理页 `src/components/admin/rbac/UsersApp/index.tsx`（注册来源分组 → 账号）。§9 是三层树的实际消费者 `BookChapterApp`（书籍分类 → 书名 → 卷章，ADR-0063）。本文不引入任何假设场景，所有代码均摘自页面的实际提交。
 
 **默认仍是两层**：分组不传 `subgroups` 时行为与扩展前逐字节一致（用户页、书本信息页、名词页、用户管理页均无需改动）。只有显式传 `subgroups` 的分支才下钻一层。
+
+**原两层方案完整保留**：`AdminTreeNavLayout` 的 `nav` / `children` 两槽契约没有改动，`BookInfoApp` / `MingCiApp` / `ZhongYaoApp` / `UsersApp` 仍按 §1–§8 的方式传构造好的 `AdminTreeGroup[]`（不传 `subgroups`）。三层树是**追加的分支**，不是替换既有方案：完整接入示例见本文 §10，布局壳一侧的传法见 `docs/zh/admin-tree-nav-layout.md` §11。
 
 ---
 
@@ -233,9 +235,12 @@ expandedKeys={
 ## 8. 文件与提交
 
 - 组件：`src/components/admin/shared/AdminGroupTree.tsx`
+- 布局壳（配套，契约未变）：`src/components/admin/shared/AdminTreeNavLayout.tsx`，见 `docs/zh/admin-tree-nav-layout.md`
 - 首个消费者（§1–§7 示例出处）：`src/components/admin/rbac/UsersApp/index.tsx`
+- 三层树消费者（§9 / §10 示例出处）：`src/components/admin/book-chapter/BookChapterApp.tsx`
 - 树原语（未搬动，组件按 import 复用）：`src/components/admin/rbac/PermissionTreeNode.tsx`
-- 引入提交：`848469c refactor(admin): 用户页左栏分组树抽为数据源驱动的 AdminGroupTree`
+- 裁决记录：`docs/novel-cms/adr/0063-book-chapter-three-level-tree.md`
+- 引入提交：`848469c refactor(admin): 用户页左栏分组树抽为数据源驱动的 AdminGroupTree`；分层扩展见 `95a7ac9`
 
 ## 9. 三层树：书本卷章页（ADR-0063）
 
@@ -252,8 +257,181 @@ expandedKeys={
 
 - **键前缀隔离**：分类 slug 与 11 位书 id 理论上不撞，但两层键进同一个 `expandedKeys` 数组，仍显式加 `cat:` / `book:` 前缀，避免将来分组键改成数字后撞车。
 - **两层手风琴**：页面持有 `expandedCategoryKey` / `expandedBookKey` 两个 state；点分类只切分类并收起上一本书，点书只切书。搜索态不手风琴，直接把所有命中分支的键全传进去。
+- **叶子第二行留空**：卷章叶子只给 `label`，构造树时不带序号、不传 `description`。`AdminTreeLeaf.description` 是可选字段，组件按 `!!description` 决定第二行是否渲染；序号与源分节号仍能在右栏详情看到。
 - **徽章同口径**：三层徽章都数「该节点下可见卷章数」，与 root 的 445 一致；搜索态跟随命中数。分类节点的 `count` 是它所有 `subgroups.count` 之和。
 - **空态分层**：分类节点给 `emptyText`（「这个分类下还没有书本」），书节点不传、回落 `emptyLeafText`（「这本书下还没有卷章」）。非搜索态保留全部分类与全部书——12 本里 2 本没有卷章，展开该节点就能看到空态，而不是整节点消失。
 - **搜索覆盖三层**：命中判定看卷章标题 / 序号 / 分节号，也看书名与分类名；命中书名或分类名时该分支的卷章整批可见，`searchPlaceholder` 与口径一致（「搜索分类、书名、卷章…」）。
 - **兜底桶分两种**：书没命中任何 settings 分类时保留原名，挂在合成分类「未分类」下；卷章没命中来源书（`sourceBookId` 为空，或指向已软删/不存在的书）时归入「未归属书本」节点。悬空引用必须并入后者，否则该卷章没有书节点可挂、被静默丢弃，root 数就会大于各级徽章之和。生产数据实测 0 条，只为宽松引用留后路。
 - **两层页面零改动**：`BookInfoApp` / `MingCiApp` / `UsersApp` 都不传 `subgroups`，走组件的叶子分支，渲染结果与扩展前一致。
+
+## 10. 完整接入示例：构造好的参数 → AdminTreeNavLayout
+
+本节回答一个具体问题：**三层树要传给 `AdminTreeNavLayout` 什么？** 答案是——和两层页完全一样，只传
+`nav` / `children` 两个内容槽；递归 `subgroups` 发生在 `AdminGroupTree` 里，布局壳不认识「树」「层」
+「分组」任何概念。页面唯一的新增工作是**把 `treeGroups` 构造成带 `subgroups` 的形状**。
+
+> 本节代码块为便于阅读的**节选**，省略处以注释标出并给出源码行号，完整实现见
+> `src/components/admin/book-chapter/BookChapterApp.tsx:426-506、509-519、598-605、844-941`。
+
+### 10.1 职责边界（三层时也不变）
+
+| 谁 | 做什么 |
+|---|---|
+| 页面 | 从看板派生 `AdminTreeGroup[]`（含 `subgroups`）；持有 `expandedKeys` / `selectedLeafId`；组装左栏整块 JSX |
+| `AdminGroupTree` | 递归 `subgroups`：遇到该字段就下钻渲染子分组，否则渲染 `leaves`；只渲染传入状态并回调 |
+| `AdminTreeNavLayout` | 把 `nav` 摆进左栏 sticky 卡片、把 `children` 摆进右栏；不拦截、不加工、不缓存 |
+
+**「递归」发生在参数被消费的那一层，不在布局壳**。同一个 `nav` 槽既能装两层树也能装三层树，
+这正是原两层方案无需改动的原因。
+
+### 10.2 第 1 步：构造带 `subgroups` 的参数
+
+看板一次返回三份只读数据：`board.groups`（`settings.book_groups` 清单）、`board.sourceBooks`
+（含 `caseDivision`）、`board.chapters`（含 `sourceBookId`）。派生三步：
+
+```tsx
+const treeGroups = useMemo<AdminTreeGroup[]>(() => {
+  // ① 卷按来源书分桶：悬空来源并入「未归属书本」，否则树里没有书节点可挂
+  const knownBookIds = new Set(sourceBooks.map((book) => book.id));
+  const chaptersByBook = new Map<string, BookChapterAdmin[]>();
+  for (const chapter of liveChapters) {
+    const bookKey =
+      chapter.sourceBookId && knownBookIds.has(chapter.sourceBookId)
+        ? chapter.sourceBookId
+        : NO_BOOK_KEY;
+    const bucket = chaptersByBook.get(bookKey);
+    if (bucket) bucket.push(chapter);
+    else chaptersByBook.set(bookKey, [chapter]);
+  }
+
+  // ② 书按 caseDivision 归分类（「未分类」兜底桶的追加见源码 :446-453）
+  const knownGroupKeys = new Set(board.groups.map((group) => group.key));
+  const booksByCategory = new Map<string, BookChapterSourceBook[]>();
+  for (const book of sourceBooks) {
+    const categoryKey = knownGroupKeys.has(book.caseDivision)
+      ? book.caseDivision
+      : UNCATEGORIZED_KEY;
+    const bucket = booksByCategory.get(categoryKey);
+    if (bucket) bucket.push(book);
+    else booksByCategory.set(categoryKey, [book]);
+  }
+
+  // ③ 三层：分类（subgroups）→ 书 → 卷（leaves）
+  return board.groups.map((category) => {
+    const books = booksByCategory.get(category.key) ?? [];
+    const subgroups: AdminTreeGroup[] = books.map((book) => {
+      const chapters = chaptersByBook.get(book.id) ?? [];
+      const visible = searchActive
+        ? chapters.filter((chapter) =>
+            (chapter.chapterHeader || "").toLowerCase().includes(searchQuery)
+            || String(chapter.chapterNo).includes(searchQuery)
+            || book.bookName.toLowerCase().includes(searchQuery)
+            || category.label.toLowerCase().includes(searchQuery))
+        : chapters;
+      return {
+        count: visible.length,
+        key: `${BOOK_KEY_PREFIX}${book.id}`,
+        label: book.bookName,
+        // 第二行留空：树只导航卷章标题，序号与源分节号在右栏详情看
+        leaves: visible.map((chapter) => ({
+          id: chapter.id,
+          label: chapter.chapterHeader || t("bookChapter.untitled"),
+        })),
+      };
+    }).filter((book) => !searchActive || book.leaves.length > 0);
+    return {
+      count: subgroups.reduce((total, book) => total + book.count, 0),
+      emptyText: t("bookChapter.categoryEmpty"),   // 分类层专属空态
+      key: `${CATEGORY_KEY_PREFIX}${category.key}`,
+      label: category.label,
+      leaves: [],                                   // 有 subgroups 时这一层不读
+      subgroups,                                    // ← 递归入口
+    };
+  }).filter((category) => !searchActive || (category.subgroups ?? []).length > 0);
+}, [board.groups, liveChapters, sourceBooks, searchActive, searchQuery, t]);
+```
+
+> `leaves: []` **不是**「空分组」：组件见到 `subgroups` 就走子分组分支，`leaves` 该层根本不读；
+> 整树空态判定 `hasVisibleLeaves` 也递归下钻，不会因顶层 `leaves` 为空误判（见 §6）。
+
+### 10.3 第 2 步：展开键与分层手风琴
+
+各层键进同一个 `expandedKeys` 数组，靠前缀分流：
+
+```tsx
+const expandedKeys = useMemo(
+  () => searchActive
+    ? treeGroups.flatMap((category) => [
+        category.key,
+        ...(category.subgroups ?? []).map((book) => book.key),
+      ])
+    : [expandedCategoryKey, expandedBookKey].filter(
+        (key): key is string => key !== null,
+      ),
+  [searchActive, treeGroups, expandedCategoryKey, expandedBookKey],
+);
+
+const toggleGroup = (key: string) => {
+  if (key.startsWith(CATEGORY_KEY_PREFIX)) {
+    setExpandedCategoryKey((current) => current === key ? null : key);
+    setExpandedBookKey(null);        // 换分类时收起上一本书
+    return;
+  }
+  setExpandedBookKey((current) => current === key ? null : key);
+};
+```
+
+### 10.4 第 3 步：把构造好的参数传进 `AdminTreeNavLayout`
+
+**唯一与布局壳打交道的调用点**，写法与两层页同构（`nav` 槽里除了树还有搜索框、按钮、软删区）：
+
+```tsx
+<AdminTreeNavLayout
+  nav={
+    <>
+      <div className="p-1">
+        <Input
+          aria-label={t("bookChapter.searchAria")}
+          className="w-full"
+          onChange={(event) => setTreeSearch(event.target.value)}
+          placeholder={t("bookChapter.searchPlaceholder")}
+          value={treeSearch}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2 px-1 pb-2">
+        <Button onClick={startCreate} size="sm" type="button">
+          {t("bookChapter.createChapter")}
+        </Button>
+      </div>
+      <AdminGroupTree
+        emptyLeafText={t("bookChapter.groupEmpty")}
+        emptyTreeText={searchActive ? t("bookChapter.searchNoResults") : undefined}
+        expandedKeys={expandedKeys}
+        groups={treeGroups}          {/* ← 构造好的参数，含 subgroups */}
+        onSelectLeaf={selectLeaf}
+        onToggleGroup={toggleGroup}
+        root={{label: t("bookChapter.treeRoot"), count: liveChapters.length}}
+        selectedLeafId={selectedId}
+      />
+      {/* 软删折叠区等其它左栏内容，见源码 :880-938 */}
+    </>
+  }
+>
+  {/* 右栏：详情 / 表单 / 空态，写法与两层页完全一致 */}
+</AdminTreeNavLayout>
+```
+
+### 10.5 接入检查清单（三层增量）
+
+在 §7 七条之外增量补四条：
+
+1. **只在需要下钻的节点传 `subgroups`**，并同时留 `leaves: []`；不要给同一节点既传 `subgroups`
+   又指望渲染 `leaves`。
+2. **整树内键唯一**：各层键进同一个数组，用 `cat:` / `book:` 前缀隔离，避免分类 slug 与 11 位书 id
+   撞车。
+3. **`count` 自下而上求和**：分类节点 `count = Σ subgroups.count`，与 `root.count` 同口径；悬空引用
+   必须并入兜底桶，否则徽章之和会小于 root。
+4. **各层空态分别给**：分类层用节点 `emptyText`，书层回落 props `emptyLeafText`；不要一个文案套所有层。
+
+> 布局壳侧「原两层方案为何不用改、`nav` 槽如何同时容纳两种树」见
+> `docs/zh/admin-tree-nav-layout.md` §11。

@@ -16,6 +16,7 @@ import AdminSelect from "@/components/admin/shared/AdminSelect";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
+import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {
   AdminCollectionError,
@@ -819,10 +820,9 @@ export default function BookInfoApp() {
             算好传入，AdminGroupTree 只渲染传入状态（约定不可改）。宽屏冻结在视口顶，
             树长时栏内自行滚动，不随右栏内容往上滚。 */}
         <div className="p-1">
-          <Input
-            aria-label={t("bookInfo.searchAria")}
-            className="w-full"
-            onChange={(event) => setTreeSearch(event.target.value)}
+          <AdminTreeSearchInput
+            ariaLabel={t("bookInfo.searchAria")}
+            onValueChange={setTreeSearch}
             placeholder={t("bookInfo.searchPlaceholder")}
             value={treeSearch}
           />

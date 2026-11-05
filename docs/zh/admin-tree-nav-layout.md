@@ -134,7 +134,10 @@ const treeGroups = useMemo(
 
 1. **页面级弹层挂布局外**：与选中项无关、未选中也要能打开的弹层（如分组/状态维护），写成
    `AdminTreeNavLayout` 的**兄弟**（同一个 `<>` 片段里、布局标签之外），别塞进 `nav` 或 `children`——
-   塞进去会被左栏卡片裁剪 / 随栏滚动。
+   塞进去会被左栏卡片裁剪 / 随栏滚动。卷章页的正文编辑/新建 `AdminDialog` 也按此挂法（与选中卷章
+   相关，但仍是页面级弹层）。`AdminDialog` 默认宽度是固定档位（`sm:max-w-lg lg:max-w-xl`）、高度上限
+   用 `100vh`；需要按视口自适应时传可选 `contentClassName` 覆盖（卷章页用 `w-[min(90vw,48rem)]` +
+   `100dvh`），其余 12 个弹层不传、行为不变。
 2. **根节点用 `<>…</>` 片段**：布局外还有兄弟（弹层）时，页面 `return` 的根要用片段，不能用
    `<div>`（否则弹层会被套进一个多余的全宽容器）。
 3. **右栏卡片样式由页面写**：本组件只给右栏 `min-w-0 flex-1` 的容器，卡片外观
@@ -151,7 +154,7 @@ const treeGroups = useMemo(
 ## 8. 新页面接入检查清单
 
 1. **页面持有状态**：搜索词、展开键、选中 id、右栏是详情还是表单——全部 `useState` 留在页面，组件只收 `nav` / `children`。
-2. **左栏整块传 `nav`**：搜索框（建议首元素、带 `aria-label` 命名 `<nav>` 地标）+ 工具栏 + `AdminGroupTree`（或其它树）+ 可选的软删/归档折叠区。
+2. **左栏整块传 `nav`**：搜索框用 `AdminTreeSearchInput`（建议首元素、带 `aria-label` 命名 `<nav>` 地标，自带清空按钮，见 §12）+ 工具栏 + `AdminGroupTree`（或其它树）+ 可选的软删/归档折叠区。
 3. **右栏整块作 `children`**：空态引导 / 详情 / 表单三态由页面切；卡片样式由页面自己写。
 4. **数据先算好再传**：分组、计数、成员过滤、搜索命中都在页面算成 `AdminTreeGroup[]`，别指望组件替你过滤。
 5. **事件处理写页面**：`onToggleGroup` / `onSelectLeaf` / 工具栏 onClick / 表单提交全在页面，组件无回调。
@@ -183,6 +186,111 @@ const treeGroups = useMemo(
 ## 10. 文件与提交
 
 - 组件：`src/components/admin/shared/AdminTreeNavLayout.tsx`
-- 首个消费者（示例出处）：`src/components/admin/book-info/BookInfoApp.tsx`
+- 首个消费者（§1–§9 示例出处）：`src/components/admin/book-info/BookInfoApp.tsx`
+- 三层树消费者（§11 出处）：`src/components/admin/book-chapter/BookChapterApp.tsx`
 - 配套分组树：`src/components/admin/shared/AdminGroupTree.tsx`（见 `docs/zh/admin-group-tree.md`）
+- 分层裁决：`docs/novel-cms/adr/0063-book-chapter-three-level-tree.md`
 - 引入提交：见书本信息模块 feature 分支（`AdminTreeNavLayout` 抽取）
+
+## 11. 三层树：传构造好的 `subgroups` 参数（ADR-0063）
+
+### 11.1 原两层方案保留
+
+`AdminTreeNavLayout` 的契约**没有因为三层树发生任何变化**：
+
+| 项 | 两层页（原有） | 三层页（新增） |
+|---|---|---|
+| props | `nav` + `children` | **同左**，一个不多 |
+| `nav` 里装什么 | 搜索框 + 工具栏 + `<AdminGroupTree groups={treeGroups}/>` + 软删区 | **同左** |
+| `treeGroups` 形状 | `AdminTreeGroup[]`，每个节点给 `leaves` | `AdminTreeGroup[]`，分类节点多一个 `subgroups` |
+| 谁递归 | 无 | `AdminGroupTree` 按 `subgroups` 下钻 |
+| 本组件做什么 | 摆两栏 | **摆两栏**，完全一样 |
+
+`BookInfoApp` / `MingCiApp` / `ZhongYaoApp` 仍按 §3 的两层写法，一行未改；`UsersApp` 用
+`AdminGroupTree` 但不用本组件，也不受影响。**三层树是「参数形状」的扩展，不是「布局壳」的扩展**：
+本组件不接收 `groups` / `expandedKeys` / 任何树回调，也不认识「层」这个概念。
+
+### 11.2 页面只传构造好的参数
+
+「构造好的参数」指 `AdminTreeGroup[]` 及其配套受控状态（`expandedKeys` / `selectedLeafId` /
+两个回调），由页面算好后经 `AdminGroupTree` 的 props 传入；本组件收的仍然是 `ReactNode`。
+数据流与 §5 一致，唯一差别是 `treeGroups` 里多了 `subgroups`：
+
+```mermaid
+flowchart TD
+  P["页面 BookChapterApp：持有状态与事件处理"] -->|派生| G["treeGroups 含 subgroups"]
+  P -->|"nav prop"| L["AdminTreeNavLayout 左栏卡片"]
+  P -->|children| R["右栏主区"]
+  P -->|"groups / expandedKeys / 回调"| T["AdminGroupTree 递归 subgroups"]
+  G --> T
+  T --> L
+  L --> S["搜索框 工具栏 树 软删区"]
+```
+
+递归发生在树组件消费参数的地方；本组件在这条链里仍是**透明容器**，不拦截、不加工、不缓存。
+因此三层页不需要给布局壳加任何 prop，也不需要改布局壳代码。
+
+### 11.3 最小调用骨架
+
+完整可复制示例（数据构造 → 树参数 → 布局壳）统一放在 `docs/zh/admin-group-tree.md` §10，
+此处只给布局壳一侧，避免两份真源：
+
+```tsx
+<AdminTreeNavLayout
+  nav={
+    <>
+      {/* 搜索框、工具栏…… */}
+      <AdminGroupTree
+        emptyLeafText={t("bookChapter.groupEmpty")}
+        expandedKeys={expandedKeys}
+        groups={treeGroups}        {/* ← 构造好的参数，含 subgroups */}
+        onSelectLeaf={selectLeaf}
+        onToggleGroup={toggleGroup}
+        root={{label: t("bookChapter.treeRoot"), count: liveChapters.length}}
+        selectedLeafId={selectedId}
+      />
+      {/* 软删折叠区…… */}
+    </>
+  }
+>
+  {/* 右栏：详情 / 表单 / 空态，写法与两层页完全一致 */}
+</AdminTreeNavLayout>
+```
+
+### 11.4 三层时的检查清单增量
+
+在 §8 七条之外补四条：
+
+1. **不要给本组件加树相关 prop**：`groups` / `expandedKeys` / 回调全属于 `AdminGroupTree`，本组件
+   只收 `nav` / `children`（§2 契约不变）。
+2. **左栏长树不用改布局**：`lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto` 已经处理三层展开后的
+   滚动，别在页面外层再套滚动容器。
+3. **键前缀隔离与空态分层**属于树参数构造，见 `docs/zh/admin-group-tree.md` §10.3 / §10.5。
+4. **页面级弹层仍挂布局外**（§7 第 1 条），三层树没有改变这一约束。
+
+## 12. 左栏搜索输入框（带清空）
+
+5 个分组树消费者（本组件的 4 个 + `UsersApp`，后者用树但不用本组件）左栏首元素都是同一个形状的
+搜索框。抽成 `src/components/admin/shared/AdminTreeSearchInput.tsx`，**独立共享组件，既不属于
+`AdminTreeNavLayout` 也不属于 `AdminGroupTree`**——两个契约都不变。
+
+| 项 | 说明 |
+|---|---|
+| 形态 | 一个受控 `<Input>`，最右叠加 `XIcon` 幽灵按钮；仅在 `value.length > 0` 时渲染 |
+| 清空 | 点按钮调 `onValueChange("")`，页面把该回调直接接到自己的搜索 state |
+| 文案 | `ariaLabel` / `placeholder` 由页面用 `t(...)` 给；清空按钮的无障碍名走通用 `common.clearSearch` |
+| 不做什么 | 不持有值、不认识「搜索 / 分组 / 树」、不参与过滤；过滤口径与展开规则仍留在页面（`docs/zh/admin-group-tree.md` §1） |
+
+调用（5 个页面各一处，裸 `<Input>` 不再出现在左栏首元素）：
+
+```tsx
+<AdminTreeSearchInput
+  ariaLabel={t("bookChapter.searchAria")}
+  onValueChange={setTreeSearch}
+  placeholder={t("bookChapter.searchPlaceholder")}
+  value={treeSearch}
+/>
+```
+
+清空按钮的视觉沿用 `AdminSelect` 的 `ComboboxClear`：幽灵图标按钮、hover 转 destructive、只在有内容
+时出现。输入框固定 `pr-9` 给按钮留位，有值/无值切换时文字不会跳动。

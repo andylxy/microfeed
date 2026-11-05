@@ -332,7 +332,9 @@ export async function createBookChapterBody(
   return created;
 }
 
-/** 合并式更新正文。`receiptNo` 可改（同卷章内重排）；文本原样写回，不 trim。 */
+/** 合并式更新正文。序号 `receipt_no` **系统托管、不可改**——始终保留原值，
+ *  即使载荷带了 `receiptNo` 也忽略（前端已禁用该框，这里兜底防 API 直改）。
+ *  文本原样写回，不 trim。 */
 export async function updateBookChapterBody(
   db: BookChapterDb,
   id: string,
@@ -343,7 +345,7 @@ export async function updateBookChapterBody(
   ).bind(id).first();
   if (!row) return null;
   const current = rowToBodyAdmin(row);
-  const receiptNo = patch.receiptNo ?? current.receiptNo;
+  const receiptNo = current.receiptNo;
   const sectionText = patch.sectionText ?? current.sectionText;
   const sectionNote = patch.sectionNote === undefined
     ? current.sectionNote

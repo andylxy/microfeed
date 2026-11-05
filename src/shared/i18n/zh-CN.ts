@@ -2161,6 +2161,7 @@ export const zhCN: TranslationKey = {
     bodiesTitle: "卷章正文",
     bodiesEmpty: "这卷章下还没有正文。",
     bodyReceiptLabel: "序号",
+    bodyReceiptAuto: "自动生成",
     bodyTextLabel: "正文",
     bodyNoteLabel: "注释",
     bodyFangJiLabel: "方剂",

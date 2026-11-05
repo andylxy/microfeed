@@ -34,6 +34,7 @@ ADR-0062 实施后的 `/admin/book-chapter/` 左栏是**两层树**：`root`「�
 8. **兜底桶分两种，落点不同**：书没命中任何 settings 分类时**保留原名**，挂在合成分类「未分类」下——并成一个「未归属书本」节点会让用户看不出原本是哪本书；卷章没命中来源书时（`sourceBookId` 为空，或指向已软删/不存在的书）才归入「未归属书本」书节点。悬空引用必须并入后者：否则该卷章在树上没有书节点可挂，会被静默丢弃，`root` 的 `liveChapters.length` 随之大于各级徽章之和。生产数据实测 0 条，此桶只为 ADR-0062 决策 5「无来源书硬外键」的宽松引用留后路，不新增任何列。
 9. **新建卷章的来源书预填改从展开的书节点取**：`startCreate` 用 `expandedBookKey` 去掉 `book:` 前缀预填 `sourceBookId`；未展开书或落在「未归属书本」桶时不预填（「未分类」下的书是真实 `book_info.id`，照常预填）。
 10. **搜索口径覆盖三层**：命中判定看卷章标题、序号、分节号，也看书名与分类名；命中书名或分类名时该分支卷章整批可见（用户搜「伤寒」期望看到整个分类，而不是零散几卷）。`searchPlaceholder` 同步写成「搜索分类、书名、卷章…」，提示不能与实际口径不一致。
+11. **示例与文档只走追加，不改组件**：`docs/zh/admin-group-tree.md` 新增 §10 作为「构造好的参数 → `AdminGroupTree` → `AdminTreeNavLayout`」的唯一完整可复制示例；`docs/zh/admin-tree-nav-layout.md` 新增 §11 只说明布局壳边界与「原两层方案保留」，并回指 §10；07 册附录指针同步。`subgroups` 语义定义仍只有一处真源，两文不重复。
 
 ## 范围之外
 
@@ -51,7 +52,9 @@ ADR-0062 实施后的 `/admin/book-chapter/` 左栏是**两层树**：`root`「�
 - 卷章看板从「读 `book_info` 一列」变成「读 `book_info` 一列 + 读 `settings` 一行 + 读 `book_chapter` 整表」；三者 `Promise.all` 并行，`settings` 是主键点查、`book_info` 是 `deleted_at IS NULL` 小表扫描，均不引入大表全扫。
 - 左栏从 10 个书分组变成 3 个分类分组，第一层节点数下降；第二层 12 本书里 2 本无卷章仍占位，展开给空态提示，用户能直接看出哪本书还没录卷章。
 - 分类清单若被清空或写入坏 JSON，`loadBookGroups` 的既有 fail-closed 口径不变：缺行回落空清单（所有书归「未分类」），坏形状抛错。卷章页因此与书本信息页对分类配置的好坏判定保持一致。
-- 组件契约文档 `docs/zh/admin-group-tree.md` 从「两层指南」扩为「分层指南」并新增 §9 三层实例；这是唯一记录 `subgroups` 语义的地方。
+- 组件契约文档 `docs/zh/admin-group-tree.md` 从「两层指南」扩为「分层指南」，新增 §9 三层实例与 §10 完整接入示例；`docs/zh/admin-tree-nav-layout.md` 新增 §11 只讲布局壳边界并回指 §10。**`subgroups` 的语义定义仍只在前一份文档一处**，两文互为指针、不重复真源。
+- **UI 细节不改变本 ADR 的契约结论**：卷章叶子第二行留空（只给 `label`）、正文编辑/新建改走项目现成的 `AdminDialog` 弹层、左栏搜索框抽成独立共享组件 `AdminTreeSearchInput`（带清空）。弹层尺寸经 `AdminDialog` 新增的可选 `contentClassName` 按视口自适应（宽度 `min(90vw,48rem)`、`100dvh` 高度上限），**不传的 12 个既有弹层尺寸逐字不变**；正文与注释文本框复用项目现成的 `AdminTextarea`（`field-sizing: content` + `minRows`/`maxRows`），按 8066 行实测分布给正文 2/12 行、注释 2/18 行档位，替换原来写死的 14/6 行。三者都落在组件指南 `docs/zh/admin-group-tree.md` / `admin-tree-nav-layout.md`，`AdminTreeNavLayout` 与 `AdminGroupTree` 的受控契约未变。
+- **`AdminTreeNavLayout` 的 `nav` / `children` 两槽契约与两层页面原方案原封保留**：本 ADR 没有给布局壳加任何 prop，也没有让它参与递归。`BookInfoApp` / `MingCiApp` / `ZhongYaoApp` 仍按两层写法，`UsersApp` 用树但不用布局壳也不受影响。三层页传给布局壳的仍是 `ReactNode`；「构造好的参数」指 `AdminTreeGroup[]` 及配套受控状态，经 `AdminGroupTree` 的 props 消费。
 
 ## 被否决的替代方案
 

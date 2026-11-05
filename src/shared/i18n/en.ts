@@ -2177,6 +2177,7 @@ export const en = {
     bodiesTitle: "Chapter text",
     bodiesEmpty: "This chapter has no text yet.",
     bodyReceiptLabel: "Number",
+    bodyReceiptAuto: "Auto-generated",
     bodyTextLabel: "Text",
     bodyNoteLabel: "Note",
     bodyFangJiLabel: "Formula",

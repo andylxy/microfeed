@@ -4,6 +4,7 @@ import {PlusIcon, Trash2Icon, UsersIcon} from "lucide-react";
 import {showToast} from "@/client/ToastUtils";
 import {useTranslation} from "@/client/i18n";
 import {Button} from "@/components/ui/button";
+import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import {Input} from "@/components/ui/input";
 import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";import AdminSelect from "@/components/admin/shared/AdminSelect";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
@@ -561,10 +562,9 @@ export default function UsersApp({
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <nav className="w-full shrink-0 rounded-[14px] border bg-card p-2 shadow-xs lg:w-72">
         <div className="p-1">
-          <Input
-            aria-label={t("rbac.userCategorySearch")}
-            className="w-full"
-            onChange={(event) => setSearch(event.target.value)}
+          <AdminTreeSearchInput
+            ariaLabel={t("rbac.userCategorySearch")}
+            onValueChange={setSearch}
             placeholder={t("rbac.userCategorySearchPlaceholder")}
             value={search}
           />
