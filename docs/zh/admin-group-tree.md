@@ -383,17 +383,16 @@ const toggleGroup = (key: string) => {
 
 ### 10.4 第 3 步：把构造好的参数传进 `AdminTreeNavLayout`
 
-**唯一与布局壳打交道的调用点**，写法与两层页同构（`nav` 槽里除了树还有搜索框、按钮、软删区）：
+**唯一与布局壳打交道的调用点**，写法与两层页同构（`nav` 槽里除了树还有搜索框、按钮、软删区）。搜索框用共享的 `AdminTreeSearchInput`（自带清空按钮，过滤逻辑仍留在页面），具名导入 `import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";`：
 
 ```tsx
 <AdminTreeNavLayout
   nav={
     <>
       <div className="p-1">
-        <Input
-          aria-label={t("bookChapter.searchAria")}
-          className="w-full"
-          onChange={(event) => setTreeSearch(event.target.value)}
+        <AdminTreeSearchInput
+          ariaLabel={t("bookChapter.searchAria")}
+          onValueChange={setTreeSearch}
           placeholder={t("bookChapter.searchPlaceholder")}
           value={treeSearch}
         />
