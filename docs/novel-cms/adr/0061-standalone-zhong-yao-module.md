@@ -122,3 +122,27 @@
 - **i18n**：`zh-CN.ts` / `en.ts` 同批补 `zhongYao` 段（30 键）+ `pageTitle`/`pageDocumentTitle`/`errors.zhongYao`；无新 `menu.icon.*`。
 - **测试（只写不跑）**：`tests/unit/zhong-yao-{store,handlers}.test.ts`。
 - **实施期修正**：本草 handler 是单 `db` 签名（无分组/来源书），照抄 ming-ci 路由时曾给 list/create/update 多传 `env.FEED_DB`，已逐一删去过参。
+
+## 后续修订（2026-11-06）：本草内容改 Markdown + 默认数据护栏
+
+本节记录实施完成后的 UI 优化，决策 9 与审计 §勘误段描述的是设计期（2026-11-04）的
+渲染口径，保留原文以维持决策轨迹。当前实现以本节与
+`docs/zhong-yao/index.md` 为准。
+
+- **编辑态**：`ZhongYaoApp.tsx` 的「本草内容」由 `Textarea` 改为
+  `AdminMarkdownEditor`（Markdown 源码编辑器，含标注工具栏，与名词/正文同款）。
+  `onChange` 收到 Markdown 源码，原样存入 `zhongYaoText`，数据契约不变。
+- **只读详情态**：`whitespace-pre-wrap` 裸文本改为 `MarkdownPreview` +
+  `remark-breaks` 渲染，与编辑预览所见一致；明暗经观察
+  `<html data-color-mode>` 跟随后台主题（与 `AdminMarkdownEditor` 同源）。
+  决策 9 提到的「真实换行」前提不变——`remark-breaks` 仍只认真实换行，
+  字面转义序列不显示为换行。
+- **本草标记**：`$u{}` / `$q{}` 是内容本体，原样保留不解析；工具栏可插入
+  后台维护的标注标记。i18n 双语各补 `zhongYao.textMarkdownPlaceholder` /
+  `textMarkdownHint` 两键（31 键镜像相等）。
+- **默认数据护栏**：`0180` 的 172 行种子本就随迁移部署到任何位置（本地库实测
+  172 行 = 种子 172 行，无用户新增行），本次在迁移头补「D1 导入限制」维护
+  护栏段，写明单语句 100KB 上限、18 批 INSERT 的实测单批最大 8712 B（LF）/
+  8741 B（CRLF 检出）（约 8.5KB），
+  与日后增行的分批要求；并新建 `docs/zhong-yao/index.md` 记录默认数据、
+  Markdown 字段与部署验证口径。

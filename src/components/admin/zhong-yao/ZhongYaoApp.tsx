@@ -15,12 +15,14 @@ import AdminInput from "@/components/admin/shared/AdminInput";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
+import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
+import MarkdownPreview from "@uiw/react-markdown-preview";
+import remarkBreaks from "remark-breaks";
 import {
   AdminCollectionError,
   AdminCollectionLoading,
 } from "@/components/admin/shared/AdminCollectionState";
 import {Button} from "@/components/ui/button";
-import {Textarea} from "@/components/ui/textarea";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {
   type ZhongYaoAdmin,
@@ -129,19 +131,18 @@ function ZhongYaoForm({
         />
       </div>
       <div className="mt-5">
-        {/* 本草内容：多行 + 标记原样存储（`$u{}`/`$q{}` 不解析，textarea）。 */}
-        <label className="w-full">
-          <div className="mb-2 text-sm font-semibold text-foreground">
-            {t("zhongYao.textLabel")}
-          </div>
-          <Textarea
-            className="w-full text-sm"
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              set("zhongYaoText", event.target.value)}
-            rows={16}
-            value={form.zhongYaoText}
-          />
-        </label>
+        <div className="mb-2 text-sm font-semibold text-foreground">
+          {t("zhongYao.textLabel")}
+        </div>
+        {/* 本草内容：Markdown 源码编辑器（含标注工具栏，与名词/正文同款）。
+            onChange 收到 Markdown 源码，原样存入 zhongYaoText；`$u{}`/`$q{}`
+            本草标记作为内容本体不解析，存库口径不变（ADR-0061）。 */}
+        <AdminMarkdownEditor
+          hint={t("zhongYao.textMarkdownHint")}
+          onChange={(value: string) => set("zhongYaoText", value)}
+          placeholder={t("zhongYao.textMarkdownPlaceholder")}
+          value={form.zhongYaoText}
+        />
       </div>
       <div className="mt-5">
         <AdminSwitch
@@ -193,6 +194,22 @@ export default function ZhongYaoApp() {
   const [listSearch, setListSearch] = useState("");
   const searchActive = listSearch.trim().length > 0;
   const searchQuery = listSearch.trim().toLowerCase();
+
+  // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源——观察
+  // <html data-color-mode>，用户切换/系统偏好变化都跟上，避免预览与后台主题错位。
+  const [colorMode, setColorMode] = useState<"dark" | "light" | undefined>(undefined);
+  useEffect(() => {
+    const read = () => setColorMode(
+      document.documentElement.dataset.colorMode === "dark" ? "dark" : "light",
+    );
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-color-mode"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   /** 回到只读详情：退出编辑/新建、清空表单。`clearSelection` = 连选中的本草一起清
    *  （删除/物理删除后无本草可看）；false = 保留选中、只退出表单（取消编辑回详情）。 */
@@ -571,8 +588,20 @@ export default function ZhongYaoApp() {
               {selectedHerb.zhongYaoText && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">{t("zhongYao.textLabel")}</dt>
-                  {/* 标记原样显示不解析（`$u{}`/`$q{}` 是内容本体）。 */}
-                  <dd className="whitespace-pre-wrap text-sm">{selectedHerb.zhongYaoText}</dd>
+                  {/* 只读态也走 Markdown 渲染，与编辑态所见一致：作者键入的语法
+                      在此渲染成最终形态（配 remark-breaks 让换行与编辑预览同观感）。
+                      `$u{}`/`$q{}` 本草标记作为内容本体原样保留，不做解析。 */}
+                  <dd className="mt-1">
+                    <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
+                      <MarkdownPreview
+                        remarkPlugins={[remarkBreaks]}
+                        source={selectedHerb.zhongYaoText}
+                        wrapperElement={
+                          colorMode ? {"data-color-mode": colorMode} : undefined
+                        }
+                      />
+                    </div>
+                  </dd>
                 </div>
               )}
             </dl>

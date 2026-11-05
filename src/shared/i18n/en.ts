@@ -2295,6 +2295,8 @@ export const en = {
     nameLabel: "Name",
     beiMingLabel: "Alias",
     textLabel: "Herbal content",
+    textMarkdownPlaceholder: "Write herbal content in Markdown",
+    textMarkdownHint: "Saved as the Markdown source you write; use the toolbar above to insert markers. Existing $u{}/$q{} herbal markers are kept as-is.",
     listLabel: "Alias entries",
     isEnableLabel: "Enabled",
     enableOn: "Enabled",
