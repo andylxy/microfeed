@@ -25,6 +25,14 @@
 --   可解析，UI 渲染须降级（alt/隐藏）。
 -- - 时间戳走 DEFAULT（created_at/updated_at 由列默认生成）。
 --
+-- ## D1 导入限制（务必遵守）
+--
+-- Cloudflare D1 单条 SQL 语句上限约 **100KB**（含全部 VALUES）。本文件当前 17 行
+-- 同一条 INSERT 约 15KB，远低于上限。若日后向默认数据增行，勿把上千行塞进
+-- 一条多值 INSERT——改成分批（每批若干行一条 INSERT），保证单条语句 < 100KB；
+-- 单条名词的 `ming_ci_text` 也别超 100KB（单值上限同量级）。超出会被 D1 拒收、
+-- 迁移失败、部署卡住。
+--
 -- 幂等：INSERT OR IGNORE（id 主键），重复执行/重放安全；已存在行不覆盖。
 
 INSERT OR IGNORE INTO ming_ci

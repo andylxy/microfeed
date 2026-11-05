@@ -64,6 +64,11 @@ ming-ci 的「出厂默认数据」全部通过**迁移 seed 固化**，部署�
 - **分组默认值在迁移里，不在代码硬编码**：`shared/MingCi.ts` 只定义分组 schema 形状（`mingCiGroupSchema`），4 个分组的实际值只写在 `0178`；改分组请走后台「管理分组」或 `PUT /groups`，不要手改迁移。
 - **源数据来源**：`ctwh/` 下 `BeiMingCi.sql` 等是开发期源数据，不随部署；种子值已冻结进迁移，后续源表与种子各自独立演化（ADR-0060 决策 4）。
 - **部署验证**：目标位置执行 `wrangler d1 migrations apply`（或对应部署流水线）后，`ming_ci` 表与 `settings.mingci_groups` 即自带上述默认数据；可用 `SELECT COUNT(*) FROM ming_ci;`（应为 17）与 `SELECT data FROM settings WHERE category='mingci_groups';` 核对。
+- **D1 单语句 100KB 上限**：Cloudflare D1 单条 SQL 语句约 100KB 上限。`0179` 当前 17 行同一条 INSERT 约 15KB，远未触顶；若日后向默认数据增行，**勿把上千行塞进一条多值 INSERT**，改成分批（每批若干行一条 INSERT），保证单条语句 < 100KB；单条名词的 `ming_ci_text` 也别超 100KB。超出会被 D1 拒收、迁移失败。详见 `0179` 迁移头注释。
+
+## 名词内容字段（Markdown）
+
+`ming_ci_text` 在编辑态用 `AdminMarkdownEditor`（自带 `$m{}/$n{}/$x{}/$a{}` 标注工具栏，与 tcm 正文编辑器同款），**只读详情态也走 `MarkdownPreview` + `remark-breaks` 渲染**，与编辑预览所见一致。内容以 Markdown 源码原样存库，不做预处理；`whitespace-pre-wrap` 的旧裸文本展示已弃用。
 
 ## 后台端点
 
@@ -102,6 +107,11 @@ text-card-foreground shadow-xs`，**每个顶层字段（含「展示图」`show
 开关）各包一层 `<div className="mt-5">`**，拿统一 20px 节奏；两列字段用
 `mt-5 grid grid-cols-1 gap-4 md:grid-cols-2`，按钮行 `mt-5 flex gap-2`。开关类字段（`AdminSwitch`
 内部 `[toggle][label]` 横向并排）也走同样的 `mt-5` 块，不因组件内部布局不同而掉节奏。
+
+- **「名词内容」字段用 `AdminMarkdownEditor`**（Markdown 源码编辑器，含 `$m{}/$n{}/$x{}/$a{}`
+  标注工具栏，与 tcm 正文同款）。`onChange` 拿到的是 Markdown 源码，**原样存入 `mingCiText`**，
+  数据契约不变（逐字存储、标记不解析；占位/提示走 `mingCi.textMarkdownPlaceholder` /
+  `mingCi.textMarkdownHint`）。
 
 - **分组清单存 `settings` 表一行**（`category='mingci_groups'`，`data` 为 JSON
   `{groups:[{key,label,sort}]}`），独立管理、整表覆盖写——与书本信息分组（`book_groups`）

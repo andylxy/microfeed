@@ -2071,6 +2071,8 @@ export const zhCN: TranslationKey = {
     nameLabel: "名词",
     beiMingLabel: "别名",
     textLabel: "名词内容",
+    textMarkdownPlaceholder: "用 Markdown 编写名词内容",
+    textMarkdownHint: "按你写的 Markdown 原文保存；可用上方工具栏插入 $m{}/$n{}/$x{}/$a{} 标注。",
     listLabel: "别名词条",
     sourceBookLabel: "来源书",
     noSourceBook: "无来源书",

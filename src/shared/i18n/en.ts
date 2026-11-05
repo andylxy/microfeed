@@ -2087,6 +2087,8 @@ export const en = {
     nameLabel: "Noun",
     beiMingLabel: "Alias",
     textLabel: "Noun content",
+    textMarkdownPlaceholder: "Write noun content in Markdown",
+    textMarkdownHint: "Saved as the Markdown source you write; use the toolbar above to insert $m{}/$n{}/$x{}/$a{} markers.",
     listLabel: "Alias entries",
     sourceBookLabel: "Source book",
     noSourceBook: "No source book",
