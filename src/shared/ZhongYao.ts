@@ -29,6 +29,13 @@
 
 import {z} from "zod";
 
+/**
+ * `zhong_yao_list` 的切分符：中英文逗号/分号/空格/句号/顿号，对齐 netcore
+ * `ZhongYaoService._splitPattern`。本草别名按纯逗号文本落库（见 ADR-0061 勘误），
+ * 读取时用本标点集切回 `string[]`；store 与 App 读取层共用，避免两处各写一份正则。
+ */
+export const ZHONG_YAO_LIST_SPLIT_PATTERN = /[,，；; 。.、]+/;
+
 /** 一列 `zhong_yao` 行在后台看板上的视图（camelCase，`isDeleted` 由
  *  `deleted_at` 派生，供两步删除流程区分「编辑/软删」与「物删」）。 */
 export interface ZhongYaoAdmin {
@@ -41,7 +48,7 @@ export interface ZhongYaoAdmin {
   zhongYaoBeiMing: string | null;
   /** YaoText 正文（必填；含 `$u{}`/`$q{}` 标记 + 真实换行，原样存储不解析标记） */
   zhongYaoText: string;
-  /** YaoList 别名列表（JSON 数组，镜像 App 形状 `string[]`） */
+  /** YaoList 别名列表（落库存纯逗号文本，读取时按标点集切回 `string[]`） */
   zhongYaoList: string[];
   /** IsEnable 启用（无状态枚举） */
   isEnable: boolean;

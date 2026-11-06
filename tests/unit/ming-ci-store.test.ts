@@ -199,7 +199,7 @@ describe("ming_ci store round-trip", () => {
     expect(byType("yaoli")).toHaveLength(3);
   });
 
-  it("serializes ming_ci_list as a JSON array and parses it back", async () => {
+  it("stores ming_ci_list as plain comma text and parses it back", async () => {
     const db = emptyDatabase();
     const created = await createMingCi(db, "mingci010", {
       mingCiName: "藏象",
@@ -208,11 +208,11 @@ describe("ming_ci store round-trip", () => {
       mingCiList: ["脏腑", "脏象"],
     });
     expect(created.mingCiList).toEqual(["脏腑", "脏象"]);
-    // DB 列里是 JSON 数组字符串（镜像 App 形状）。
+    // DB 列里是纯逗号文本（对齐 netcore MingCiList 落库形态）。
     const row = await db.prepare(
       "SELECT ming_ci_list FROM ming_ci WHERE id = ?",
     ).bind(created.id).first();
-    expect(JSON.parse(String(row?.ming_ci_list))).toEqual(["脏腑", "脏象"]);
+    expect(String(row?.ming_ci_list)).toBe("脏腑,脏象");
   });
 
   it("stores $m{}/$n{}/$x{}/$a{} markers verbatim (no escaping/parsing)", async () => {

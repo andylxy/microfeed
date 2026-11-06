@@ -35,16 +35,14 @@ function toInt(value: unknown, fallback: number): number {
   return fallback;
 }
 
-/** `ming_ci_list` JSON 数组字符串 → `string[]`。坏值回落空数组（宽松，仅显示）。 */
+/** `ming_ci_list` 纯逗号文本 → `string[]`（对齐 netcore `GetAllMingCi` 的
+ *  `Split(',')`，仅英文逗号）。空串/空值 → 空数组；丢弃空 token。
+ *  迁移 0177 的列默认值仍是 `'[]'`（历史 JSON 形态），0187 归一化前按空数组处理。 */
 function parseList(value: unknown): string[] {
   if (value == null) return [];
-  const s = String(value);
-  try {
-    const arr: unknown = JSON.parse(s);
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
+  const s = String(value).trim();
+  if (s === "" || s === "[]") return [];
+  return s.split(",").filter((token) => token !== "");
 }
 
 function nowIso(): string {
@@ -106,7 +104,8 @@ async function nextMingCiNo(db: MingCiDb): Promise<number> {
 }
 
 /** 新建。`id` 由 handler 生成并已做过校验（见 handlers.ts）。
- *  `isEnable` 布尔 → `is_enable` 1/0；`mingCiList` string[] → JSON 字符串；
+ *  `isEnable` 布尔 → `is_enable` 1/0；`mingCiList` string[] → 纯逗号文本
+ *  （对齐 netcore `MingCiList` 落库形态）；
  *  可空字段空值写 null；`signature_id`/`signature` 新建不写（admin 不编辑，
  *  列位保留，App 签名链路另行处理）。 */
 export async function createMingCi(
@@ -128,7 +127,7 @@ export async function createMingCi(
     input.mingCiName,
     input.mingCiBeiMing ?? null,
     input.mingCiText,
-    JSON.stringify(input.mingCiList ?? []),
+    (input.mingCiList ?? []).join(","),
     input.sourceBookId ?? null,
     input.mingCiType,
     input.showImage ?? null,
@@ -188,7 +187,7 @@ export async function updateMingCi(
     mingCiName,
     mingCiBeiMing,
     mingCiText,
-    JSON.stringify(mingCiList),
+    mingCiList.join(","),
     sourceBookId,
     mingCiType,
     showImage,

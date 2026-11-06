@@ -1,7 +1,7 @@
 # ADR-0061: 独立「本草」模块 `zhong_yao`（参考 ctwh ZhongYao 实体）
 
-- 状态：Accepted（2026-11-05 实施完成，工单 01–09 全部落地）
-- 日期：2026-11-04（设计）/ 2026-11-05（实施完成）
+- 状态：Accepted（2026-11-05 实施完成，工单 01–09 全部落地；**2026-11-06 勘误**：决策 5 的 `zhong_yao_list` 存储形态由 JSON 数组改为纯逗号文本，见下）
+- 日期：2026-11-04（设计）/ 2026-11-05（实施完成）/ 2026-11-06（勘误）
 - 关联：ADR-0060（独立「名词」模块，本 ADR 的直接范式来源）、ADR-0058/0059（独立模块 + 分组树范式）、`scripts/import-ctwh/build.ts`（真 `tcmId` 算法与既有 items 中药条目 id 生成）、数据源 `ctwh/ZhongYao.sql`
 - 用户裁决（2026-11-04）：D1 表名/模块名 = `zhong_yao`（页面路由 `zhongyao`）；D2 = 无分组平铺；D3 = 本期不做 App 端点；D4 = 行尾空格命中 `git diff --check` 则 strip；D5 = id 用真 `tcmId('zhongyao', 源Id)` 预计算
 
@@ -17,7 +17,7 @@
 2. **不与 `items`/`channels` 耦合**：不迁移既有 172 条 `tcm_kind='yao'` items 行、不改其数据、不废弃既有中药链路（App `GetAllZhongYao`、方剂 `fangYaoList.yaoId` 仍指向 items 条目）。两套中药模型**并行共存**：items-中药（既有内容链路 + App 读取 + 方剂引用）与 `zhong_yao`（参考模型镜像，后台自持）各管各的，互不读写。
 3. **无分组**（用户裁决 D2）：源实体无分类字段（无 `MingCiType` 对应物），**不伪造推导分组**——不建分组清单（对比 ming-ci 的 `mingci_groups` + settings KV）、无 groups/reassign 端点。**UI 复用 `AdminTreeNavLayout` 两栏容器**（用户指令）：`nav` 槽放平铺列表 + 搜索、`children` 槽放详情/表单——该容器零业务、只有两个 ReactNode 槽（`src/components/admin/shared/AdminTreeNavLayout.tsx` L3–12），左栏放什么由调用方决定，故「复用容器」与「无分组」自洽；**不引 `AdminGroupTree` 树组件**（ming-ci 的 `MingCiApp` 是容器 + 树两个组件都用，本草只复用前者）。
 4. **无来源书**：源实体无 `SoureBook` 对应物 → 无 `source_book_id` 列，不读 `book_info`（对比 ming-ci 决策 3）。
-5. **别名列保留并播种**：`YaoList` 源非空 52/172 行（逗号切分为别名 token，104 个 token 全 distinct、无空元素、无尾随逗号——审计 §4）；`YaoBieMing` 全 NULL（列位保留，种子空）。`zhong_yao_list` 存 JSON 数组字符串（镜像 App 形状 `string[]`），映射规则：空→`'[]'`，否则 `JSON.stringify(split(',').map(trim))`。
+5. **别名列保留并播种**：`YaoList` 源非空 52/172 行（逗号切分为别名 token，104 个 token 全 distinct、无空元素、无尾随逗号——审计 §4）；`YaoBieMing` 全 NULL（列位保留，种子空）。**`zhong_yao_list` 存纯逗号文本**（对齐 netcore `YaoList` 落库原形态）：空值/空串 → `''`，非空 → `split(',').map(trim).join(',')`；读取时按 `@/shared/ZhongYao` 的 `ZHONG_YAO_LIST_SPLIT_PATTERN`（`[,，；; 。.、]+`，对齐 netcore `_splitPattern`）切回 `string[]`。**勘误（2026-11-06）**：原写「存 JSON 数组字符串，`JSON.stringify(split(',').map(trim))`」——该转换会把 split 后残留的 SQL 单引号一并 stringify（如 `["'地文",…,"示姑'"]`），偏离 netcore 原列且写入脏 token。迁移 `0187` 负责把已部署库的 JSON 形态收回纯文本（幂等，只处理 `LIKE '[%'` 的行）。
 6. **全栈模块 + 命名三形态**：按 `docs/zh/09-new-module.md` §2 落位——迁移 + `src/server/zhong-yao/` + `src/shared/ZhongYao.ts`（Zod）+ `src/components/admin/zhong-yao/` + `src/pages/[adminPath]/zhongyao/` + `src/shared/AdminPageGuards.ts` 登记 + 契约/运行时测试（**只写不跑**）。三形态各自固定、不混用：**`zhong_yao`**（下划线）= DB 表名/列名前缀/`ext_permission_nodes` 节点 id（`page_zhong_yao`）；**`zhong-yao`**（连字符）= 文件系统目录（`src/server/zhong-yao/`、`src/components/admin/zhong-yao/`）；**`zhongyao`**（无分隔，用户裁决 D1）= 路由路径（`[adminPath]/zhongyao`）+ `AdminPageGuards` key + ajax 目录（`ajax/zhongyao/`）。类型与 schema 用大驼峰 `ZhongYao*`（`ZhongYaoEntry`/`ZhongYaoBoard`/`zhongYaoCreateSchema`）。
 7. **复用权限码，不加新码**（镜像 ADR-0060 决策 6）：页面守卫复用既有 `PERMISSION_CODES.CONTENT_YAO_READ`/`_MANAGE`（`Constants.ts:309-310` 已存在，既有 `yao` 页同码），在 `AdminPageGuards.ts` 登记 `"zhongyao"` 路由 → `CONTENT_YAO_READ`；侧栏页面节点随迁移播种（`page_zhong_yao`，`entry_code='content:yao:read'`，icon 复用已注册的 `leaf`——`src/shared/MenuIconNames.ts:29` 已含，免 check-i18n 新图标标签）。**权限码三镜像零改动**：`Constants.ts` / `rbac/seed.ts` / 既有权限迁移都不加新码（`content:yao:read`/`_MANAGE` 已存在于三者）；迁移 `0180` 只是**新增文件**、其内插一行页面节点 seed 数据（`ext_permission_nodes`，列序按 0177 新列序含 `path`/`entry_code`，sort=113 排 `ming-ci`=112 之后），不动任何既有权限行。
 8. **后台 CRUD 面**：管理员 ajax 端点（`[adminPath]/ajax/zhongyao/`），读走 `loadZhongYaoBoard`（一次性返回 `{entries}`，含已软删行 + `isDeleted` 派生），写走 create（`zhong_yao_no` 事务内 `MAX+1`，UNIQUE 索引兜底 fail-fast）/update（合并式）/delete（软删）/purge（物删，仅已软删行）。**无公共 api/v1、无 App 端点**（用户裁决 D3）——App 中药数据流继续走 items；若日后 App 要读 `zhong_yao`，需另立 `GetAllZhongYaoV2` 类端点 + `app:*:view` 新码，按 OpenAPI 契约另立。
@@ -61,7 +61,7 @@
 
 ### 4. 别名（zhong_yao_list，规则已定，无异常）
 
-- **可以**。`YaoList` 非空 52/172，样例：半夏→`地文,水玉,守,示姑`、芍药→`白木,余容,犁食,解仓,铤`。逗号切分 + trim 后：104 token 全 distinct（无同名别名指向两药）、空元素 0、尾随逗号 0。映射规则：空→`'[]'`，否则 `JSON.stringify(split(',').map(trim))`（与 ming-ci `MingCiList` 同构）。
+- **可以**。`YaoList` 非空 52/172，样例：半夏→`地文,水玉,守,示姑`、芍药→`白木,余容,犁食,解仓,铤`。逗号切分 + trim 后：104 token 全 distinct（无同名别名指向两药）、空元素 0、尾随逗号 0。映射规则：空→`''`，否则 `split(',').map(trim).join(',')`（存纯逗号文本，与 ming-ci `MingCiList` 同构；**勘误见决策 5**——原 JSON 数组写法会把残留单引号写成脏 token）。
 
 ### 5. 名称唯一性（无异常）
 

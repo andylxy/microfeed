@@ -5,6 +5,7 @@
 | 功能 | 阶段 | 起始 | 最近更新 | 完成 | 指针 |
 | --- | --- | --- | --- | --- | --- |
 | AGENTS.md 分册化 | done | 2026-10-26 | 2026-10-26 | 2026-10-26 | `.scratch/agents-md-opt/` |
+| 单测 D1 端口替身收成一份 | evaluating | 2026-11-05 | 2026-11-05 | — | `.scratch/sqlite-test-double/` |
 | 独立方剂模块（ADR-0065） | implementing | 2026-11-05 | 2026-11-05 | — | `.scratch/fang-yao-module/` |
 
 ## 维护说明

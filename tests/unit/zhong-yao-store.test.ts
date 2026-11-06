@@ -162,7 +162,7 @@ describe("zhong_yao store round-trip", () => {
     expect(board[0]?.isDeleted).toBe(true);
   });
 
-  it("serializes zhong_yao_list as a JSON array and parses it back", async () => {
+  it("stores zhong_yao_list as plain comma text and parses it back", async () => {
     const db = emptyDatabase();
     const created = await createZhongYao(db, "zy000000007", {
       zhongYaoName: "茯苓",
@@ -170,11 +170,11 @@ describe("zhong_yao store round-trip", () => {
       zhongYaoList: ["茯灵", "伏菟"],
     });
     expect(created.zhongYaoList).toEqual(["茯灵", "伏菟"]);
-    // DB 列里是 JSON 数组字符串（镜像 App 形状）。
+    // DB 列里是纯逗号文本（对齐 netcore YaoList 落库形态）。
     const row = await db.prepare(
       "SELECT zhong_yao_list FROM zhong_yao WHERE id = ?",
     ).bind(created.id).first();
-    expect(JSON.parse(String(row?.zhong_yao_list))).toEqual(["茯灵", "伏菟"]);
+    expect(String(row?.zhong_yao_list)).toBe("茯灵,伏菟");
   });
 
   it("stores $u{}/$q{} markers and literal \\r\\n verbatim (no escaping/parsing)", async () => {

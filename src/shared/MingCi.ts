@@ -32,7 +32,7 @@ export interface MingCiAdmin {
   mingCiBeiMing: string | null;
   /** MingCiText 名词内容（必填；含 `$m{}/$n{}/$x{}/$a{}` 标记，原样存储不解析） */
   mingCiText: string;
-  /** MingCiList 别名列表（JSON 数组，镜像 App 形状 `mingCiList: string[]`） */
+  /** MingCiList 别名列表（落库存纯逗号文本，读取时按英文逗号切回 `string[]`） */
   mingCiList: string[];
   /** SoureBook 名词来源书 → `book_info.id`（逻辑引用，无硬外键） */
   sourceBookId: string | null;

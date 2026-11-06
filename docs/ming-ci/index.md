@@ -28,7 +28,7 @@ description: 独立于条目频道的「名词」表（ADR-0060），后台 CRUD
 | `ming_ci_name` | `VARCHAR(255) NOT NULL` | `MingCiName` | 名词名称（必填） |
 | `ming_ci_bei_ming` | `VARCHAR(255)` | `MingCiBeiMing` | 名词别名 |
 | `ming_ci_text` | `TEXT NOT NULL` | `MingCiText` | 名词内容（必填；含 `$m{}/$n{}/$x{}/$a{}` 标记，**原样存储不解析**） |
-| `ming_ci_list` | `TEXT NOT NULL DEFAULT '[]'` | `MingCiList` | 别名列表（JSON 数组字符串，镜像 App 形状 `mingCiList: string[]`） |
+| `ming_ci_list` | `TEXT NOT NULL DEFAULT '[]'` | `MingCiList` | 别名列表（**纯逗号文本**，对齐 netcore 源列；读取时按英文逗号切回 `string[]`） |
 | `source_book_id` | `VARCHAR(11)` | `SoureBook` | 名词来源书 → `book_info.id`（逻辑引用，无硬外键） |
 | `ming_ci_type` | `VARCHAR(255) NOT NULL` | `MingCiType` | 归纳分类（必填；取值=分组 `key`，**服务端严格校验命中 `mingci_groups.key`，未命中 400 fail-closed**，镜像 ADR-0059 `case_division`） |
 | `show_image` | `VARCHAR(255)` | `ShowImage` | 显示图片 |
@@ -151,10 +151,10 @@ text-card-foreground shadow-xs`，**每个顶层字段（含「展示图」`show
 | 源列 | `ming_ci` 列 | 变换 |
 | --- | --- | --- |
 | `MingCiNo` | `ming_ci_no` | 原值（0–16） |
-| `MingCiName` | `ming_ci_name` | `trim()`（清源行「畏\n」尾随换行） |
+| `MingCiName` | `ming_ci_name` | 原值（保留源行「畏\n」的尾随换行，不 trim） |
 | `MingCiBeiMing` | `ming_ci_bei_ming` | 原值 |
-| `MingCiText` | `ming_ci_text` | 原值（多行 + `$m{}/$a{}` 标记原样） |
-| `MingCiList` | `ming_ci_list` | NULL→`'[]'`；否则 `JSON.stringify(split(',').map(trim))` |
+| `MingCiText` | `ming_ci_text` | 原值（多行 + `$m{}/$a{}` 标记原样；换行保持源 LF） |
+| `MingCiList` | `ming_ci_list` | NULL/空→`''`；否则 `split(',').map(trim).join(',')`（存纯逗号文本） |
 | `SoureBook` | `source_book_id` | 查 `book_info.id`：9040000→`XNK0VFX39Xv`、400100→`OsOP62cyp3j`、1001000→`5IGM9t76quT`、20300000→`ghBqURJwurj` |
 | `MingCiType` | `ming_ci_type` | 查分组 `key`：医理→yili、药理→yaoli、易理→zhouyi、通用→tongyong |
 | `ShowImage` | `show_image` | 原值 |

@@ -1,7 +1,7 @@
 # ADR-0060: 独立「名词」模块 `ming_ci`（参考 vol.api.sqlsugar BeiMingCi）
 
-- 状态：Accepted（2026-11-04 设计并于同日会话实施完成；迁移 0177/0178/0179、`src/server/ming-ci/`、`src/shared/MingCi.ts`、`src/components/admin/ming-ci/`、`docs/ming-ci/` 均已落地）
-- 日期：2026-11-04
+- 状态：Accepted（2026-11-04 设计并于同日会话实施完成；迁移 0177/0178/0179、`src/server/ming-ci/`、`src/shared/MingCi.ts`、`src/components/admin/ming-ci/`、`docs/ming-ci/` 均已落地；**2026-11-06 勘误**：决策 8 的 `ming_ci_list` 存储形态由 JSON 数组改为纯逗号文本、`MingCiName` 改为保留源尾随换行，见下）
+- 日期：2026-11-04（设计/实施）/ 2026-11-06（勘误）
 - 关联：ADR-0058（独立「书本信息」模块，本 ADR 的范式来源）、ADR-0059（书本信息分组树）、`docs/zh/admin-tree-nav-layout.md`（AdminTreeNavLayout 两栏布局）、`CONTEXT.md`（分组树词条）、参考项目 `D:\git\web\Vue.NetCore\vol.api.sqlsugar` 的 `SimpleEasy.Entity/DomainModels/ZhongYi/BeiMingCi.cs`、数据源 `ctwh/BeiMingCi.sql`
 
 ## 背景
@@ -19,7 +19,7 @@
 5. **全栈模块**：按 `docs/zh/09-new-module.md` §2 十步落位——迁移 + `src/server/ming-ci/` + `src/shared/MingCi.ts`（Zod）+ `src/components/admin/ming-ci/` + `src/pages/[adminPath]/ming-ci/` + `src/shared/AdminPageGuards.ts` 登记 + `docs/ming-ci/` + 契约/运行时测试（**只写不跑**）。
 6. **复用权限码，不加新码**：页面守卫复用既有 `PERMISSION_CODES.CONTENT_TERM_READ`/`_MANAGE`（`term` 页同码），在 `AdminPageGuards.ts` 登记 `"ming-ci"` 路由 → 该码；侧栏节点行（`ext_permission_nodes` `kind='page'`）随迁移 0177 播种（`page_ming_ci`，`entry_code='content:term:read'`，icon 复用 `tags` 免 `check-i18n.ts` 新图标双语标签）。
 7. **后台 CRUD 面**：管理员 ajax 端点（`[adminPath]/ajax/ming-ci/`），读走 `loadMingCiBoard`（一次性返回 `{groups, sourceBooks, nouns}`，含已软删行 + `isDeleted` 派生），写走 create/update（合并式）/delete（软删）/purge（物删，仅已软删行）/groups（整表覆盖写）/reassign（删组前改派）。**无公共 api/v1**——名词是后台管理 + App 既有链路的数据，App 读暂走 items（决策 2 并行共存）；若日后 App 改读 `ming_ci`，按 OpenAPI 契约另立。
-8. **数据导入**：`ctwh/BeiMingCi.sql` 17 行经迁移 `0179_seed_ming_ci_rows.sql` 播种（`INSERT OR IGNORE`，幂等）。id = `tcmId('mingci', MingCiNo)` 确定性 11 位（作者时预计算硬编码）；`SoureBook`→`book_info.id` 映射（9040000→`XNK0VFX39Xv`、400100→`OsOP62cyp3j`、1001000→`5IGM9t76quT`、20300000→`ghBqURJwurj`）；`MingCiType`→分组 `key`（医理→yili、药理→yaoli、易理→zhouyi、通用→tongyong）；`MingCiList` 逗号切 JSON 数组（镜像 `getAppAllTerms` 的 `split(",")`）；`MingCiName` 清尾随换行（源行「畏\n」）。迁移 0179 只读文件于作者时，运行时不读文件。**id 必须用真 `tcmId`（`scripts/import-ctwh/build.ts:153`）在隔离进程按 `MingCiNo` 0→16 顺序预计算**；此前一次「纯 SHA-256 无碰撞加盐」的复刻产物（首值 `u7UiA44Otad`、末值 `z5GAvKzDZ52`）**与真算法不符，作废**。17 个真值（2026-11-04 实测，全 11 位 base62、互异、与 `book_info` 种子 10 个 id 无跨表碰撞）：`KXky0UUeJqt`/`vawJmMy1R6i`/`cyDmUmuDwd6`/`Z94SNqBdY3v`/`64OxeWGpLyA`/`eFJUTqNLZ9I`/`SB8YK29l3lb`/`q2PBuGxblo4`/`wcj0IVVNNmY`/`hew93S5np05`/`B7xDfBL5qeU`/`mOeRPbMyovF`/`fWye5mGxShN`/`NgyWBPZuFIj`/`wTgDQzVfGlL`/`42ZqG4162Cw`/`PV60LaP3pVS`（`MingCiNo` 0→16）。
+8. **数据导入**：`ctwh/BeiMingCi.sql` 17 行经迁移 `0179_seed_ming_ci_rows.sql` 播种（`INSERT OR IGNORE`，幂等）。id = `tcmId('mingci', MingCiNo)` 确定性 11 位（作者时预计算硬编码）；`SoureBook`→`book_info.id` 映射（9040000→`XNK0VFX39Xv`、400100→`OsOP62cyp3j`、1001000→`5IGM9t76quT`、20300000→`ghBqURJwurj`）；`MingCiType`→分组 `key`（医理→yili、药理→yaoli、易理→zhouyi、通用→tongyong）；**`MingCiList` 存纯逗号文本**（对齐 netcore `BeiMingCi.MingCiList` 原列，读取时按英文逗号切回 `string[]`）；**`MingCiName` 保留源原样（含「畏\n」的尾随换行）**，不做 trim。迁移 0179 只读文件于作者时，运行时不读文件。**id 必须用真 `tcmId`（`scripts/import-ctwh/build.ts:153`）在隔离进程按 `MingCiNo` 0→16 顺序预计算**；此前一次「纯 SHA-256 无碰撞加盐」的复刻产物（首值 `u7UiA44Otad`、末值 `z5GAvKzDZ52`）**与真算法不符，作废**。17 个真值（2026-11-04 实测，全 11 位 base62、互异、与 `book_info` 种子 10 个 id 无跨表碰撞）：`KXky0UUeJqt`/`vawJmMy1R6i`/`cyDmUmuDwd6`/`Z94SNqBdY3v`/`64OxeWGpLyA`/`eFJUTqNLZ9I`/`SB8YK29l3lb`/`q2PBuGxblo4`/`wcj0IVVNNmY`/`hew93S5np05`/`B7xDfBL5qeU`/`mOeRPbMyovF`/`fWye5mGxShN`/`NgyWBPZuFIj`/`wTgDQzVfGlL`/`42ZqG4162Cw`/`PV60LaP3pVS`（`MingCiNo` 0→16）。**勘误（2026-11-06）**：本条原写「`MingCiList` 逗号切 JSON 数组」「`MingCiName` 清尾随换行（源行「畏\n」）」——两处均偏离 netcore 源，已改：JSON 化会把残留单引号写成脏 token，trim 掉的是源数据本身。迁移 `0187` 把已部署库收回纯文本 / LF / 保留尾随换行（幂等，带前置条件）。
 
 ## 范围之外
 
@@ -57,7 +57,7 @@
 
 ### 4. ming_ci_list（无异常，规则已定）
 
-- **结论：可以**。非空 5 行（`MingCiNo` 0/1/5/7/16），其余 12 行 NULL。仅 `MingCiNo` 16 为多元素（`肾阳虚,肾阴虚`→2 元素）；**无空元素、无尾随逗号**。映射规则：NULL→`'[]'`，否则 `JSON.stringify(split(',').map(trim))`。经 `.map(trim)` 后 17 行无一产生空串元素。
+- **结论：可以**。非空 5 行（`MingCiNo` 0/1/5/7/16），其余 12 行 NULL。仅 `MingCiNo` 16 为多元素（`肾阳虚,肾阴虚`→2 元素）；**无空元素、无尾随逗号**。映射规则：空/NULL→`''`，否则 `split(',').map(trim).join(',')`（存纯逗号文本；**勘误见决策 8**——原 JSON 数组写法会把残留单引号写成脏 token）。经 `.map(trim)` 后 17 行无一产生空串元素。
 
 ### 5. 必填/可空字段（无异常）
 

@@ -13,9 +13,10 @@
  */
 
 import type {ZhongYaoDb} from "./types";
-import type {
-  ZhongYaoAdmin,
-  ZhongYaoInput,
+import {
+  ZHONG_YAO_LIST_SPLIT_PATTERN,
+  type ZhongYaoAdmin,
+  type ZhongYaoInput,
 } from "@/shared/ZhongYao";
 
 function asText(value: unknown): string {
@@ -38,16 +39,14 @@ function toInt(value: unknown, fallback: number): number {
   return fallback;
 }
 
-/** `zhong_yao_list` JSON 数组字符串 → `string[]`。坏值回落空数组（宽松，仅显示）。 */
+/** `zhong_yao_list` 纯逗号文本 → `string[]`（对齐 netcore YaoList 的标点集切分）。
+ *  空串/空值 → 空数组；切分后丢弃空 token（连续分隔符、首尾分隔符会产生空串）。
+ *  迁移 0180 的列默认值仍是 `'[]'`（历史 JSON 形态），0187 归一化前按空数组处理。 */
 function parseList(value: unknown): string[] {
   if (value == null) return [];
-  const s = String(value);
-  try {
-    const arr: unknown = JSON.parse(s);
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
+  const s = String(value).trim();
+  if (s === "" || s === "[]") return [];
+  return s.split(ZHONG_YAO_LIST_SPLIT_PATTERN).filter((token) => token !== "");
 }
 
 function nowIso(): string {
@@ -105,9 +104,10 @@ async function nextZhongYaoNo(db: ZhongYaoDb): Promise<number> {
 }
 
 /** 新建。`id` 由 handler 生成并已做过校验（见 handlers.ts）。
- *  `isEnable` 布尔 → `is_enable` 1/0；`zhongYaoList` string[] → JSON 字符串；
- *  可空字段空值写 null；`signature_id`/`signature` 新建不写（admin 不编辑，
- *  列位保留，App 签名链路另行处理）。 */
+ *  `isEnable` 布尔 → `is_enable` 1/0；`zhongYaoList` string[] → 纯逗号文本
+ *  （对齐 netcore YaoList 落库形态）；可空字段空值写 null；
+ *  `signature_id`/`signature` 新建不写（admin 不编辑，列位保留，
+ *  App 签名链路另行处理）。 */
 export async function createZhongYao(
   db: ZhongYaoDb,
   id: string,
@@ -126,7 +126,7 @@ export async function createZhongYao(
     input.zhongYaoName,
     input.zhongYaoBeiMing ?? null,
     input.zhongYaoText,
-    JSON.stringify(input.zhongYaoList ?? []),
+    (input.zhongYaoList ?? []).join(","),
     input.isEnable === false ? 0 : 1,
     ts,
     ts,
@@ -169,7 +169,7 @@ export async function updateZhongYao(
     zhongYaoName,
     zhongYaoBeiMing,
     zhongYaoText,
-    JSON.stringify(zhongYaoList),
+    zhongYaoList.join(","),
     isEnable ? 1 : 0,
     nowIso(),
     id,

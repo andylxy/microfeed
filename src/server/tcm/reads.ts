@@ -17,6 +17,7 @@
 
 import {MEMBER_BOOK_STATUS} from "@/shared/ExtBook";
 import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
+import {ZHONG_YAO_LIST_SPLIT_PATTERN as ALIAS_SPLIT_PATTERN} from "@/shared/ZhongYao";
 import {TCM_CHAPTER_ORDER_SQL} from "./ordering";
 import {JINGSHU_ONLY_YAO_NAMES} from "./zhongyao-anchor";
 
@@ -809,8 +810,8 @@ export async function getAppAllYao(db: D1Database): Promise<AppZhongYao[]> {
   });
 }
 
-/** 旧后端 GetAliaZhongYao 的切分符：中英文逗号/分号、空格、句号、顿号（ZhongYaoService._splitPattern）。 */
-const ALIAS_SPLIT_PATTERN = /[,，；; 。.、]+/;
+// 切分符见顶部 import（`@/shared/ZhongYao` 的 `ZHONG_YAO_LIST_SPLIT_PATTERN`，
+// 与后台 store 共用同一份）。
 
 /**
  * 纯「导入派生」别名——照抄旧后端三源合并（重复别名后者覆盖前者，处理顺序一致）：
