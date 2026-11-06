@@ -46,4 +46,28 @@ describe("AdminMarkdownEditor preview", () => {
   it("keeps the preview toggle available", () => {
     expect(render("正文")).toContain("Preview");
   });
+
+  it("uses a switch (not a checkbox) for the preview toggle", () => {
+    const html = render("正文");
+    // The visible control must be a real switch, not a bare checkbox toggle.
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('data-slot="switch"');
+    // base-ui Switch renders a hidden, aria-hidden checkbox purely for form
+    // semantics; assert no *visible* checkbox toggle exists (a bare <input
+    // type="checkbox"> acting as the control would lack aria-hidden).
+    expect(html).not.toMatch(/<input(?![^>]*aria-hidden)[^>]*type="checkbox"/);
+  });
+
+  it("constrains the editor width so grid dialogs do not stretch when preview is on", () => {
+    const html = render("# 标题\n\n正文", true);
+    // 只看根节点自己的 class 是否含这些约束，不锁整串（顺序/新增 class 不该弄红）。
+    const rootClass = html.match(/class="(admin-markdown-editor[^"]*)"/)?.[1] ?? "";
+    const rootTokens = rootClass.split(/\s+/);
+    for (const token of ["w-full", "min-w-0", "max-w-full", "overflow-hidden"]) {
+      expect(rootTokens).toContain(token);
+    }
+    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("[&amp;_pre]:max-w-full");
+    expect(html).toContain("[&amp;_table]:max-w-full");
+  });
 });

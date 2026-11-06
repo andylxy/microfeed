@@ -47,6 +47,7 @@ export default function EditorFormatToolbar({onAction}: Props) {
             className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
             key={action}
             onClick={() => onAction(action)}
+            onMouseDown={(event) => event.preventDefault()}
             title={t(labelKey)}
             type="button"
           >

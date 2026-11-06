@@ -7,9 +7,11 @@
 -- 「神农本草经疏」等 10 本书塞进这两张表，并用三个挪用的框架字段在运行时反抽
 -- 本草药材（IsEnable 当判别式、Extend01 当等级、BieMing 当药名+别名）。
 --
--- 本迁移只建表，**卷章目录由 0182 播种、正文 8066 行走导入脚本
--- `scripts/import-ctwh/import-chapter-body.mjs`**（避免迁移文件膨胀，且正文
--- 格式远比本草/名词丰富，走参数化脚本才能零格式损失）。
+-- 本迁移只建表，**卷章目录由 0182 播种、正文 8066 行由 0186 播种**（两张表的
+-- 默认数据都随迁移分发，部署到任何位置都自带同一份）。本地开发实例仍可跑
+-- `scripts/import-ctwh/import-chapter-body.mjs --apply` 重建正文并逐行对账；
+-- 0186 由同一脚本的 `--emit-migration` 生成，哨兵编码保持单物理行、按
+-- <80KB 分块，格式零损失（详见 ADR-0062 决策 6/10/11）。
 --
 -- 与既有 `items`(`tcm_kind='chapter'/'section'`)、`channels`、`book_info`、
 -- `ming_ci`、`zhong_yao` **完全并行共存、互不读写、互不迁移**（照 ADR-0060/0061
@@ -53,7 +55,7 @@ CREATE TABLE IF NOT EXISTS book_chapter (
   source_book_id         VARCHAR(11),              -- → book_info.id（逻辑引用，无硬外键，下拉选书）
   source_book_name       VARCHAR(255),             -- 源 BookName 只读历史（153/445 NULL，缺失靠 book_info 书名兜底）
   source_book_legacy_id  VARCHAR(64),              -- 源 BookId 只读历史（如 10001），可追溯
-  source_chapter_legacy_id VARCHAR(64),            -- 源 BookChapter.Id 只读历史；正文导入脚本据此把 BookChapterId 映射到新 id
+  source_chapter_legacy_id VARCHAR(64),            -- 源 BookChapter.Id 只读历史；正文种子靠 0182 冻结映射把 BookChapterId 关联到新 id
   chapter_section        VARCHAR(64),              -- 源 ChapterSection 保真（跨书异构，仅追溯，不排序）
   is_enable              INTEGER NOT NULL DEFAULT 1, -- 源 343=1 / 102=0；导入全量含禁用
   signature_id           VARCHAR(64),              -- 源 SignatureId（列位保留，admin 不编辑）
@@ -65,7 +67,8 @@ CREATE TABLE IF NOT EXISTS book_chapter (
   ext6 VARCHAR(255), ext7 VARCHAR(255), ext8 VARCHAR(255), ext9 VARCHAR(255), ext10 VARCHAR(255)
 );
 
--- 2. 卷章正文（8066 行，导入脚本写入）
+-- 2. 卷章正文（8066 行，0186 部署种子写入；本地可用导入脚本重建）
+-- 正文 id 为确定性 'bc'+9 位补零（源顺序序号），与 0186 种子一致。
 CREATE TABLE IF NOT EXISTS book_chapter_body (
   id              VARCHAR(11) PRIMARY KEY,
   book_chapter_id VARCHAR(11) NOT NULL,           -- → book_chapter.id（逻辑引用；审计 100% 非空、0 悬空）
@@ -91,7 +94,8 @@ CREATE TABLE IF NOT EXISTS book_chapter_body (
 -- 3. 索引：点查/窄范围，避免全表扫描（08 册）
 CREATE INDEX IF NOT EXISTS book_chapter_header       ON book_chapter (chapter_header);
 CREATE INDEX IF NOT EXISTS book_chapter_source_book  ON book_chapter (source_book_id);
--- 正文导入脚本按源 BookChapter.Id 查新 id（445 行点查，避免逐行全表扫）。
+-- 源 Chapter Id 的历史列保留索引：0182 冻结映射据此生成 0186 的卷章关联
+-- （445 行点查可核对）；运行期读侧按 source_book_id / chapter_no 走窄范围。
 CREATE INDEX IF NOT EXISTS book_chapter_source_legacy ON book_chapter (source_chapter_legacy_id);
 CREATE INDEX IF NOT EXISTS book_chapter_book_no      ON book_chapter (source_book_id, chapter_no);
 -- chapter_no 唯一（种子 1..445；create 走 MAX+1，冲突 fail-fast）
@@ -99,8 +103,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS book_chapter_no_unique ON book_chapter (chapte
 
 -- 按卷章取正文（防全表扫）+ 卷章内排序 + 二期合并点查（仅 930 行非空）
 CREATE INDEX IF NOT EXISTS book_chapter_body_chapter ON book_chapter_body (book_chapter_id);
--- 卷章内 receipt_no 唯一：正文导入用随机 id + INSERT OR REPLACE，没有这条唯一约束
--- 复跑会整批再插一遍（8066 → 16132）。唯一索引让重放变成替换而不是新增。
+-- 卷章内 receipt_no 唯一：0186 种子用确定性 id + INSERT OR IGNORE，本地
+-- `--apply` 重建先清空再写；这条唯一约束让两种路径的重放都不产生重复行。
 CREATE UNIQUE INDEX IF NOT EXISTS book_chapter_body_receipt ON book_chapter_body (book_chapter_id, receipt_no);
 CREATE INDEX IF NOT EXISTS book_chapter_body_yao     ON book_chapter_body (bencao_yao_name);
 

@@ -10,6 +10,7 @@ import {
 import {ArrowDownIcon, ArrowUpIcon, ChevronRightIcon, PencilIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
+import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
@@ -309,21 +310,8 @@ export default function MingCiApp() {
   const [pendingReassign, setPendingReassign] = useState<Record<string, string>>({});
   const [groupError, setGroupError] = useState<string | null>(null);
 
-  // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源——观察
-  // <html data-color-mode>，用户切换/系统偏好变化都跟上，避免预览与后台主题错位。
-  const [colorMode, setColorMode] = useState<"dark" | "light" | undefined>(undefined);
-  useEffect(() => {
-    const read = () => setColorMode(
-      document.documentElement.dataset.colorMode === "dark" ? "dark" : "light",
-    );
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-color-mode"],
-    });
-    return () => observer.disconnect();
-  }, []);
+  // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
+  const colorMode = useColorMode();
 
   const groups = board.groups;
   const sourceBooks = board.sourceBooks;

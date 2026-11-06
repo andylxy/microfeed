@@ -20,6 +20,12 @@ interface AdminDialogProps {
    * 调用方可给按视口自适应的宽度与 `dvh` 高度上限；不传的弹层行为完全不变。
    */
   contentClassName?: string;
+  /**
+   * 是否禁止点击弹层外部（遮罩/空白处）关闭。默认 `false`（保持既有行为）。
+   * 传 `true` 后只有显式「关闭/取消」或 Esc 才会关，避免误点空白把编辑中的
+   * 表单关掉——适合编辑类弹层。
+   */
+  disablePointerDismissal?: boolean;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   title: ReactNode;
@@ -29,12 +35,14 @@ export default function AdminDialog({
   children,
   closeDisabled = false,
   contentClassName,
+  disablePointerDismissal = false,
   onOpenChange,
   open,
   title,
 }: AdminDialogProps) {
   return (
     <Dialog
+      disablePointerDismissal={disablePointerDismissal}
       open={open}
       onOpenChange={(nextOpen, eventDetails) => {
         if (!nextOpen && closeDisabled) {

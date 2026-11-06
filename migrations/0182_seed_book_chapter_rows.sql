@@ -17,8 +17,10 @@
 --   标记原样存储不解析。
 -- - source_book_id：源 BookId → `book_info.id`（按 `book_info.book_no` 对映，
 --   0175 种子 10 行全命中）；`source_book_legacy_id` 存源 BookId 便于追溯。
--- - source_chapter_legacy_id：源 `BookChapter.Id` 只读历史。正文导入脚本靠它把
---   源 `BookChapterBody.BookChapterId` 映射到本表新 id（0182 建了索引）。
+-- - source_chapter_legacy_id：源 `BookChapter.Id` 只读历史。0182 冻结映射
+--   （`scripts/import-ctwh/book-chapter-ids.json`）据此把源
+--   `BookChapterBody.BookChapterId` 关联到本表新 id，供 0186 正文种子使用；
+--   0182 建了索引便于核对。
 -- - source_book_name：源 BookName 原样，153/445 为 NULL（缺失时 UI 用
 --   book_info 书名兜底显示）。
 -- - is_enable：源 343=1 / 102=0，**全量导入含禁用**（禁用书卷章仍要能后台看见）。

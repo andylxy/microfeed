@@ -10,16 +10,20 @@ import {
 import {ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
+import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import AdminInput from "@/components/admin/shared/AdminInput";
+import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
 import {AdminGroupTree} from "@/components/admin/shared/AdminGroupTree";
 import type {AdminTreeGroup} from "@/components/admin/shared/AdminGroupTree";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
-import AdminTextarea from "@/components/admin/shared/AdminTextarea";
+import MarkdownPreview from "@uiw/react-markdown-preview";
+import remarkBreaks from "remark-breaks";
+import remarkNoIndentedCode from "@/components/admin/shared/AdminMarkdownEditor/remarkNoIndentedCode";
 import {Button} from "@/components/ui/button";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
@@ -81,13 +85,65 @@ const CATEGORY_KEY_PREFIX = "cat:";
 const BOOK_KEY_PREFIX = "book:";
 
 /**
- * 正文弹层的自适应尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：
- * 宽度按视口缩放、上限 48rem；高度由内容撑开，`dvh` 上限防超屏（移动端地址栏
- * 收起时比 `vh` 准）。`sm/lg:max-w-none` 清掉默认与 `DialogContent` 基础的固定
- * 宽度档位，否则 576px 上限会让 `w-[min(...)]` 失效。其余弹层不传，行为不变。
+ * 正文弹层尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：按视口 65%
+ * 自适应——`w-[65vw]` 定宽、`max-h-[65vh]` 限高（内容超高在弹层内滚动，滚动
+ * 由默认值的 `overflow-y-auto` 提供）。替换 HEAD 的 `w-[min(90vw,48rem)]`
+ * 固定档加 `sm/lg:max-w-none`，弹层随窗口大小伸缩，不再是一成不变的固定尺寸。
+ * 关键：`AdminDialog` 默认带 `sm:max-w-lg lg:max-w-xl`，而 tailwind-merge 只去重
+ * 「同断点」的同类 class，所以只在基线给 `max-w-[65vw]` 会被 lg 起的 `max-w-xl`
+ * 盖掉、退回固定宽度。必须把 `sm:max-w-[65vw] lg:max-w-[65vw]` 一并给上，65%
+ * 才在所有断点真正生效（已用 tailwind-merge 实测合并结果确认）。
+ * `grid grid-cols-[minmax(0,1fr)]` 保留：让 `DialogContent` 的 CSS Grid 隐式列
+ * 有界（默认 auto 列会按 min-content 撑开），预览里的 `pre`/`table` 长行无法把
+ * 整列（连同源码框）向右撑开；控件侧仍各自约束自身宽度。vh/vw 在 v4 均可生成
+ * （沿用原写法，避免 `dvh` 的同类风险）。
  */
 const BODY_DIALOG_CONTENT_CLASS =
-  "w-[min(90vw,48rem)] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] sm:max-w-none lg:max-w-none";
+  "grid grid-cols-[minmax(0,1fr)] w-[65vw] max-w-[65vw] sm:max-w-[65vw] lg:max-w-[65vw] max-h-[65vh]";
+
+/**
+ * 只读详情是否渲染注释块。`false` = 页面不展示注释；渲染代码、`section_note`
+ * 数据、编辑态的注释 Markdown 编辑器与 i18n 键均保留，改为 `true` 即恢复展示。
+ */
+const SHOW_BODY_NOTE_IN_DETAIL: boolean = false;
+
+/**
+ * 只读详情是否渲染正文全文。`false` = 只显示一行摘要（超出处以 `.....` 收尾）；
+ * Markdown 全文渲染代码保留，改为 `true` 即恢复。全文另可在编辑态查看。
+ */
+const SHOW_FULL_BODY_TEXT_IN_DETAIL: boolean = false;
+
+/** 正文单行摘要的字符上限（照 `AnnouncementsApp` 的列表摘要口径）。 */
+const BODY_TEXT_PREVIEW_LIMIT = 80;
+
+/**
+ * 正文单行摘要：取首行并按字符上限截断。返回 `hasMore` 供调用方在行尾补
+ * 字面量 `.....`。前导缩进原样保留，不 trim、不改写正文；这里只决定显示。
+ */
+function bodyTextPreview(text: string): {head: string; hasMore: boolean} {
+  const lines = text.split(/\r\n|\r|\n/);
+  const firstLine = lines[0] ?? "";
+  // 按 Unicode 码点截断，避免把代理对（emoji 等）劈成半个字符。
+  const firstRunes = Array.from(firstLine);
+  return {
+    head: firstRunes.slice(0, BODY_TEXT_PREVIEW_LIMIT).join(""),
+    hasMore: lines.length > 1 || firstRunes.length > BODY_TEXT_PREVIEW_LIMIT,
+  };
+}
+
+/** 只读正文的一行摘要。`whitespace-pre` 保住前导缩进，`overflow-hidden` 裁掉
+ *  超宽部分，行尾的 `.....` 是独立 span，不会与 CSS ellipsis 叠加。 */
+function BodyTextPreviewLine({text}: {text: string}) {
+  const {head, hasMore} = bodyTextPreview(text);
+  return (
+    <div className="flex min-w-0 items-center text-sm">
+      <span className="min-w-0 flex-1 overflow-hidden whitespace-pre">
+        {head}
+      </span>
+      {hasMore && <span className="shrink-0 pl-1 text-muted-foreground">.....</span>}
+    </div>
+  );
+}
 
 function formFromChapter(chapter: BookChapterAdmin): ChapterFormState {
   return {
@@ -253,7 +309,8 @@ function ChapterForm({
 }
 
 /** 正文表单，作为 `AdminDialog` 的内容（卡片与标题由弹层提供）。
- *  多行文本用 textarea，**原样提交不 trim**。`creating` 区分新建/编辑——
+ *  正文与注释用共享的 Markdown 源码编辑器，**原样提交不 trim**；只读详情
+ *  用 `MarkdownPreview` 渲染同一份源码。`creating` 区分新建/编辑——
  *  序号（receipt_no）一律由系统给：新建自动 `MAX(receipt_no)+1`、编辑锁死
  *  不可改，故该输入框始终禁用（新建留空占位，编辑显示原值）。 */
 function BodyForm({
@@ -275,7 +332,11 @@ function BodyForm({
   const set = (key: keyof BodyFormState, value: string | boolean) =>
     setForm((current) => ({...current, [key]: value}));
   return (
-    <div>
+    // min-w-0：本 div 是弹层 grid 的直接 item，默认 min-width:auto（= 内容的
+    // min-content）。缺它时，内层 Markdown 源码框/预览的长行会把整个 item 连同
+    // 弹层列一起向右撑宽（正是「选中预览后整块向右拉长」的根因）——内层各处
+    // 的 min-w-0 只能约束自己，约束不了这个最外层 item，故必须在这里断掉。
+    <div className="min-w-0">
       <div>
         {/* 序号系统托管：新建由后端取卷章内 MAX+1，编辑锁死。禁用框给出
             「自动生成」提示，避免操作者误以为漏填。 */}
@@ -287,28 +348,31 @@ function BodyForm({
         />
       </div>
       <div className="mt-4">
-        {/* 正文普遍是单行短文本（中位 37 字），注释 82% 为空、非空时反而很长
-            （p90 328 字 / 9 行）。故复用 AdminTextarea 的 field-sizing: content
-            按内容增高，min/maxRows 定上下限，不再写死 14 / 6 行。
-            `min-h-12` 覆盖 Textarea 基础的 min-h-24（96px），让 2 行下限生效。 */}
-        <AdminTextarea
-          customCss="min-h-12 text-sm"
-          label={t("bookChapter.bodyTextLabel")}
-          maxRows={12}
-          minRows={2}
-          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-            set("sectionText", event.target.value)}
+        <div className="mb-2 text-sm font-semibold text-foreground">
+          {t("bookChapter.bodyTextLabel")}
+        </div>
+        {/* 正文：Markdown 源码编辑器（含标注工具栏，与本草/名词同款）。
+            onChange 收到的是源码，原样存入 section_text；$a{}/$m{} 等标记
+            作内容本体不解析，存库口径不变（ADR-0062 决策 6）。 */}
+        <AdminMarkdownEditor
+          ariaLabel={t("bookChapter.bodyTextLabel")}
+          hint={t("bookChapter.bodyTextMarkdownHint")}
+          indentAsText
+          onChange={(value: string) => set("sectionText", value)}
+          placeholder={t("bookChapter.bodyTextMarkdownPlaceholder")}
           value={form.sectionText}
         />
       </div>
       <div className="mt-4">
-        <AdminTextarea
-          customCss="min-h-12 text-sm"
-          label={t("bookChapter.bodyNoteLabel")}
-          maxRows={18}
-          minRows={2}
-          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-            set("sectionNote", event.target.value)}
+        <div className="mb-2 text-sm font-semibold text-foreground">
+          {t("bookChapter.bodyNoteLabel")}
+        </div>
+        <AdminMarkdownEditor
+          ariaLabel={t("bookChapter.bodyNoteLabel")}
+          hint={t("bookChapter.bodyNoteMarkdownHint")}
+          indentAsText
+          onChange={(value: string) => set("sectionNote", value)}
+          placeholder={t("bookChapter.bodyNoteMarkdownPlaceholder")}
           value={form.sectionNote}
         />
       </div>
@@ -396,6 +460,13 @@ export default function BookChapterApp() {
   const [treeSearch, setTreeSearch] = useState("");
   const searchActive = treeSearch.trim().length > 0;
   const searchQuery = treeSearch.trim().toLowerCase();
+
+  // 只读正文的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
+  // 两个只读开关都为 false 时预览根本不渲染，就不挂观察器，省一个常驻
+  // MutationObserver。
+  const colorMode = useColorMode(
+    SHOW_FULL_BODY_TEXT_IN_DETAIL || SHOW_BODY_NOTE_IN_DETAIL,
+  );
 
   // ---- 正文（按选中卷章按需拉取） ----
   const [bodies, setBodies] = useState<BookChapterBodyAdmin[]>([]);
@@ -1098,10 +1169,45 @@ export default function BookChapterApp() {
                         </Button>
                       </div>
                     </div>
-                    {/* 正文原样显示（whitespace-pre-wrap 保住换行/缩进/句号后空格）。 */}
-                    <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm">
-                      {body.sectionText}
-                    </p>
+                    {/* 只读正文默认只显示一行摘要：首行截断到 80 字符，超出或后面
+                        还有内容时在行尾补字面量 `.....`。行尾省略号用独立 span，
+                        与正文的 overflow-hidden 分开，避免 CSS ellipsis 叠加。
+                        完整内容进编辑态的 Markdown 编辑器查看；全文渲染代码由
+                        SHOW_FULL_BODY_TEXT_IN_DETAIL 保留。注释块同样保留但隐藏。 */}
+                    <div className="mt-2">
+                      <div className="mb-1 text-xs text-muted-foreground">
+                        {t("bookChapter.bodyTextLabel")}
+                      </div>
+                      {SHOW_FULL_BODY_TEXT_IN_DETAIL ? (
+                        <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
+                          <MarkdownPreview
+                            remarkPlugins={[remarkBreaks, remarkNoIndentedCode]}
+                            source={body.sectionText}
+                            wrapperElement={
+                              colorMode ? {"data-color-mode": colorMode} : undefined
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <BodyTextPreviewLine text={body.sectionText} />
+                      )}
+                    </div>
+                    {SHOW_BODY_NOTE_IN_DETAIL && body.sectionNote && (
+                      <div className="mt-2">
+                        <div className="mb-1 text-xs text-muted-foreground">
+                          {t("bookChapter.bodyNoteLabel")}
+                        </div>
+                        <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
+                          <MarkdownPreview
+                            remarkPlugins={[remarkBreaks, remarkNoIndentedCode]}
+                            source={body.sectionNote}
+                            wrapperElement={
+                              colorMode ? {"data-color-mode": colorMode} : undefined
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
                     {body.bencaoYaoName && (
                       <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
                         <div>
@@ -1286,6 +1392,7 @@ export default function BookChapterApp() {
       <AdminDialog
         closeDisabled={saving}
         contentClassName={BODY_DIALOG_CONTENT_CLASS}
+        disablePointerDismissal
         onOpenChange={(nextOpen) => {
           if (!nextOpen) cancelBody();
         }}

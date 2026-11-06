@@ -30,6 +30,12 @@ import {readFileSync, readdirSync, writeFileSync, mkdirSync} from "node:fs";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {iterInsertRows, rowValue} from "./parse.ts";
+import {
+  chunkByBytes,
+  encodeLiteral,
+  SENTINELS,
+  textExpr,
+} from "./sql-emit.mjs";
 
 const INSTANCE = "ctwh-881019-xyz";
 const args = process.argv.slice(2);
@@ -551,27 +557,7 @@ console.log("自检全部通过。报告：", join(OUT, "summary.json"));
 // 所以库内内容与迁移文本必然一致。id 用本脚本生成的确定性 `fy`/`fb`+9 位补零写死进文件
 // （取代早期随机 11 位，保证 0185 重放幂等），此后稳定；`INSERT OR IGNORE` 幂等
 // （UNIQUE(source_fang_legacy_id) / 主键冲突跳过）。
-const SENTINELS = ["@@NL@@", "@@TB@@", "@@CR@@"];
-
-/** 单引号转义 + 控制字符编码为哨兵。返回 SQL 字面量（无引号，`'` 已 `''`）。
- *  前提：任何文本列都不得含哨兵原文（下方 verifyNoSentinel 先 fail-fast）。 */
-function encodeLiteral(value) {
-  if (value === null || value === undefined) return "NULL";
-  return `'${String(value)
-    .replace(/'/g, "''")
-    .replace(/\n/g, "@@NL@@")
-    .replace(/\t/g, "@@TB@@")
-    .replace(/\r/g, "@@CR@@")}'`;
-}
-
-/** 文本列表达式：无控制字符 → 纯字面量；有 → 字面量外包三层 replace 运行时还原。 */
-function textExpr(value) {
-  if (value === null || value === undefined) return "NULL";
-  const s = String(value);
-  if (!/[\n\t\r]/.test(s)) return encodeLiteral(s);
-  return `replace(replace(replace(${encodeLiteral(s)}, ` +
-    `'@@NL@@', char(10)), '@@TB@@', char(9)), '@@CR@@', char(13))`;
-}
+// SENTINELS / encodeLiteral / textExpr / chunkByBytes 见 ./sql-emit.mjs（与 import-chapter-body 共用）。
 
 function verifyNoSentinel(rows, pick) {
   for (const row of rows) {
@@ -584,25 +570,7 @@ function verifyNoSentinel(rows, pick) {
   }
 }
 
-/** 按累计字节分块（单条 INSERT 语句 <80KB）。 */
-function chunkByBytes(rows, toRowSql) {
-  const chunks = [];
-  let current = [];
-  let bytes = 0;
-  for (const row of rows) {
-    const sql = toRowSql(row);
-    const rowBytes = Buffer.byteLength(sql, "utf8") + 8; // ", " 与 ")" 余量
-    if (current.length > 0 && bytes + rowBytes > 80 * 1024) {
-      chunks.push(current);
-      current = [];
-      bytes = 0;
-    }
-    current.push(sql);
-    bytes += rowBytes;
-  }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
-}
+// chunkByBytes 见 ./sql-emit.mjs。
 
 function fangRowSql(row) {
   return `(${[
