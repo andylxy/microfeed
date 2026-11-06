@@ -82,9 +82,15 @@ const EMPTY_BODY_FORM: BodyFormState = {
 const GROUP_KEY_PREFIX = "group:";
 
 /** 组成弹层的自适应尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：
- *  宽度按视口缩放、上限 48rem；高度由内容撑开，`dvh` 上限防超屏。 */
+ *  宽按视口 70%、高按视口 80% 自适应——`w-[70vw]` 定宽、`max-h-[80vh]` 限高
+ *  （内容超高在弹层内滚动，滚动由默认值的 `overflow-y-auto` 提供）。与 book-chapter
+ *  正文弹层同款。关键：`AdminDialog` 默认带 `sm:max-w-lg lg:max-w-xl`，而
+ *  tailwind-merge 只去重「同断点」的同类 class，只在基线给 `max-w-[70vw]` 会被 lg
+ *  的 `max-w-xl` 盖掉、退回固定宽度。必须把 `sm:max-w-[70vw] lg:max-w-[70vw]` 一并
+ *  给上，70% 才在所有断点生效。`grid grid-cols-[minmax(0,1fr)]` 让 Grid 隐式列有界，
+ *  预览长行无法把整列向右撑开。vh/vw 沿用原写法，避免 `dvh` 的同类风险。 */
 const BODY_DIALOG_CONTENT_CLASS =
-  "w-[min(90vw,48rem)] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] sm:max-w-none lg:max-w-none";
+  "grid grid-cols-[minmax(0,1fr)] w-[70vw] max-w-[70vw] sm:max-w-[70vw] lg:max-w-[70vw] max-h-[80vh]";
 
 function formFromFang(formula: FangYaoAdmin): FangFormState {
   return {

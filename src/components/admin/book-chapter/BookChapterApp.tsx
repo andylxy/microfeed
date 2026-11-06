@@ -85,13 +85,13 @@ const CATEGORY_KEY_PREFIX = "cat:";
 const BOOK_KEY_PREFIX = "book:";
 
 /**
- * 正文弹层尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：按视口 65%
- * 自适应——`w-[65vw]` 定宽、`max-h-[65vh]` 限高（内容超高在弹层内滚动，滚动
- * 由默认值的 `overflow-y-auto` 提供）。替换 HEAD 的 `w-[min(90vw,48rem)]`
+ * 正文弹层尺寸（经 `AdminDialog.contentClassName` 与默认值合并）：宽按视口 70%、
+ * 高按视口 80% 自适应——`w-[70vw]` 定宽、`max-h-[80vh]` 限高（内容超高在弹层内
+ * 滚动，滚动由默认值的 `overflow-y-auto` 提供）。替换 HEAD 的 `w-[min(90vw,48rem)]`
  * 固定档加 `sm/lg:max-w-none`，弹层随窗口大小伸缩，不再是一成不变的固定尺寸。
  * 关键：`AdminDialog` 默认带 `sm:max-w-lg lg:max-w-xl`，而 tailwind-merge 只去重
- * 「同断点」的同类 class，所以只在基线给 `max-w-[65vw]` 会被 lg 起的 `max-w-xl`
- * 盖掉、退回固定宽度。必须把 `sm:max-w-[65vw] lg:max-w-[65vw]` 一并给上，65%
+ * 「同断点」的同类 class，所以只在基线给 `max-w-[70vw]` 会被 lg 起的 `max-w-xl`
+ * 盖掉、退回固定宽度。必须把 `sm:max-w-[70vw] lg:max-w-[70vw]` 一并给上，70%
  * 才在所有断点真正生效（已用 tailwind-merge 实测合并结果确认）。
  * `grid grid-cols-[minmax(0,1fr)]` 保留：让 `DialogContent` 的 CSS Grid 隐式列
  * 有界（默认 auto 列会按 min-content 撑开），预览里的 `pre`/`table` 长行无法把
@@ -99,7 +99,7 @@ const BOOK_KEY_PREFIX = "book:";
  * （沿用原写法，避免 `dvh` 的同类风险）。
  */
 const BODY_DIALOG_CONTENT_CLASS =
-  "grid grid-cols-[minmax(0,1fr)] w-[65vw] max-w-[65vw] sm:max-w-[65vw] lg:max-w-[65vw] max-h-[65vh]";
+  "grid grid-cols-[minmax(0,1fr)] w-[70vw] max-w-[70vw] sm:max-w-[70vw] lg:max-w-[70vw] max-h-[80vh]";
 
 /**
  * 只读详情是否渲染注释块。`false` = 页面不展示注释；渲染代码、`section_note`
