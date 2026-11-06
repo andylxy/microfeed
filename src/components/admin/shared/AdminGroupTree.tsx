@@ -76,6 +76,9 @@ interface GroupNodeProps {
   onToggleGroup: (key: string) => void;
   onSelectLeaf: (id: string) => void;
   emptyLeafText?: string;
+  /** 是否在该分组行渲染 `count` 徽标。默认 true（子分组沿用）；顶层分组传 false
+   *  以隐藏第一层分类/题材后的统计数字——该层只作导航锚点，计数信息量低。 */
+  showCount?: boolean;
 }
 
 /**
@@ -90,6 +93,7 @@ function GroupNode({
   onToggleGroup,
   onSelectLeaf,
   emptyLeafText,
+  showCount = true,
 }: GroupNodeProps) {
   const expanded = expandedKeys.includes(group.key);
   const emptyText = group.emptyText ?? emptyLeafText;
@@ -112,7 +116,7 @@ function GroupNode({
           type="button"
         >
           <span className="truncate">{group.label}</span>
-          <TreeBadge>{group.count}</TreeBadge>
+          {showCount && <TreeBadge>{group.count}</TreeBadge>}
         </button>
       </div>
       {expanded && (group.subgroups ? (
@@ -213,6 +217,7 @@ export function AdminGroupTree({
               onSelectLeaf={onSelectLeaf}
               onToggleGroup={onToggleGroup}
               selectedLeafId={selectedLeafId}
+              showCount={false}
             />
           ))}
         </ul>
