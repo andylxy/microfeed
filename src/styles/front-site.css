@@ -975,6 +975,12 @@ body:has(.mf-reader-page) > footer {
   color: var(--mf-text);
   font-size: 1.125rem;
   line-height: 2;
+  /* 正文换行/缩进是内容（ADR-0062 格式保真）：源数据用真实换行分隔段落、
+     用行首空格做段首缩进。renderBodyHtml 把整条正文包进单个 <p> 且不转 <br>，
+     默认 white-space:normal 会把这些换行折叠成空格、段首缩进也塌掉，多段正文
+     （题辞署名、本草条目正文）会连成一片。pre-wrap 让换行与缩进原样呈现；
+     每条 receipt 本就是独立 <p>，条与条的分段不受影响。 */
+  white-space: pre-wrap;
 }
 
 .mf-reader-body > * {
