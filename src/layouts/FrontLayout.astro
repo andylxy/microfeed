@@ -21,6 +21,10 @@ interface Props {
   activeGroupKey?: string;
   /** 标注浮层的 runtime HTML（style + dialog + JSON + handler） */
   runtimeHtml?: string | null;
+  /** 是否阅读页（卷页 / 方剂 / 中药 / 名词条目页）。阅读页身份由页面类型决定，
+   * 与 runtimeHtml 解耦——浮层 runtime 在无标注样式 / 无实体标记时为 null，但
+   * 页面仍是阅读页，仍要吃主题岛。 */
+  isReaderPage?: boolean;
 }
 
 const {
@@ -30,13 +34,19 @@ const {
   canonicalUrl,
   activeGroupKey,
   runtimeHtml,
+  isReaderPage = false,
 } = Astro.props;
 const groups = await listGroups(env.FEED_DB);
 const pageTitle = title || site.title;
 ---
 
 <!doctype html>
-<html lang={site.language}>
+<!-- 阅读页身份在服务端渲染时由页面类型（isReaderPage）确定，生成静态类
+     mf-reader-mode，供主题岛 CSS 用 html.mf-reader-mode 命中。这里刻意避开
+     :has()：html 上的 :has() 是相对选择器，阅读页浮层每点一次药材/返回都用
+     innerHTML 重写内容，会触发 html 子树整片样式重算，正文越大越卡；静态类
+     只在加载时求值一次，永不随浮层 DOM 变更重算。 -->
+<html lang={site.language} class={isReaderPage ? "mf-reader-mode" : ""}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

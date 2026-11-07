@@ -59,17 +59,19 @@
    该属性即恢复全站主题。三态各自是一整组配套色（底色 + 字色 + muted + 边框 +
    accent + brand/novel），切态时整组一起换；每组字色都按对应底色校过 WCAG
    对比度（正文 ≥10:1、muted ≥4.5:1、accent/brand/novel ≥4:1），不会出现暖纸配
-   冷白字这类错配。属性选择器 (0,1,1) 高于 .dark (0,1,0)，故阅读页白天态能盖过
-   全站墨夜。
-   作用域：三态一律收窄到 .mf-reader-page 存在的页面（html:has(.mf-reader-page)）。
-   全站每页都经 FrontLayout 播种 data-mf-reader-theme，若三态全局生效，day/night
-   会以 (0,1,1) 盖过 .dark，把书页/卷页等非阅读页的画布与字色钉回白天——这正是
-   「切墨夜后书页背景没完整跟着变」的根因。收窄后非阅读页完全不吃主题岛，只认
-   全站明暗轨道。阅读页里 .fq-header 顶栏与站点 footer 本就 display:none（见
-   body:has(.mf-reader-page) 块），换装只落在阅读页自身外壳与正文上。 */
+   冷白字这类错配。属性+类选择器高于 .dark，故阅读页白天态能盖过全站墨夜。
+   作用域：三态一律收窄到阅读页——用服务端渲染时按页面类型定死的静态类
+   html.mf-reader-mode（FrontLayout 收到 isReaderPage 时加上）。html 上的 :has()
+   是相对选择器，阅读页浮层每点
+   一次药材/返回都用 innerHTML 重写内容，会触发 html 子树整片样式重算，正文越
+   大越卡；静态类只在加载时求值一次，永不随浮层 DOM 变更重算。非阅读页没有
+   mf-reader-mode 类，完全不吃主题岛，只认全站明暗轨道——否则 day/night 会盖过
+   .dark，把书页/卷页画布钉回白天（「切墨夜后书页背景没完整跟着变」的根因）。
+   阅读页里 .fq-header 顶栏与站点 footer 本就 display:none（见 html.mf-reader-mode
+   块），换装只落在阅读页自身外壳与正文上。 */
 
 /* 白天：与全站浅色同值。即便全站处于墨夜，阅读页白天态也显浅色。 */
-html[data-mf-reader-theme="day"]:has(.mf-reader-page) {
+html.mf-reader-mode[data-mf-reader-theme="day"] {
   --mf-background: #ffffff;
   --mf-surface: #f6f8fa;
   --mf-text: #24292f;
@@ -81,7 +83,7 @@ html[data-mf-reader-theme="day"]:has(.mf-reader-page) {
 }
 
 /* 墨夜：与全站深色同值。 */
-html[data-mf-reader-theme="night"]:has(.mf-reader-page) {
+html.mf-reader-mode[data-mf-reader-theme="night"] {
   --mf-background: #0d1117;
   --mf-surface: #161b22;
   --mf-text: #f0f3f6;
@@ -95,7 +97,7 @@ html[data-mf-reader-theme="night"]:has(.mf-reader-page) {
 /* 暖色（羊皮纸 / 护眼）：阅读页独有的第三态。纸面暖米黄、字用深棕；accent /
    brand / novel 取同族深一档——原浅色值（#0997cc / #ff4d4f / #ff6a00）在暖底
    只有 2.5~2.9:1，链接和 hover 字色看不清，换深色后回到 4:1 以上。 */
-html[data-mf-reader-theme="warm"]:has(.mf-reader-page) {
+html.mf-reader-mode[data-mf-reader-theme="warm"] {
   --mf-background: #f6efe0;
   --mf-surface: #efe4cf;
   --mf-text: #3b3226;
@@ -945,12 +947,15 @@ body:has(.mf-volume-page) {
 
 /* Reading page prototype: wide white reader shell, centered 760px text column,
  * and a fixed five-button tool rail, matching poto/阅读面.html. */
-body:has(.mf-reader-page) {
+/* 用静态类 html.mf-reader-mode（FrontLayout 服务端渲染时按 isReaderPage 加上）。
+   body 上的 :has() 是相对选择器，阅读页浮层每点一次药材/返回都用 innerHTML
+   重写内容，会触发 body 子树样式重算，正文越大越卡；静态类只在加载时求值一次。 */
+html.mf-reader-mode body {
   background: var(--mf-page-bg);
 }
 
-body:has(.mf-reader-page) .fq-header,
-body:has(.mf-reader-page) > footer {
+html.mf-reader-mode .fq-header,
+html.mf-reader-mode body > footer {
   display: none;
 }
 

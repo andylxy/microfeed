@@ -14,7 +14,7 @@
 结果就是用户看到的「各页颜色深浅不同、乱搭配置」：
 
 1. 阅读/条目页的暖棕 sepia 是**第三种观感**，却既不是全站白天也不是全站墨夜，没有自己的轨道，只能靠一个硬编码覆盖块临时改几条规则。
-2. 旧的 `data-mf-reader-night` 块只重刷 `.mf-reader-body/header/back/login/chapter-head` **几个元素**，阅读页里其余部分（`.mf-reader-content`、nav、toc、工具栏）仍吃全站令牌——于是开夜间后阅读页**内部**一半暖灰一半原色。这不是顶栏问题：`.fq-header` 顶栏与站点 footer 在阅读页本就 `display:none`（`body:has(.mf-reader-page)` 块），读者根本看不到它们；真问题是阅读页自身没整页换装。
+2. 旧的 `data-mf-reader-night` 块只重刷 `.mf-reader-body/header/back/login/chapter-head` **几个元素**，阅读页里其余部分（`.mf-reader-content`、nav、toc、工具栏）仍吃全站令牌——于是开夜间后阅读页**内部**一半暖灰一半原色。这不是顶栏问题：`.fq-header` 顶栏与站点 footer 在阅读页本就 `display:none`（`html.mf-reader-mode` 块），读者根本看不到它们；真问题是阅读页自身没整页换装。
 3. 一次性散值（footer `#19b7fa`、搜索遮罩 `#0f172a73`）与令牌并行，改主题时漏改。
 4. 阅读页还有一个旧的「米黄」纸色开关（`html[data-mf-paper=sepia]`），它重定义 `--mf-background/surface/page-bg/text/muted/border` 六个令牌却**不**覆盖 accent/brand/novel——是第二套暖色机制，会盖掉暖色态校准过的链接色。
 
@@ -46,7 +46,7 @@
 
 day 与全站浅色同值、night 与全站深色同值；warm 是阅读页独有的第三态。
 
-**作用域**：全站每页都经 `FrontLayout` 播种 `data-mf-reader-theme`，故 `day`/`night` 全局套用无害（与 `:root`/`.dark` 同值）；`warm` 不与任何全站态同值，须收窄到阅读页——选择器写作 `html[data-mf-reader-theme="warm"]:has(.mf-reader-page)`，否则属性残留到非阅读页会让它们误穿暖色。
+**作用域**：三态一律收窄到阅读页，用**服务端渲染时按页面类型定死的静态类** `html.mf-reader-mode`（`FrontLayout` 收到 `isReaderPage` prop 时在 `<html>` 上加；卷页与三个条目页传 `isReaderPage`），配合 `data-mf-reader-theme` 写成 `html.mf-reader-mode[data-mf-reader-theme=X]`。阅读页身份由**页面类型**决定，与 `runtimeHtml`（浮层数据，无标注样式/无实体标记时为 null）解耦——否则这些页会丢主题岛。**刻意避开 `:has(.mf-reader-page)`**：html/body 上的 `:has()` 是相对选择器，阅读页浮层每点一次药材/返回都用 `innerHTML` 重写内容，会触发 html/body 子树整片样式重算，正文越大越卡（实测「点药材、点返回、浮层内交互都很卡」的根因）；静态类只在加载时求值一次，永不随浮层 DOM 变更重算。非阅读页没有 `mf-reader-mode` 类，完全不吃主题岛——否则 day/night 会盖过 `.dark`，把书页/卷页画布钉回白天（「切墨夜后书页背景没完整跟着变」的根因）。阅读页里 `.fq-header` 顶栏与站点 footer 本就 `display:none`（`html.mf-reader-mode` 块），换装只落在阅读页自身外壳与正文上。
 
 **防闪变靠 head 内联播种**：`FrontLayout` 在 `<head>` 里有一段 `is:inline` 脚本，首绘前读 `microfeed-reader-theme`（无则按全站 `microfeed-public-theme` 推 day/night）设好 `data-mf-reader-theme`，避免先按默认白天渲染再跳成墨夜/暖色。`front-site.ts` 里另有一遍兜底播种，脚本晚到时补设。
 

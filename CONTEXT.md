@@ -346,8 +346,8 @@ _Avoid_: CSS 变量（泛指，不含「语义色」这层约束）、design tok
 _Avoid_: 全局主题（易被读成连阅读页一起管）、站点主题
 
 **阅读页主题岛**：
-阅读/条目页自成的一套配色，与全站明暗轨道解耦。进阅读页由 JS 在 `<html>` 上设 `data-mf-reader-theme=day|night|warm`，CSS 在 `html[data-mf-reader-theme=X]` 重定义那批语义令牌，整页（含全站顶栏 `.fq-header`，因顶栏在 `.mf-reader-page` 之外、靠根层令牌继承换装）一起切换；出阅读页移除属性即回落全站轨道。属性选择器 (0,1,1) 高于 `.dark` (0,1,0)，故阅读页白天态能盖过全站墨夜。
-_Avoid_: 阅读主题（未点明「岛」的解耦边界）、sepia 模式（旧称，现在是三态之一）
+阅读/条目页自成的一套配色，与全站明暗轨道解耦。进阅读页由 JS 在 `<html>` 上设 `data-mf-reader-theme=day|night|warm`；阅读页身份由服务端渲染时按页面类型定死的静态类 `mf-reader-mode`（`FrontLayout` 收到 `isReaderPage` 时加上，卷页与三个条目页传它）表达，CSS 在 `html.mf-reader-mode[data-mf-reader-theme=X]` 重定义那批语义令牌，阅读页自身外壳与正文整组换装（顶栏 `.fq-header` 与站点 footer 在阅读页本就 `display:none`）；出阅读页即回落全站轨道。属性+类选择器高于 `.dark`，故阅读页白天态能盖过全站墨夜。
+_Avoid_: 阅读主题（未点明「岛」的解耦边界）、sepia 模式（旧称，现在是三态之一）、`:has(.mf-reader-page)`（相对选择器，浮层每次 innerHTML 重写都触发整片样式重算，是浮层卡顿根因，已改静态类）、把阅读页身份绑在 `runtimeHtml` 上（浮层 runtime 在无标注样式/无实体标记时为 null，但页面仍是阅读页，绑它会丢主题岛）
 
 **阅读页三态**：
 阅读页主题岛取的三个值——`day`（白天，与全站浅色同值）、`night`（墨夜，与全站深色同值）、`warm`（暖色/羊皮纸，阅读页独有的第三态）。三态各自是**一整组配套色**（底色+字色+muted+边框+accent+brand/novel），切态时整组一起换；每组字色都按对应底色校过 WCAG 对比度（正文 ≥10:1、muted ≥4.5:1、accent/brand/novel ≥4:1），不会出现暖纸配冷白字这类错配。

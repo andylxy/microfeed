@@ -35,6 +35,7 @@ const markerLayer = entry && !unavailable
     title={entry.name}
     canonicalUrl={new URL(Astro.url.pathname, Astro.url.origin).toString()}
     runtimeHtml={markerLayer?.runtimeHtml ?? null}
+    isReaderPage={true}
   >
     <EntryPanel
       site={site}
