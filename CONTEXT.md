@@ -214,6 +214,46 @@ _Avoid_: 无卷书、平铺书（都指同一件事，但「扁平条目」强�
 分组键不指向本书任何一行篇章的那些条文（`tcm_parent_id` 为空、指向别的书、或指向已不存在的行），在看板上作为一个卷行展示、恒排最后，卷名是空串、键是 `UNFILED_VOLUME_KEY`（`"unfiled"`）。挂在**被软删的篇章**下的条文不算未归类：那条篇章查询刻意不带 `status` 条件，被删篇章的 id 仍是合法分组键。未归类只数 `section`——方剂（`fang`）带着本书的 `book_id` 却没有父项，属于独立的方剂目录，混进来会凭空造出一个几百条的桶。小说类书里未归类就是 `_microfeed.volume` 为空的那些章。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
 _Avoid_: 孤儿条文（读不出「还没归档」这层意思）、散章
 
+**题材分类**：
+前台站点组织书的一级分类，读者在头部导航点它进入分类页、看该分类下的书。它的真源是书本分组的 `key`（见「书本分组」），分类页地址 `/category/<key>/` 里的段就是这个 `key`。它与后台 `/admin/categories/` 管的旧「分类」不是同一套数据。
+_Avoid_: 分类（泛指时会和旧 `ext_category` 混淆）、书籍分类（那是后台 `case_division` 字段名）
+
+**书本信息**：
+一本书在前台的完整描述：书名、作者、封面、成书时间、题材分类归属、编号等。真源是 `book_info` 表一行。它与 `channels` 行是两个概念——`channels` 是旧 novel-cms 的书，`book_info` 是前台站点现在读的书；两者靠相同的主键值对应，但前台只认 `book_info`。
+_Avoid_: 书（泛指时不分 `channels`/`book_info`）、频道、channel
+
+**书本分组**：
+书的归类清单，存一份可编辑的 `key`/显示名/顺序列表（真源 `settings.book_groups`）。`key` 是稳定 slug、书靠它归属题材分类；改名只动显示名、不动 `key`，所以书的归属不会因改名而断。清单由 `/admin/book-info/` 维护，前台只读。
+_Avoid_: 分组（泛指时会和别的分组混淆）、分类清单
+
+**独立内容引擎**：
+前台站点渲染「站点外壳 → 题材分类 → 书 → 卷 → 正文 → 标注引用 → 中药/名词条目」所依赖的那套数据真源：书本分组 + 书本信息 + 卷章 + 正文 + 方剂/中药引用目标 + 中药/名词条目 + 站点配置，各自落在独立模块的表与 `settings` 里。前台站点只读这套，不再读旧 novel-cms 的 `channels`/`items`，也不再用 `publicFeed` 与 mustache 主题渲染。见 [ADR-0066](docs/novel-cms/adr/0066-front-site-standalone-module-engine.md)。
+_Avoid_: 内容引擎（泛指时不分新旧）、前台数据源
+
+**站点外壳**：
+前台每页共用的部分：站名/描述/语言/图标/版权/导航固定页 + 头部、页脚、主题切换脚本 + CSS。旧实现里它由 `loadPublishedFeed` 把主频道 `channels` 行与 `items` 窗口组装成 `publicFeed`、再交给 mustache 主题渲染；切换后它由 `catalog/site.ts` 只读 `settings`（`webGlobalSettings` 的站名/图标/描述/语言/版权/出版方 + `access`）+ `pages` 表取导航固定页，外观由 `FrontLayout` 与 `components/front/*` 加 `front-site.css` 承担。其中描述/语言/版权/出版方四个键原本只存在于主频道，由一条 `data` 迁移复制进 `settings`（裁决 ③），因此站壳既不读 `channels` 也不改显示，代价是这四个键暂无后台编辑入口。主题系统仍在，但只作用于后台预览，不影响前台。
+_Avoid_: 公共布局（会和 `PublicLayout` 混淆）、主题（那只管外观，不含站点配置与导航）
+
+**零耦合不变式**：
+前台**对外输出**（首页、分类页、书页、卷页、三条条目页，含站点外壳与 `sitemap.xml`）的硬判据：任何一条 SQL 不得出现 `items`、`channels`、`ext_category`、`ext_book_stats`、`ext_book_status`；源码不得出现 `loadPublishedFeed`、`loadFeed`、`getPublicJsonData`、`publicFeed`、`new Theme`、`themeContext`、`renderThemeTemplate`。取数只允许 `settings`（`book_groups`/`webGlobalSettings`/`access`）+ `book_info` + `book_chapter` + `book_chapter_body` + `fang_yao`(+`fang_yao_body`) + `zhong_yao` + `ming_ci` + `pages`（导航固定页），以及唯一被允许的 `ext_annotation_markers`（标记语法字典）。站点外壳不豁免——`publicFeed` 本身就是旧真源的组装结果。`sitemap.xml` 同属此列（改由新模块生成）；`rss`/`json`/`llms*` 与 `[...path].astro` 直接下线。**两处例外**：中间件 `loadFeed` 的注入本次不动，前台每请求仍读一次 `channels`；`robots.txt` 仍经 `publicSiteFileResponse` 走一次 `loadPublishedFeed`。这两条都不写成「零读」。
+_Avoid_: 解耦（泛指）、无耦合（不指明范围时无意义）
+
+**反向引用索引**：
+「哪些条文引用了这个方剂/中药」的物化表 `ext_marker_citations`。由旧前台在卷页渲染时整本扫 `items` 写入，`section_id` 是 `items.id`、`section_seq` 是 items 的 rowid、`book_id` 是 `channels.id`。切换后前台不再读也不再写，表与数据原地冻结，后台方剂编辑器的反向引用视图继续读它。条目浮层里对应的「引用此方剂 / 引用此中药的条文」一段随之取消——换新表要动 schema 与后台写入链，越出「只改前端主题」。
+_Avoid_: 引用索引（不说正/反向时含糊）、citation 表（英文混写，书面统一用「反向引用索引」）
+
+**前台可见口径**：
+前台判断一行「读者能不能看到」的唯一条件：`deleted_at IS NULL`。独立模块表上的 `is_enable` 不参与这个判断——它在 `book_chapter_body` 上是本草条目标记（930 行）、在 `book_chapter` 上是来源卷状态（102 卷为 0）、在 `fang_yao` 上是方剂组成状态（438 行为 0）。按 `is_enable=1` 过滤会丢 88.5% 正文、22.9% 卷、46.9% 的方剂引用。同样不引入旧链路的 `channels.status` / `ext_book_status`（会员、隐藏等语义），也不把 `book_info.hot_book` 当判据（当前 10 本真实书全是「隐藏」，按它判会让前台空站）。见 [数据完整性核准报告](docs/front-site-catalog-switch-data-audit.md)。
+_Avoid_: 启用状态（会和 `is_enable` 的字面意思混淆）、发布状态、会员可见
+
+**正文分流**：
+同一个「正文」字段在两类书里存的东西不同：本草条目（`bencao_yao_name` 非空，930 行）的 `section_text` 只有条目名，正文在 `section_note`；其余书（7,136 行）的正文就在 `section_text`、`section_note` 是额外讲义。渲染时按 `bencao_yao_name` 分流拼接，才能还原旧站正文且不让讲义内容混进正文。
+_Avoid_: 正文（不分列时以为 `section_text` 就是全部正文）
+
+**容器书**：
+旧 novel-cms 体系里承载中药、名词条目的两本「假书」（`4KbG9bDqdz3` 中药、`tcmterm0001` 名词），条目靠 `items.book_id` 挂上去。它们在 `book_info` 里两行已于 2026-11-06 软删，前台按 `deleted_at IS NULL` 不再出现；中药 172 条、名词 17 条改为各自单条路由可达（`/zhongyao/<id>/`、`/ming-ci/<id>/`），不再有聚合书页。`CONTAINER_CHANNEL_IDS` 与 `isTcmContainerChannel` 一并退场。
+_Avoid_: 空书、占位书（都不点明它承载的是条目而不是内容）
+
 ## 数据层（D1）
 
 **全表扫描**：

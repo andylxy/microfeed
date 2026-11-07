@@ -1,0 +1,50 @@
+---
+import {env} from "cloudflare:workers";
+
+import FrontLayout from "@/layouts/FrontLayout.astro";
+import EntryPanel from "@/components/front/EntryPanel.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
+import {loadFrontSite, shouldHideFrontSite} from "@/server/catalog/site";
+import {getFangEntry} from "@/server/catalog/entries";
+import {buildTcmMarkerLayer} from "@/server/tcm/markerPopover";
+
+const id = Astro.params.id ?? "";
+const db = env.FEED_DB;
+const site = await loadFrontSite(db, Astro.request);
+const entry = await getFangEntry(db, id);
+const unavailable = shouldHideFrontSite(site) || !entry;
+if (unavailable) {
+  Astro.response.status = 404;
+}
+// 按 book_no 反查出来的 book_info.id 决定方剂引用的书作用域。
+const markerLayer = entry && !unavailable
+  ? await buildTcmMarkerLayer(db, {
+      bodyHtml: entry.textSource,
+      title: entry.name,
+      currentBookId: entry.bookId,
+    })
+  : null;
+const tocUrl = entry?.bookId ? `/book/${entry.bookId}/` : "/";
+---
+
+{unavailable || !entry ? (
+  <PublicNotFoundHeading />
+) : (
+  <FrontLayout
+    site={site}
+    title={entry.name}
+    canonicalUrl={new URL(Astro.url.pathname, Astro.url.origin).toString()}
+    runtimeHtml={markerLayer?.runtimeHtml ?? null}
+  >
+    <EntryPanel
+      site={site}
+      name={entry.name}
+      titleHtml={markerLayer?.titleHtml ?? null}
+      bodyHtml={markerLayer?.bodyHtml ?? entry.textHtml}
+      drinkNum={entry.drinkNum}
+      bodies={entry.bodies}
+      bookName={entry.bookName}
+      tocUrl={tocUrl}
+    />
+  </FrontLayout>
+)}

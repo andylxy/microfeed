@@ -16,8 +16,6 @@ import * as legacyApiDocs from "@/pages/api/index";
 import * as legacyItem from "@/pages/api/items/[itemId]/index";
 import * as legacyItems from "@/pages/api/items/index";
 import * as legacyMedia from "@/pages/api/media_files/presigned_urls/index";
-import * as legacyLlms from "@/pages/api/llms.txt";
-import * as legacyLlmsFull from "@/pages/api/llms-full.txt";
 import * as legacyOpenApiHtml from "@/pages/api/openapi.html";
 import * as legacyOpenApiJson from "@/pages/api/openapi.json";
 import * as legacyOpenApiYaml from "@/pages/api/openapi.yaml";
@@ -411,12 +409,6 @@ describe("API route version aliases", () => {
         legacyOpenApiYaml.GET,
         "/api/openapi.yaml",
         `${API_BASE_PATH}openapi.yaml`,
-      ],
-      [legacyLlms.GET, "/api/llms.txt", `${API_BASE_PATH}llms.txt`],
-      [
-        legacyLlmsFull.GET,
-        "/api/llms-full.txt",
-        `${API_BASE_PATH}llms-full.txt`,
       ],
     ];
 

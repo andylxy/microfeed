@@ -1,93 +1,30 @@
 ---
 import {env} from "cloudflare:workers";
 
-import {CODE_TYPES} from "@/shared/Constants";
-import Theme from "@/server/themes/Theme";
-import PublicLayout from "../layouts/PublicLayout.astro";
+import FrontLayout from "@/layouts/FrontLayout.astro";
+import HomeShelf from "@/components/front/HomeShelf.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
-import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
-import {listPublishedBookSamples} from "@/server/feed/extCategory";
-import type {CategoryDb} from "@/server/feed/extCategory";
-import {loadSiteNav} from "@/server/feed/siteNav";
-import {renderThemeTemplate, resolveSiteTitle} from "@/shared/themes/ThemeRenderer";
-import DEFAULT_WEB_HOME from "../../themes/default/web-home.mustache?raw";
+import {loadFrontSite, shouldHideFrontSite} from "@/server/catalog/site";
+import {listAllBooks, type CatalogBook} from "@/server/catalog/books";
+import {listGroups, type CatalogGroup} from "@/server/catalog/groups";
 
-const loaded = await loadPublishedFeed(env, Astro.request, {
-  includeActiveTheme: true,
-});
-const unavailable = shouldHidePublicWeb(loaded.content);
-if (!unavailable && !loaded.onboarding.requiredOk) {
-  return Astro.redirect(
-    new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
-    302,
-  );
-}
+const db = env.FEED_DB;
+const site = await loadFrontSite(db, Astro.request);
+const unavailable = shouldHideFrontSite(site);
 if (unavailable) {
   Astro.response.status = 404;
 }
-const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
-const assetBaseUrl = themeAssetBaseUrl(
-  env,
-  Astro.request.url,
-  loaded.content.activeTheme?.assetOwnerThemeId,
-  loaded.content.activeTheme?.bundle.assets,
-  webSettings.publicBucketUrl,
-);
-const navigation = await loadSiteNav(
-  loaded.database.FEED_DB,
-  Astro.request,
-  "home",
-);
-const categoryDb = loaded.database.FEED_DB as unknown as CategoryDb;
-const bookSamples = (await listPublishedBookSamples(categoryDb)).map((book) => ({
-  ...book,
-  url: `/book/${book.id}`,
-}));
-
-const homeContext = {
-  ...navigation,
-  book_samples: bookSamples,
-};
-const theme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  null,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  homeContext,
-);
-const sharedTheme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  CODE_TYPES.SHARED,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  homeContext,
-);
-
-const bodyHtml = renderThemeTemplate(
-  theme.hasWebHome() ? theme.getWebHomeTmpl() : DEFAULT_WEB_HOME,
-  homeContext,
-);
+let books: CatalogBook[] = [];
+let groups: CatalogGroup[] = [];
+if (!unavailable) {
+  [books, groups] = await Promise.all([listAllBooks(db), listGroups(db)]);
+}
 ---
 
 {unavailable ? (
   <PublicNotFoundHeading />
 ) : (
-  <PublicLayout
-    title={resolveSiteTitle(loaded.publicFeed) || loaded.publicFeed.title}
-    description={String(loaded.publicFeed._microfeed?.description_text ?? "")}
-    language={loaded.publicFeed.language}
-    channelImage={String(loaded.content.channel?.image ?? "")}
-    favicon={webSettings.favicon}
-    publicBucketUrl={webSettings.publicBucketUrl}
-    headHtml={theme.getWebHeader().html}
-    sharedHeadHtml={sharedTheme.getWebHeader().html}
-    bodyStart={theme.getWebBodyStart().html}
-    sharedBodyStart={sharedTheme.getWebBodyStart().html}
-    bodyHtml={bodyHtml}
-    bodyEnd={theme.getWebBodyEnd().html}
-    sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
-  />
+  <FrontLayout site={site}>
+    <HomeShelf books={books} groups={groups} />
+  </FrontLayout>
 )}

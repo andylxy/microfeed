@@ -1,131 +1,33 @@
 ---
 import {env} from "cloudflare:workers";
 
-import {CODE_TYPES} from "@/shared/Constants";
-import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import Theme from "@/server/themes/Theme";
-import {
-  BUNDLED_DEFAULT_THEME_MANIFEST,
-} from "@/server/themes/BundledThemes";
-import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
-import {
-  themeContext,
-  renderThemeTemplate,
-} from "@/shared/themes/ThemeRenderer";
-import PublicLayout from "../../../layouts/PublicLayout.astro";
+import FrontLayout from "@/layouts/FrontLayout.astro";
+import CategoryShelf from "@/components/front/CategoryShelf.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
-import DEFAULT_WEB_CATEGORY from "../../../../themes/default/web-category.mustache?raw";
-import {
-  getCategoryBySlugOrId,
-  listChannelsByGenre,
-} from "@/server/feed/extCategory";
-import type {CategoryDb} from "@/server/feed/extCategory";
-import {loadSiteNav} from "@/server/feed/siteNav";
+import {loadFrontSite, shouldHideFrontSite} from "@/server/catalog/site";
+import {getGroupByKey} from "@/server/catalog/groups";
+import {listBooksByGroup} from "@/server/catalog/books";
 
 const slug = Astro.params.slug ?? "";
-const loaded = await loadPublishedFeed(env, Astro.request, {
-  includeActiveTheme: true,
-});
-const hidePublicWeb = shouldHidePublicWeb(loaded.content);
-if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
-  return Astro.redirect(
-    new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
-    302,
-  );
-}
-
-// `feedDb` stays D1Database-typed for the helpers that want the full binding;
-// `db` narrows to the ext_category slice that the novel-cms queries use.
-const feedDb = loaded.database.FEED_DB;
-const db = feedDb as unknown as CategoryDb;
-const category = await getCategoryBySlugOrId(db, slug);
-// A headless or offline site must not serve this page either: the redirect guard
-// above only covers onboarding, and `/i/` already counts `hidePublicWeb` as
-// unavailable. Leaving it out here rendered the full category page while the
-// rest of the public site answered 404.
-const unavailable = hidePublicWeb || !category || !category.visible;
+const db = env.FEED_DB;
+const site = await loadFrontSite(db, Astro.request);
+// 只认 book_groups.key；旧 ext_category.id 形式的地址一律查不到，直接 404。
+const group = await getGroupByKey(db, slug);
+const unavailable = shouldHideFrontSite(site) || !group;
 if (unavailable) {
   Astro.response.status = 404;
 }
-
-const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
-const assetBaseUrl = themeAssetBaseUrl(
-  env,
-  Astro.request.url,
-  loaded.content.activeTheme?.assetOwnerThemeId,
-  loaded.content.activeTheme?.bundle.assets,
-  webSettings.publicBucketUrl,
-);
-const navigation = await loadSiteNav(feedDb, Astro.request, slug);
-
-const theme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  null,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  {...navigation},
-);
-const sharedTheme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  CODE_TYPES.SHARED,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  {...navigation},
-);
-
-let bodyHtml = "";
-if (!unavailable && category) {
-  const books = await listChannelsByGenre(db, category.id);
-  const metadata = {
-    assetBaseUrl,
-    packageId: BUNDLED_DEFAULT_THEME_MANIFEST.packageId,
-    version: BUNDLED_DEFAULT_THEME_MANIFEST.version,
-  };
-  const baseContext = themeContext(loaded.publicFeed, metadata);
-  const categoryContext = {
-    ...baseContext,
-    ...navigation,
-    category: {
-      name: category.name,
-      slug: category.slug,
-      bookCount: category.bookCount ?? 0,
-    },
-    // Spread the whole summary (like the home and book routes) instead of
-    // hand-picking fields: the explicit list silently dropped new fields such
-    // as serialStatusLabel / wordCountLabel, so the cards fell back to their
-    // "暂无字数" placeholder.
-    category_books: books.map((book) => ({
-      ...book,
-      url: `/book/${book.id}`,
-    })),
-  };
-  // Prefer the active theme's own genre page so the page keeps the site's look;
-  // fall back to the bundled default for themes that ship without one.
-  bodyHtml = renderThemeTemplate(
-    theme.hasWebCategory() ? theme.getWebCategoryTmpl() : DEFAULT_WEB_CATEGORY,
-    categoryContext,
-  );
-}
+const books = group && !unavailable ? await listBooksByGroup(db, group.key) : [];
 ---
 
-{unavailable || !category ? (
+{unavailable || !group ? (
   <PublicNotFoundHeading />
 ) : (
-  <PublicLayout
-    title={category.name}
-    description={""}
-    language={loaded.publicFeed.language}
-    channelImage={String(loaded.content.channel?.image ?? "")}
-    favicon={webSettings.favicon}
-    publicBucketUrl={webSettings.publicBucketUrl}
-    headHtml={theme.getWebHeader().html}
-    sharedHeadHtml={sharedTheme.getWebHeader().html}
-    bodyStart={theme.getWebBodyStart().html}
-    sharedBodyStart={sharedTheme.getWebBodyStart().html}
-    bodyHtml={bodyHtml}
-    bodyEnd={theme.getWebBodyEnd().html}
-    sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
-  />
+  <FrontLayout
+    site={site}
+    title={group.label}
+    activeGroupKey={group.key}
+  >
+    <CategoryShelf groupLabel={group.label} books={books} />
+  </FrontLayout>
 )}

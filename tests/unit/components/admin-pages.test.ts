@@ -78,21 +78,6 @@ describe("admin Page editor routes", () => {
     expect(adminIndex).toContain("Astro.response.status = publicPage.status");
   });
 
-  it("keeps admin styles out of nested public Page routes", async () => {
-    const route = await readFile(
-      new URL("../../../src/pages/[...path].astro", import.meta.url),
-      "utf8",
-    );
-
-    expect(route).not.toContain(
-      'import AdminShell from "@/layouts/AdminShell.astro"',
-    );
-    expect(route).toContain(
-      '(await import("@/layouts/AdminShell.astro")).default',
-    );
-    expect(route).toContain("<PublicLayout {...publicPage.layout} />");
-  });
-
   it("loads the admin canvas stylesheet only inside admin documents", async () => {
     const [adminShell, loginShell] = await Promise.all([
       readFile(
@@ -252,16 +237,19 @@ describe("admin Page editor routes", () => {
     expect(list).toContain('event.key === "ArrowDown"');
   });
 
-  it("uses the editable Page for the explicit /404/ preview", async () => {
+  it("serves the explicit /404/ from the admin shell or public heading", async () => {
     const route = await readFile(
       new URL("../../../src/pages/404.astro", import.meta.url),
       "utf8",
     );
 
+    expect(route).not.toContain("loadPublicPageRoute");
+    expect(route).toContain("isAdminPathname");
     expect(route).toContain(
-      'loadPublicPageRoute(env, Astro.request, "404")',
+      '(await import("@/layouts/AdminShell.astro")).default',
     );
     expect(route).toContain("Astro.response.status = 404");
-    expect(route).toContain("<PublicLayout {...publicPage.layout} />");
+    expect(route).toContain("<PublicNotFoundHeading");
+    expect(route).toContain("errors.general.adminContextUninitialized");
   });
 });

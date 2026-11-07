@@ -42,6 +42,11 @@ const WHITELIST = new Set([
   // 与 `book-info` 先例同为特性目录。
   "ming-ci",
   "cache",
+  // 前台内容引擎只读层（ADR-0066）：七个模块把 book_info / book_chapter /
+  // book_chapter_body / fang_yao / zhong_yao / ming_ci 的取数收成前台专用出口，
+  // 与既有 feed 链路并行共存、不迁移。2026-11-07 新增，与 `book-info` 先例同为
+  // 特性目录；登记白名单只说明目录归属，不代表它可以读旧表。
+  "catalog",
   // 独立「本草」模块（ADR-0061）：自持 `zhong_yao` 表的纯读写层 + handler，
   // 与既有 items/channels 中药机制（tcm_kind='yao'）并行共存、不迁移（决策 2）。
   // 2026-11-05 新增，与 `book-info`/`ming-ci` 先例同为特性目录。

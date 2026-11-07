@@ -1,0 +1,307 @@
+// @ts-nocheck
+// 前台站点脚本：从 themes/feed-zh/web-body-end.mustache 的六段 <script> 原样搬运。
+// 包含主题切换 / 图片懒加载 / 导航溢出 / 分享 / 日期格式化 / 目录锚点 / 阅读页工具。
+// localStorage 键名 microfeed-public-theme 不变，用户已保存的深浅色偏好不丢。
+// 脚本内注释沿用 mustache 资产原文：规范 §9 第 9 步要求六段 <script> 原样搬运，
+// 翻译注释会改动资产本身，记为已登记例外；本文件新写的说明一律用中文。
+// @ts-nocheck 是移植无类型脚本所需，脚本逻辑与主题输出逐字不变。
+(function(){var e=`microfeed-public-theme`,t=[`system`,`light`,`dark`];function n(e){return t.includes(e)?e:`light`}function r(e){let t=e===`dark`||e===`system`&&window.matchMedia(`(prefers-color-scheme: dark)`).matches;document.documentElement.classList.toggle(`dark`,t),document.documentElement.dataset.themePreference=e,document.documentElement.dataset.colorMode=t?`dark`:`light`,document.documentElement.style.colorScheme=t?`dark`:`light`}function i(){let t=document.querySelector(`[data-microfeed-theme-menu]`),i=t?.querySelector(`[data-microfeed-theme-trigger]`),a=t?.querySelector(`[role=menu]`),o=Array.from(t?.querySelectorAll(`[data-microfeed-theme-option]`)??[]);if(!t||!i||!a||o.length===0)return;let s=n(document.documentElement.dataset.themePreference??null),c=e=>{s=e,r(s),i.setAttribute(`aria-label`,`颜色主题：`+(s===`light`?`浅色`:s===`dark`?`深色`:`跟随系统`));for(let e of o)e.setAttribute(`aria-checked`,String(e.dataset.microfeedThemeOption===s))},l=e=>{a.hidden=!e,i.setAttribute(`aria-expanded`,String(e))};i.addEventListener(`click`,()=>{l(a.hidden)});for(let t of o)t.addEventListener(`click`,()=>{let r=n(t.dataset.microfeedThemeOption??null);try{window.localStorage.setItem(e,r)}catch{}c(r),l(!1),i.focus()});window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{s===`system`&&r(`system`)}),window.addEventListener(`storage`,t=>{t.key===e&&c(n(t.newValue))}),document.addEventListener(`pointerdown`,e=>{e.target instanceof Node&&!t.contains(e.target)&&l(!1)}),document.addEventListener(`keydown`,e=>{e.key!==`Escape`||a.hidden||(l(!1),i.focus())}),c(s)}function a(){if(!(`IntersectionObserver`in window))return;let e=new IntersectionObserver(t=>{for(let n of t){if(!n.isIntersecting||!(n.target instanceof HTMLImageElement))continue;let t=n.target,r=t.dataset.src;if(!r)continue;let i=document.createElement(`img`);i.src=r,i.alt=t.alt,i.onload=()=>{let e=document.createElement(`a`);e.href=r,e.target=`_blank`,e.rel=`noopener`,e.append(i),t.replaceWith(e)},e.unobserve(t)}});document.querySelectorAll(`img:not([loading="lazy"])`).forEach(t=>{t.dataset.src=t.src,t.classList.add(`loader`),t.src=`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP88eNnPQAJQwNqJHSUZQAAAABJRU5ErkJggg==`,e.observe(t)})}function o(){for(let e of document.querySelectorAll(`[data-microfeed-site-nav]`)){let t=e.querySelector(`.mf-nav-links`),n=Array.from(e.querySelectorAll(`[data-microfeed-nav-item]`)),r=e.querySelector(`[data-microfeed-nav-overflow]`),i=r?.querySelector(`[data-microfeed-nav-overflow-menu]`),a=r?.querySelector(`summary`);if(!t||!r||!i||!a)continue;let o=window.matchMedia(`(max-width: 600px)`),s=()=>{if(r.open=!1,o.matches){for(let e of n)i.append(e);r.hidden=n.length===0,a.setAttribute(`aria-label`,`页面菜单`);return}for(let e of n.slice(0,2))t.insertBefore(e,r);for(let e of n.slice(2))i.append(e);r.hidden=n.length<=2,a.setAttribute(`aria-label`,`更多页面`)},c=()=>{a.setAttribute(`aria-expanded`,String(r.open))};r.addEventListener(`toggle`,c),i.addEventListener(`click`,()=>{r.open=!1}),document.addEventListener(`pointerdown`,e=>{e.target instanceof Node&&!r.contains(e.target)&&(r.open=!1)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&(r.open=!1)}),o.addEventListener(`change`,s),s(),c()}}function s(){i(),a(),o()}document.readyState===`loading`?document.addEventListener(`DOMContentLoaded`,s,{once:!0}):s()})();
+(function () {
+  "use strict";
+  var share = document.querySelector("[data-mf-copy-link]");
+  if (share) {
+    share.addEventListener("click", function () {
+      var done = function () {
+        var old = share.textContent;
+        share.textContent = "已复制";
+        window.setTimeout(function () { share.textContent = old || "分享"; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(window.location.href).then(done).catch(done);
+      } else {
+        done();
+      }
+    });
+  }
+})();
+(function () {
+  "use strict";
+  var elements = document.querySelectorAll("[data-microfeed-date-ms]");
+  if (!elements.length || typeof Intl === "undefined" || typeof Intl.DateTimeFormat !== "function") return;
+  var formatter;
+  try {
+    formatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+  } catch (error) {
+    return;
+  }
+  for (var index = 0; index < elements.length; index++) {
+    var element = elements[index];
+    var milliseconds = Number(element.getAttribute("data-microfeed-date-ms"));
+    if (Number.isFinite(milliseconds) && milliseconds > 0) {
+      element.textContent = formatter.format(new Date(milliseconds));
+    }
+  }
+})();
+(function () {
+  "use strict";
+  function chapterNumber(row) {
+    var value = parseInt(row.getAttribute("data-mf-chapter-no"), 10);
+    return isFinite(value) ? value : null;
+  }
+
+  // Ascending by chapter number. Rows without one keep their feed position and
+  // land after the numbered chapters, since they are not part of the novel's
+  // running order. Stable, so chapters sharing a number keep their order.
+  function compareChapters(a, b) {
+    var an = chapterNumber(a);
+    var bn = chapterNumber(b);
+    if (an !== null && bn !== null) return an - bn;
+    if (an !== null) return -1;
+    if (bn !== null) return 1;
+    return 0;
+  }
+
+  // Group the chapter list into volumes and put it in reading order. Mustache
+  // cannot group or sort, so web-feed.mustache emits a flat list where every
+  // row carries its volume in data-mf-volume and its number in
+  // data-mf-chapter-no; this rebuilds the "volume heading + its chapters" shape
+  // from chapter one onwards.
+  var lists = document.querySelectorAll("[data-mf-toc]");
+  for (var listIndex = 0; listIndex < lists.length; listIndex++) {
+    var list = lists[listIndex];
+    var rows = Array.prototype.slice.call(list.querySelectorAll(".mf-toc-item"));
+    if (rows.length === 0) continue;
+
+    var groups = [];
+    var byVolume = {};
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      var row = rows[rowIndex];
+      var volume = (row.getAttribute("data-mf-volume") || "").trim();
+      var group = byVolume[volume];
+      if (!group) {
+        group = {volume: volume, rows: []};
+        byVolume[volume] = group;
+        groups.push(group);
+      }
+      group.rows.push(row);
+    }
+
+    // Items with no volume (posts that are not part of any volume) sink to the
+    // end, so the novel's volumes lead the catalog instead of a stray post.
+    groups.sort(function (a, b) {
+      var aEmpty = a.volume === "";
+      var bEmpty = b.volume === "";
+      if (aEmpty === bEmpty) return 0;
+      return aEmpty ? 1 : -1;
+    });
+
+    // The feed emits chapters newest-first; a novel catalog reads from chapter
+    // one, so sort inside every volume before rebuilding.
+    for (var sortIndex = 0; sortIndex < groups.length; sortIndex++) {
+      groups[sortIndex].rows.sort(compareChapters);
+    }
+
+    var fragment = document.createDocumentFragment();
+    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      var current = groups[groupIndex];
+      if (current.volume !== "") {
+        var heading = document.createElement("h3");
+        heading.className = "mf-volume-heading";
+        heading.textContent = current.volume;
+        // Anchor the 篇章 so a 篇章 返回 (`#mf-toc-<篇章 id>`) resolves to this
+        // heading. The owning 篇章 id rides on every 条文 row as
+        // data-mf-chapter-id (stamped by getTcmBookChapters); pull it from the
+        // group's first row. A 条文 返回 resolves to the row itself instead.
+        var chapterId = current.rows.length
+          ? current.rows[0].getAttribute("data-mf-chapter-id") || ""
+          : "";
+        if (chapterId) heading.id = "mf-toc-" + chapterId;
+        fragment.appendChild(heading);
+      }
+      for (var itemIndex = 0; itemIndex < current.rows.length; itemIndex++) {
+        fragment.appendChild(current.rows[itemIndex]);
+      }
+    }
+    while (list.firstChild) list.removeChild(list.firstChild);
+    list.appendChild(fragment);
+  }
+
+  // A reader arriving from a chapter page carries `#mf-toc-<item id>` (the 返回
+  // affordance on `/i/[slug]` builds it). The browser's own hash scroll is
+  // unreliable here: this loop re-parents the rows, which changes where the
+  // anchor sits, and the scroll can happen before that finishes. So scroll again
+  // once the catalogue is in its final shape.
+  //
+  // The highlight is what actually answers "which entry did I come from" — on a
+  // catalogue long enough that scrolling alone does not identify the row. It is
+  // decorative and purely presentational: no class is asserted by any test and it
+  // carries no state, only a background that fades back via transition.
+  var target = null;
+  if (window.location.hash) {
+    target = document.getElementById(window.location.hash.slice(1));
+  }
+  if (target) {
+    target.scrollIntoView({block: "center"});
+    // 书页目录行是 `div.mf-toc-item`（内含唯一章链接），高亮加在那个 `<a>` 上；
+    // 卷页的 target 是 `<article class="mf-volume-section">`，它的正文里本身就有
+    // `$f{}` / `$u{}` 渲染出来的实体链接 —— 无条件下探会高亮到正文第一个内联链接
+    // 而不是整条，所以只对目录行下探，其余一律高亮 target 本身。
+    var host = target.classList.contains("mf-toc-item")
+      ? (target.querySelector("a[href]") || target)
+      : target;
+    host.classList.add("mf-toc-came-from");
+  }
+})();
+(function () {
+  "use strict";
+  // Home page: point "start reading" at chapter one, show the newest chapter,
+  // and fill in the chapter count. Everything degrades to the static markup
+  // when the page has no catalog.
+  var rows = Array.prototype.slice.call(
+    document.querySelectorAll(".mf-novel-home .mf-toc-item"),
+  );
+  if (rows.length === 0) return;
+
+  function number(row) {
+    var value = parseInt(row.getAttribute("data-mf-chapter-no"), 10);
+    return isFinite(value) ? value : null;
+  }
+
+  function link(row) {
+    return row ? row.querySelector("a[href]") : null;
+  }
+
+  // Only rows carrying a chapter number are chapters. A post without one is not
+  // part of the novel, so it must never become the reading entry point or be
+  // counted as a chapter.
+  var chapters = [];
+  for (var index = 0; index < rows.length; index++) {
+    if (number(rows[index]) !== null) chapters.push(rows[index]);
+  }
+
+  var start = document.querySelector("[data-mf-start-reading]");
+  var first = link(chapters.length ? chapters[0] : rows[0]);
+  if (first && start) start.setAttribute("href", first.getAttribute("href"));
+
+  // The ascending sort leaves the highest chapter number last, so the newest
+  // chapter is the final numbered row.
+  var newest = chapters.length
+    ? chapters[chapters.length - 1]
+    : rows[rows.length - 1];
+
+  var slot = document.querySelector("[data-mf-latest]");
+  var newestLink = link(newest);
+  if (slot && newestLink) {
+    var anchor = document.createElement("a");
+    anchor.setAttribute("href", newestLink.getAttribute("href"));
+    anchor.textContent = String(newestLink.textContent || "").trim();
+    slot.textContent = "最新章节：";
+    slot.appendChild(anchor);
+    slot.hidden = false;
+  }
+
+  var count = document.querySelector("[data-mf-chapter-count]");
+  if (count) {
+    count.textContent = "共 " + (chapters.length || rows.length) + " 章";
+    count.hidden = false;
+  }
+})();
+(function () {
+  "use strict";
+  // Reading page: font size, paper colour, scroll progress, and the TOC drawer.
+  // Everything degrades gracefully - the controls stay hidden without JS, and
+  // the TOC is a plain <details> that works on its own.
+  var FONT_KEY = "microfeed-reading-font";
+  var PAPER_KEY = "microfeed-reading-paper";
+  var root = document.documentElement;
+
+  function read(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function write(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (error) {
+      // Storage can be unavailable (private mode, blocked cookies); the
+      // setting then simply does not persist across visits.
+    }
+  }
+
+  var controls = document.querySelector("[data-mf-reading-controls]");
+  if (controls) {
+    controls.hidden = false;
+
+    // `attribute` doubles as the button marker and the <html> setting, so the
+    // two can never drift apart. A value outside `allowed` (including the
+    // "default" paper button) clears the attribute.
+    function select(attribute, key, allowed) {
+      var buttons = controls.querySelectorAll("[" + attribute + "]");
+
+      function apply(value) {
+        var active = value && allowed.indexOf(value) !== -1 ? value : "";
+        if (active) {
+          root.setAttribute(attribute, active);
+        } else {
+          root.removeAttribute(attribute);
+        }
+        for (var index = 0; index < buttons.length; index++) {
+          buttons[index].setAttribute(
+            "aria-pressed",
+            String(buttons[index].getAttribute(attribute) === active),
+          );
+        }
+        return active;
+      }
+
+      for (var index = 0; index < buttons.length; index++) {
+        (function (button) {
+          button.addEventListener("click", function () {
+            write(key, apply(button.getAttribute(attribute)));
+          });
+        })(buttons[index]);
+      }
+
+      apply(read(key));
+    }
+
+    select("data-mf-font", FONT_KEY, ["small", "medium", "large"]);
+    select("data-mf-paper", PAPER_KEY, ["sepia"]);
+  }
+
+  var night = document.querySelector("[data-mf-reader-night]");
+  if (night) {
+    night.addEventListener("click", function () {
+      var active = document.documentElement.hasAttribute("data-mf-reader-night");
+      if (active) document.documentElement.removeAttribute("data-mf-reader-night");
+      else document.documentElement.setAttribute("data-mf-reader-night", "");
+    });
+  }
+
+  // The reader's bottom TOC drawer was removed (its 目录(X 章) summary duplicated
+  // the book page's chapter grid), so there is no toggle to wire up. The volume
+  // grouping and current-chapter highlight below still serve the book page,
+  // which also carries [data-mf-toc].
+
+  var currentId = document.querySelector("[data-mf-toc]")?.getAttribute("data-mf-current") || "";
+  if (currentId) {
+    var current = document.querySelector('[data-mf-chapter-id="' + currentId + '"]');
+    if (current) current.setAttribute("data-mf-current", "");
+  }
+
+  var progress = document.querySelector("[data-mf-progress]");
+  if (progress) {
+    var update = function () {
+      var scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      var ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
+      progress.style.transform = "scaleX(" + Math.min(1, Math.max(0, ratio)) + ")";
+    };
+    update();
+    window.addEventListener("scroll", update, {passive: true});
+    window.addEventListener("resize", update);
+  }
+})();

@@ -1,0 +1,21 @@
+---
+/** 前台页脚：文案、class 名与 themes/feed-zh/web-body-end.mustache 一致。 */
+import type {FrontSite} from "@/server/catalog/site";
+
+interface Props {
+  site: FrontSite;
+}
+
+const {site} = Astro.props;
+const copyright = site.copyright || (site.publisher ? `© ${site.publisher}` : "");
+---
+
+<footer class="text-sm border-t text-center mb-4">
+  <div class="mt-4">
+    {copyright}
+  </div>
+  <div>
+    由 <a href="https://www.microfeed.org/" class="mf-footer-link">microfeed</a> 提供支持
+    （<a class="mf-footer-link" href="https://www.listennotes.com/">Listen Notes</a> 旗下项目）
+  </div>
+</footer>

@@ -1,0 +1,102 @@
+---
+/**
+ * 方剂 / 中药 / 名词条目面板：结构沿用 themes/feed-zh/web-item.mustache。
+ * 三种条目由页面拆平后传入同一组 props，组件不做跨表猜测。
+ */
+import type {FrontSite} from "@/server/catalog/site";
+import type {CatalogFangBody} from "@/server/catalog/entries";
+
+interface Props {
+  site: FrontSite;
+  name: string;
+  titleHtml?: string | null;
+  bodyHtml: string;
+  alias?: string;
+  image?: string;
+  drinkNum?: string;
+  bodies?: CatalogFangBody[];
+  bookName?: string | null;
+  listRaw?: string;
+  tocUrl?: string;
+}
+
+const {
+  site,
+  name,
+  titleHtml = null,
+  bodyHtml,
+  alias = "",
+  image = "",
+  drinkNum = "",
+  bodies = [],
+  bookName = null,
+  listRaw = "",
+  tocUrl = "/",
+} = Astro.props;
+---
+
+<main class="mf-reader-page">
+  <div class="mf-reader-shell">
+    <header class="mf-reader-header">
+      <a class="mf-reader-back" href={tocUrl}>
+        <span class="icon-arrow-left" aria-hidden="true"></span>
+        <span>{site.title}</span>
+      </a>
+      <a class="mf-reader-login" href="/admin/">登录</a>
+    </header>
+
+    <article class="mf-reader-content">
+      <header class="mf-reader-chapter-head">
+        <h1>{titleHtml ? <Fragment set:html={titleHtml} /> : name}</h1>
+        <div class="mf-reader-meta">
+          {alias && <span>别名：{alias}</span>}
+          {drinkNum && <span>煎服{drinkNum}次</span>}
+          {bookName && <span>所属书：{bookName}</span>}
+        </div>
+      </header>
+
+      <div class="mf-reading-controls" data-mf-reading-controls hidden>
+        <div class="mf-reading-group" role="group" aria-label="字号">
+          <button type="button" data-mf-font="small">小</button>
+          <button type="button" data-mf-font="medium">中</button>
+          <button type="button" data-mf-font="large">大</button>
+        </div>
+        <div class="mf-reading-group" role="group" aria-label="背景">
+          <button type="button" data-mf-paper="default">默认</button>
+          <button type="button" data-mf-paper="sepia">米黄</button>
+        </div>
+      </div>
+
+      {image && (
+        <div class="mb-4"><img src={image} width="250" height="250" loading="lazy" alt="" /></div>
+      )}
+
+      {bodies.length > 0 && (
+        <table class="mf-tcm-table">
+          <thead><tr><th>药味</th><th>剂量</th><th>炮制</th></tr></thead>
+          <tbody>
+            {bodies.map((body) => (
+              <tr><td>{body.showName}</td><td>{body.amount}</td><td>{body.extra}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div class="mf-reader-body mf-rich-content"><Fragment set:html={bodyHtml} /></div>
+
+      {listRaw && <div class="mf-reader-body mf-rich-content">{listRaw}</div>}
+
+      <nav class="mf-reader-nav" aria-label="阅读导航">
+        <a href={tocUrl} class="mf-reader-return">
+          <span class="icon-arrow-left" aria-hidden="true"></span>
+          <span>返回</span>
+        </a>
+      </nav>
+    </article>
+
+    <aside class="mf-reader-tools" aria-label="阅读工具">
+      <button class="mf-reader-tool" type="button" data-mf-reader-night><span aria-hidden="true">◐</span><small>夜间</small></button>
+      <button class="mf-reader-tool" type="button" data-mf-font="large"><span aria-hidden="true">A</span><small>字号</small></button>
+    </aside>
+  </div>
+</main>

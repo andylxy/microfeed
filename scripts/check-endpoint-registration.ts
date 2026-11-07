@@ -66,13 +66,15 @@ const APP_CHANNEL_PATHS = new Set([
  * base（`/api/openapi.html`）发布，也以带版本 base（`/api/v1/openapi.html`，
  * 一条 `.astro` 路由）发布；而带版本 base 本身（`/api/v1/`，`index.astro`）
  * 是该界面的 landing page——扮演的角色与下方的 `/api/` 相同。
+ *
+ * llms 两条只保留带版本 base：ADR-0066 前台切源时旧 base 的
+ * `src/pages/api/llms.txt.ts` 与 `llms-full.txt.ts` 已随 rss / json Feed 一并退场，
+ * 登记清单不该继续描述已删除的路由。
  */
 const META_DOC_PATHS = new Set([
   "/api/openapi.html",
   "/api/openapi.json",
   "/api/openapi.yaml",
-  "/api/llms.txt",
-  "/api/llms-full.txt",
   `${API_BASE_PATH}openapi.html`,
   `${API_BASE_PATH}openapi.json`,
   `${API_BASE_PATH}openapi.yaml`,

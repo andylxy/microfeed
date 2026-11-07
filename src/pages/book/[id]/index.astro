@@ -1,276 +1,73 @@
 ---
 import {env} from "cloudflare:workers";
 
-import {CODE_TYPES} from "@/shared/Constants";
-import {languageFromAcceptLanguage} from "@/shared/AdminLanguage";
-import {translate} from "@/shared/i18n";
-import {isTcmContainerChannel} from "@/shared/ExtCategory";
 import {escapeHtml} from "@/shared/StringUtils";
-import {markersToPlainText, renderTcmMarkers} from "@/shared/TcmMarkers";
-import {loadPublishedFeed, shouldHidePublicWeb} from "@/server/feed/feed";
-import Theme from "@/server/themes/Theme";
-import PublicLayout from "../../../layouts/PublicLayout.astro";
+import {renderTcmMarkers, type TcmMarkerStyle} from "@/shared/TcmMarkers";
+import FrontLayout from "@/layouts/FrontLayout.astro";
+import BookDetail from "@/components/front/BookDetail.astro";
 import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
-import {themeAssetBaseUrl} from "@/server/themes/ThemeAssets";
+import {loadFrontSite, shouldHideFrontSite} from "@/server/catalog/site";
+import {getBookInfoById} from "@/server/catalog/books";
+import {listGroups, type CatalogGroup} from "@/server/catalog/groups";
 import {
-  getBookById,
-  getBookChapters,
-  getBookVolumes,
-  getLatestBookSection,
-  getTcmBookEntries,
-  getTcmBookFang,
-  listPublishedBookSamples,
-} from "@/server/feed/extCategory";
-import type {CategoryDb} from "@/server/feed/extCategory";
-import {readBookStats} from "@/server/feed/bookWordCount";
-import {mapStyles} from "@/server/tcm/markerPopover";
-import {getAppStyleConfig} from "@/server/tcm/reads";
-import {loadSiteNav} from "@/server/feed/siteNav";
+  listVolumesByBook,
+  loadMarkerStyles,
+  type CatalogVolume,
+} from "@/server/catalog/chapters";
+import {
+  listTermsByBook,
+  listFangByBook,
+  type CatalogTermEntry,
+  type CatalogFangRef,
+} from "@/server/catalog/entries";
 
 const bookId = Astro.params.id ?? "";
-// B23: the theme-context fallback copy resolves in the site language.
-const bookLanguage = languageFromAcceptLanguage(
-  Astro.request.headers.get("accept-language"),
-);
-
-const loaded = await loadPublishedFeed(env, Astro.request, {
-  includeActiveTheme: true,
-});
-const hidePublicWeb = shouldHidePublicWeb(loaded.content);
-if (!hidePublicWeb && !loaded.onboarding.requiredOk) {
-  return Astro.redirect(
-    new URL(`/${env.MICROFEED_ADMIN_PATH || "admin"}/`, Astro.url),
-    302,
-  );
-}
-
-// `feedDb` stays D1Database-typed for the helpers that want the full binding;
-// `db` narrows to the ext_category slice the novel-cms queries use. Same
-// pattern as the category page.
-const feedDb = loaded.database.FEED_DB;
-const db = feedDb as unknown as CategoryDb;
-const book = await getBookById(db, bookId);
-// A TCM container channel (方剂 等) is not a work: its entries belong to the
-// real books through `_microfeed.sourceBookId`, so the channel itself has no
-// chapters. Serving it as a book page used to fall through to the site feed's
-// item window and render another book's content — it is a 404 instead.
-const containerChannel = isTcmContainerChannel(book?.microfeed);
-// Both reasons have to reach the render branch below: the page used to key its
-// not-found state off `Astro.response.status`, which only `!book` ever set, so a
-// headless or offline site still served the whole book page.
-const unavailable = hidePublicWeb || !book || containerChannel;
+const db = env.FEED_DB;
+const site = await loadFrontSite(db, Astro.request);
+const book = await getBookInfoById(db, bookId);
+// 两行容器书在 book_info 已软删，getBookInfoById 查不到即 404，不需要容器书判定。
+const unavailable = shouldHideFrontSite(site) || !book;
 if (unavailable) {
   Astro.response.status = 404;
 }
 
-const webSettings = loaded.content.settings?.webGlobalSettings ?? {};
-const assetBaseUrl = themeAssetBaseUrl(
-  env,
-  Astro.request.url,
-  loaded.content.activeTheme?.assetOwnerThemeId,
-  loaded.content.activeTheme?.bundle.assets,
-  webSettings.publicBucketUrl,
-);
-const siteNav = await loadSiteNav(feedDb, Astro.request);
-
-// A TCM book carries no volume tags: its structure is `tcm_kind` + `tcm_parent_id`,
-// where a 篇章 (chapter row) is what a reader sees as a volume and its 条文
-// (section rows) are the chapters inside it. Since ADR-0025 the book page lists
-// only the 篇章 — one link each — and the reader opens a volume on demand, so the
-// whole-book 条文 scan (`getTcmBookChapters`, 921 rows_read) is gone.
-const tcmProbe = await db.prepare(
-  "SELECT 1 AS one FROM items WHERE book_id = ? AND tcm_kind IS NOT NULL LIMIT 1",
-).bind(bookId).first();
-const isTcmBook = tcmProbe != null;
-// 只读篇章行（实测 56 rows_read for 27 卷 = 1 行「有没有条文」点查 + 55 篇章），不读任何条文。
-const bookVolumes = isTcmBook ? await getBookVolumes(db, bookId) : [];
-// 卷名与条名同权：14 个卷名带标记（灵枢 9、神农本草经・人纪 4、宋版伤寒论 1），
-// 书页目录曾原样显示 `$r{...}` / `$f{...}`。这里用标注层同一渲染器过一次
-// （styles 取一次，27 个卷名复用）。**不传 resolveHref**：目录项本身是 `<a>`，
-// 嵌套链接是非法 HTML——卷名里的 `$f` 出彩色 span 即可，要链接请点进卷页。
-// 先 escapeHtml：模板用三括号原样输出，卷名里的 `<` 不能被当成标签。
-const markerStyles = bookVolumes.length > 0
-  ? mapStyles(await getAppStyleConfig(db as unknown as D1Database))
-  : [];
-const bookVolumesRendered = bookVolumes.map((volume) => ({
-  ...volume,
-  nameHtml: renderTcmMarkers(escapeHtml(volume.name), markerStyles, {}),
+let volumes: CatalogVolume[] = [];
+let terms: CatalogTermEntry[] = [];
+let fang: CatalogFangRef[] = [];
+let groups: CatalogGroup[] = [];
+let styles: TcmMarkerStyle[] = [];
+if (book && !unavailable) {
+  [volumes, terms, fang, groups, styles] = await Promise.all([
+    listVolumesByBook(db, bookId),
+    listTermsByBook(db, bookId),
+    listFangByBook(db, bookId),
+    listGroups(db),
+    loadMarkerStyles(db),
+  ]);
+}
+const categoryLabel = book
+  ? (groups.find((group) => group.key === book.caseDivision)?.label ?? "")
+  : "";
+// 卷名带标记（14 个）走标注层同一渲染器；目录项本身是 <a>，不传 resolveHref。
+const volumeLinks = volumes.map((volume) => ({
+  id: volume.id,
+  name: volume.name,
+  nameHtml: renderTcmMarkers(escapeHtml(volume.name), styles, {}),
+  url: `/book/${bookId}/v/${volume.id}/`,
 }));
-// A flat TCM book (中药 / 名词 collections) has a single root 篇章 but no 条文,
-// so `getBookVolumes` returns empty and its catalog stays the flat entry list it
-// always was.
-const structuredTcmBook = bookVolumes.length > 0;
-const allItems = loaded.publicFeed.items as Array<Record<string, any>>;
-// Resolve a non-structured book's catalog directly from the item store by the
-// `_microfeed.bookId` tag, so it is never truncated by the primary feed's paged
-// item window. Fall back to the feed's items during the transition before
-// chapters are tagged.
-//
-// A container channel (方剂) has no rows of its own at all: its entries carry
-// `sourceBookId` of the real books. It must never reach the feed window either,
-// or the old "another book's content" bug comes back through this branch.
-let bookItems: Array<Record<string, any>>;
-if (structuredTcmBook) {
-  // The catalog is the volume list (`book_volumes`); no 条文 rows are read.
-  bookItems = [];
-} else if (isTcmBook) {
-  bookItems = await getTcmBookEntries(db, bookId, Astro.url.origin);
-} else {
-  const tagged = await getBookChapters(feedDb, bookId, Astro.url.origin);
-  bookItems = tagged.length > 0 ? tagged : containerChannel ? [] : allItems;
-  // Order by publish date: `chapterNo` restarts per volume, so sorting on it
-  // alone interleaves 第一卷 / 第二卷 / 第三卷. chapterNo only breaks same-day ties.
-  bookItems.sort((a: any, b: any) => {
-    const ad = String(a.date_published ?? "");
-    const bd = String(b.date_published ?? "");
-    if (ad !== bd) return ad < bd ? -1 : 1;
-    const an = Number(a._microfeed?.chapterNo);
-    const bn = Number(b._microfeed?.chapterNo);
-    if (!Number.isFinite(an)) return 1;
-    if (!Number.isFinite(bn)) return -1;
-    return an - bn;
-  });
-}
-
-// Head figures. A structured TCM book takes them from the materialized stats
-// (`ext_book_stats`, 13 rows_read — one row per channel the table holds on this
-// snapshot; it was 26 on an earlier one) and the rebuilt `items_book_kind` index
-// (「最近更新」1 row) — that is what lets the page drop the whole-book scan
-// without losing a single number. The count's 口径 becomes "全部已发布条目"
-// (`chapters_published`, i.e. `status = PUBLISHED`; the non-deleted figure is a
-// separate field `chapters_all`) — 952 = 27 篇章 + 812 条文 + 113 方剂 — as
-// ADR-0025 D5 accepts over paying a 813-row COUNT to keep the old 812.
-let totalWordCount: number;
-let totalChapterCount: number;
-let firstChapterUrl: string;
-let latestChapterTitle: string;
-let latestChapterUrl: string;
-let latestDate: string;
-if (structuredTcmBook) {
-  const stats = (await readBookStats(db, [bookId])).get(bookId);
-  totalWordCount = stats?.wordsPublished ?? 0;
-  totalChapterCount = stats?.chaptersPublished ?? bookVolumes.length;
-  const latest = await getLatestBookSection(db, bookId, Astro.url.origin);
-  // 开始阅读 → 第一卷的卷页（书页不再持有条文行）。
-  firstChapterUrl = `/book/${bookId}/v/${bookVolumes[0]!.id}/`;
-  // 「最近更新」行展示的是条标题——288 个条名带标记（多为 $f{方剂}），
-  // 这行是小号弱化 metadata，出纯文本（外壳是噪声，内容保留）。
-  latestChapterTitle = latest?.title
-    ? markersToPlainText(latest.title)
-    : translate("publicBook.noUpdatesYet", bookLanguage);
-  latestChapterUrl = latest?.url ?? "#";
-  latestDate = latest?.dateShort ?? "";
-} else {
-  totalWordCount = bookItems.reduce(
-    (total: number, item: any) =>
-      total + (Number(item._microfeed?.wordCount) || 0),
-    0,
-  );
-  totalChapterCount = bookItems.length;
-  const firstChapter = bookItems[0] ?? null;
-  const latestChapter = bookItems[bookItems.length - 1] ?? null;
-  firstChapterUrl = String(firstChapter?._microfeed?.web_url ?? "#");
-  // 扁平书（中药 / 名词，实测 0 个标题带标记）同样走纯文本出口——no-op 开销，
-  // 但边界与结构化书一致，不留给「修一个冒一个」。
-  latestChapterTitle = latestChapter?.title
-    ? markersToPlainText(String(latestChapter.title))
-    : translate("publicBook.noUpdatesYet", bookLanguage);
-  latestChapterUrl = String(latestChapter?._microfeed?.web_url ?? "#");
-  latestDate = String(latestChapter?._microfeed?.date_published_short ?? "");
-}
-
-const bookSamples = (await listPublishedBookSamples(feedDb))
-  .filter((b) => b.id !== bookId)
-  .map((b) => ({
-    ...b,
-    url: `/book/${b.id}`,
-  }));
-
-// 方剂 are a catalog of their own, not chapters, so they get an appendix block
-// rather than being mixed into the 卷/章 catalog above.
-const bookFang = isTcmBook
-  ? await getTcmBookFang(db, bookId, Astro.url.origin)
-  : [];
-
-const bookMicrofeed = book?.microfeed ?? {};
-const headerMicrofeed = {
-  ...bookMicrofeed,
-  // `_microfeed.genre` is the category id; the tag list needs the display name.
-  genreName: book?.categoryName ?? "",
-  serialStatusFinished: bookMicrofeed.serialStatus === "finished",
-};
-
-const extraContext = book
-  ? {
-      ...siteNav,
-      // Deliberately NOT `title`: the theme's base context already sets `title`
-      // to the site name, which the header logo renders. Overriding it here made
-      // the logo show the book's name on book pages. The book's own name lives
-      // under `book_title`, used by the detail template.
-      book_title: book.title,
-      description: book.description ?? "",
-      _microfeed: headerMicrofeed,
-      items: bookItems,
-      // 卷列表（仅 TCM 结构化书）。模板在 `book_volumes.length` 非零时渲染卷目录，
-      // 否则改用 `items` 的平铺列表（中药 / 名词等扁平书）。
-      ...(bookVolumes.length > 0
-        ? {
-            book_volumes: bookVolumesRendered.map((volume) => ({
-              ...volume,
-              url: `/book/${bookId}/v/${volume.id}/`,
-            })),
-          }
-        : {}),
-      ...(bookFang.length > 0 ? {book_fang: bookFang} : {}),
-      book_samples: bookSamples,
-      novel_detail: {
-        // B23: the fallback copy follows the site language instead of being
-        // hardcoded Chinese — the zh-CN strings are unchanged for zh readers.
-        author: book.author ?? translate("publicBook.unknownAuthor", bookLanguage),
-        firstChapterUrl,
-        latestChapterTitle,
-        latestChapterUrl,
-        latestDate,
-        totalChapterCount,
-        totalWordCount,
-      },
-    }
-  : {};
-
-const theme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  null,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  extraContext,
-);
-const sharedTheme = new Theme(
-  loaded.publicFeed,
-  loaded.content.settings,
-  CODE_TYPES.SHARED,
-  loaded.content.activeTheme,
-  assetBaseUrl,
-  extraContext,
-);
 ---
 
-{unavailable ? (
+{unavailable || !book ? (
   <PublicNotFoundHeading />
 ) : (
-  <PublicLayout
-    title={book?.title ?? loaded.publicFeed.title}
-    description={String(book?.description ?? "")}
-    language={loaded.publicFeed.language}
-    channelImage={String(loaded.content.channel?.image ?? "")}
-    favicon={webSettings.favicon}
-    publicBucketUrl={webSettings.publicBucketUrl}
-    headHtml={theme.getWebHeader().html}
-    sharedHeadHtml={sharedTheme.getWebHeader().html}
-    bodyStart={theme.getWebBodyStart().html}
-    sharedBodyStart={sharedTheme.getWebBodyStart().html}
-    bodyHtml={theme.getWebFeed().html}
-    bodyEnd={theme.getWebBodyEnd().html}
-    sharedBodyEnd={sharedTheme.getWebBodyEnd().html}
-  />
+  <FrontLayout site={site} title={book.title} description={book.description}>
+    <BookDetail
+      view="book"
+      book={book}
+      categoryLabel={categoryLabel}
+      volumes={volumeLinks}
+      terms={terms}
+      fang={fang}
+    />
+  </FrontLayout>
 )}

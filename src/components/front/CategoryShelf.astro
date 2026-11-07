@@ -1,0 +1,42 @@
+---
+/** 分类页书架：结构沿用 themes/feed-zh/web-category.mustache，删掉连载/字数两段。 */
+import type {CatalogBook} from "@/server/catalog/books";
+
+interface Props {
+  groupLabel: string;
+  books: CatalogBook[];
+}
+
+const {groupLabel, books} = Astro.props;
+---
+
+<main class="mf-library-page">
+  <div class="mf-library-container">
+    <section class="mf-library-section">
+      <div class="mf-library-section-head">
+        <h2>本分类精选</h2>
+        <span>按更新时间排序</span>
+      </div>
+      {books.length === 0 && (
+        <div class="mf-library-empty">该分类下暂时没有书。</div>
+      )}
+      <div class="mf-library-grid">
+        {books.map((book) => (
+          <a href={book.url} class="mf-library-book-card">
+            {book.image ? (
+              <img class="mf-library-cover" alt={book.title} src={book.image} loading="lazy" />
+            ) : (
+              <div class="mf-library-cover mf-library-cover-empty">暂无封面</div>
+            )}
+            <div class="mf-library-book-info">
+              <h3>{book.title}</h3>
+              <p>作者：{book.author || "未知作者"}</p>
+              {book.description && <div class="mf-library-desc">{book.description}</div>}
+              <small>{groupLabel}</small>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  </div>
+</main>

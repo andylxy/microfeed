@@ -1,0 +1,49 @@
+---
+import {env} from "cloudflare:workers";
+
+import FrontLayout from "@/layouts/FrontLayout.astro";
+import EntryPanel from "@/components/front/EntryPanel.astro";
+import PublicNotFoundHeading from "@/components/public/PublicNotFoundHeading.astro";
+import {loadFrontSite, shouldHideFrontSite} from "@/server/catalog/site";
+import {getYaoEntry} from "@/server/catalog/entries";
+import {buildTcmMarkerLayer} from "@/server/tcm/markerPopover";
+
+const id = Astro.params.id ?? "";
+const db = env.FEED_DB;
+const site = await loadFrontSite(db, Astro.request);
+const entry = await getYaoEntry(db, id);
+// 单表点查，未命中或已软删即 404；不做跨表猜测，也不兼容旧 /i/ 地址。
+const unavailable = shouldHideFrontSite(site) || !entry;
+if (unavailable) {
+  Astro.response.status = 404;
+}
+// 中药没有归属书，标注层不按书解析方剂，只把正文标记渲染成上色文本。
+const markerLayer = entry && !unavailable
+  ? await buildTcmMarkerLayer(db, {
+      bodyHtml: entry.textSource,
+      title: entry.name,
+      currentBookId: null,
+    })
+  : null;
+---
+
+{unavailable || !entry ? (
+  <PublicNotFoundHeading />
+) : (
+  <FrontLayout
+    site={site}
+    title={entry.name}
+    canonicalUrl={new URL(Astro.url.pathname, Astro.url.origin).toString()}
+    runtimeHtml={markerLayer?.runtimeHtml ?? null}
+  >
+    <EntryPanel
+      site={site}
+      name={entry.name}
+      titleHtml={markerLayer?.titleHtml ?? null}
+      bodyHtml={markerLayer?.bodyHtml ?? entry.textHtml}
+      alias={entry.alias}
+      listRaw={entry.listRaw}
+      tocUrl="/"
+    />
+  </FrontLayout>
+)}

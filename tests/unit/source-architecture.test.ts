@@ -42,6 +42,17 @@ async function contentsUnder(directory: string): Promise<string> {
     .join("\n");
 }
 
+/**
+ * `import type` 在编译期擦除、无运行时依赖；边界测试只应管运行时 import，
+ * 所以先剥掉 type-only import 行再做 `from "@/server/"` 等方向断言。
+ */
+function withoutTypeImports(source: string): string {
+  return source.replace(
+    /^[ \t]*import\s+type\b[\s\S]*?from\s+["'][^"']+["']\s*;?/gmu,
+    "",
+  );
+}
+
 describe("source architecture", () => {
   it("does not let a static asset shadow the editable robots Site File", async () => {
     await expect(access(path.join(repositoryRoot, "public", "robots.txt")))
@@ -133,15 +144,15 @@ describe("source architecture", () => {
   });
 
   it("keeps browser, Worker, and repository tooling boundaries separate", async () => {
-    const browserContents = [
+    const browserContents = withoutTypeImports([
       await contentsUnder(path.join(repositoryRoot, "src", "client")),
       await contentsUnder(path.join(repositoryRoot, "src", "components")),
-    ].join("\n");
-    const serverContents = await contentsUnder(
-      path.join(repositoryRoot, "src", "server"),
+    ].join("\n"));
+    const serverContents = withoutTypeImports(
+      await contentsUnder(path.join(repositoryRoot, "src", "server")),
     );
-    const manageCliContents = await contentsUnder(
-      path.join(repositoryRoot, "manage-cli"),
+    const manageCliContents = withoutTypeImports(
+      await contentsUnder(path.join(repositoryRoot, "manage-cli")),
     );
 
     expect(browserContents).not.toContain('from "@/server/');

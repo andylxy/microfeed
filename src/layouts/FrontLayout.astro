@@ -1,0 +1,78 @@
+---
+/**
+ * 前台外壳（ADR-0066 决策 14）：替代 PublicLayout 的三个主题 HTML 槽位。
+ * 站点配置只来自 loadFrontSite()，外观只来自 front-site.css / front-site.ts。
+ */
+import {env} from "cloudflare:workers";
+
+import {htmlMetaDescription} from "@/shared/StringUtils";
+import {listGroups} from "@/server/catalog/groups";
+import type {FrontSite} from "@/server/catalog/site";
+import SiteHeader from "@/components/front/SiteHeader.astro";
+import SiteFooter from "@/components/front/SiteFooter.astro";
+import "../styles/front-site.css";
+import "../styles/interactive.css";
+
+interface Props {
+  site: FrontSite;
+  title?: string;
+  description?: string;
+  canonicalUrl?: string;
+  activeGroupKey?: string;
+  /** 标注浮层的 runtime HTML（style + dialog + JSON + handler） */
+  runtimeHtml?: string | null;
+}
+
+const {
+  site,
+  title,
+  description,
+  canonicalUrl,
+  activeGroupKey,
+  runtimeHtml,
+} = Astro.props;
+const groups = await listGroups(env.FEED_DB);
+const pageTitle = title || site.title;
+---
+
+<!doctype html>
+<html lang={site.language}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+    {description && <meta name="description" content={htmlMetaDescription(description, false)} />}
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+    {site.faviconUrl && <link rel="icon" type="image/png" href={site.faviconUrl} />}
+    <script is:inline>
+      (() => {
+        const storageKey = "microfeed-public-theme";
+        const supportedThemes = ["system", "light", "dark"];
+        let preference = "light";
+        try {
+          const savedPreference = window.localStorage.getItem(storageKey);
+          if (supportedThemes.includes(savedPreference)) preference = savedPreference;
+        } catch {
+          // 隐私模式下 localStorage 读取抛 SecurityError，保留浅色默认。
+        }
+        const isDark = preference === "dark" || (
+          preference === "system" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        );
+        document.documentElement.classList.toggle("dark", isDark);
+        document.documentElement.dataset.themePreference = preference;
+        document.documentElement.dataset.colorMode = isDark ? "dark" : "light";
+        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+      })();
+    </script>
+  </head>
+  <body>
+    <SiteHeader site={site} groups={groups} activeGroupKey={activeGroupKey} />
+    <slot />
+    <SiteFooter site={site} />
+    {runtimeHtml && <Fragment set:html={runtimeHtml} />}
+    <script>
+      import "@/scripts/front-site.ts";
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1488 @@
+/* 前台站点样式：从 themes/feed-zh 原样搬运，禁止在此文件里改写选择器。
+   来源顺序：web-header.mustache 的三个 <style>（设计令牌 / novel 样式 / 编译后 Tailwind），
+   再加 web-home.mustache 的首页专属 <style>（.mf-home-*，header 三段不含）。 */
+/* microfeed design tokens
+ * For a quick color change in Admin, edit only the values in this block.
+ *
+ * Two surfaces are deliberately distinct (see ADR-0010): --mf-page-bg is the
+ * page canvas, --mf-background is a raised surface (card, header, floating
+ * tool). The public pages used to hard-code both, which is why the home, book
+ * and reading pages each ended up on a different canvas colour.
+ */
+:root {
+  --mf-accent: #0997cc;
+  --mf-background: #ffffff;
+  --mf-surface: #f6f8fa;
+  --mf-text: #24292f;
+  --mf-muted: #57606a;
+  --mf-border: #dcdcdc;
+  --mf-novel: #ff6a00;
+  --mf-page-bg: #f5f6f8;
+  --mf-novel-hover: #e65c00;
+  --mf-on-accent: #ffffff;
+  --mf-brand: #ff4d4f;
+  --mf-brand-dot: #4caf50;
+  --mf-warning: #ffb800;
+  --mf-warning-bg: #fff9ed;
+  --mf-warning-text: #d88900;
+  --mf-reader-night-bg: #202020;
+  --mf-cover-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --mf-cover-gradient-soft: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+  --mf-avatar-gradient: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  --mf-radius-card: .75rem;
+  --mf-radius-control: .5rem;
+  --mf-radius-pill: 999px;
+  --mf-shadow-card: 0 4px 12px rgb(0 0 0 / 8%);
+  --mf-shadow-card-hover: 0 6px 20px rgb(0 0 0 / 12%);
+}
+
+.dark {
+  --mf-accent: #58c7f3;
+  --mf-background: #0d1117;
+  --mf-surface: #161b22;
+  --mf-text: #f0f3f6;
+  --mf-muted: #9da7b3;
+  --mf-border: #30363d;
+  --mf-novel: #ff8a3d;
+  --mf-page-bg: #010409;
+  --mf-novel-hover: #ff9d5c;
+  --mf-on-accent: #ffffff;
+  --mf-brand: #ff6b6d;
+  --mf-brand-dot: #5cbf60;
+  --mf-warning: #d9a400;
+  --mf-warning-bg: #2b2416;
+  --mf-warning-text: #f0c14b;
+  /* The reading page's own night switch has to stay DARKER than whatever the
+     canvas already is. Its old hard-coded #202020 was chosen when the reader
+     surface was #fff; once that surface became --mf-background (#0d1117 here)
+     pressing 夜间 would have LIGHTENED the page. */
+  --mf-reader-night-bg: #000000;
+}
+/* Novel-cms additions: book header, category nav, and the volume-grouped
+ * chapter list. These are new class names, so nothing here competes with the
+ * compiled utility block below. */
+.mf-book-head {
+  margin-bottom: 2em;
+}
+
+.mf-book-title {
+  margin: 0 0 .25em;
+}
+
+.mf-book-authors {
+  color: var(--mf-muted);
+  font-size: .875em;
+}
+
+.mf-book-badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4em;
+  margin-top: .6em;
+}
+
+.mf-book-badges .badge,
+.mf-category-nav .badge {
+  border: 1px solid var(--mf-border);
+  background: var(--mf-surface);
+  border-radius: 999px;
+  padding: .1em .6em;
+  font-size: .8em;
+  font-weight: 500;
+}
+
+.mf-book-badges .badge {
+  color: var(--mf-muted);
+}
+
+.mf-book-badges a.badge {
+  color: var(--mf-accent);
+}
+
+.mf-category-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5em;
+  margin-bottom: 2em;
+}
+
+.mf-category-nav a {
+  border: 1px solid var(--mf-border);
+  border-radius: 999px;
+  padding: .15em .75em;
+  font-size: .875em;
+}
+
+.mf-category-nav a:hover {
+  background: var(--mf-surface);
+  opacity: 1;
+}
+
+.mf-toc-item {
+  border-bottom: 1px solid var(--mf-border);
+  padding: .6em 0;
+}
+
+.mf-toc-item:last-child {
+  border-bottom: 0;
+}
+
+.mf-volume-heading {
+  border-bottom: 1px solid var(--mf-border);
+  color: var(--mf-muted);
+  margin: 1.5em 0 .25em;
+  padding-bottom: .25em;
+  font-size: .95em;
+  font-weight: 650;
+}
+
+.mf-volume-heading:first-child {
+  margin-top: 0;
+}
+
+/* Home page: novel-store layout - genre bar, book hero, and a chapter grid.
+ * Scoped to .mf-novel-home so the reading page's own TOC drawer keeps the
+ * plain list it has always used. */
+.mf-genre-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5em;
+  margin-bottom: 1.5em;
+}
+
+.mf-genre-tab {
+  align-items: center;
+  border: 1px solid var(--mf-border);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: .35em;
+  padding: .3em .9em;
+  font-size: .9em;
+}
+
+.mf-genre-tab:hover {
+  background: var(--mf-surface);
+  opacity: 1;
+}
+
+.mf-genre-count {
+  color: var(--mf-muted);
+  font-size: .85em;
+}
+
+.mf-book-hero {
+  display: grid;
+  gap: 1.25em;
+  grid-template-columns: 9rem 1fr;
+  margin-bottom: 2em;
+}
+
+@media (max-width: 768px) {
+  .mf-book-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .mf-book-cover-col {
+    max-width: 9rem;
+  }
+}
+
+.mf-book-cover {
+  aspect-ratio: 3 / 4;
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-control);
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.mf-book-cover--empty {
+  align-items: center;
+  color: var(--mf-muted);
+  display: flex;
+  font-size: .8em;
+  justify-content: center;
+}
+
+.mf-book-info {
+  min-width: 0;
+}
+
+.mf-book-title {
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 .3em;
+}
+
+.mf-book-author {
+  color: var(--mf-muted);
+  font-size: .9em;
+  margin: 0 0 .6em;
+}
+
+.mf-book-author span + span {
+  margin-left: .35em;
+}
+
+.mf-book-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4em;
+  margin-bottom: .7em;
+}
+
+.mf-chip {
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-border);
+  border-radius: .25rem;
+  color: var(--mf-muted);
+  font-size: .78em;
+  padding: .2em .5em;
+}
+
+a.mf-chip {
+  color: var(--mf-accent);
+}
+
+.mf-chip--serial {
+  background: var(--mf-novel);
+  border-color: var(--mf-novel);
+  color: var(--mf-on-accent);
+  font-weight: 600;
+}
+
+.mf-book-latest {
+  color: var(--mf-muted);
+  font-size: .9em;
+  margin: 0 0 .7em;
+}
+
+.mf-book-latest[hidden] {
+  display: none;
+}
+
+.mf-book-latest a {
+  color: var(--mf-novel);
+}
+
+.mf-book-desc {
+  color: var(--mf-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  font-size: .9em;
+  margin-bottom: 1em;
+}
+
+.mf-subscribe {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75em;
+  margin-top: 1em;
+}
+
+.mf-subscribe-label {
+  color: var(--mf-muted);
+  font-size: .85em;
+}
+
+.mf-subscribe-item {
+  align-items: center;
+  color: var(--mf-muted);
+  display: inline-flex;
+  font-size: .85em;
+  gap: .3em;
+}
+
+.mf-subscribe-item img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.mf-section-title {
+  align-items: baseline;
+  border-bottom: 1px solid var(--mf-border);
+  display: flex;
+  gap: .5em;
+  padding-bottom: .4em;
+}
+
+.mf-section-count {
+  color: var(--mf-muted);
+  font-size: .7em;
+  font-weight: 400;
+}
+
+.mf-section-count[hidden] {
+  display: none;
+}
+
+/* Chapter grid. The volume heading spans the whole row so the flat
+ * "heading + its chapters" shape the script builds still reads correctly. */
+.mf-novel-home .mf-toc {
+  display: grid;
+  gap: .6em;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  margin-top: 1em;
+}
+
+.mf-novel-home .mf-volume-heading {
+  grid-column: 1 / -1;
+}
+
+.mf-novel-home .mf-toc-item {
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-control);
+  padding: .6em .7em;
+}
+
+.mf-novel-home .mf-toc-item:last-child {
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.mf-novel-home .mf-toc-item:hover {
+  background: var(--mf-surface);
+}
+
+.mf-novel-home .mf-toc-item a {
+  color: var(--mf-text);
+  display: block;
+  font-size: .9em;
+  font-weight: 500;
+}
+
+.mf-toc-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.mf-toc-meta {
+  color: var(--mf-muted);
+  font-size: .75em;
+  margin-top: .25em;
+}
+
+.mf-toc-empty {
+  color: var(--mf-muted);
+}
+
+.mf-pager {
+  display: flex;
+  gap: .6em;
+  justify-content: center;
+  margin-top: 1.5em;
+}
+
+/* Prototype detail page: pale-grey canvas, white cards, three-column header,
+ * and a three-column chapter list. This mirrors poto/详情面.html. */
+/* The canvas has to reach the footer too, or these pages end in a white band. */
+body:has(.mf-book-detail-page),
+body:has(.mf-library-page),
+body:has(.mf-volume-page) {
+  background: var(--mf-page-bg);
+}
+
+.mf-book-detail-page,
+.mf-library-page,
+.mf-volume-page {
+  background: var(--mf-page-bg);
+  min-height: 100vh;
+  /* Was `-2em -1em -4em`. Those negative margins cancelled the shared
+     stylesheet's html padding, which `html:has(.fq-header)` now zeroes —
+     so they only dragged the breadcrumb up under the sticky header. The
+     reading page was fixed for the same reason; these two were not. */
+  margin: 0;
+  padding: 1.5em 1em 4em;
+}
+
+.mf-detail-container,
+.mf-library-container {
+  margin: 0 auto;
+  max-width: 62.5rem;
+}
+
+.mf-breadcrumb {
+  align-items: center;
+  color: var(--mf-muted);
+  display: flex;
+  font-size: .8125rem;
+  gap: .5em;
+  padding: 1em 0;
+}
+
+.mf-breadcrumb a:hover {
+  color: var(--mf-novel);
+  opacity: 1;
+}
+
+.mf-detail-card {
+  background: var(--mf-background);
+  border-radius: var(--mf-radius-card);
+  margin-bottom: 1.5em;
+  padding: 2em;
+}
+
+.mf-book-header-card {
+  display: grid;
+  gap: 2em;
+  grid-template-columns: 10rem minmax(0, 1fr) 12.5rem;
+}
+
+.mf-detail-cover {
+  aspect-ratio: 3 / 4;
+  background: var(--mf-cover-gradient-soft);
+  border-radius: var(--mf-radius-control);
+  box-shadow: var(--mf-shadow-card);
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.mf-detail-cover-empty {
+  align-items: center;
+  color: var(--mf-muted);
+  display: flex;
+  font-size: .8em;
+  justify-content: center;
+}
+
+.mf-detail-main {
+  border-right: 1px solid var(--mf-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-right: 2em;
+}
+
+.mf-detail-title {
+  color: var(--mf-text);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 .75em;
+}
+
+.mf-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5em;
+  margin-bottom: 1em;
+}
+
+.mf-detail-tag {
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-border);
+  border-radius: .25rem;
+  color: var(--mf-muted);
+  font-size: .75rem;
+  padding: .2em .65em;
+}
+
+.mf-detail-tag--accent {
+  background: var(--mf-warning-bg);
+  border-color: var(--mf-warning);
+  color: var(--mf-warning-text);
+}
+
+.mf-detail-word-count {
+  color: var(--mf-muted);
+  font-size: 1rem;
+  margin-bottom: 1.5em;
+}
+
+.mf-detail-word-count strong {
+  color: var(--mf-text);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-right: .25em;
+}
+
+.mf-detail-update {
+  color: var(--mf-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: .8125rem;
+  gap: 1em;
+  margin-bottom: 1.5em;
+}
+
+.mf-detail-update span {
+  color: var(--mf-text);
+}
+
+.mf-detail-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75em;
+  margin-top: auto;
+}
+
+/* The one button in this theme. Every action wears it — whether it is an <a>
+   that navigates or a <button> that runs a handler — so the geometry lives
+   here and is never copied into a modifier. Copying it is exactly how the
+   share button ended up at the UA default 13.33px beside 14px links.
+   There is deliberately no --primary/--secondary pair any more. The detail
+   page's three actions were levelled (2026-09-25) because 开始阅读 rendered
+   as a vivid orange pill beside two near-invisible ones. */
+.mf-detail-btn {
+  align-items: center;
+  border: 0;
+  border-radius: var(--mf-radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  height: 2.5rem;
+  justify-content: center;
+  padding: 0 1.5em;
+  text-decoration: none;
+}
+
+.mf-detail-btn:hover {
+  opacity: 1;
+}
+
+/* The class is repeated on purpose. The compiled stylesheet closes with
+   `a, a:visited { color: var(--mf-accent) }` at (0,1,1), and a lone class
+   (0,1,0) loses to it: measured, once the reader had opened the first
+   chapter this label repainted accent-blue on the pill. Doubling the class
+   gives (0,2,0), which wins outright and never depends on source order.
+   The theme's own idiom is a `:visited` companion selector — see
+   `.mf-footer-link, .mf-footer-link:visited` — and that does hold up in
+   practice, but it only ties at (0,1,1) and leans on the tie-break. */
+.mf-detail-btn.mf-detail-btn {
+  background: var(--mf-surface);
+  color: var(--mf-text);
+}
+
+.mf-author-card {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.mf-author-avatar {
+  align-items: center;
+  background: var(--mf-avatar-gradient);
+  border-radius: 50%;
+  color: var(--mf-on-accent);
+  display: flex;
+  font-size: .75rem;
+  height: 4rem;
+  justify-content: center;
+  margin-bottom: .75em;
+  overflow: hidden;
+  padding: .5em;
+  text-align: center;
+  width: 4rem;
+}
+
+.mf-author-name {
+  color: var(--mf-text);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: .5em;
+}
+
+.mf-author-badge {
+  background: var(--mf-warning);
+  border-radius: .25rem;
+  color: var(--mf-on-accent);
+  display: inline-block;
+  font-size: .625rem;
+  font-weight: 400;
+  margin-right: .3em;
+  padding: .1em .35em;
+  vertical-align: .15em;
+}
+
+.mf-author-desc {
+  color: var(--mf-muted);
+  font-size: .75rem;
+}
+
+.mf-detail-section-title {
+  border-bottom: 1px solid var(--mf-border);
+  color: var(--mf-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 1.5em;
+  padding-bottom: .75em;
+}
+
+.mf-detail-intro {
+  color: var(--mf-muted);
+  font-size: .875rem;
+  line-height: 1.8;
+}
+
+.mf-detail-empty {
+  color: var(--mf-muted);
+  font-size: .875rem;
+}
+
+.mf-detail-volume-title {
+  color: var(--mf-text);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1.25em;
+}
+
+.mf-detail-volume-title span {
+  color: var(--mf-muted);
+  font-size: .8125rem;
+  font-weight: 400;
+  margin-left: .5em;
+}
+
+.mf-detail-chapter-grid {
+  display: grid;
+  column-gap: 1.5em;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 1em;
+}
+
+.mf-detail-chapter-grid .mf-volume-heading {
+  grid-column: 1 / -1;
+}
+
+.mf-detail-chapter-item {
+  border: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.mf-detail-chapter-item a {
+  color: var(--mf-muted);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 卷页（ADR-0025 D1/D3）：卷头 + 连续铺开的条文正文。
+   正文复用 .mf-rich-content，条与条之间不加分隔线（正文自带序号已足够分界）。
+   「返回」落到某条时的 `.mf-toc-came-from` 高亮沿用上面那条通用规则。 */
+
+/* 卷导航：放在正文之后、整行居中（2026-10-13 站点要求）。顺序是
+   「上一卷 · 卷名 | 返回目录 | 下一卷 · 卷名」—— 读完一卷顺手往下翻，不用回顶部。
+   按钮沿用 `.mf-detail-btn` 的胶囊外观，只覆盖高度/换行/宽度：卷名可长到 41 字符
+   （还含 `$r{…}` 标注），固定 2.5rem 高的胶囊在窄屏会横向溢出。 */
+.mf-volume-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .75em;
+  margin-top: 2em;
+}
+
+.mf-volume-nav .mf-detail-btn {
+  height: auto;
+  min-height: 2.5rem;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.mf-volume-body {
+  margin-top: 1.5em;
+  /* 正文栏收窄居中，与 `.mf-reader-content` 同值（47.5rem）：卷页曾经没有宽度
+     约束，条文正文拉通到 960px 容器，一行七八十个字，与 0.1.39 时代阅读页的
+     760px 阅读栏相比「区域非常大、很难看」（2026-10-13 站点要求）。 */
+  max-width: 47.5rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 卷头（2026-10-13 站点要求）：阅读页式紧凑头，替代原先的 `.mf-detail-card` 大卡。
+   卷页只有「卷名 + 条数」一项内容，大卡（1.75rem 标题 + 标签 pill + 1.25em 内距）
+   通栏铺开显得空且大；这里沿用 `.mf-reader-chapter-head` 的结构与字号——即
+   0.1.39 时代阅读页章节头的观感。书页/分类页的 `.mf-detail-card` 不受影响。 */
+.mf-volume-head {
+  border-bottom: 1px solid var(--mf-border);
+  padding-bottom: 1em;
+  margin-bottom: 1.5em;
+}
+
+.mf-volume-title {
+  color: var(--mf-text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 .5em;
+}
+
+/* 条数与卷名同一行（2026-10-13 站点要求）：小号弱化色，跟在卷名后。
+   书名不显示——面包屑已有，不重复。 */
+.mf-volume-count {
+  color: var(--mf-muted);
+  font-size: .8125rem;
+  font-weight: 400;
+  margin-left: .75em;
+}
+
+.mf-volume-section {
+  scroll-margin-top: 5rem;
+}
+
+.mf-volume-section + .mf-volume-section {
+  margin-top: 1.75em;
+}
+
+.mf-detail-chapter-item a:hover {
+  color: var(--mf-novel);
+  opacity: 1;
+}
+
+/* Prototype home/library page: three-column cover-and-summary cards.
+ * Category pages provide the real list of channels available to this
+ * single-channel microfeed instance. */
+
+
+
+.mf-library-section-head span {
+  color: var(--mf-muted);
+  font-size: .8125rem;
+}
+
+
+
+
+
+.mf-library-section {
+  background: var(--mf-background);
+  border-radius: var(--mf-radius-card);
+  padding: 2em;
+}
+
+.mf-library-section-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--mf-border);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5em;
+  padding-bottom: .75em;
+}
+
+.mf-library-section-head h2 {
+  color: var(--mf-text);
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.mf-library-grid {
+  display: grid;
+  column-gap: 2.5em;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 2.5em;
+}
+
+.mf-library-book-card {
+  display: flex;
+  gap: 1em;
+  min-width: 0;
+}
+
+.mf-library-book-card:hover {
+  opacity: 1;
+}
+
+.mf-library-cover {
+  aspect-ratio: 3 / 4;
+  background: var(--mf-cover-gradient-soft);
+  border-radius: var(--mf-radius-control);
+  flex: 0 0 6rem;
+  object-fit: cover;
+  width: 6rem;
+}
+
+.mf-library-cover-empty {
+  align-items: center;
+  color: var(--mf-on-accent);
+  display: flex;
+  font-size: .7rem;
+  justify-content: center;
+  text-align: center;
+}
+
+.mf-library-book-info {
+  min-width: 0;
+}
+
+.mf-library-book-info h3 {
+  color: var(--mf-text);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 .4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-library-book-info p,
+.mf-library-book-info small {
+  color: var(--mf-muted);
+  font-size: .75rem;
+  margin: 0 0 .5em;
+}
+
+.mf-library-desc {
+  color: var(--mf-muted);
+  display: -webkit-box;
+  font-size: .75rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.mf-library-empty {
+  color: var(--mf-muted);
+  font-size: .875rem;
+  padding: 1em 0;
+}
+
+/* Breakpoints are px now and the mobile tier is the site-wide 768px (ADR-0013).
+   Merged from 800px / 768px / 400px — three blocks collapsed at different
+   widths, now one. */
+@media (max-width: 768px) {
+  .mf-book-header-card,
+  .mf-library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* 书页的作者信息区在移动端整块隐藏（2026-10-13 站点要求）：窄屏一屏能看到的
+     应该是书名、封面、简介与目录，「作者 / 用心写出不一样的故事」这段占一大块
+     且信息量低。桌面端（>768px）保持原样。 */
+  .mf-author-card {
+    display: none;
+  }
+
+  .mf-detail-main {
+    border-right: 0;
+    padding-right: 0;
+  }
+
+  .mf-detail-cover-wrap {
+    max-width: 9rem;
+  }
+
+  .mf-detail-card,
+  .mf-library-section {
+    padding: 1.25em;
+  }
+
+  .mf-detail-chapter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Reading page prototype: wide white reader shell, centered 760px text column,
+ * and a fixed five-button tool rail, matching poto/阅读面.html. */
+body:has(.mf-reader-page) {
+  background: var(--mf-page-bg);
+}
+
+body:has(.mf-reader-page) .fq-header,
+body:has(.mf-reader-page) > footer {
+  display: none;
+}
+
+.mf-reader-page {
+  background: var(--mf-background);
+  min-height: 100vh;
+  /* Was `-2em auto -4em`, cancelling the shared stylesheet's html padding.
+     `html:has(.fq-header)` now zeroes that padding, so the negative margins
+     would drag the reader up under the top edge and shorten the page. */
+  margin: 0 auto;
+  max-width: 65rem;
+  padding: 0 2.5rem 3.75rem;
+  position: relative;
+}
+
+.mf-reader-shell {
+  min-height: 100vh;
+}
+
+.mf-reader-header {
+  align-items: center;
+  border-bottom: 1px solid var(--mf-border);
+  display: flex;
+  font-size: 1rem;
+  height: 4.5rem;
+  justify-content: space-between;
+  margin-bottom: 2.5rem;
+}
+
+.mf-reader-back,
+.mf-reader-login {
+  color: var(--mf-text);
+  font-weight: 500;
+}
+
+.mf-reader-back {
+  align-items: center;
+  display: flex;
+  gap: .5em;
+}
+
+.mf-reader-back:hover,
+.mf-reader-login:hover {
+  color: var(--mf-novel);
+  opacity: 1;
+}
+
+.mf-reader-content {
+  margin: 0 auto;
+  max-width: 47.5rem;
+}
+
+.mf-reader-chapter-head {
+  margin-bottom: 2.5rem;
+}
+
+.mf-reader-chapter-head h1 {
+  color: var(--mf-text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  margin: 0 0 .75em;
+}
+
+.mf-reader-meta {
+  color: var(--mf-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: .8125rem;
+  gap: 1.5em;
+}
+
+.mf-reader-body {
+  color: var(--mf-text);
+  font-size: 1.125rem;
+  line-height: 2;
+}
+
+.mf-reader-body > * {
+  margin-bottom: 1.333em;
+  text-align: justify;
+  word-break: break-all;
+}
+
+.mf-reader-body p {
+  margin-top: 0;
+}
+
+html[data-mf-font=small] .mf-reader-body { font-size: 1rem; }
+html[data-mf-font=medium] .mf-reader-body { font-size: 1.125rem; }
+html[data-mf-font=large] .mf-reader-body { font-size: 1.25rem; }
+
+html[data-mf-reader-night] body:has(.mf-reader-page),
+html[data-mf-reader-night] body:has(.mf-reader-page) .mf-reader-page {
+  background: var(--mf-reader-night-bg);
+}
+
+html[data-mf-reader-night] .mf-reader-header {
+  border-color: #3a3a3a;
+}
+
+html[data-mf-reader-night] .mf-reader-back,
+html[data-mf-reader-night] .mf-reader-login,
+html[data-mf-reader-night] .mf-reader-chapter-head h1,
+html[data-mf-reader-night] .mf-reader-body {
+  color: #e9e9e9;
+}
+
+.mf-reader-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: fixed;
+  right: max(1.25rem, calc(50% - 38rem));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
+.mf-reader-tool {
+  align-items: center;
+  background: var(--mf-background);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-card);
+  box-shadow: var(--mf-shadow-card);
+  color: var(--mf-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: .25em;
+  height: 3.5rem;
+  justify-content: center;
+  padding: 0;
+  transition: transform .2s, box-shadow .2s;
+  width: 3.5rem;
+}
+
+.mf-reader-tool:hover {
+  box-shadow: var(--mf-shadow-card-hover);
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.mf-reader-tool span {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.mf-reader-tool small {
+  color: var(--mf-muted);
+  font-size: .6875rem;
+}
+
+.mf-reader-nav {
+  align-items: center;
+  border-top: 1px solid var(--mf-border);
+  display: flex;
+  gap: 1rem;
+  /* 只剩「返回」一个链接后 space-between 会把孤零零一项推到左边，居中才对；
+     上一章 / 下一章在 2026-10-12 移除，原因见 web-item.mustache 里的注释。 */
+  justify-content: center;
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+}
+
+/* The single return control. Styled after the header's own back button so the
+   two read as the same affordance, since they point at the same URL. */
+.mf-reader-return {
+  align-items: center;
+  color: var(--mf-accent);
+  display: inline-flex;
+  font-weight: 500;
+  gap: 0.375rem;
+}
+
+.mf-reader-return:hover {
+  opacity: 1;
+}
+
+/* Marks the 目录 row the reader came back from, set by the catalogue rebuild in
+   web-body-end.mustache. Purely presentational — no test asserts on it and it
+   holds no state. Tinted from `--mf-accent` so it tracks whichever theme block
+   is live (light / dark / sepia all inherit an accent). */
+.mf-toc-came-from {
+  background-color: rgba(127, 127, 127, 0.16);
+  background-color: color-mix(in srgb, var(--mf-accent) 16%, transparent);
+  border-radius: var(--mf-radius-control);
+  animation: mf-toc-came-from 2.4s ease-out;
+}
+
+@keyframes mf-toc-came-from {
+  from {
+    background-color: rgba(127, 127, 127, 0.34);
+    background-color: color-mix(in srgb, var(--mf-accent) 34%, transparent);
+  }
+}
+
+.mf-reader-nav a {
+  color: var(--mf-accent);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mf-reader-nav a:hover {
+  opacity: 1;
+}
+
+.mf-reader-nav strong {
+  font-weight: 400;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mf-reader-nav-toc {
+  font-weight: 600;
+}
+
+.mf-reader-nav-empty {
+  color: var(--mf-muted);
+  font-size: .8125rem;
+}
+
+.mf-reader-toc {
+  margin-top: 2rem;
+}
+
+.mf-reader-toc .mf-toc-item a {
+  color: var(--mf-accent);
+}
+
+/* Prototype hard reset. The shared theme stylesheet constrains ordinary
+ * `main` elements for the legacy feed layout. These page roots must escape
+ * that constraint or the prototypes collapse into a narrow centered column.
+ * The prototypes specify px, so the primary geometry deliberately uses px. */
+/* ===== Homepage top nav: centered, sticky bar (番茄小说网 prototype) =====
+ * The `.fq-*` classes are only styled here (no shared base), so every property
+ * is spelled out. `!important` is kept on the geometry so the shared theme's
+ * generic `header`/`nav` resets cannot collapse this bar. */
+
+/* The shared stylesheet centers the whole document in a 70ch reading column
+ * (`html { max-width: 70ch; margin: auto; padding: 1.5em 0.2em }`). That is
+ * right for the legacy single-column feed, but it collapses the novel
+ * prototypes — full-bleed with 1200px inner containers (see poto/首页.html) —
+ * into a ~604px band, which squeezes the header until 登录/注册 wrap onto two
+ * lines. Every page of this theme renders `.fq-header`, so key the escape off
+ * it instead of widening every site that uses the shared stylesheet. */
+html:has(.fq-header) {
+  margin: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+.fq-header {
+  width: 100% !important;
+  background: var(--mf-background) !important;
+  border-bottom: 1px solid var(--mf-border) !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
+}
+
+.fq-header-inner {
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 64px !important;
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+  padding: 0 24px !important;
+  width: 100% !important;
+}
+
+.fq-header-left,
+.fq-header-right {
+  align-items: center !important;
+  display: flex !important;
+}
+
+.fq-header-left {
+  gap: 40px !important;
+}
+
+.fq-header-right {
+  gap: 20px !important;
+}
+
+/* Logo: 一枚杏仁（苦杏仁）。整枚标记仍由 CSS 绘制 —— 本主题 assets 为空，
+   换成位图会要求目标实例启用 R2。 */
+.fq-logo {
+  align-items: center !important;
+  color: var(--mf-text) !important;
+  display: flex !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  gap: 8px !important;
+}
+
+/* 杏仁标记（苦杏仁：一枚带壳整仁 + 一枚裂壳果仁 + 一枝两叶）。
+   画成 data URI 内联 SVG 而不是位图：本主题 assets 为空，位图会要求目标实例
+   启用 R2。代价是墨色固化在 SVG 内，吃不到 design token，所以深色单独换一份
+   浅墨线稿 —— #5b3a1e 落在 #0d1117 上只有约 3:1，28px 下几乎看不见。 */
+.fq-logo-icon {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%235b3a1e' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg fill='%23f6ecdc' fill-opacity='.55'%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3C/g%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M22 8.6C24.6 18 24.6 40 22 53.4' stroke-width='1'/%3E%3Cpath d='M28.4 20C30 26 30.4 34 29 41M26 47C27.4 43 28.2 39 28.4 35' stroke-width='.8' opacity='.75'/%3E%3Cpath d='M27.8 24 26.6 25M28.8 29 27.6 30M29.2 34 28 35M28.6 39 27.4 40M27 44 25.8 45M16.2 24 17.4 25M15.2 29 16.4 30M14.8 34 16 35M15.4 39 16.6 40M17 44 18.2 45' stroke-width='.7' opacity='.55'/%3E%3Cpath d='M15.4 22C14.4 27 14.2 33 15 38' stroke-width='.65' opacity='.5'/%3E%3Cpath d='M41 9C48.5 17 51.5 30 49 41 47 49.5 42.5 55 38.5 54.5 35.5 54 33.5 49.5 33 44L34.6 42 33.4 39.4 35.2 37 33.9 34 35.6 31.5 34.3 28.5 36 26 34.7 23 36.4 20.5 35.2 17.5C36.2 14 38.5 10.5 41 9Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3Cpath d='M42 18.5C39.8 25.5 39.2 37 41.2 45M46 20C47.8 26.5 47.6 37 45.4 43.5M44 17C42.6 23 42.2 32 43.4 40' stroke-width='.8' opacity='.8'/%3E%3Cpath d='M47.6 24C48.8 30 48.4 38 46 44' stroke-width='.7' opacity='.6'/%3E%3Cpath d='M46.5 52C50 53 54 52.5 57 51' stroke-width='.9'/%3E%3Cpath d='M50.5 51C53 45.5 58.5 42 63 42 62 47.5 57 52 51.6 52.4 51 52.4 50.6 51.8 50.5 51Z'/%3E%3Cpath d='M51.6 51.2C55.4 48.6 59.4 45.4 61.8 43.4M53.6 50.4C55.6 49.4 57.4 48.2 59 46.8M55.4 47.6C57 45.8 58.4 44 59.4 42.4' stroke-width='.65' opacity='.7'/%3E%3Cpath d='M48.5 44.5C50.5 40 55 37 59.5 37.2 58.8 41.5 54.8 45 50 45.6 49.2 45.7 48.6 45.2 48.5 44.5Z'/%3E%3Cpath d='M49.6 44.6C52.8 42.4 56.2 39.8 58.3 38.4M51.6 43.6C53.6 42.4 55.4 41 57 39.4' stroke-width='.65' opacity='.7'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  display: inline-block !important;
+  flex: 0 0 auto !important;
+  height: 28px !important;
+  width: 28px !important;
+}
+
+.dark .fq-logo-icon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23e3bd90' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg fill='%23e3bd90' fill-opacity='.16'%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3C/g%3E%3Cpath d='M22 7C29 15 33 27 31.5 38 30.2 47.5 26.5 55 22 55 17.5 55 13.8 47.5 12.5 38 11 27 15 15 22 7Z'/%3E%3Cpath d='M22 8.6C24.6 18 24.6 40 22 53.4' stroke-width='1'/%3E%3Cpath d='M28.4 20C30 26 30.4 34 29 41M26 47C27.4 43 28.2 39 28.4 35' stroke-width='.8' opacity='.75'/%3E%3Cpath d='M27.8 24 26.6 25M28.8 29 27.6 30M29.2 34 28 35M28.6 39 27.4 40M27 44 25.8 45M16.2 24 17.4 25M15.2 29 16.4 30M14.8 34 16 35M15.4 39 16.6 40M17 44 18.2 45' stroke-width='.7' opacity='.55'/%3E%3Cpath d='M15.4 22C14.4 27 14.2 33 15 38' stroke-width='.65' opacity='.5'/%3E%3Cpath d='M41 9C48.5 17 51.5 30 49 41 47 49.5 42.5 55 38.5 54.5 35.5 54 33.5 49.5 33 44L34.6 42 33.4 39.4 35.2 37 33.9 34 35.6 31.5 34.3 28.5 36 26 34.7 23 36.4 20.5 35.2 17.5C36.2 14 38.5 10.5 41 9Z'/%3E%3Cpath d='M44.5 15C49 21.5 50.5 31 47.8 38.8 45.6 45.3 41.5 49.8 38.4 48.7 35.3 47.6 34 40.8 35.2 33.6 36.5 25.8 40.5 19.2 44.5 15Z'/%3E%3Cpath d='M42 18.5C39.8 25.5 39.2 37 41.2 45M46 20C47.8 26.5 47.6 37 45.4 43.5M44 17C42.6 23 42.2 32 43.4 40' stroke-width='.8' opacity='.8'/%3E%3Cpath d='M47.6 24C48.8 30 48.4 38 46 44' stroke-width='.7' opacity='.6'/%3E%3Cpath d='M46.5 52C50 53 54 52.5 57 51' stroke-width='.9'/%3E%3Cpath d='M50.5 51C53 45.5 58.5 42 63 42 62 47.5 57 52 51.6 52.4 51 52.4 50.6 51.8 50.5 51Z'/%3E%3Cpath d='M51.6 51.2C55.4 48.6 59.4 45.4 61.8 43.4M53.6 50.4C55.6 49.4 57.4 48.2 59 46.8M55.4 47.6C57 45.8 58.4 44 59.4 42.4' stroke-width='.65' opacity='.7'/%3E%3Cpath d='M48.5 44.5C50.5 40 55 37 59.5 37.2 58.8 41.5 54.8 45 50 45.6 49.2 45.7 48.6 45.2 48.5 44.5Z'/%3E%3Cpath d='M49.6 44.6C52.8 42.4 56.2 39.8 58.3 38.4M51.6 43.6C53.6 42.4 55.4 41 57 39.4' stroke-width='.65' opacity='.7'/%3E%3C/svg%3E") !important;
+}
+
+.fq-logo-text {
+  white-space: nowrap !important;
+}
+
+/* Nav menu */
+.fq-nav {
+  align-items: center !important;
+  display: flex !important;
+  gap: 32px !important;
+  white-space: nowrap !important;
+}
+
+.fq-nav a {
+  color: var(--mf-text) !important;
+  font-size: 15px !important;
+}
+
+.fq-nav a:hover {
+  color: var(--mf-brand) !important;
+}
+
+.fq-nav a.active {
+  color: var(--mf-brand) !important;
+  font-weight: 600 !important;
+}
+
+/* 顶部的搜索框与「登录 / 注册」入口已按站点要求移除（2026-10-13）：
+   `web-body-start.mustache` 的 `fq-header-right` 只剩颜色主题切换，本节原先的
+   `.fq-search*` / `.fq-auth*` 规则随之失效，一并删除（留着只会让人以为还能配出来）。
+   注意：文件末尾 `vite` 编译产物那一段不可手工维护，里面还有更早一代的
+   `.mf-site-search` 等死规则，同理不再追究。 */
+
+/* These page roots used to be 100vw with negative margins to break out of the
+ * shared stylesheet's 70ch html column. `html:has(.fq-header)` now makes the
+ * document full width, so a plain 100% is enough — and it avoids the
+ * horizontal scrollbar that 100vw causes once a vertical scrollbar exists. */
+.mf-book-detail-page,
+.mf-library-page,
+.mf-reader-page,
+.mf-volume-page {
+  box-sizing: border-box !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.mf-detail-container,
+.mf-library-container {
+  box-sizing: border-box !important;
+  max-width: 1000px !important;
+  width: calc(100% - 40px) !important;
+}
+
+.mf-reader-page {
+  margin-left: calc(50% - 50vw) !important;
+  margin-right: calc(50% - 50vw) !important;
+}
+
+.mf-reader-content {
+  max-width: 760px !important;
+}
+
+/* Mobile tier (the site-wide 768px, ADR-0013). The tool rail is
+   `position: fixed` against the right edge, so below this width it sat on
+   top of the text column. Lay it along the bottom instead, and drop the
+   wide gutters. */
+@media (max-width: 768px) {
+  .mf-reader-page {
+    padding: 0 1.25rem 7rem;
+  }
+
+  .mf-reader-tools {
+    bottom: 1rem;
+    flex-direction: row;
+    left: 50%;
+    right: auto;
+    top: auto;
+    transform: translateX(-50%);
+  }
+}
+
+/* Existing controls and generic report styles remain available as a no-JS
+ * fallback. */
+/* Reading page: progress bar, reading settings, chapter navigation, and the
+ * table-of-contents drawer. */
+.mf-reading-progress {
+  background: var(--mf-accent);
+  height: 2px;
+  inset-inline: 0;
+  position: fixed;
+  top: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  z-index: 20;
+}
+
+.mf-chapter-head {
+  margin-bottom: 1.5em;
+}
+
+.mf-chapter-head h1 {
+  margin-bottom: .2em;
+}
+
+.mf-reading-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5em;
+  margin-top: .8em;
+}
+
+.mf-reading-controls[hidden] {
+  display: none;
+}
+
+.mf-reading-group {
+  border: 1px solid var(--mf-border);
+  border-radius: 999px;
+  display: flex;
+  overflow: hidden;
+}
+
+.mf-reading-controls button {
+  background: 0 0;
+  border: 0;
+  color: var(--mf-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: .2em .7em;
+  font-size: .8em;
+}
+
+.mf-reading-controls button:hover {
+  background: var(--mf-surface);
+}
+
+.mf-reading-controls button[aria-pressed=true] {
+  background: var(--mf-accent);
+  color: var(--mf-background);
+  font-weight: 650;
+}
+
+.mf-toc-toggle {
+  border: 1px solid var(--mf-border);
+  border-radius: 999px;
+}
+
+/* The reader's font size is set on <html> so it scales the chapter body only;
+   the surrounding chrome keeps its own size. */
+html[data-mf-font=small] .mf-chapter-body { font-size: .95em; }
+html[data-mf-font=medium] .mf-chapter-body { font-size: 1.05em; }
+html[data-mf-font=large] .mf-chapter-body { font-size: 1.2em; }
+
+html[data-mf-paper=sepia] {
+  --mf-background: #f6efe0;
+  --mf-surface: #efe4cf;
+  --mf-page-bg: #ece2cd;
+  --mf-text: #3b3226;
+  --mf-muted: #6f6350;
+  --mf-border: #ddcfb4;
+}
+
+.mf-chapter-nav {
+  align-items: center;
+  border-top: 1px solid var(--mf-border);
+  display: flex;
+  gap: .75em;
+  justify-content: space-between;
+  margin-top: 3em;
+  padding-top: 1em;
+  font-size: .9em;
+}
+
+.mf-chapter-nav a {
+  min-width: 0;
+}
+
+.mf-chapter-nav-empty {
+  color: var(--mf-muted);
+  font-size: .9em;
+}
+
+.mf-toc-item[data-mf-current] a {
+  color: var(--mf-text);
+  font-weight: 650;
+}
+
+/* Genre page: book cards. */
+.mf-category-head {
+  margin-bottom: 1.5em;
+}
+
+.mf-book-grid {
+  display: grid;
+  gap: 1em;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  margin-top: 1em;
+}
+
+.mf-book-card {
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-card);
+  padding: .6em;
+  text-align: center;
+}
+
+.mf-book-card:hover {
+  background: var(--mf-surface);
+  opacity: 1;
+}
+
+.mf-book-card img {
+  border-radius: .4rem;
+  display: block;
+  margin: 0 auto .5em;
+  max-width: 100%;
+}
+
+.mf-book-card-title {
+  color: var(--mf-text);
+  font-size: .9em;
+  font-weight: 600;
+}
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-border-style:solid;--tw-font-weight:initial;--tw-outline-style:solid}}}@layer theme{:root,:host{--color-black:#000;--spacing:.25rem;--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-lg:1.125rem;--text-lg--line-height:calc(1.75 / 1.125);--font-weight-bold:700;--color-mf-accent:var(--mf-accent);--color-mf-background:var(--mf-background);--color-mf-surface:var(--mf-surface);--color-mf-text:var(--mf-text);--color-mf-muted:var(--mf-muted);--color-mf-border:var(--mf-border)}}@layer utilities{.visible{visibility:visible}.relative{position:relative}.container{width:100%}@media (width>=40rem){.container{max-width:40rem}}@media (width>=48rem){.container{max-width:48rem}}@media (width>=64rem){.container{max-width:64rem}}@media (width>=80rem){.container{max-width:80rem}}@media (width>=96rem){.container{max-width:96rem}}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-4{margin-top:calc(var(--spacing) * 4)}.mr-4{margin-right:calc(var(--spacing) * 4)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-4{margin-bottom:calc(var(--spacing) * 4)}.ml-1{margin-left:var(--spacing)}.block{display:block}.contents{display:contents}.flex{display:flex}.hidden{display:none}.inline{display:inline}.w-full{width:100%}.flex-1{flex:1}.flex-none{flex:none}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.border{border-style:var(--tw-border-style);border-width:1px}.border-t{border-top-style:var(--tw-border-style);border-top-width:1px}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.px-2{padding-inline:calc(var(--spacing) * 2)}.text-center{text-align:center}.text-lg{font-size:var(--text-lg);line-height:var(--tw-leading,var(--text-lg--line-height))}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.font-bold{--tw-font-weight:var(--font-weight-bold);font-weight:var(--font-weight-bold)}.text-black{color:var(--color-black)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}}html{box-sizing:border-box;background:var(--mf-background);max-width:70ch;min-height:100%;color:var(--mf-text);margin:auto;padding:1.5em .2em;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif;font-size:1em;line-height:1.75}body{background:var(--mf-background);flex-direction:column;min-height:calc(100dvh - 3em);margin:0;display:flex}.dark{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}main{flex:1 0 auto;width:100%}footer{flex:none}.mf-site-nav{border-bottom:1px solid var(--mf-border);flex:none;justify-content:space-between;align-items:center;gap:.75rem;width:100%;margin-bottom:2rem;padding-bottom:.75rem;display:flex;position:relative}.mf-site-brand{min-width:0;max-width:10rem;color:var(--mf-text);flex:none;align-items:center;font-weight:650;display:flex}.mf-site-brand:visited{color:var(--mf-text)}.mf-site-brand img{object-fit:cover;border-radius:.4rem;width:2rem;height:2rem}.mf-site-brand span{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.mf-site-search{border:1px solid var(--mf-border);background:var(--mf-background);width:min(13.5rem,38vw);color:var(--mf-text);border-radius:.55rem;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.35rem;margin-left:auto;padding:.2rem .5rem;transition:border-color .12s,box-shadow .12s;display:grid;position:relative}.mf-site-search:focus-within{border-color:var(--mf-accent);box-shadow:0 0 0 .18rem var(--mf-accent)}@supports (color:color-mix(in lab, red, red)){.mf-site-search:focus-within{box-shadow:0 0 0 .18rem color-mix(in srgb, var(--mf-accent) 20%, transparent)}}.mf-site-search input[type=search]{width:100%;min-width:0;color:var(--mf-text);cursor:pointer;font:inherit;background:0 0;border:0;outline:0;padding:0;font-size:.875rem;line-height:1.45}.mf-site-search input[type=search]::placeholder{color:var(--mf-muted)}.mf-site-search kbd{border:1px solid var(--mf-border);background:var(--mf-surface);color:var(--mf-muted);font:inherit;border-radius:.3rem;padding:.05rem .3rem;font-size:.72em;line-height:1.4}.mf-search-icon-graphic{width:1rem;height:1rem;color:var(--mf-muted)}.mf-search-icon-button{border:1px solid var(--mf-border);background:var(--mf-background);color:var(--mf-text);cursor:pointer;border-radius:.5rem;justify-content:center;align-items:center;padding:.4rem;display:none}.mf-nav-links{align-items:center;gap:.75rem;min-width:0;display:flex}.mf-nav-links>a{text-overflow:ellipsis;white-space:nowrap;max-width:10rem;display:block;overflow:hidden}.mf-nav-overflow{position:relative}.mf-nav-overflow summary{color:var(--mf-accent);cursor:pointer;align-items:center;gap:.2rem;font-weight:500;list-style:none;display:flex}.mf-nav-overflow summary::-webkit-details-marker{display:none}.mf-nav-overflow summary:hover{opacity:.65}.mf-nav-overflow[open] summary svg{transform:rotate(180deg)}.mf-nav-overflow-menu-icon{display:none}.mf-nav-overflow-menu{z-index:30;border:1px solid var(--mf-border);background:var(--mf-background);border-radius:.55rem;gap:.15rem;min-width:10rem;padding:.35rem;display:grid;position:absolute;top:calc(100% + .55rem);right:0;box-shadow:0 .7rem 2rem #00000024}.mf-nav-overflow-menu a{white-space:nowrap;border-radius:.35rem;padding:.35rem .55rem}.mf-nav-overflow-menu a:hover,.mf-nav-overflow-menu a:focus-visible{background:var(--mf-surface);opacity:1}.mf-theme-menu{flex:none;position:relative}.mf-theme-trigger{width:2.5rem;height:2.5rem;color:var(--mf-text);cursor:pointer;background:0 0;border:0;border-radius:999px;place-items:center;padding:0;list-style:none;transition:background-color .12s,color .12s;display:grid}.mf-theme-trigger:hover,.mf-theme-trigger[aria-expanded=true]{background:var(--mf-surface)}.mf-theme-trigger-icon{width:1.1rem;height:1.1rem;display:none}.mf-theme-trigger-icon[data-microfeed-theme-icon=light]{display:block}html[data-theme-preference=system] .mf-theme-trigger-icon,html[data-theme-preference=dark] .mf-theme-trigger-icon{display:none}html[data-theme-preference=system] .mf-theme-trigger-icon[data-microfeed-theme-icon=system],html[data-theme-preference=dark] .mf-theme-trigger-icon[data-microfeed-theme-icon=dark]{display:block}.mf-theme-menu-panel{z-index:40;border:1px solid var(--mf-border);background:var(--mf-background);border-radius:.65rem;gap:.1rem;min-width:10.5rem;padding:.35rem;display:grid;position:absolute;top:calc(100% + .45rem);right:0;box-shadow:0 .8rem 2.2rem #0000002e}.mf-theme-menu-panel[hidden]{display:none}.mf-theme-menu-label{color:var(--mf-muted);padding:.35rem .55rem;font-size:.75rem;font-weight:600}.mf-theme-menu-panel button{width:100%;color:var(--mf-text);cursor:pointer;font:inherit;text-align:left;background:0 0;border:0;border-radius:.4rem;grid-template-columns:minmax(0,1fr) 1rem;align-items:center;gap:.5rem;padding:.45rem .55rem;font-size:.875rem;display:grid}.mf-theme-menu-panel button:after{color:var(--mf-accent);content:"";justify-self:end;font-weight:700}.mf-theme-menu-panel button[aria-checked=true]:after{content:"✓"}.mf-theme-menu-panel button:hover,.mf-theme-menu-panel button:focus-visible{background:var(--mf-surface);outline:0}.mf-footer-link,.mf-footer-link:visited{color:#19b7fa}.mf-back-link{margin-bottom:1rem}.mf-page{margin-bottom:4em}.mf-visually-hidden{clip:rect(0, 0, 0, 0);clip-path:inset(50%);white-space:nowrap;border:0;width:1px;height:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}html .mf-public-search{background:var(--mf-background);color:var(--mf-text);margin:auto;position:fixed;inset:0}html .mf-public-search::backdrop{background:#0f172a73}.mf-search-page h1{margin-bottom:1.25rem}.mf-search-page-form{margin:0}.mf-search-control{border:1px solid var(--mf-border);background:var(--mf-background);border-radius:.7rem;grid-template-columns:minmax(0,1fr) auto;transition:border-color .12s,box-shadow .12s;display:grid;overflow:hidden}.mf-search-control:focus-within{border-color:var(--mf-accent);box-shadow:0 0 0 .2rem var(--mf-accent)}@supports (color:color-mix(in lab, red, red)){.mf-search-control:focus-within{box-shadow:0 0 0 .2rem color-mix(in srgb, var(--mf-accent) 20%, transparent)}}.mf-search-control input[type=search]{box-sizing:border-box;background:var(--mf-background);width:100%;min-width:0;color:var(--mf-text);font:inherit;border:0;border-radius:0;outline:0;padding:.75rem .9rem}.mf-search-control input[type=search]::placeholder{color:var(--mf-muted)}.mf-search-control button{border:0;border-left:1px solid var(--mf-accent);background:var(--mf-accent);color:var(--mf-background);cursor:pointer;font:inherit;justify-content:center;align-items:center;gap:.45rem;padding:.75rem 1rem;font-weight:650;transition:filter .12s;display:inline-flex}.mf-search-control button:hover{filter:brightness(.92)}.mf-search-control button:focus-visible{outline:3px solid var(--mf-accent)}@supports (color:color-mix(in lab, red, red)){.mf-search-control button:focus-visible{outline:3px solid color-mix(in srgb, var(--mf-accent) 28%, transparent)}}.mf-search-control button:focus-visible{outline-offset:-4px}.mf-search-page-results{gap:.35rem;margin-top:1.25rem;display:grid}.mf-search-page-results .mf-public-search-result{border-color:var(--mf-border);background:var(--mf-background);color:var(--mf-accent)}.mf-search-page-results .mf-public-search-result:visited{color:var(--mf-accent)}.mf-search-page-results .mf-public-search-result:hover,.mf-search-page-results .mf-public-search-result:focus-visible{background:var(--mf-surface);opacity:1}.mf-search-page-results .mf-public-search-result__details{color:var(--mf-muted);-webkit-line-clamp:2;-webkit-box-orient:vertical;margin:.2rem 0 0;font-size:.84em;font-weight:400;line-height:1.45;display:-webkit-box;overflow:hidden}.mf-search-page-results .mf-public-search-result__details mark{background:var(--mf-accent);border-radius:.2em}@supports (color:color-mix(in lab, red, red)){.mf-search-page-results .mf-public-search-result__details mark{background:color-mix(in srgb, var(--mf-accent) 16%, transparent)}}.mf-search-page-results .mf-public-search-result__details mark{color:inherit;font-weight:650}.mf-rich-content{--mf-rich-block-gap:1rem;line-height:1.6}.mf-rich-content>*{margin-block:0}.mf-rich-content>*+*{margin-top:var(--mf-rich-block-gap)}section{margin-bottom:4em}h1{font-size:2em}h2{font-size:1.5em}h3{font-size:1.25em}p,ul,ol{margin-top:0;margin-bottom:.5em}a,a:visited{color:var(--mf-accent);font-weight:500;text-decoration:none}a:hover{opacity:.65}img{max-width:100%}:not(pre)>code{border:1px solid var(--mf-border);background:var(--mf-surface);-webkit-box-decoration-break:clone;box-decoration-break:clone;color:var(--mf-text);overflow-wrap:anywhere;border-radius:.35em;padding:.1em .35em;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-size:.9em}pre{box-sizing:border-box;border:1px solid var(--mf-border);background:var(--mf-surface);tab-size:2;white-space:pre;border-radius:.5em;max-width:100%;margin:1em 0;padding:1em;line-height:1.5;overflow-x:auto}pre code{color:var(--mf-text);overflow-wrap:normal;background:0 0;border:0;padding:0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-size:.9em;display:block}.flex{display:flex}.flex-none{flex:none}.flex-1{flex:1}.items-center{align-items:center}.justify-center{justify-content:center}.flex-wrap{flex-wrap:wrap}.px-2{padding-left:.5em;padding-right:.5em}.mb-1{margin-bottom:.25em}.mb-2{margin-bottom:.5em}.mb-4{margin-bottom:1em}.mt-2{margin-top:.5em}.mt-4{margin-top:1em}.ml-1{margin-left:.25em}.mr-4{margin-right:1em}.one-line{-webkit-line-clamp:1;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden}.text-sm{font-size:.8em}.text-lg{font-size:1.25em}.text-muted{color:var(--mf-muted)}.img-lg{max-width:7.5em;box-shadow:.2em .2em .2em var(--mf-border);border-radius:.8em}.img-md{max-width:3.5em;box-shadow:.1em .1em .1em var(--mf-border);border-radius:.2em}.img-sm{border-radius:.2em;width:1em;max-width:1em;height:1em}.border-t{border-top:1px solid var(--mf-border)}.border-b{border-bottom:1px solid var(--mf-border)}.text-center{text-align:center}.w-full{width:100%}.font-bold{font-weight:700}@media only screen and (width<=768px){html:not(.rss-document){padding-left:1em;padding-right:1em}.hide-mobile{display:none}.mf-site-nav{gap:.6rem}.mf-site-brand{order:1;max-width:6rem;margin-right:auto}.mf-site-brand img{width:1.8rem;height:1.8rem}.mf-site-search{display:none}.mf-search-icon-button{order:2;width:2.5rem;height:2.5rem;padding:0;display:inline-flex}.mf-nav-links{flex:none;order:3}.mf-nav-links>a{display:none}.mf-nav-overflow summary{border:1px solid var(--mf-border);background:var(--mf-background);width:2.5rem;height:2.5rem;color:var(--mf-text);border-radius:.5rem;justify-content:center;padding:0}.mf-nav-overflow-label,.mf-nav-overflow-chevron{display:none}.mf-nav-overflow-menu-icon{display:block}.mf-nav-overflow[open] summary .mf-nav-overflow-menu-icon{transform:none}.mf-theme-menu{order:4}.mf-search-control button{padding-inline:.85rem}.mf-search-control button span{display:none}}.icon-arrow-left:before{content:"←"}.icon-arrow-right:before{content:"→"}@keyframes background-color-palette{0%,to{background:var(--mf-border)}25%,75%{background:color-mix(in srgb, var(--mf-border) 85%, var(--mf-muted))}50%{background:var(--mf-muted)}}.loader{background-color:var(--mf-border);width:100%;height:20em;animation:10s infinite alternate background-color-palette}@media (prefers-reduced-motion:reduce){.loader{animation:none}}html.rss-document{background:var(--mf-text);max-width:none;min-height:100%;margin:0;padding:0}@supports (color:color-mix(in lab, red, red)){html.rss-document{background:color-mix(in srgb, var(--mf-text) 3%, var(--mf-background))}}html.rss-document *{box-sizing:border-box}body.rss-page{background:var(--mf-text);max-width:none;min-height:100dvh;margin:0;padding:1rem;display:block}@supports (color:color-mix(in lab, red, red)){body.rss-page{background:color-mix(in srgb, var(--mf-text) 3%, var(--mf-background))}}body.rss-page{color:var(--mf-text)}@supports (color:color-mix(in lab, red, red)){body.rss-page{color:color-mix(in srgb, var(--mf-text) 80%, transparent)}}body.rss-page{font-size:.75rem;line-height:1.7}.rss-page .rss-container{border:1px solid var(--mf-text);flex-direction:column;max-width:50rem;min-height:calc(100dvh - 2rem);padding:1.875rem;display:flex}@supports (color:color-mix(in lab, red, red)){.rss-page .rss-container{border:1px solid color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .rss-container{background:var(--mf-background);box-shadow:0 .125rem .1875rem var(--mf-text);border-radius:.5rem;margin:0 auto}@supports (color:color-mix(in lab, red, red)){.rss-page .rss-container{box-shadow:0 .125rem .1875rem color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .rss-content{flex:1 0 auto}.rss-page section{margin-bottom:0}.rss-page .podcast-header{margin-bottom:1.25rem}.rss-page .podcast-header-image-title{display:flex}.rss-page .podcast-image{margin-bottom:1.25rem;margin-right:1.25rem}.rss-page .podcast-image img{border:1px solid var(--mf-text);width:12.5rem;height:auto}@supports (color:color-mix(in lab, red, red)){.rss-page .podcast-image img{border:1px solid color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .podcast-image img{box-shadow:0 0 1.25rem var(--mf-text);border-radius:.25rem}@supports (color:color-mix(in lab, red, red)){.rss-page .podcast-image img{box-shadow:0 0 1.25rem color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .podcast-author,.rss-page .episode-time{color:var(--mf-muted)}.rss-page .category-container{margin-bottom:1rem;font-size:.75rem}.rss-page .category-item{border:1px solid var(--mf-muted);background:var(--mf-muted);color:var(--mf-background);border-radius:.25rem;margin:.25rem;padding:.25rem;display:inline-block}.rss-page .item{clear:both;border-top:1px solid var(--mf-text);padding:1.5rem 0}@supports (color:color-mix(in lab, red, red)){.rss-page .item{border-top:1px solid color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .item h2,.rss-page .item p,.rss-page .item a{line-height:1.7}.rss-page .episode-image img{border-radius:.3125rem;width:6.25rem;height:auto;margin:0 1.875rem .9375rem 0}.rss-page audio,.rss-page video{border-radius:.25rem;width:100%}.rss-page .enclosure-link{margin-top:.75rem;display:inline-block}.rss-page .pagination{border-top:1px solid var(--mf-text);justify-content:center;padding-top:2.5rem;display:flex}@supports (color:color-mix(in lab, red, red)){.rss-page .pagination{border-top:1px solid color-mix(in srgb, var(--mf-text) 10%, transparent)}}.rss-page .pagination a{border:1px solid var(--mf-accent);border-radius:.25rem;margin:0 .5rem;padding:0 1rem}.rss-page footer{color:var(--mf-muted);text-align:center;border-top:0;flex:none;margin-top:5rem;padding-top:1rem}@media only screen and (width<=768px){body.rss-page{padding:.5rem}.rss-page .rss-container{min-height:calc(100dvh - 1rem);padding:1rem}.rss-page .podcast-header-image-title{display:block}.rss-page .podcast-image{margin-right:0}.rss-page .podcast-image img{width:9rem}}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-outline-style{syntax:"*";inherits:false;initial-value:solid}
+/*$vite$:1*/
+  /* Same canvas as the book and reading pages (ADR-0013): the home page used to
+     be plain white while the other two had their own greys. */
+  body:has(.mf-home-page) { background: var(--mf-page-bg); }
+  .mf-home-page { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
+  .mf-home-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+  .mf-home-heading h2 { font-size: 22px; font-weight: 600; color: var(--mf-text); }
+  .mf-home-heading span { font-size: 13px; color: var(--mf-muted); }
+  .mf-home-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  /* Raised surface, so a book card reads the same as a .mf-detail-card. */
+  .mf-home-card {
+    display: flex; gap: 16px; text-decoration: none; color: inherit;
+    background: var(--mf-background);
+    border-radius: var(--mf-radius-card);
+    padding: 1.25rem;
+  }
+  .mf-home-card:hover { opacity: 1; box-shadow: var(--mf-shadow-card); }
+  .mf-home-cover {
+    width: 96px; height: 128px; border-radius: var(--mf-radius-control); flex-shrink: 0;
+    object-fit: cover;
+    background: var(--mf-cover-gradient);
+  }
+  .mf-home-cover-empty {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--mf-on-accent); font-size: 20px; font-weight: 600;
+  }
+  .mf-home-info { display: flex; flex-direction: column; justify-content: flex-start; flex: 1; min-width: 0; }
+  .mf-home-title {
+    font-size: 18px; font-weight: 600; color: var(--mf-text); margin-bottom: 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mf-home-author { font-size: 13px; color: var(--mf-muted); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mf-home-desc {
+    font-size: 13px; color: var(--mf-muted); line-height: 1.5; margin-bottom: 12px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mf-home-status { font-size: 12px; color: var(--mf-muted); margin-top: auto; }
+  .mf-home-empty { color: var(--mf-muted); padding: 40px 0; text-align: center; }
+  @media (max-width: 1024px) { .mf-home-grid { grid-template-columns: repeat(2, 1fr); } } /* ADR-0013: 网格专属断点，2→3列切换 */
+  @media (max-width: 768px) { .mf-home-grid { grid-template-columns: 1fr; } }

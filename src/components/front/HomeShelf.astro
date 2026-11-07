@@ -1,0 +1,45 @@
+---
+/**
+ * 首页书架：结构沿用 themes/feed-zh/web-home.mustache。
+ * 字数与连载状态两段按 ADR-0066 决策 5 删除，封面与简介保留。
+ */
+import type {CatalogBook} from "@/server/catalog/books";
+import type {CatalogGroup} from "@/server/catalog/groups";
+
+interface Props {
+  books: CatalogBook[];
+  groups: CatalogGroup[];
+}
+
+const {books, groups} = Astro.props;
+const groupLabels = new Map(groups.map((group) => [group.key, group.label]));
+---
+
+<main class="mf-home-page">
+  <div class="mf-home-heading">
+    <h2>书库</h2>
+    <span>共 {books.length} 本作品</span>
+  </div>
+
+  {books.length === 0 && (
+    <div class="mf-home-empty">书库暂时还没有书，去后台添加一本吧。</div>
+  )}
+
+  <div class="mf-home-grid">
+    {books.map((book) => (
+      <a class="mf-home-card" href={book.url}>
+        {book.image ? (
+          <img class="mf-home-cover" src={book.image} alt={book.title} loading="lazy" />
+        ) : (
+          <span class="mf-home-cover mf-home-cover-empty">书</span>
+        )}
+        <div class="mf-home-info">
+          <h3 class="mf-home-title">{book.title}</h3>
+          <p class="mf-home-author">{book.author || "未知作者"}</p>
+          {book.description && <p class="mf-home-desc">{book.description}</p>}
+          <small class="mf-home-status">{groupLabels.get(book.caseDivision) ?? ""}</small>
+        </div>
+      </a>
+    ))}
+  </div>
+</main>

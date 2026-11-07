@@ -1,0 +1,170 @@
+---
+/**
+ * 书页 / 卷页共用视图：结构沿用 themes/feed-zh/web-feed.mustache。
+ * 字数、章节数、最近更新按 ADR-0066 决策 5 删除；「附：方剂」块保留并换源。
+ */
+import type {CatalogBook} from "@/server/catalog/books";
+import type {CatalogTermEntry, CatalogFangRef} from "@/server/catalog/entries";
+
+interface VolumeLink {
+  id: string;
+  name: string;
+  nameHtml: string;
+  url: string;
+}
+
+interface SectionView {
+  id: string;
+  bodyHtml: string;
+}
+
+interface Props {
+  view: "book" | "volume";
+  book: CatalogBook;
+  categoryLabel?: string;
+  volumes?: VolumeLink[];
+  terms?: CatalogTermEntry[];
+  fang?: CatalogFangRef[];
+  volumeName?: string;
+  volumeNameHtml?: string | null;
+  volumeNameText?: string;
+  volumeSections?: SectionView[];
+  prevVolume?: {text: string; url: string} | null;
+  nextVolume?: {text: string; url: string} | null;
+}
+
+const {
+  view,
+  book,
+  categoryLabel = "",
+  volumes = [],
+  terms = [],
+  fang = [],
+  volumeName = "",
+  volumeNameHtml = null,
+  volumeNameText = "",
+  volumeSections = [],
+  prevVolume = null,
+  nextVolume = null,
+} = Astro.props;
+const bookUrl = book.url;
+const firstChapterUrl = volumes.length > 0 ? volumes[0]!.url : "#";
+---
+
+{view === "volume" ? (
+  <main class="mf-volume-page">
+    <div class="mf-detail-container">
+      <nav class="mf-breadcrumb" aria-label="面包屑">
+        <a href="/">首页</a><span>/</span><a href={bookUrl}>{book.title}</a><span>/</span><span>{volumeNameText || volumeName}</span>
+      </nav>
+
+      <header class="mf-volume-head">
+        <h1 class="mf-volume-title">
+          {volumeNameHtml ? <Fragment set:html={volumeNameHtml} /> : volumeName}
+          <span class="mf-volume-count">共 {volumeSections.length} 条</span>
+        </h1>
+      </header>
+
+      <div class="mf-volume-body">
+        {volumeSections.length === 0 && <div class="mf-detail-empty">本卷暂无内容</div>}
+        {volumeSections.map((section) => (
+          <article class="mf-volume-section" id={`mf-toc-${section.id}`}>
+            <div class="mf-rich-content mf-reader-body"><Fragment set:html={section.bodyHtml} /></div>
+          </article>
+        ))}
+      </div>
+
+      <nav class="mf-volume-nav" aria-label="卷导航">
+        {prevVolume && <a class="mf-detail-btn" href={prevVolume.url}>上一卷 · {prevVolume.text}</a>}
+        <a class="mf-detail-btn" href={bookUrl}>返回目录</a>
+        {nextVolume && <a class="mf-detail-btn" href={nextVolume.url}>下一卷 · {nextVolume.text}</a>}
+      </nav>
+    </div>
+  </main>
+) : (
+  <main class="mf-book-detail-page">
+    <div class="mf-detail-container">
+      <nav class="mf-breadcrumb" aria-label="面包屑">
+        <a href="/">首页</a><span>/</span><span>{book.title}</span>
+      </nav>
+
+      <section class="mf-detail-card mf-book-header-card">
+        <div class="mf-detail-cover-wrap">
+          {book.image ? (
+            <img class="mf-detail-cover" src={book.image} alt={book.title} loading="lazy" />
+          ) : (
+            <div class="mf-detail-cover mf-detail-cover-empty">暂无封面</div>
+          )}
+        </div>
+
+        <div class="mf-detail-main">
+          <h1 class="mf-detail-title">{book.title}</h1>
+          <div class="mf-detail-tags">
+            {categoryLabel && <span class="mf-detail-tag">{categoryLabel}</span>}
+          </div>
+
+          <div class="mf-detail-actions">
+            <a class="mf-detail-btn" href={firstChapterUrl} data-mf-detail-start>开始阅读</a>
+            <a class="mf-detail-btn" href="#mf-detail-catalog">查看目录</a>
+            <button class="mf-detail-btn" type="button" data-mf-copy-link aria-label="分享本书">分享</button>
+          </div>
+        </div>
+
+        <aside class="mf-author-card">
+          <div class="mf-author-avatar" aria-hidden="true">{book.author || "佚"}</div>
+          <div class="mf-author-name"><span class="mf-author-badge">作者</span>{book.author || "未知作者"}</div>
+          <div class="mf-author-desc">用心写出不一样的故事</div>
+        </aside>
+      </section>
+
+      <section class="mf-detail-card mf-detail-content-card">
+        <h2 class="mf-detail-section-title">作品简介</h2>
+        {book.description ? (
+          <div class="mf-detail-intro mf-rich-content">{book.description}</div>
+        ) : (
+          <div class="mf-detail-empty">暂无作品简介</div>
+        )}
+      </section>
+
+      <section class="mf-detail-card mf-detail-content-card" id="mf-detail-catalog">
+        <h2 class="mf-detail-section-title">目录 · {volumes.length}卷</h2>
+        <div class="mf-detail-volume-title">卷目录 <span>共 {volumes.length} 卷</span></div>
+        <div class="mf-detail-chapter-grid">
+          {volumes.map((volume) => (
+            <div class="mf-toc-item mf-detail-chapter-item" id={`mf-toc-${volume.id}`}>
+              <a href={volume.url}>
+                {volume.nameHtml ? <Fragment set:html={volume.nameHtml} /> : volume.name}
+              </a>
+            </div>
+          ))}
+        </div>
+        {terms.length > 0 && (
+          <>
+            <h2 class="mf-detail-section-title">名词 · {terms.length}条</h2>
+            <div class="mf-detail-chapter-grid">
+              {terms.map((term) => (
+                <div class="mf-toc-item mf-detail-chapter-item" id={`mf-toc-${term.id}`}>
+                  <a href={`/ming-ci/${term.id}/`}>{term.name}</a>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      {fang.length > 0 && (
+        <section class="mf-detail-card mf-detail-content-card" id="mf-detail-fang">
+          <h2 class="mf-detail-section-title">附：方剂 · {fang.length}首</h2>
+          <div class="mf-detail-volume-title">方剂目录 <span>共 {fang.length} 首</span></div>
+          <div class="mf-detail-chapter-grid">
+            {fang.map((entry) => (
+              <div class="mf-toc-item" id={`mf-toc-${entry.id}`}>
+                <a href={`/fang-yao/${entry.id}/`}>{entry.name}</a>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  </main>
+)}

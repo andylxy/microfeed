@@ -1,0 +1,77 @@
+---
+/**
+ * 前台头部：结构、class 名与 themes/feed-zh/web-body-start.mustache 一致。
+ * 分类导航改由独立模块的分组清单驱动，固定页来自 pages 表。
+ */
+import type {FrontSite} from "@/server/catalog/site";
+import type {CatalogGroup} from "@/server/catalog/groups";
+
+interface Props {
+  site: FrontSite;
+  groups: CatalogGroup[];
+  activeGroupKey?: string;
+}
+
+const {site, groups, activeGroupKey} = Astro.props;
+---
+
+<header class="fq-header" data-microfeed-site-nav>
+  <div class="fq-header-inner">
+    <div class="fq-header-left">
+      <a class="fq-logo" href="/" aria-label={`${site.title} 首页`}>
+        <span class="fq-logo-icon" aria-hidden="true"></span>
+        <span class="fq-logo-text">{site.title}</span>
+      </a>
+
+      <nav class="fq-nav" aria-label="站点导航">
+        {groups.map((group) => (
+          <a
+            href={`/category/${group.key}/`}
+            rel="tag"
+            class={activeGroupKey === group.key ? "active" : undefined}
+          >{group.label}</a>
+        ))}
+        {site.navPages.map((page) => (
+          <a href={page.url} data-microfeed-nav-item>{page.label}</a>
+        ))}
+      </nav>
+    </div>
+
+    <div class="fq-header-right">
+      <div class="mf-theme-menu" data-microfeed-theme-menu>
+        <button
+          type="button"
+          class="mf-theme-trigger"
+          aria-label="颜色主题：浅色"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          data-microfeed-theme-trigger
+        >
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="system" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 22h8M12 18v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
+          </svg>
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="light" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"/>
+          </svg>
+          <svg class="mf-theme-trigger-icon" data-microfeed-theme-icon="dark" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/>
+          </svg>
+        </button>
+        <div class="mf-theme-menu-panel" role="menu" aria-label="颜色主题" hidden>
+          <div class="mf-theme-menu-label">颜色主题</div>
+          <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="system">
+            <span>跟随系统</span>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked="true" data-microfeed-theme-option="light">
+            <span>浅色</span>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-microfeed-theme-option="dark">
+            <span>深色</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
