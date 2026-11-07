@@ -10,7 +10,6 @@ import {
 import {ArrowDownIcon, ArrowUpIcon, ChevronRightIcon, PencilIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
-import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import AdminSelect from "@/components/admin/shared/AdminSelect";
@@ -20,8 +19,7 @@ import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
-import MarkdownPreview from "@uiw/react-markdown-preview";
-import remarkBreaks from "remark-breaks";
+import AdminMarkdownPreview from "@/components/admin/shared/AdminMarkdownPreview";
 import {
   AdminCollectionError,
   AdminCollectionLoading,
@@ -311,8 +309,6 @@ export default function MingCiApp() {
   const [groupError, setGroupError] = useState<string | null>(null);
 
   // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
-  const colorMode = useColorMode();
-
   const groups = board.groups;
   const sourceBooks = board.sourceBooks;
   const nouns = board.nouns;
@@ -910,18 +906,11 @@ export default function MingCiApp() {
               {selectedNoun.mingCiText && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">{t("mingCi.textLabel")}</dt>
-                  {/* 只读态也走 Markdown 渲染，与编辑态所见一致：作者键入的语法
-                      在此渲染成最终形态（配 remark-breaks 让换行与编辑预览同观感）。 */}
+                  {/* 只读态走共享 AdminMarkdownPreview 渲染，与编辑态所见一致：作者键入的
+                      语法在此渲染成最终形态。缩进代码块横向撑破的根因与三层防御
+                      见组件内注释与 docs/novel-cms/admin-markdown-preview.md。 */}
                   <dd className="mt-1">
-                    <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
-                      <MarkdownPreview
-                        remarkPlugins={[remarkBreaks]}
-                        source={selectedNoun.mingCiText}
-                        wrapperElement={
-                          colorMode ? {"data-color-mode": colorMode} : undefined
-                        }
-                      />
-                    </div>
+                    <AdminMarkdownPreview source={selectedNoun.mingCiText} />
                   </dd>
                 </div>
               )}

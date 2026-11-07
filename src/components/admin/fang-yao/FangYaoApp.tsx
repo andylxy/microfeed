@@ -10,7 +10,6 @@ import {
 import {ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
-import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import AdminInput from "@/components/admin/shared/AdminInput";
@@ -21,8 +20,7 @@ import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import {Button} from "@/components/ui/button";
-import MarkdownPreview from "@uiw/react-markdown-preview";
-import remarkBreaks from "remark-breaks";
+import AdminMarkdownPreview from "@/components/admin/shared/AdminMarkdownPreview";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import {UNGROUPED_KEY} from "@/shared/FangYao";
 import type {
@@ -370,8 +368,6 @@ export default function FangYaoApp() {
   const [bodyConfirmingPurge, setBodyConfirmingPurge] = useState<FangYaoBodyAdmin | null>(null);
 
   // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
-  const colorMode = useColorMode();
-
   const formulas = board.formulas;
   const liveFormulas = formulas.filter((formula) => !formula.isDeleted);
   const deletedFormulas = formulas.filter((formula) => formula.isDeleted);
@@ -946,22 +942,12 @@ export default function FangYaoApp() {
               )}
               <div className="sm:col-span-2">
                 <dt className="text-xs text-muted-foreground">{t("fangYao.fangTextLabel")}</dt>
-                {/* 只读态也走 Markdown 渲染，与编辑态所见一致：方文里的 $ 标记
-                    原样呈现，配 remark-breaks 让换行与编辑预览同观感（ADR-0065：
-                    方文逐字存储，这里只渲染不改写）。
-                    tab 缩进行会被 Markdown 当代码块 <pre>，库默认 white-space:
-                    pre 不换行，长行横向拉伸——这里让 <pre> 也按容器宽换行
-                    （whitespace-pre-wrap + break-words），不出现横向滚动条。 */}
+                {/* 只读态走共享 AdminMarkdownPreview 渲染，与编辑态所见一致：方文里的
+                    $ 标记原样呈现，方文逐字存储、这里只渲染不改写（ADR-0065）。
+                    缩进代码块横向撑破的根因与三层防御见组件内注释与
+                    docs/novel-cms/admin-markdown-preview.md。 */}
                 <dd className="mt-1">
-                  <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm [&_.wmde-markdown]:break-words [&_.wmde-markdown_pre]:whitespace-pre-wrap [&_.wmde-markdown_pre]:break-words">
-                    <MarkdownPreview
-                      remarkPlugins={[remarkBreaks]}
-                      source={selectedFormula.fangText}
-                      wrapperElement={
-                        colorMode ? {"data-color-mode": colorMode} : undefined
-                      }
-                    />
-                  </div>
+                  <AdminMarkdownPreview source={selectedFormula.fangText} />
                 </dd>
               </div>
             </dl>

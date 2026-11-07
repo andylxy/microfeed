@@ -68,7 +68,7 @@ ming-ci 的「出厂默认数据」全部通过**迁移 seed 固化**，部署�
 
 ## 名词内容字段（Markdown）
 
-`ming_ci_text` 在编辑态用 `AdminMarkdownEditor`（自带 `$m{}/$n{}/$x{}/$a{}` 标注工具栏，与 tcm 正文编辑器同款），**只读详情态也走 `MarkdownPreview` + `remark-breaks` 渲染**，与编辑预览所见一致。内容以 Markdown 源码原样存库，不做预处理；`whitespace-pre-wrap` 的旧裸文本展示已弃用。
+`ming_ci_text` 在编辑态用 `AdminMarkdownEditor`（自带 `$m{}/$n{}/$x{}/$a{}` 标注工具栏，与 tcm 正文编辑器同款），**只读详情态走共享的 `AdminMarkdownPreview` 组件渲染**，与编辑预览所见一致。内容以 Markdown 源码原样存库，不做预处理；`whitespace-pre-wrap` 的旧裸文本展示已弃用。组件的横向撑破防御与用法见 [`docs/novel-cms/admin-markdown-preview.md`](../novel-cms/admin-markdown-preview.md)。
 
 ## 后台端点
 

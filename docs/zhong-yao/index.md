@@ -36,9 +36,10 @@ D1 环境）自动 apply，无需手动录入，与 book-info / ming-ci 模块�
 ## 本草内容字段（Markdown）
 
 `zhong_yao_text` 在编辑态用 `AdminMarkdownEditor`（Markdown 源码编辑器，含标注工具栏，
-与名词/正文编辑器同款），**只读详情态也走 `MarkdownPreview` + `remark-breaks` 渲染**，
+与名词/正文编辑器同款），**只读详情态走共享的 `AdminMarkdownPreview` 组件渲染**，
 与编辑预览所见一致；预览明暗跟随 `<html data-color-mode>`。内容以 Markdown 源码原样存库，
-不做预处理：
+不做预处理（组件用法与横向撑破防御见
+[`docs/novel-cms/admin-markdown-preview.md`](../novel-cms/admin-markdown-preview.md)）：
 
 - 源数据的真实换行（MySQL dump 的 `\r\n`/`\n` 转义序列在导入期已解析为真实换行）
   经 `remark-breaks` 渲染为换行；字面转义序列不会被当作换行。

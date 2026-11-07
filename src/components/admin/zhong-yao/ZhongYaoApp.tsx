@@ -10,15 +10,13 @@ import {
 import {PencilIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
-import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminInput from "@/components/admin/shared/AdminInput";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
 import AdminMarkdownEditor from "@/components/admin/shared/AdminMarkdownEditor";
-import MarkdownPreview from "@uiw/react-markdown-preview";
-import remarkBreaks from "remark-breaks";
+import AdminMarkdownPreview from "@/components/admin/shared/AdminMarkdownPreview";
 import {
   AdminCollectionError,
   AdminCollectionLoading,
@@ -197,8 +195,6 @@ export default function ZhongYaoApp() {
   const searchQuery = listSearch.trim().toLowerCase();
 
   // 只读详情视图的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
-  const colorMode = useColorMode();
-
   /** 回到只读详情：退出编辑/新建、清空表单。`clearSelection` = 连选中的本草一起清
    *  （删除/物理删除后无本草可看）；false = 保留选中、只退出表单（取消编辑回详情）。 */
   const resetDetail = (clearSelection: boolean) => {
@@ -576,19 +572,12 @@ export default function ZhongYaoApp() {
               {selectedHerb.zhongYaoText && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">{t("zhongYao.textLabel")}</dt>
-                  {/* 只读态也走 Markdown 渲染，与编辑态所见一致：作者键入的语法
-                      在此渲染成最终形态（配 remark-breaks 让换行与编辑预览同观感）。
-                      `$u{}`/`$q{}` 本草标记作为内容本体原样保留，不做解析。 */}
+                  {/* 只读态走共享 AdminMarkdownPreview 渲染，与编辑态所见一致：作者键入的
+                      语法在此渲染成最终形态，`$u{}`/`$q{}` 本草标记作为内容本体
+                      原样保留、不做解析。缩进代码块横向撑破的根因与三层防御见
+                      组件内注释与 docs/novel-cms/admin-markdown-preview.md。 */}
                   <dd className="mt-1">
-                    <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
-                      <MarkdownPreview
-                        remarkPlugins={[remarkBreaks]}
-                        source={selectedHerb.zhongYaoText}
-                        wrapperElement={
-                          colorMode ? {"data-color-mode": colorMode} : undefined
-                        }
-                      />
-                    </div>
+                    <AdminMarkdownPreview source={selectedHerb.zhongYaoText} />
                   </dd>
                 </div>
               )}

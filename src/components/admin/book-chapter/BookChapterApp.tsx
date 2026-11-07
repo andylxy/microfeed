@@ -10,7 +10,6 @@ import {
 import {ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon} from "lucide-react";
 
 import {showToast} from "@/client/ToastUtils";
-import {useColorMode} from "@/client/useColorMode";
 import {useTranslation} from "@/client/i18n";
 import AdminDialog from "@/components/admin/shared/AdminDialog";
 import AdminInput from "@/components/admin/shared/AdminInput";
@@ -21,9 +20,7 @@ import type {AdminTreeGroup} from "@/components/admin/shared/AdminGroupTree";
 import {AdminTreeNavLayout} from "@/components/admin/shared/AdminTreeNavLayout";
 import {AdminTreeSearchInput} from "@/components/admin/shared/AdminTreeSearchInput";
 import AdminSwitch from "@/components/admin/shared/AdminSwitch";
-import MarkdownPreview from "@uiw/react-markdown-preview";
-import remarkBreaks from "remark-breaks";
-import remarkNoIndentedCode from "@/components/admin/shared/AdminMarkdownEditor/remarkNoIndentedCode";
+import AdminMarkdownPreview from "@/components/admin/shared/AdminMarkdownPreview";
 import {Button} from "@/components/ui/button";
 import {ADMIN_URLS} from "@/shared/StringUtils";
 import type {
@@ -310,7 +307,7 @@ function ChapterForm({
 
 /** 正文表单，作为 `AdminDialog` 的内容（卡片与标题由弹层提供）。
  *  正文与注释用共享的 Markdown 源码编辑器，**原样提交不 trim**；只读详情
- *  用 `MarkdownPreview` 渲染同一份源码。`creating` 区分新建/编辑——
+ *  用共享的 `AdminMarkdownPreview` 渲染同一份源码。`creating` 区分新建/编辑——
  *  序号（receipt_no）一律由系统给：新建自动 `MAX(receipt_no)+1`、编辑锁死
  *  不可改，故该输入框始终禁用（新建留空占位，编辑显示原值）。 */
 function BodyForm({
@@ -460,13 +457,6 @@ export default function BookChapterApp() {
   const [treeSearch, setTreeSearch] = useState("");
   const searchActive = treeSearch.trim().length > 0;
   const searchQuery = treeSearch.trim().toLowerCase();
-
-  // 只读正文的 Markdown 预览明暗：与 AdminMarkdownEditor 同源（共享 hook）。
-  // 两个只读开关都为 false 时预览根本不渲染，就不挂观察器，省一个常驻
-  // MutationObserver。
-  const colorMode = useColorMode(
-    SHOW_FULL_BODY_TEXT_IN_DETAIL || SHOW_BODY_NOTE_IN_DETAIL,
-  );
 
   // ---- 正文（按选中卷章按需拉取） ----
   const [bodies, setBodies] = useState<BookChapterBodyAdmin[]>([]);
@@ -1179,15 +1169,7 @@ export default function BookChapterApp() {
                         {t("bookChapter.bodyTextLabel")}
                       </div>
                       {SHOW_FULL_BODY_TEXT_IN_DETAIL ? (
-                        <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
-                          <MarkdownPreview
-                            remarkPlugins={[remarkBreaks, remarkNoIndentedCode]}
-                            source={body.sectionText}
-                            wrapperElement={
-                              colorMode ? {"data-color-mode": colorMode} : undefined
-                            }
-                          />
-                        </div>
+                        <AdminMarkdownPreview source={body.sectionText} />
                       ) : (
                         <BodyTextPreviewLine text={body.sectionText} />
                       )}
@@ -1197,15 +1179,7 @@ export default function BookChapterApp() {
                         <div className="mb-1 text-xs text-muted-foreground">
                           {t("bookChapter.bodyNoteLabel")}
                         </div>
-                        <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
-                          <MarkdownPreview
-                            remarkPlugins={[remarkBreaks, remarkNoIndentedCode]}
-                            source={body.sectionNote}
-                            wrapperElement={
-                              colorMode ? {"data-color-mode": colorMode} : undefined
-                            }
-                          />
-                        </div>
+                        <AdminMarkdownPreview source={body.sectionNote} />
                       </div>
                     )}
                     {body.bencaoYaoName && (
