@@ -211,7 +211,6 @@ describe("buildTcmMarkerLayer — 新模块引用解析", () => {
     const data = popoverData(layer);
     expect(Object.keys(data).sort()).toEqual(["F1", "Y1", "Y2"]);
     expect(data.F1!.kind).toBe("fang");
-    expect(data.F1!.url).toBe("/fang-yao/F1/");
     expect(data.F1!.yao?.map((row) => row.name)).toEqual(["吴茱萸", "人参"]);
     // F1 正文里的 $u{人参} 是嵌套标记，浮层内部同样可点
     expect(data.F1!.body).toContain('<a href="/zhongyao/Y2/">');

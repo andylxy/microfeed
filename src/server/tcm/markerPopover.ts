@@ -46,7 +46,6 @@ export interface TcmPopoverEntry {
   yao?: Array<{name: string; amount: string; suffix: string; extra: string}>;
   /** 已渲染的正文 HTML（内部标记同样可点）。 */
   body: string;
-  url: string;
 }
 
 export interface TcmMarkerLayer {
@@ -387,7 +386,6 @@ export async function buildTcmMarkerLayer(
           }
         : {}),
       body,
-      url: detail.url,
     };
     for (const name of childNames.fang) {
       const ref = fangByName.get(name);
