@@ -132,41 +132,67 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
   text-decoration: underline dotted currentColor;
   text-underline-offset: 2px;
 }
+/* 布局只写在 [open] 上：裸 dialog 的 display 得留给 UA 的
+   dialog:not([open]){display:none}，否则关闭态也会被 author 的 display:flex
+   顶开，在页面加载时渲染成一块 70vh 白盒（上半页白屏的根因）。 */
 .mf-tcm-dialog {
-  max-width: 36rem;
-  width: calc(100vw - 2rem);
+  width: 70vw;
+  height: 70vh;
+  max-width: none;
   border: 1px solid #e2e2e2;
   border-radius: 12px;
   background: #fff;
   color: #1a1a1a;
   padding: 0;
 }
+.mf-tcm-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+/* 点药材：从方剂浮层进入药材详情，弹窗收到父窗口 65%。 */
+.mf-tcm-dialog.mf-tcm-yao {
+  width: 65vw;
+  height: 65vh;
+}
 .mf-tcm-dialog::backdrop { background: rgb(0 0 0 / 45%); }
-.mf-tcm-head { display: flex; align-items: baseline; gap: .5em; padding: 1rem 1.25rem .5rem; }
+.mf-tcm-head { display: flex; align-items: baseline; gap: .5em; padding: 1rem 1.25rem .5rem; flex: 0 0 auto; }
 .mf-tcm-head h2 { margin: 0; font-size: 1.1em; }
 .mf-tcm-meta { color: #6b6b6b; font-size: .8em; }
+/* 右上角关闭键复用项目的圆形图标按钮（同 PublicSearch 的关闭键）：
+   内联 SVG 画 X，不用原生 × 字符。 */
 .mf-tcm-close {
-  margin-left: auto; border: 0; background: transparent; color: #6b6b6b;
-  font-size: 1.2em; cursor: pointer; line-height: 1; padding: .1em .3em;
+  margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem; padding: 0; border: 0; border-radius: 999px;
+  background: var(--mf-surface, #f6f8fa); color: var(--mf-muted, #57606a);
+  cursor: pointer; line-height: 1;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
 }
-.mf-tcm-body { padding: 0 1.25rem 1.25rem; max-height: 62vh; overflow-y: auto; line-height: 1.7; }
+.mf-tcm-close:hover { background: var(--mf-border, #d0d7de); color: var(--mf-text, #1a1a1a); }
+.mf-tcm-close:active { transform: scale(0.94); }
+/* 正文里的换行是数据的一部分（同前台阅读层 .mf-reader-body）：pre-wrap
+   让字面 \n 与段首缩进原样呈现，不被 normal 折叠成一片。 */
+.mf-tcm-body { padding: 0 1.25rem; flex: 1 1 auto; overflow-y: auto; line-height: 1.7; white-space: pre-wrap; }
 .mf-tcm-table { width: 100%; border-collapse: collapse; font-size: .92em; margin-top: .25em; }
 .mf-tcm-table th, .mf-tcm-table td { text-align: left; padding: .35em .5em; border-bottom: 1px solid #eee; }
 .mf-tcm-table th { color: #6b6b6b; font-weight: 500; }
-.mf-tcm-link { display: inline-block; margin-top: 1em; font-size: .85em; color: #2563eb; }
-.mf-tcm-back {
-  display: inline-block; margin-top: 1em; font-size: .85em; color: #2563eb;
-  background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+/* 返回键贴弹窗底边、水平居中；按钮本身复用项目胶囊按钮 .mf-detail-btn。 */
+.mf-tcm-foot {
+  flex: 0 0 auto; display: flex; justify-content: center;
+  padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #eee;
 }
-.mf-tcm-back:hover { text-decoration: underline; }
 </style>
 <dialog class="mf-tcm-dialog" id="mf-tcm-dialog" aria-labelledby="mf-tcm-title">
   <div class="mf-tcm-head">
     <h2 id="mf-tcm-title"></h2>
     <span class="mf-tcm-meta" id="mf-tcm-meta"></span>
-    <button type="button" class="mf-tcm-close" id="mf-tcm-close" aria-label="关闭">×</button>
+    <button type="button" class="mf-tcm-close" id="mf-tcm-close" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+    </button>
   </div>
   <div class="mf-tcm-body" id="mf-tcm-body"></div>
+  <div class="mf-tcm-foot">
+    <button type="button" class="mf-detail-btn" id="mf-tcm-back" data-back="1">返回</button>
+  </div>
 </dialog>
 <script type="application/json" id="mf-tcm-data">${payload}</script>
 <script>
@@ -186,6 +212,8 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
   function render(f) {
     titleEl.textContent = f.name;
     metaEl.textContent = f.meta || '';
+    // 方剂浮层占父窗口 70%，点药材进入的详情收到 65%（药方 70% / 药材 65%）。
+    dlg.classList.toggle('mf-tcm-yao', f.kind === 'yao');
     var inner = '';
     if (f.kind === 'fang' && f.yao && f.yao.length) {
       var rows = f.yao.map(function (y) {
@@ -196,8 +224,6 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
         rows + '</tbody></table>';
     }
     if (f.body) inner += '<div>' + f.body + '</div>';
-    inner += '<a class="mf-tcm-link" href="' + esc(f.url) + '">查看条目</a>';
-    inner += '<button type="button" class="mf-tcm-back" data-back="1">返回</button>';
     bodyEl.innerHTML = inner;
   }
   function open(id) {
@@ -215,7 +241,16 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
     if (!stack.length) return;
     stack.pop();
     if (stack.length) render(DATA[stack[stack.length - 1]]);
-    else dlg.close();
+    else close();
+  }
+  // 真模态：只有「关闭 / 返回」这两条主动路径能关掉浮层。close() 先放开
+  // allowClose 再调 dialog.close()；除此之外的任何关闭请求（点 backdrop、
+  // ESC 触发的 cancel）一律拦下，避免点空白处就把浮层关掉。
+  var allowClose = false;
+  function close() {
+    allowClose = true;
+    dlg.close();
+    allowClose = false;
   }
   document.addEventListener('click', function (e) {
     var t = e.target;
@@ -230,20 +265,22 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
   });
   document.getElementById('mf-tcm-close').addEventListener('click', function (e) {
     e.preventDefault();
-    back();
+    stack.length = 0;
+    close();
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && dlg.open) {
       e.preventDefault();
       e.stopPropagation();
-      back();
     }
   }, true);
+  dlg.addEventListener('cancel', function (e) {
+    // ESC / 其它 dismiss 请求：非主动关闭一律阻止默认的关闭行为。
+    if (!allowClose) e.preventDefault();
+  });
   dlg.addEventListener('click', function (e) {
-    if (e.target === dlg) {
-      stack.length = 0;
-      dlg.close();
-    }
+    // 点在 dialog 自身（= backdrop 空白处）不关闭；只有内部控件能关。
+    if (e.target === dlg) e.preventDefault();
   });
 })();
 </script>`;
