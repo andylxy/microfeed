@@ -1,8 +1,8 @@
 /**
  * 前台 sitemap 的 URL 集合与 XML 生成（ADR-0066 决策 14，规范 §3.4）。
  *
- * 只列 `deleted_at IS NULL` 的行，不按 `is_enable` 过滤；卷页 URL 用
- * `book_chapter.id`，三条条目路由用各自新表 id，旧地址不进 sitemap。
+ * 只列 `deleted_at IS NULL` 且 `hot_book = 0`（公开）的行，不按 `is_enable` 过滤；
+ * 卷页 URL 用 `book_chapter.id`，三条条目路由用各自新表 id，旧地址不进 sitemap。
  */
 import {listGroups} from "./groups";
 
@@ -62,7 +62,7 @@ export async function listSitemapEntries(
   };
 
   const books = await db
-    .prepare("SELECT id, updated_at FROM book_info WHERE deleted_at IS NULL")
+    .prepare("SELECT id, updated_at FROM book_info WHERE deleted_at IS NULL AND hot_book = 0")
     .all<UpdatedRow>();
   append(books.results ?? [], (id) => `/book/${id}/`);
 
@@ -70,7 +70,8 @@ export async function listSitemapEntries(
     .prepare(
       "SELECT c.id, c.source_book_id, c.updated_at FROM book_chapter c " +
         "WHERE c.deleted_at IS NULL AND EXISTS " +
-        "(SELECT 1 FROM book_info b WHERE b.id = c.source_book_id AND b.deleted_at IS NULL)",
+        "(SELECT 1 FROM book_info b WHERE b.id = c.source_book_id " +
+        "AND b.deleted_at IS NULL AND b.hot_book = 0)",
     )
     .all<VolumeRow>();
   for (const row of volumes.results ?? []) {

@@ -214,37 +214,6 @@ export async function getTermEntry(
   };
 }
 
-/** 书页「名词」区块：只列名词，中药没有归属字段，不造聚合。 */
-export async function listTermsByBook(
-  db: D1Database,
-  bookInfoId: string,
-): Promise<CatalogTermEntry[]> {
-  const {results} = await db
-    .prepare(
-      "SELECT id, ming_ci_no, ming_ci_name, ming_ci_bei_ming, ming_ci_text, " +
-        "ming_ci_list, source_book_id, show_image FROM ming_ci " +
-        "WHERE source_book_id = ? AND deleted_at IS NULL ORDER BY ming_ci_no",
-    )
-    .bind(bookInfoId)
-    .all<TermRow>();
-  if ((results ?? []).length === 0) return [];
-  const styles = await loadMarkerStyles(db);
-  return (results ?? []).map((row) => {
-    const text = String(row.ming_ci_text ?? "");
-    return {
-      kind: "term" as const,
-      id: String(row.id),
-      no: Number(row.ming_ci_no ?? 0),
-      name: String(row.ming_ci_name ?? ""),
-      alias: String(row.ming_ci_bei_ming ?? ""),
-      textHtml: renderBodyHtml(text, styles),
-      textSource: renderBodySource(text),
-      image: String(row.show_image ?? ""),
-      bookId: row.source_book_id ? String(row.source_book_id) : null,
-    };
-  });
-}
-
 /** 书页「附：方剂」块：book_info.book_no → fang_yao.source_book_legacy_id。 */
 export async function listFangByBook(
   db: D1Database,

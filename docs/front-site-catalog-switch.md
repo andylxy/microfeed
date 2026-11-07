@@ -74,7 +74,7 @@
 
 ## 2. 全局口径（先定这个，再谈实现）
 
-### 2.1 可见性：只用 `deleted_at IS NULL`
+### 2.1 可见性：`deleted_at IS NULL`，书级另加 `hot_book = 0`
 
 **禁止在前台用 `is_enable` 过滤。** 实测代价：
 
@@ -86,9 +86,11 @@
 
 `is_enable` 在独立模块里是导入期语义（本草条目标记、方剂是否有组成、来源卷状态），与「发布」无关。
 
-**同样禁止引入 `channels.status` / `ext_book_status`。** 旧链路靠它们表达「会员/隐藏」，新引擎不继承这个语义，也不做双源判据。`book_info.hot_book` 同样不作可见判据——当前 10 本真实书全是 `1`（状态清单 `1=隐藏`），两行容器书是 `0`（公开但已软删），按它判会得到「前台 0 本」或「含容器书的 12 本」两种错结果。
+**同样禁止引入 `channels.status` / `ext_book_status`。** 旧链路靠它们表达「会员/隐藏」，新引擎不继承这个语义，也不做双源判据。
 
-直接后果：`伤寒金匮・宋版`、`金匮要略・宋版` 会出现在分类「伤寒金匮」（3→5 本）与首页（9→10 张）。这是「不读 `channels`」的代价，已被用户接受。
+**书级另加 `book_info.hot_book = 0` 判据**（2026-11-07 会话修订）：`hot_book` 是 `book_info` 自带状态列（迁移 0173，`0 公开 / 1 隐藏 / 2 会员`），与旧频道状态无耦合，直接用作书级发布判据。**只对 `book_info` 行生效**——卷/正文/条目仍只看 `deleted_at`，不加书级条件（**sitemap 卷页枚举是例外**：为不产出隐藏书卷的 404 URL，卷查询的 `book_info` EXISTS 子查询额外过滤 `hot_book = 0`，见 §3.4）。
+
+直接后果：现网非软删 10 本中公开 6 本（桂林古本、神农本草经疏、金匮宋版、难经、灵枢、素问），分类与首页只列这 6 本；`伤寒金匮・宋版`（`hot_book=1` 隐藏）与人纪三本（`hot_book=2` 会员）不再出现。旧链路里金匮宋版按 `channels.status=10`（会员）本不显示，现因 `hot_book=0` 公开而出现——这是「不读 `channels`」加上「书级公开判据」的共同结果，已被用户接受。
 
 ### 2.2 正文渲染：按 `bencao_yao_name` 分流
 
@@ -131,7 +133,7 @@ import {loadBookGroups} from "@/server/book-info/groups";
 export interface CatalogGroup {
   key: string;        // = settings.book_groups.key = book_info.case_division = /category/<key>/ 的 slug
   label: string;      // 显示名（如 伤寒金匮）
-  bookCount: number;  // 该分组下 book_info 行数（deleted_at IS NULL）
+  bookCount: number;  // 该分组下公开书行数（deleted_at IS NULL 且 hot_book = 0）
 }
 
 export async function listGroups(db: D1Database): Promise<CatalogGroup[]>;
@@ -159,7 +161,7 @@ export async function getBookInfoById(db: D1Database, id: string): Promise<Catal
 export async function listAllBooks(db: D1Database): Promise<CatalogBook[]>;  // 首页书架
 ```
 
-过滤口径：`deleted_at IS NULL`（不加 `is_enable`）。排序按 `book_name`。分组显示名（`categoryName`）由调用方用 `listGroups()` 的 map 补，不在 `books.ts` 里再查一次 `settings`。
+过滤口径：`deleted_at IS NULL` 且 `hot_book = 0`（不加 `is_enable`）。排序按 `book_name`。分组显示名（`categoryName`）由调用方用 `listGroups()` 的 map 补，不在 `books.ts` 里再查一次 `settings`。
 
 **确实没有对应数据、必须从组件里删掉的字段**：`serialStatus` / `serialStatusLabel`（旧值取自 `_microfeed.serialStatus`）、`wordCount` / `wordCountLabel`（旧值取自 `ext_book_stats`）。这两个字段在旧模板里都有回落分支（「连载中」「暂无字数」），删掉后书卡少两段文字，与 ADR-0066 决策 5 一致。封面与简介不回归。
 
@@ -226,8 +228,8 @@ export async function getTermEntry(db: D1Database, id: string): Promise<CatalogT
 // 三条各自单表点查（+ fang_yao_body 一次列表；fang 另按 book_no 点查 book_info 取所属书）
 // WHERE deleted_at IS NULL
 
-export async function listTermsByBook(db: D1Database, bookInfoId: string): Promise<CatalogTermEntry[]>;
-// 见 §5.5：只列名词（ming_ci.source_book_id）；中药无归属字段，不提供按书聚合，故不叫 `listFlatEntries`
+// 书页「名词」区块与 listTermsByBook 已删除（2026-11-07 会话修订，§5.5）：名词只在
+// /ming-ci/<id>/ 单条可达，从正文 $g 标记进入；中药无归属字段，不提供按书聚合。
 
 export interface CatalogFangRef {
   id: string;    // fang_yao.id → /fang-yao/<id>/
@@ -324,7 +326,7 @@ export interface FrontSite {
 | 站点隐藏策略 | `hidePublicWeb(content)` ← `settings.access.currentPolicy`（经 `loadFeed` 带出） | `loadFrontSite().accessPolicy` 点查 `settings` 的 `access` 行（实测 `{"currentPolicy":"public"}`）；`headless`/`offline` 仍 404，行为不变 |
 | 导航固定页 | `publicFeed.navigation_pages` ← `@/server/pages/service` 的 `navigationPages()`，读 **`pages` 表**（`status != DELETED` 且启用导航的行） | `catalog/site` 的 `navigationPages()`，同一张 `pages` 表（已并入 §1 的十处允许来源）。**不是 settings** —— settings 里没有任何页面配置。当前 `pages` 仅 2 行（`system-404`、about 已删），导航实际为空 |
 | 主题设置对前台的作用 | 后台换主题即换前台外观 | 失效（§3.3）。后台主题页保留，只影响预览 |
-| `sitemap.xml` | 经 `publicSiteFileResponse` 取 `publicFeed.items` + `listPages` | 新增 `catalog/sitemap.ts` 生成：`/`、3 个分类页、10 个书页、445 个卷页、804 个方剂页、172 个中药页、17 个名词页；`lastmod` 取各表 `updated_at`（七张表都有此列，无需省略分支） |
+| `sitemap.xml` | 经 `publicSiteFileResponse` 取 `publicFeed.items` + `listPages` | 新增 `catalog/sitemap.ts` 生成：`/`、3 个分类页、6 个书页（公开）、对应公开书的卷页、804 个方剂页、172 个中药页、17 个名词页；`lastmod` 取各表 `updated_at`（七张表都有此列，无需省略分支） |
 | `rss/`（`index.ts` + `stylesheet.ts`） | `rssFeedResponse` 读 `publicFeed.items` | **删除**（同一批处理：路由与 `pages/i/[slug]/rss/` 一并退场） |
 | `json/`（`index.ts`）与 `pages/i/[slug]/json/` | `jsonFeedResponse` 读 `publicFeed`（整份 JSON Feed，含 `items`） | **删除**。它与 `rss` 是同一类公开订阅输出（`subscribe_methods` 里 `json` 与 `rss` 并列、都由 `PUBLIC_URLS` 自动填 URL），只删 rss 会留一条旧的 `channels`+`items` 出口。主题页脚不渲染订阅链接，删除不影响站内导航 |
 | `llms.txt` / `llms-full.txt` / `api/llms*` | `llmsContent` 读 `publicFeed` | **删除三个路由**；`server/site-files/public.ts` 里的 `llmsContent` 分支保留不删（模块本次不重构） |
@@ -333,7 +335,7 @@ export interface FrontSite {
 | `404.astro` | 先 `loadPublicPageRoute(env, request, "404")` 找自定义 404 页；`[...path].astro` 同时承担后台路径的 404 渲染 | 去掉这次查询，公共路径只渲染 `PublicNotFoundHeading`（无自定义 404 页的站点表现与今天一致）；`[...path].astro` 下线后，它原有的后台 404 分支（`isAdminPathname` → `AdminShell` → `adminPageNotFound`，注入缺失时抛 `adminContextUninitialized`）整段迁入 `404.astro`，避免后台未匹配地址退化成公共标题。这是删路由的必要连带处理，后台代码没有新增功能 |
 | 中间件 | 每个非 App 请求都跑 `loadFeed`，注入 `locals.feedContent`/`feedDb`/`feedCrud`（`src/middleware.ts:485`） | **不改**。前台页面不再消费这份注入，但请求仍会触发一次 `channels` 读；记为已知例外，见 §6 |
 
-`sitemap.xml` 的口径与 §2.1 一致：只列 `deleted_at IS NULL` 的行，不按 `is_enable` 过滤。三条条目页与卷页的 id 全部是新模块 id，旧地址不进 sitemap。
+`sitemap.xml` 的口径与 §2.1 一致：只列 `deleted_at IS NULL` 的行，书级另加 `hot_book = 0`，不按 `is_enable` 过滤。三条条目页与卷页的 id 全部是新模块 id，旧地址不进 sitemap。
 
 #### P1 裁决：③ 把 4 个字段搬进 `settings`
 
@@ -530,7 +532,7 @@ SQL 过滤只加 `deleted_at IS NULL`（**不加 `is_enable`**，否则 1001000 
 | `novel_detail.author` | `channels.data.authors[0].name` | `book_info.author` | 5 本由空变有值 |
 | `novel_detail.firstChapterUrl` | `/book/<id>/v/<首卷 id>/` | 同（卷 id 换 `book_chapter.id`） | — |
 | `book_fang[]`（「附：方剂」块） | `getTcmBookFang`：`items WHERE tcm_kind='fang' AND json_extract(data,'$._microfeed.sourceBookId')=?` | `listFangByBook`：`book_info.book_no` → `fang_yao WHERE source_book_legacy_id=?`（§4.3 同一条链） | 5 本书共 804 首，**块必须保留**；排序沿用 `fang_no` |
-| `book_terms[]`（「名词」区块） | `getTcmBookEntries` 里 `tcm_kind='term'` 的部分 | `listTermsByBook`（`ming_ci.source_book_id`） | §5.5 |
+| ~~`book_terms[]`（「名词」区块）~~ | `getTcmBookEntries` 里 `tcm_kind='term'` 的部分 | **删除**（2026-11-07 会话修订；正文 `$g` 标记仍链接 `/ming-ci/[id]/`） | §5.5 |
 | ~~`novel_detail.totalWordCount`~~ | `ext_book_stats` | **删除** | — |
 | ~~`novel_detail.totalChapterCount`~~ | `ext_book_stats` | **删除** | — |
 | ~~`novel_detail.latestChapter*`~~ | `getLatestBookSection`（items） | **删除** | — |
@@ -556,18 +558,21 @@ SQL 过滤只加 `deleted_at IS NULL`（**不加 `is_enable`**，否则 1001000 
 | 条目 | 新表的归属能力 | 前台呈现 |
 | --- | --- | --- |
 | 中药 | `zhong_yao` 没有归属字段 | **不做书页聚合**，只在 `/zhongyao/[id]/` 单条可达，从条文里的 `$u` 浮层进入 |
-| 名词 | `ming_ci.source_book_id` 存在，分散在 4 本真实书（伤寒论・人纪 8、神农本草经疏 7、伤寒杂病论 1、黄帝内经・灵枢 1） | 归入各自真实书的扁平目录；书页的「名词」区块按 `source_book_id` 取 |
+| 名词 | `ming_ci.source_book_id` 存在，分散在 4 本真实书（伤寒论・人纪 8、神农本草经疏 7、伤寒杂病论 1、黄帝内经・灵枢 1） | **书页目录不再列名词**（2026-11-07 会话修订），只在 `/ming-ci/[id]/` 单条可达，从正文里的 `$g` 标记进入 |
 
-`listTermsByBook` 只查名词，不为 `zhong_yao` 造一个归属字段。
+`listTermsByBook` 已随书页「名词」区块一并删除（无其他调用方）；不为 `zhong_yao` 造归属字段。
 
 ### 5.6 内容可见范围变化
 
-| 位置 | 旧 | 新 | 原因 |
-| --- | --- | --- | --- |
-| 分类「伤寒金匮」书数 | 3 | 5 | `伤寒金匮・宋版`、`金匮要略・宋版` 在旧链路是 `channels.status=10`（会员，`public_visible=0`）；新引擎不引入这个判据 |
-| 首页书架 | 9 张 | 10 张 | 同上 +2，主频道「肘后斋」−1 |
+书级判据 = `book_info.hot_book = 0`（§2.1 修订），只对 `book_info` 行生效。现网非软删 10 本中公开 6 本：
 
-这是「不读 `channels`」的直接代价，已确认接受。`book_info.hot_book` 也不能用来还原这个范围（现值与状态语义冲突，见 §2.1）。
+| 分类 | 非软删 | 公开（`hot_book=0`） | 说明 |
+| --- | --- | --- | --- |
+| 伤寒金匮 | 5 | 2 | 桂林古本、金匮宋版；伤寒金匮・宋版隐藏、人纪两本会员 |
+| 本草 | 2 | 1 | 神农本草经疏；人纪神农本草经会员 |
+| 内经 | 3 | 3 | 难经、灵枢、素问 |
+
+首页书架与分类只列这 6 本公开书（原按 `channels.status` 判「会员/隐藏」的两本宋版书，现按 `hot_book` 判：金匮宋版公开出现、伤寒金匮宋版隐藏不出现）。这是「不读 `channels`」加上「书级公开判据」的共同结果，已确认接受。旧链路数值（分类 3、首页 9 张）基于 `channels.status`，与本模块无对应列，不再作为对照基线。
 
 **站点外壳不产生显示变化**（R16 裁决 ③）：`<html lang>` 仍是 `en-us`、页脚版权仍是 `©2026`、站点图标仍是 `channel-image.png`——4 个缺失键由 `data` 迁移从主频道复制后写进 `settings`，`favicon` 改写成现网生效值。`description`/`publisher` 旧值本就为空，迁移写入空串。唯一非显示层的连带变化：`settings.favicon` 从 legacy 默认图变为频道图（后台卡片显示「已有自定义图标」），以及这 4 个键暂时没有后台编辑入口（§3.4）。
 
@@ -591,8 +596,8 @@ SQL 过滤只加 `deleted_at IS NULL`（**不加 `is_enable`**，否则 1001000 
 - **门禁只在手动触发时跑**（AGENTS.md「最高指令」）。测试只写不跑。
 - **解耦门禁**：`scripts/check-front-site-decoupling.ts`，手动触发 `node --import tsx scripts/check-front-site-decoupling.ts`；不并入 `yarn check`，也不并入 `microfeed-gate-subset`。扫描范围就是下面「解耦断言」逐字列出的那一份，四处已知例外显式登记。规则编号 `DECOUPLE-001`～`006` 分别覆盖禁用词、内容表可见性、方剂书作用域、旧地址兼容痕迹、旧出口退场、新路由齐备。执行期的 `.scratch/front-site-catalog-switch/verify.mjs` 是这份清单的临时镜像，只做静态自检，不调用项目门禁。判定细则：`DECOUPLE-002` 拒绝 `FROM ${...}` 动态表名（改显式 SQL 才能静态核对可见性）；`DECOUPLE-003` 在剥注释后的 `loadFangRefsForBook` / `listFangByBook` 函数体里核对 `source_book_legacy_id = ?`，注释里出现字面量不算通过；`DECOUPLE-004` 只认重定向语义里的 301，尺寸与数值字面量不参与判定。
 - **契约/运行时测试**（实施清单第 21 步，只写）：`tests/unit/server/catalog-contract.test.ts` 覆盖 `catalog/*` 七个模块取数形状、`/category/[key]/` 解析、三条新条目路由、书页「附：方剂」块、`loadFrontSite` 的缺行回落、旧地址 404、不写 301、方剂不跨书解析、引用解析基线（固定语料口径复算）；`tests/unit/server/tcm-marker-popover.test.ts` 随标注层改源整体重写夹具与断言（旧版本全量依赖 `items` + `ext_marker_citations` + `/i/`，切源后无法成立）。
-- **数据不变式断言**（防将来任一侧漂移）：分类 3 组、书 alive 10、卷 445、正文 8,066、方剂 804、中药 172、名词 17、`(source_book_id, chapter_section)` 唯一、`receipt_no` 全局唯一。
-- **口径断言**：`catalog/*` 的 SQL 不得出现 `is_enable`（可写成静态检查）；本草分流按 `bencao_yao_name` 判定。
+- **数据不变式断言**（防将来任一侧漂移）：分类 3 组、书 alive 10（其中公开 `hot_book=0` 6）、卷 445、正文 8,066、方剂 804、中药 172、名词 17、`(source_book_id, chapter_section)` 唯一、`receipt_no` 全局唯一。
+- **口径断言**：`catalog/*` 的 SQL 不得出现 `is_enable`（可写成静态检查），书级判据 `hot_book = 0` 为允许项（§2.1 修订）；本草分流按 `bencao_yao_name` 判定。
 - **解耦断言**（D1/D5/站点壳裁决的落地）：① `src/server/catalog/**`、四条前台页面、三条条目路由、`markerPopover.ts`、`sitemap.xml.ts` 的源码里不得出现 `items`/`channels`/`ext_category`/`ext_book_stats`/`ext_book_status`/`legacy_item_id`/`ext_marker_citations`/`ensureMarkerCitations`；② 同样范围不得出现 `loadPublishedFeed`/`loadFeed`/`getPublicJsonData`/`publicFeed`/`new Theme`/`themeContext`/`renderThemeTemplate`；③ 方剂解析不得出书——给《金匮要略・人纪》的正文塞一个只登记在宋版的方名，须渲染为纯文本；④ 旧地址一律 404——旧卷 id、旧条目 id、`/category/<ext_category.id>/` 三条各一例，断言 404、不写 301。扫描范围明确不含 `src/middleware.ts`、`src/pages/robots.txt.ts`、`src/server/site-files/public.ts`、`src/server/feed/siteNav.ts` 四处（前两处是 §6 的已知例外，后两处是后台/站点文件模块，本次不重构）。注释与 `front-decoupling:ignore-start/end` 后台专用区段不参与判定，理由见 §4.6。P1 裁决 ③ 之后 `site.ts` **不需要任何白名单**——它不读 `channels`，4 个站壳字段全来自 `settings`。
 - **引用解析断言必须固定语料**：验收基线是「新名表 + §2.2 分流语料」= `$f` 1,534/1,585、`$u` 44/57。只读 `section_text` 会得到 `$u` 33/36、统一 `st+sn` 会得到 48/62，两者都不是本次渲染口径，写进断言会误判。复算用 `.scratch/catalog-audit/audit-matrix.py`。测试只在固定语料上复算口径，不读 `docs/` 散文、不把全量数字硬编成第二份真源（AGENTS.md 硬性红线）；全量数字由只读探针取证。
 - **视觉回归**：前台改组件后，取值不变的页面（首页/分类/书页/卷页的 DOM 结构）应与改前逐块对照 class 名与层级；CSS 与脚本是原样搬运，不允许「顺手优化」；`front-site.ts` 里来自 mustache 资产的 14 条英文注释随资产保留，作为「注释用中文」的已登记例外（新增说明一律中文，见 §9 第 9 步）。这项靠人工对照存档截图，不写成自动断言。

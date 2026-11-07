@@ -15,9 +15,7 @@ import {
   type CatalogVolume,
 } from "@/server/catalog/chapters";
 import {
-  listTermsByBook,
   listFangByBook,
-  type CatalogTermEntry,
   type CatalogFangRef,
 } from "@/server/catalog/entries";
 
@@ -32,14 +30,12 @@ if (unavailable) {
 }
 
 let volumes: CatalogVolume[] = [];
-let terms: CatalogTermEntry[] = [];
 let fang: CatalogFangRef[] = [];
 let groups: CatalogGroup[] = [];
 let styles: TcmMarkerStyle[] = [];
 if (book && !unavailable) {
-  [volumes, terms, fang, groups, styles] = await Promise.all([
+  [volumes, fang, groups, styles] = await Promise.all([
     listVolumesByBook(db, bookId),
-    listTermsByBook(db, bookId),
     listFangByBook(db, bookId),
     listGroups(db),
     loadMarkerStyles(db),
@@ -66,7 +62,6 @@ const volumeLinks = volumes.map((volume) => ({
       book={book}
       categoryLabel={categoryLabel}
       volumes={volumeLinks}
-      terms={terms}
       fang={fang}
     />
   </FrontLayout>

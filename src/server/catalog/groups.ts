@@ -2,7 +2,8 @@
  * 前台题材分类只读层（ADR-0066 决策 2）。
  *
  * 分组清单的真源是 `settings.book_groups`，书本数由 `book_info.case_division`
- * 聚合，不经过旧分类表。函数只收 `D1Database`，页面用 `env.FEED_DB` 传入。
+ * 聚合（只算公开书，`hot_book = 0`，ADR-0066 决策 12），不经过旧分类表。
+ * 函数只收 `D1Database`，页面用 `env.FEED_DB` 传入。
  */
 import {loadBookGroups} from "@/server/book-info/groups";
 
@@ -20,7 +21,7 @@ export async function listGroups(db: D1Database): Promise<CatalogGroup[]> {
   const {results} = await db
     .prepare(
       "SELECT case_division AS division, COUNT(*) AS total " +
-        "FROM book_info WHERE deleted_at IS NULL GROUP BY case_division",
+        "FROM book_info WHERE deleted_at IS NULL AND hot_book = 0 GROUP BY case_division",
     )
     .all<{division: string | null; total: number}>();
   const counts = new Map<string, number>();
@@ -45,7 +46,7 @@ export async function getGroupByKey(
   const row = await db
     .prepare(
       "SELECT COUNT(*) AS total FROM book_info " +
-        "WHERE case_division = ? AND deleted_at IS NULL",
+        "WHERE case_division = ? AND deleted_at IS NULL AND hot_book = 0",
     )
     .bind(slug)
     .first<{total: number}>();

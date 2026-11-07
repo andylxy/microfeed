@@ -36,7 +36,6 @@ import {
   getTermEntry,
   getYaoEntry,
   listFangByBook,
-  listTermsByBook,
 } from "@/server/catalog/entries";
 import {
   findYaoRefByName,
@@ -72,7 +71,7 @@ function emptyDatabase(): D1Database {
     );
     CREATE TABLE book_info (
       id TEXT PRIMARY KEY, book_name TEXT, image_url TEXT, author TEXT,
-      comment TEXT, case_division TEXT, book_no TEXT,
+      comment TEXT, case_division TEXT, book_no TEXT, hot_book INTEGER,
       updated_at TEXT, deleted_at TEXT
     );
     CREATE TABLE book_chapter (
@@ -110,10 +109,10 @@ function emptyDatabase(): D1Database {
       (code, color, small_font, small_font_scale, link_type, sort_order) VALUES
       ('u', '#2a7', 0, 0.7, 1, 0), ('f', '#a23', 0, 0.7, 2, 1);
     INSERT INTO book_info
-      (id, book_name, image_url, author, comment, case_division, book_no, updated_at, deleted_at) VALUES
-      ('BOOK1', '伤寒论', '/cover-1.png', '张仲景', '按语。', 'shanghan', '1', '2026-11-06 13:00:04', NULL),
-      ('BOOK2', '金匮要略', '/cover-2.png', '张仲景', '按语二。', 'bencao', '2', NULL, NULL),
-      ('BOOK3', '已软删的书', '', '', '', 'shanghan', '3', NULL, '2026-11-07 00:00:00');
+      (id, book_name, image_url, author, comment, case_division, book_no, hot_book, updated_at, deleted_at) VALUES
+      ('BOOK1', '伤寒论', '/cover-1.png', '张仲景', '按语。', 'shanghan', '1', 0, '2026-11-06 13:00:04', NULL),
+      ('BOOK2', '金匮要略', '/cover-2.png', '张仲景', '按语二。', 'bencao', '2', 1, NULL, NULL),
+      ('BOOK3', '已软删的书', '', '', '', 'shanghan', '3', 0, NULL, '2026-11-07 00:00:00');
     INSERT INTO book_chapter
       (id, source_book_id, chapter_header, chapter_no, updated_at, deleted_at) VALUES
       ('C2', 'BOOK1', '辨太阳病脉证并治（下）', 2, '2026-11-06 13:00:04', NULL),
@@ -186,14 +185,14 @@ describe("§2.2 正文分流与转义", () => {
 });
 
 describe("分类与书本取数形状", () => {
-  it("分类键来自 settings.book_groups，书本数按 book_info.case_division 聚合", async () => {
+  it("分类键来自 settings.book_groups，书本数按 book_info.case_division 聚合（只算公开书）", async () => {
     const db = emptyDatabase();
     expect(await listGroups(db)).toEqual([
       {key: "shanghan", label: "伤寒金匮", bookCount: 1},
-      {key: "bencao", label: "本草", bookCount: 1},
+      {key: "bencao", label: "本草", bookCount: 0},
     ]);
     expect(await getGroupByKey(db, "bencao")).toEqual({
-      key: "bencao", label: "本草", bookCount: 1,
+      key: "bencao", label: "本草", bookCount: 0,
     });
   });
 
@@ -202,10 +201,10 @@ describe("分类与书本取数形状", () => {
     expect(await getGroupByKey(db, "feed-zh")).toBeNull();
   });
 
-  it("书列表只认 deleted_at IS NULL，url 指向 /book/<id>/", async () => {
+  it("书列表只认 deleted_at IS NULL 且 hot_book = 0（公开），url 指向 /book/<id>/", async () => {
     const db = emptyDatabase();
     const books = await listAllBooks(db);
-    expect(books.map((book) => book.id)).toEqual(["BOOK1", "BOOK2"]);
+    expect(books.map((book) => book.id)).toEqual(["BOOK1"]);
     expect(books[0]).toMatchObject({
       id: "BOOK1", title: "伤寒论", image: "/cover-1.png",
       author: "张仲景", description: "按语。", caseDivision: "shanghan",
@@ -213,6 +212,7 @@ describe("分类与书本取数形状", () => {
     });
     expect((await listBooksByGroup(db, "shanghan")).map((book) => book.id))
       .toEqual(["BOOK1"]);
+    expect(await getBookInfoById(db, "BOOK2")).toBeNull();
     expect(await getBookInfoById(db, "BOOK3")).toBeNull();
     expect(await getBookNoById(db, "BOOK1")).toBe("1");
     expect(await getBookNoById(db, "BOOK3")).toBeNull();
@@ -265,17 +265,17 @@ describe("三条条目路由与书页附录", () => {
     expect(term?.textSource).toContain("$m{按}");
   });
 
-  it("书页「名词」与「附：方剂」区块都按新表取数并限定书", async () => {
+  it("书页「附：方剂」区块按新表取数并限定书，目录不再列名词", async () => {
     const db = emptyDatabase();
-    expect((await listTermsByBook(db, "BOOK1")).map((term) => term.id))
-      .toEqual(["M1"]);
     const fang = await listFangByBook(db, "BOOK1");
     expect(fang.map((entry) => entry.id)).toEqual(["F1", "F2"]);
     expect(await listFangByBook(db, "BOOK3")).toEqual([]);
-    // 组件保留方剂附录，链接指向新条目路由
+    // 组件保留方剂附录，链接指向新条目路由；名词区块已从目录删除（正文 $g 标记仍在卷页渲染）
     const detail = read("src/components/front/BookDetail.astro");
     expect(detail).toContain("附：方剂");
     expect(detail).toContain("/fang-yao/${entry.id}/");
+    expect(detail).not.toContain("名词");
+    expect(detail).not.toContain("/ming-ci/");
   });
 });
 
@@ -387,6 +387,7 @@ describe("站点外壳与 sitemap", () => {
     expect(locs).toContain("https://example.com/zhongyao/Y1/");
     expect(locs).toContain("https://example.com/ming-ci/M1/");
     expect(locs.some((loc) => loc.includes("/book/BOOK3/"))).toBe(false);
+    expect(locs.some((loc) => loc.includes("/book/BOOK2/"))).toBe(false);
     expect(locs.some((loc) => loc.includes("/v/C3/"))).toBe(false);
     expect(locs.some((loc) => loc.includes("/i/"))).toBe(false);
     expect(entries.find((entry) => entry.loc.endsWith("/book/BOOK1/"))?.lastmod)
@@ -439,12 +440,12 @@ describe("D1 裁决 A：旧地址一律 404，不是 301", () => {
     expect(catalogSources).not.toContain("301");
   });
 
-  it("catalog 的 SQL 不把 is_enable / hot_book / 频道状态当发布判据", () => {
+  it("catalog 的 SQL 只认 deleted_at IS NULL 加 hot_book = 0，不把 is_enable / 频道状态当发布判据", () => {
     const catalogSources = [
       "groups", "books", "chapters", "entries", "refs", "site", "sitemap",
     ].map((name) => read(`src/server/catalog/${name}.ts`).replace(/\/\/.*$/gmu, "").replace(/\/\*[\s\S]*?\*\//gu, "")).join("\n");
     expect(catalogSources).not.toContain("is_enable");
-    expect(catalogSources).not.toContain("hot_book");
+    expect(catalogSources).toContain("hot_book");
     expect(catalogSources).toContain("deleted_at IS NULL");
   });
 });

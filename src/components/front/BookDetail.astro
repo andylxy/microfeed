@@ -4,7 +4,7 @@
  * 字数、章节数、最近更新按 ADR-0066 决策 5 删除；「附：方剂」块保留并换源。
  */
 import type {CatalogBook} from "@/server/catalog/books";
-import type {CatalogTermEntry, CatalogFangRef} from "@/server/catalog/entries";
+import type {CatalogFangRef} from "@/server/catalog/entries";
 
 interface VolumeLink {
   id: string;
@@ -23,7 +23,6 @@ interface Props {
   book: CatalogBook;
   categoryLabel?: string;
   volumes?: VolumeLink[];
-  terms?: CatalogTermEntry[];
   fang?: CatalogFangRef[];
   volumeName?: string;
   volumeNameHtml?: string | null;
@@ -38,7 +37,6 @@ const {
   book,
   categoryLabel = "",
   volumes = [],
-  terms = [],
   fang = [],
   volumeName = "",
   volumeNameHtml = null,
@@ -138,18 +136,6 @@ const firstChapterUrl = volumes.length > 0 ? volumes[0]!.url : "#";
             </div>
           ))}
         </div>
-        {terms.length > 0 && (
-          <>
-            <h2 class="mf-detail-section-title">名词 · {terms.length}条</h2>
-            <div class="mf-detail-chapter-grid">
-              {terms.map((term) => (
-                <div class="mf-toc-item mf-detail-chapter-item" id={`mf-toc-${term.id}`}>
-                  <a href={`/ming-ci/${term.id}/`}>{term.name}</a>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
       </section>
 
       {fang.length > 0 && (

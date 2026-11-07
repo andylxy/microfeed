@@ -75,7 +75,7 @@
 
 7. **中药/方剂/名词引用与条目页全部走各自模块的前台路由**（用户裁决）。前台新增三条只读路由：`/zhongyao/[id]/`、`/fang-yao/[id]/`、`/ming-ci/[id]/`，取数分别只来自 `zhong_yao`、`fang_yao`(+`fang_yao_body`)、`ming_ci`。`$u{}` 浮层链接指向 `/zhongyao/<zhong_yao.id>/`，`$f{}` 指向 `/fang-yao/<fang_yao.id>/`，名词指向 `/ming-ci/<ming_ci.id>/`。方剂页的「所属书」按 `book_no` 反查 `book_info.book_name`（实测 5/5 与 `source_book_name` 逐字相同，见核准报告 §F.4），不读导入派生的 `source_book_name`，也不展示 `source_fang_legacy_id`。旧 `/i/[slug]/`（读 `items` + `channels`）整体退场，不在切换后的前台保留任何 `items` 取数路径。
 
-8. **前台可见性一律用 `deleted_at IS NULL`，`is_enable` 不作为发布口径**（数据核准新增）。按 `is_enable=1` 过滤会丢 7,136/8,066 行正文（88.5%）、102/445 卷（22.9%）、743/1,585 次方剂引用（46.9%）——该列在独立模块里承载导入期语义（本草条目标记、方剂是否有组成、来源卷状态），与「是否发布」无关。
+8. **前台可见性一律用 `deleted_at IS NULL`，`is_enable` 不作为发布口径**（数据核准新增）。按 `is_enable=1` 过滤会丢 7,136/8,066 行正文（88.5%）、102/445 卷（22.9%）、743/1,585 次方剂引用（46.9%）——该列在独立模块里承载导入期语义（本草条目标记、方剂是否有组成、来源卷状态），与「是否发布」无关。书级另加 `hot_book = 0` 判据（决策 12 修订），只对 `book_info` 行生效，卷/正文/条目仍只看 `deleted_at`。
 
 9. **正文渲染按 `bencao_yao_name` 分流**（数据核准新增）。`bencao_yao_name` 非空的 930 行（= `is_enable=1` 的全部行）渲染 `section_text + section_note`，其余 7,136 行只渲染 `section_text`。依据：旧正文去掉空白后 100% 是两列拼接的子串（8,066/8,066）；只读 `section_text` 保留率 52.3%（本草两本 18.1%/6.7%）；统一拼接会让「伤寒论・人纪」「金匮要略・人纪」多出 720.8%/1,346.9% 的讲义内容（约 23.6 万字符）。
 
@@ -87,8 +87,7 @@
     - **手工维护的重定向表**：把 1,441 条 `旧 id → 新 id` 写进一张新表或一份静态清单，虽然不读 `items`，但数据来源仍是 `items.id`，且切换后再无真源可复核，会变成一份永久需要人工跟进的死数据。
     采纳 A：旧卷页/旧条目页/旧锚点一律 404，不写 301、不建映射表、不给任何新表加 `legacy_item_id` 这类以 `items.id` 为内容的列。分类的 3 个旧地址同理（`/category/<ext_category.id>/` 直接 404，不回查 `ext_category`）。代价是外部链接与书签失效，已知并接受：这个库的内容没有外部收录依赖，且地址稳定后不再变动。
 
-12. **可见性只看各模块自己的 `deleted_at`，不引入 `channels.status` / `ext_book_status` 任何字段**（用户裁决）。原「两本宋版书 `channels.status=10` 是否上前台」的裁决作废——`channels.status` 属于旧链路，不进入新引擎的判据。后果：`伤寒金匮・宋版`（`q6u5siNb2hT`）、`金匮要略・宋版`（`ydyQltIuQv6`）在 `book_info` 里 `deleted_at IS NULL`，会正常出现在分类「伤寒金匮」（3→5 本）与首页（9→10 张）。
-    `book_info.hot_book` 同样不作可见判据：当前 12 行里 10 本真实书全是 `1`（状态清单里 `1=隐藏`），两行容器书是 `0`（公开但已软删）——按 `hot_book` 判会得到「前台 0 本书」或「含容器书的 12 本」两种错结果。
+12. **可见性 = 各模块自己的 `deleted_at IS NULL`，不引入 `channels.status` / `ext_book_status` 任何字段；书级另加 `book_info.hot_book = 0` 判据**（2026-11-07 会话修订）。`channels.status` 属于旧链路，不进入新引擎的判据（原「两本宋版书是否上前台」的裁决作废）。`hot_book` 是 `book_info` 自带的状态列（迁移 0173，`0 公开 / 1 隐藏 / 2 会员`），与旧频道状态无耦合，直接用作书级发布判据；只对 `book_info` 行生效，卷/正文/条目仍只看 `deleted_at`（**sitemap 卷页枚举是例外**：为不产出隐藏书卷的 404 URL，卷查询的 `book_info` EXISTS 子查询额外过滤 `hot_book = 0`，见决策 14）。现网非软删 10 本中公开 6 本（`5IGM9t76quT` 桂林古本、`OsOP62cyp3j` 神农本草经疏、`ydyQltIuQv6` 金匮宋版、`tZYk25WiJ0R` 难经、`ghBqURJwurj` 灵枢、`drsRImTi5tv` 素问），隐藏 1 本（`q6u5siNb2hT` 伤寒金匮宋版），会员 3 本（人纪三本 `XNK0VFX39Xv`/`ZhuBd0Vj7kl`/`Kcb7X2K5LTh`）；两行容器书（`4KbG9bDqdz3` 中药、`tcmterm0001` 名词）已软删。前台只列这 6 本公开书。
 
 13. **中药/名词容器书不恢复、不建聚合入口**（用户裁决）。`book_info` 里「中药」（`4KbG9bDqdz3`）、「名词」（`tcmterm0001`）两行已软删（2026-11-06），不再出现在分类与首页。中药 172 条只在 `/zhongyao/[id]/` 单条可达，名词 17 条只在 `/ming-ci/[id]/` 单条可达；不再有「中药」「名词」两本书页。`zhong_yao` 无归属字段，不再造一个。
 
@@ -99,7 +98,7 @@
     - **站点外壳 4 个字段搬进 `settings`（复核补正 + 裁决 ③）**：`description`/`language`/`copyright`/`publisher` 的真源是主频道 `channels.data`——实测 `settings` 全库 13 个分类里没有任何一个含这 4 个键，`webGlobalSettings` 实际只有 `publicBucketUrl`/`favicon`/`itemsOrder`/`itemsSort`/`itemsPerPage`/`siteTitle` 六项。三条路（接受显示变化 / 让 `site.ts` 读主频道 1 行 / 搬进 `settings`）里**用户裁决 ③**：写一条 `data` 类型迁移，按实例从主频道复制这 4 个键进 `settings.webGlobalSettings`，并把 `favicon` 改写成现网生效值（当前 `settings.favicon` 等于 `LEGACY_DEFAULT_FAVICON_URL`，真实图标来自 `channel.image`）。迁移只用 `json_set`，不建表不加列，带 `-- rollback:`；`description` 存原文（读取时 `htmlToPlainText`）、`copyright` 存 `©{{current_year}}`（读取时 `resolveBuiltInTemplateVariables`），业务转换留在代码里。**代价三条**：① 本次唯一的库改动，破了「零迁移」；② 这 4 个键在 `/admin` 站点设置表单里没有编辑入口，写入后只能改库，补表单属独立工作；③ `settings.favicon` 的语义从「用户上传的图标」扩成「站点图标」，后台卡片会显示为已有自定义图标（前台输出不变）。收益是站壳零读 `channels` 且显示逐字不变——①② 各有一项做不到。
     - **视觉按 `themes/feed-zh/` 现版移植**：`web-header.mustache` 的三块 `<style>`（设计令牌 / novel 样式 / 编译后 Tailwind）与 `web-home.mustache` 的一块首页专属 `.mf-home-*` `<style>`，合计四块按原顺序原样提出为一份前台 CSS（实施时核准补入：只搬三块会丢首页书架样式）；`web-body-end.mustache` 的主题切换、图片懒加载、导航溢出脚本原样提出为前台脚本；`web-body-start`/`web-body-end` 的 header/footer 结构与 `web-home`/`web-category`/`web-feed`/`web-item` 的正文结构改写为 Astro 组件，**class 名与 DOM 层级不改**，视觉零回归。
     - **主题系统本身保留、但对前台失效**：后台的主题上传/切换/预览页与 `themes/` 目录不动，属于后台功能；前台不再受主题影响。这是明确接受的产品语义变化。
-    - **站点文件端点与自定义页一并收口**：`sitemap.xml` 改由 `catalog/sitemap` 生成（首页 + 3 个分类 + 10 本书 + 445 卷 + 993 条目，只列 `deleted_at IS NULL`），不再经 `publicSiteFileResponse` 读 `publicFeed`/`listPages`；`rss`（含 `i/[slug]/rss`）、**`json`（`/json` 与 `i/[slug]/json` 两条，与 rss 同属公开订阅输出，`subscribe_methods` 里两者并列）** 与 `llms.txt`/`llms-full.txt`/`api/llms*` 下线；`[...path].astro`（自定义页）删除；`404.astro` 去掉 `loadPublicPageRoute` 的自定义 404 查询，只渲染通用标题。`server/site-files/public.ts` 与 `middleware.ts` 不动——前者仍服务 `robots.txt` 与运行时站点文件覆盖，`robots.txt` 因此每请求仍走一次 `loadPublishedFeed`（带 items 窗口），写成第二处已知例外。
+    - **站点文件端点与自定义页一并收口**：`sitemap.xml` 改由 `catalog/sitemap` 生成（首页 + 3 个分类 + 6 本公开书 + 对应公开书的卷 + 993 条目，书级只列 `deleted_at IS NULL` 且 `hot_book = 0`），不再经 `publicSiteFileResponse` 读 `publicFeed`/`listPages`；`rss`（含 `i/[slug]/rss`）、**`json`（`/json` 与 `i/[slug]/json` 两条，与 rss 同属公开订阅输出，`subscribe_methods` 里两者并列）** 与 `llms.txt`/`llms-full.txt`/`api/llms*` 下线；`[...path].astro`（自定义页）删除；`404.astro` 去掉 `loadPublicPageRoute` 的自定义 404 查询，只渲染通用标题。`server/site-files/public.ts` 与 `middleware.ts` 不动——前者仍服务 `robots.txt` 与运行时站点文件覆盖，`robots.txt` 因此每请求仍走一次 `loadPublishedFeed`（带 items 窗口），写成第二处已知例外。
     - **站点隐藏（`hidePublicWeb`）语义保留、来源换掉**：仍读 `settings.access.currentPolicy`，但经 `loadFrontSite()` 直查，不经 `channels`。行为不变（`headless`/`offline` 时前台 404）。
 
 15. **浮层里「引用此方剂 / 引用此中药的条文」这一块在前台砍掉，不建新表**（用户裁决「换不了的砍掉不要了」+「后端 / admin 不需要改动」）。现状是前台写路径：卷页渲染 → `ensureMarkerCitations` → 整本 `SELECT ... FROM items WHERE book_id=? AND tcm_kind IN ('section','chapter')` → 扫 `$f{}`/`$u{}` → `INSERT OR REPLACE INTO ext_marker_citations`。索引的每一列都带旧体系语义（`section_id` 是 `items.id`、`section_seq` 是 items 的 rowid），必须换掉；而换成新模块要同时做三件事：
@@ -136,7 +135,7 @@
 
 六条推论：
 
-1. **可见性**只看各表的 `deleted_at`，不看 `is_enable`（决策 8）、不看 `channels.status`（决策 12）、不看 `book_info.hot_book`。
+1. **可见性** = 各表 `deleted_at IS NULL`，书级另加 `book_info.hot_book = 0`（决策 12 修订）；不看 `is_enable`（决策 8）、不看 `channels.status`（决策 12）。
 2. **旧地址不做任何兼容**（决策 11）：不写 301、不建映射表、不给新表加 `legacy_item_id` 之类以 `items.id` 为内容的列。
 3. **分类解析**不得回查 `ext_category`（决策 2）。
 4. **带 `legacy` 字样的列不是旧表依赖**：`book_info.book_no`、`fang_yao.source_book_legacy_id`（源书号 `10001` 等）、`source_book_name` 都是新表自己的列，前台读它们只做「按书作用域过滤」与回显，两侧逐字相同故可直连，不经 `channels`、不建外键；`book_chapter.source_chapter_legacy_id`、`fang_yao.source_fang_legacy_id` 只服务导入脚本与后台维护，前台 SQL 不读，也不参与任何 URL 解析。
@@ -171,8 +170,8 @@
 - **站点外壳无显示变化，但多一条迁移与一个后台缺口**（决策 14，裁决 ③）：4 个缺失键由 `data` 迁移从主频道复制进 `settings`，`favicon` 改写成现网生效值，所以 `<html lang>` 仍 `en-us`、版权仍 `©2026`、图标仍 `channel-image.png`。连带两件事：`settings.favicon` 的语义扩成「站点图标」（后台卡片显示为已有自定义图标，前台输出不变）；这 4 个键在 `/admin` 站点设置表单里没有编辑入口，改它们只能直接改库——补表单是独立工作，不在本次。
 - **书页「附：方剂」块保留**（决策 4）：5 本书共 804 首，改按 `book_info.book_no = source_book_legacy_id` 取，显示不变。
 - **标记渲染链不变**：`renderTcmMarkers`/`markersToPlainText`（`TcmMarkers.ts`）是纯函数，`section_text`/`zhong_yao_text`/`ming_ci_text` 原样存标记，渲染期处理。卷页新增一步「拼 `section_note`（仅本草）+ 转义 + 包 `<p>`」，因为旧站渲染的是 `items.description` 的 HTML。
-- **前台可见范围会扩大**：`伤寒金匮・宋版`、`金匮要略・宋版` 在旧链路的 `channels.status=10`（会员，`public_visible=0`），旧前台不显示；新引擎不引入这个判据（决策 12），两本会出现在分类「伤寒金匮」（3→5 本）与首页（9→10 张）。这是「不读 `channels`」的直接代价，且是可接受的：它们在 `book_info` 里就是两行正常的书。
-- **前台少了两个书页**：「中药」「名词」两行在 `book_info` 已软删（2026-11-06），按 `deleted_at IS NULL` 列书不再出现（决策 13）。172 条中药、17 条名词改为单条可达，聚合入口取消。
+- **前台只列公开书**：书级判据 = `book_info.hot_book = 0`（决策 12 修订）。现网 12 行里非软删 10 本，公开 6 本（桂林古本、神农本草经疏、金匮宋版、难经、灵枢、素问）；`伤寒金匮・宋版`（`hot_book=1` 隐藏）与人纪三本（`hot_book=2` 会员）不再出现在分类与首页。旧链路里金匮宋版按 `channels.status=10`（会员）本不显示，现因 `hot_book=0` 公开而出现——这是「不读 `channels`」加上「书级公开判据」的共同结果，且是可接受的：金匮宋版在 `book_info` 里就是一行公开的正常书。
+- **前台少了两个书页**：「中药」「名词」两行在 `book_info` 已软删（2026-11-06），按 `deleted_at IS NULL` 列书不再出现（决策 13）。172 条中药、17 条名词改为单条可达，聚合入口取消；书页目录也不再列名词（正文 `$g` 标记仍链接名词详情页，见决策 7），名词仅经正文标记单条可达。
 - **书卡字段来源变化**：封面取 `book_info.image_url`、作者取 `book_info.author`（10 本中 5 本有值）、简介取 `book_info.comment`、分类名取 `case_division` 对应的分组 label。字数标签消失（决策 5），连载状态不再显示（旧值取自 `_microfeed.serialStatus`，新模块无对应列）。
 
 ## 被否决的替代方案
