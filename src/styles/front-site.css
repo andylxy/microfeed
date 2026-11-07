@@ -810,14 +810,18 @@ body:has(.mf-volume-page) {
   width: 6rem;
 }
 
-.mf-library-cover-empty {
-  align-items: center;
-  color: var(--mf-on-accent);
-  display: flex;
-  font-size: .7rem;
-  justify-content: center;
-  text-align: center;
-}
+  /* 分类页无封面占位：与首页 .mf-home-cover-empty 同款线装书样式
+     （宣纸封面 + 竖排题签 .mf-cover-slip + 右侧订线），尺寸同为 6rem×3/4。 */
+  .mf-library-cover-empty {
+    position: relative; display: block; overflow: hidden;
+    background: #e8dcc0; border: 1px solid #bfae86;
+    box-shadow: inset 0 0 0 4px #e8dcc0, inset 0 0 0 5px #cdbd96;
+  }
+  .mf-library-cover-empty::after {
+    content: ""; position: absolute; top: 12px; bottom: 12px; right: 8px;
+    width: 2px;
+    background: repeating-linear-gradient(to bottom, #7a5c33 0 5px, transparent 5px 14px);
+  }
 
 .mf-library-book-info {
   min-width: 0;
@@ -1473,9 +1477,28 @@ html[data-mf-paper=sepia] {
     object-fit: cover;
     background: var(--mf-cover-gradient);
   }
+  /* 无封面时的线装书占位：宣纸封面 + 竖排题签（书名）+ 右侧线装订线。
+     传统线装书开口朝左、装订在右，题签贴左上。装饰色固定，随主题无关（与
+     .mf-home-cover 的渐变封面一致）。 */
   .mf-home-cover-empty {
-    display: flex; align-items: center; justify-content: center;
-    color: var(--mf-on-accent); font-size: 20px; font-weight: 600;
+    position: relative; display: block; overflow: hidden;
+    background: #e8dcc0; border: 1px solid #bfae86;
+    box-shadow: inset 0 0 0 4px #e8dcc0, inset 0 0 0 5px #cdbd96;
+  }
+  /* 题签：竖排书名，宣纸白签条贴左上，长书名溢出裁切。 */
+  .mf-cover-slip {
+    position: absolute; top: 8px; left: 8px;
+    max-width: 34px; max-height: 104px; padding: 6px 3px;
+    background: #f7efdb; border: 1px solid #a98f5c;
+    writing-mode: vertical-rl; text-orientation: upright;
+    font-size: 13px; line-height: 1.2; letter-spacing: 1px;
+    font-weight: 600; color: #3d3222; overflow: hidden;
+  }
+  /* 线装订线：右缘四孔装订，用重复渐变画出等距线孔。 */
+  .mf-home-cover-empty::after {
+    content: ""; position: absolute; top: 12px; bottom: 12px; right: 8px;
+    width: 2px;
+    background: repeating-linear-gradient(to bottom, #7a5c33 0 5px, transparent 5px 14px);
   }
   .mf-home-info { display: flex; flex-direction: column; justify-content: flex-start; flex: 1; min-width: 0; }
   .mf-home-title {

@@ -26,7 +26,9 @@ const {groupLabel, books} = Astro.props;
             {book.image ? (
               <img class="mf-library-cover" alt={book.title} src={book.image} loading="lazy" />
             ) : (
-              <div class="mf-library-cover mf-library-cover-empty">暂无封面</div>
+              <div class="mf-library-cover mf-library-cover-empty">
+                <span class="mf-cover-slip">{book.title}</span>
+              </div>
             )}
             <div class="mf-library-book-info">
               <h3>{book.title}</h3>

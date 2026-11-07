@@ -31,7 +31,9 @@ const groupLabels = new Map(groups.map((group) => [group.key, group.label]));
         {book.image ? (
           <img class="mf-home-cover" src={book.image} alt={book.title} loading="lazy" />
         ) : (
-          <span class="mf-home-cover mf-home-cover-empty">书</span>
+          <span class="mf-home-cover mf-home-cover-empty">
+            <span class="mf-cover-slip">{book.title}</span>
+          </span>
         )}
         <div class="mf-home-info">
           <h3 class="mf-home-title">{book.title}</h3>
