@@ -948,9 +948,12 @@ export default function FangYaoApp() {
                 <dt className="text-xs text-muted-foreground">{t("fangYao.fangTextLabel")}</dt>
                 {/* 只读态也走 Markdown 渲染，与编辑态所见一致：方文里的 $ 标记
                     原样呈现，配 remark-breaks 让换行与编辑预览同观感（ADR-0065：
-                    方文逐字存储，这里只渲染不改写）。 */}
+                    方文逐字存储，这里只渲染不改写）。
+                    tab 缩进行会被 Markdown 当代码块 <pre>，库默认 white-space:
+                    pre 不换行，长行横向拉伸——这里让 <pre> 也按容器宽换行
+                    （whitespace-pre-wrap + break-words），不出现横向滚动条。 */}
                 <dd className="mt-1">
-                  <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm">
+                  <div className="overflow-auto rounded-md border bg-muted/30 p-4 text-sm [&_.wmde-markdown]:break-words [&_.wmde-markdown_pre]:whitespace-pre-wrap [&_.wmde-markdown_pre]:break-words">
                     <MarkdownPreview
                       remarkPlugins={[remarkBreaks]}
                       source={selectedFormula.fangText}
