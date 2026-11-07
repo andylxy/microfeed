@@ -25,7 +25,6 @@
   --mf-warning: #ffb800;
   --mf-warning-bg: #fff9ed;
   --mf-warning-text: #d88900;
-  --mf-reader-night-bg: #202020;
   --mf-cover-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --mf-cover-gradient-soft: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
   --mf-avatar-gradient: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
@@ -52,11 +51,59 @@
   --mf-warning: #d9a400;
   --mf-warning-bg: #2b2416;
   --mf-warning-text: #f0c14b;
-  /* The reading page's own night switch has to stay DARKER than whatever the
-     canvas already is. Its old hard-coded #202020 was chosen when the reader
-     surface was #fff; once that surface became --mf-background (#0d1117 here)
-     pressing 夜间 would have LIGHTENED the page. */
-  --mf-reader-night-bg: #000000;
+}
+
+/* ===== 阅读页主题岛：白天 / 墨夜 / 暖色 三态 =====
+   阅读页自成一套主题，与全站白天/墨夜解耦：进阅读页由 head 内联脚本在 <html>
+   上设 data-mf-reader-theme=day|night|warm，此处重定义语义令牌；出阅读页移除
+   该属性即恢复全站主题。三态各自是一整组配套色（底色 + 字色 + muted + 边框 +
+   accent + brand/novel），切态时整组一起换；每组字色都按对应底色校过 WCAG
+   对比度（正文 ≥10:1、muted ≥4.5:1、accent/brand/novel ≥4:1），不会出现暖纸配
+   冷白字这类错配。属性选择器 (0,1,1) 高于 .dark (0,1,0)，故阅读页白天态能盖过
+   全站墨夜。
+   作用域：三态一律收窄到 .mf-reader-page 存在的页面（html:has(.mf-reader-page)）。
+   全站每页都经 FrontLayout 播种 data-mf-reader-theme，若三态全局生效，day/night
+   会以 (0,1,1) 盖过 .dark，把书页/卷页等非阅读页的画布与字色钉回白天——这正是
+   「切墨夜后书页背景没完整跟着变」的根因。收窄后非阅读页完全不吃主题岛，只认
+   全站明暗轨道。阅读页里 .fq-header 顶栏与站点 footer 本就 display:none（见
+   body:has(.mf-reader-page) 块），换装只落在阅读页自身外壳与正文上。 */
+
+/* 白天：与全站浅色同值。即便全站处于墨夜，阅读页白天态也显浅色。 */
+html[data-mf-reader-theme="day"]:has(.mf-reader-page) {
+  --mf-background: #ffffff;
+  --mf-surface: #f6f8fa;
+  --mf-text: #24292f;
+  --mf-muted: #57606a;
+  --mf-border: #dcdcdc;
+  --mf-accent: #0997cc;
+  --mf-brand: #ff4d4f;
+  --mf-novel: #ff6a00;
+}
+
+/* 墨夜：与全站深色同值。 */
+html[data-mf-reader-theme="night"]:has(.mf-reader-page) {
+  --mf-background: #0d1117;
+  --mf-surface: #161b22;
+  --mf-text: #f0f3f6;
+  --mf-muted: #9da7b3;
+  --mf-border: #30363d;
+  --mf-accent: #58c7f3;
+  --mf-brand: #ff6b6d;
+  --mf-novel: #ff8a3d;
+}
+
+/* 暖色（羊皮纸 / 护眼）：阅读页独有的第三态。纸面暖米黄、字用深棕；accent /
+   brand / novel 取同族深一档——原浅色值（#0997cc / #ff4d4f / #ff6a00）在暖底
+   只有 2.5~2.9:1，链接和 hover 字色看不清，换深色后回到 4:1 以上。 */
+html[data-mf-reader-theme="warm"]:has(.mf-reader-page) {
+  --mf-background: #f6efe0;
+  --mf-surface: #efe4cf;
+  --mf-text: #3b3226;
+  --mf-muted: #6f6350;
+  --mf-border: #ddcfb4;
+  --mf-accent: #0a7ea4;
+  --mf-brand: #c2410c;
+  --mf-novel: #b45309;
 }
 /* Novel-cms additions: book header, category nav, and the volume-grouped
  * chapter list. These are new class names, so nothing here competes with the
@@ -1001,21 +1048,12 @@ html[data-mf-font=small] .mf-reader-body { font-size: 1rem; }
 html[data-mf-font=medium] .mf-reader-body { font-size: 1.125rem; }
 html[data-mf-font=large] .mf-reader-body { font-size: 1.25rem; }
 
-html[data-mf-reader-night] body:has(.mf-reader-page),
-html[data-mf-reader-night] body:has(.mf-reader-page) .mf-reader-page {
-  background: var(--mf-reader-night-bg);
-}
-
-html[data-mf-reader-night] .mf-reader-header {
-  border-color: #3a3a3a;
-}
-
-html[data-mf-reader-night] .mf-reader-back,
-html[data-mf-reader-night] .mf-reader-login,
-html[data-mf-reader-night] .mf-reader-chapter-head h1,
-html[data-mf-reader-night] .mf-reader-body {
-  color: #e9e9e9;
-}
+/* 阅读页三态（白天/墨夜/暖色）不再单独覆盖背景与字色：.mf-reader-page 与 body
+   都读 var(--mf-background)，正文/标题/muted/边框也都读语义令牌，故在 <html> 上
+   设 data-mf-reader-theme 重定义那组令牌即可整页换装（见文件顶部的阅读页主题岛
+   令牌组）。旧的 data-mf-reader-night 硬编码覆盖（#3a3a3a 边框 / #e9e9e9 字色 /
+   --mf-reader-night-bg 背景）已删——那是绕过令牌的第二套明暗机制，正是各页深浅
+   不一致的来源之一。 */
 
 .mf-reader-tools {
   display: flex;
@@ -1061,6 +1099,53 @@ html[data-mf-reader-night] .mf-reader-body {
 .mf-reader-tool small {
   color: var(--mf-muted);
   font-size: .6875rem;
+}
+
+/* 阅读主题下拉：三态（白天/墨夜/暖色）菜单，配色全吃语义令牌，随阅读页
+   主题岛一起换装。定位在固定右侧工具栏的左侧弹出，避免被右缘裁切。 */
+.mf-reader-theme-menu {
+  position: relative;
+}
+
+.mf-reader-theme-panel {
+  background: var(--mf-background);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius-control);
+  box-shadow: var(--mf-shadow-card-hover);
+  color: var(--mf-text);
+  min-width: 6.5rem;
+  padding: .3rem;
+  position: absolute;
+  right: calc(100% + .5rem);
+  top: 0;
+  z-index: 20;
+}
+
+.mf-reader-theme-panel[hidden] {
+  display: none;
+}
+
+.mf-reader-theme-panel button {
+  background: 0 0;
+  border: 0;
+  border-radius: var(--mf-radius-control);
+  color: var(--mf-text);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  padding: .35rem .6rem;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.mf-reader-theme-panel button:hover {
+  background: var(--mf-surface);
+}
+
+.mf-reader-theme-panel button[aria-checked=true] {
+  color: var(--mf-accent);
+  font-weight: 650;
 }
 
 .mf-reader-nav {
@@ -1379,15 +1464,6 @@ html:has(.fq-header) {
 html[data-mf-font=small] .mf-chapter-body { font-size: .95em; }
 html[data-mf-font=medium] .mf-chapter-body { font-size: 1.05em; }
 html[data-mf-font=large] .mf-chapter-body { font-size: 1.2em; }
-
-html[data-mf-paper=sepia] {
-  --mf-background: #f6efe0;
-  --mf-surface: #efe4cf;
-  --mf-page-bg: #ece2cd;
-  --mf-text: #3b3226;
-  --mf-muted: #6f6350;
-  --mf-border: #ddcfb4;
-}
 
 .mf-chapter-nav {
   align-items: center;

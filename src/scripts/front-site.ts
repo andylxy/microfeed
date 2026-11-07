@@ -208,11 +208,11 @@
 })();
 (function () {
   "use strict";
-  // Reading page: font size, paper colour, scroll progress, and the TOC drawer.
-  // Everything degrades gracefully - the controls stay hidden without JS, and
-  // the TOC is a plain <details> that works on its own.
+  // Reading page: font size, scroll progress, and the TOC drawer. Colour is
+  // owned by the reader theme menu below (day / night / warm), so there is no
+  // separate paper-colour control. Everything degrades gracefully - the
+  // controls stay hidden without JS, and the TOC is a plain <details>.
   var FONT_KEY = "microfeed-reading-font";
-  var PAPER_KEY = "microfeed-reading-paper";
   var root = document.documentElement;
 
   function read(key) {
@@ -270,15 +270,82 @@
     }
 
     select("data-mf-font", FONT_KEY, ["small", "medium", "large"]);
-    select("data-mf-paper", PAPER_KEY, ["sepia"]);
   }
 
-  var night = document.querySelector("[data-mf-reader-night]");
-  if (night) {
-    night.addEventListener("click", function () {
-      var active = document.documentElement.hasAttribute("data-mf-reader-night");
-      if (active) document.documentElement.removeAttribute("data-mf-reader-night");
-      else document.documentElement.setAttribute("data-mf-reader-night", "");
+  // 阅读页自成一套三态主题岛（day / night / warm），与全站明暗偏好解耦。
+  // 首次到访跟随全站偏好（dark -> night，否则 day）；读者在此手动选过则落到
+  // 自己的存储键上。把 data-mf-reader-theme 设在 <html> 上会重定义整页的
+  // --mf-* 令牌，故整页 chrome 一起换装。
+  var READER_THEME_KEY = "microfeed-reader-theme";
+  var PUBLIC_THEME_KEY = "microfeed-public-theme";
+  var READER_THEMES = ["day", "night", "warm"];
+
+  function readerThemeMenu() {
+    return document.querySelector("[data-mf-reader-theme-menu]");
+  }
+
+  function applyReaderTheme(value) {
+    var active = READER_THEMES.indexOf(value) !== -1 ? value : "day";
+    root.setAttribute("data-mf-reader-theme", active);
+    var menu = readerThemeMenu();
+    if (!menu) return;
+    var trigger = menu.querySelector("[data-mf-reader-theme-trigger]");
+    if (trigger) {
+      var labels = { day: "白天", night: "墨夜", warm: "暖色" };
+      trigger.setAttribute("aria-label", "阅读主题：" + labels[active]);
+    }
+    var options = menu.querySelectorAll("[data-mf-reader-theme-option]");
+    for (var index = 0; index < options.length; index++) {
+      options[index].setAttribute(
+        "aria-checked",
+        String(options[index].getAttribute("data-mf-reader-theme-option") === active),
+      );
+    }
+  }
+
+  // 兜底播种：正常情况下 head 内联脚本已在首绘前设好 data-mf-reader-theme，
+  // 这里在脚本晚到或内联未命中时再算一遍，保证菜单接线前主题已就位。
+  var storedReaderTheme = read(READER_THEME_KEY);
+  if (storedReaderTheme && READER_THEMES.indexOf(storedReaderTheme) !== -1) {
+    applyReaderTheme(storedReaderTheme);
+  } else {
+    applyReaderTheme(read(PUBLIC_THEME_KEY) === "dark" ? "night" : "day");
+  }
+
+  var themeMenu = readerThemeMenu();
+  if (themeMenu) {
+    var themeTrigger = themeMenu.querySelector("[data-mf-reader-theme-trigger]");
+    var themePanel = themeMenu.querySelector(".mf-reader-theme-panel");
+
+    function setReaderThemeMenuOpen(open) {
+      if (!themePanel || !themeTrigger) return;
+      themePanel.hidden = !open;
+      themeTrigger.setAttribute("aria-expanded", String(open));
+    }
+
+    if (themeTrigger) {
+      themeTrigger.addEventListener("click", function () {
+        setReaderThemeMenuOpen(themePanel ? themePanel.hidden : false);
+      });
+    }
+
+    var themeOptions = themeMenu.querySelectorAll("[data-mf-reader-theme-option]");
+    for (var themeIndex = 0; themeIndex < themeOptions.length; themeIndex++) {
+      (function (option) {
+        option.addEventListener("click", function () {
+          var value = option.getAttribute("data-mf-reader-theme-option");
+          applyReaderTheme(value);
+          write(READER_THEME_KEY, value);
+          setReaderThemeMenuOpen(false);
+        });
+      })(themeOptions[themeIndex]);
+    }
+
+    document.addEventListener("click", function (event) {
+      if (!themeMenu.contains(event.target)) setReaderThemeMenuOpen(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") setReaderThemeMenuOpen(false);
     });
   }
 

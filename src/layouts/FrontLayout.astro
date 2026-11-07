@@ -65,6 +65,26 @@ const pageTitle = title || site.title;
         document.documentElement.style.colorScheme = isDark ? "dark" : "light";
       })();
     </script>
+    <script is:inline>
+      // 阅读页三态主题岛（白天/墨夜/暖色）在首绘前播种，避免按默认白天渲染后
+      // 再跳成墨夜/暖色的闪变。逻辑与 front-site.ts 的兜底播种一致：读者在阅读页
+      // 手动选过用其独立键；否则跟随全站偏好（dark -> night，否则 day）。非阅读页
+      // 设此属性无害——三态 CSS 只作用于 .mf-reader-* 元素。
+      (() => {
+        const readerKey = "microfeed-reader-theme";
+        const publicKey = "microfeed-public-theme";
+        const readerThemes = ["day", "night", "warm"];
+        let theme = "day";
+        try {
+          const saved = window.localStorage.getItem(readerKey);
+          if (readerThemes.includes(saved)) theme = saved;
+          else if (window.localStorage.getItem(publicKey) === "dark") theme = "night";
+        } catch {
+          // 隐私模式下 localStorage 读取抛 SecurityError，保留白天默认。
+        }
+        document.documentElement.dataset.mfReaderTheme = theme;
+      })();
+    </script>
   </head>
   <body>
     <SiteHeader site={site} groups={groups} activeGroupKey={activeGroupKey} />

@@ -61,10 +61,6 @@ const {
           <button type="button" data-mf-font="medium">中</button>
           <button type="button" data-mf-font="large">大</button>
         </div>
-        <div class="mf-reading-group" role="group" aria-label="背景">
-          <button type="button" data-mf-paper="default">默认</button>
-          <button type="button" data-mf-paper="sepia">米黄</button>
-        </div>
       </div>
 
       {image && (
@@ -95,7 +91,16 @@ const {
     </article>
 
     <aside class="mf-reader-tools" aria-label="阅读工具">
-      <button class="mf-reader-tool" type="button" data-mf-reader-night><span aria-hidden="true">◐</span><small>夜间</small></button>
+      <div class="mf-reader-theme-menu" data-mf-reader-theme-menu>
+        <button class="mf-reader-tool" type="button" aria-label="阅读主题：白天" aria-haspopup="menu" aria-expanded="false" data-mf-reader-theme-trigger>
+          <span aria-hidden="true">◐</span><small>主题</small>
+        </button>
+        <div class="mf-reader-theme-panel" role="menu" aria-label="阅读主题" hidden>
+          <button type="button" role="menuitemradio" aria-checked="true" data-mf-reader-theme-option="day"><span>白天</span></button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mf-reader-theme-option="night"><span>墨夜</span></button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mf-reader-theme-option="warm"><span>暖色</span></button>
+        </div>
+      </div>
       <button class="mf-reader-tool" type="button" data-mf-font="large"><span aria-hidden="true">A</span><small>字号</small></button>
     </aside>
   </div>

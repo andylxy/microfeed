@@ -138,10 +138,10 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
   width: 70vw;
   height: 70vh;
   max-width: none;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--mf-border, #e2e2e2);
   border-radius: 12px;
-  background: #fff;
-  color: #1a1a1a;
+  background: var(--mf-background, #fff);
+  color: var(--mf-text, #1a1a1a);
   padding: 0;
 }
 .mf-tcm-dialog[open] {
@@ -156,7 +156,7 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
 .mf-tcm-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .mf-tcm-head { display: flex; align-items: baseline; gap: .5em; padding: 1rem 1.25rem .5rem; flex: 0 0 auto; }
 .mf-tcm-head h2 { margin: 0; font-size: 1.1em; }
-.mf-tcm-meta { color: #6b6b6b; font-size: .8em; }
+.mf-tcm-meta { color: var(--mf-muted, #6b6b6b); font-size: .8em; }
 /* 右上角关闭键复用项目的圆形图标按钮（同 PublicSearch 的关闭键）：
    内联 SVG 画 X，不用原生 × 字符。 */
 .mf-tcm-close {
@@ -172,12 +172,12 @@ function buildRuntimeHtml(data: Record<string, TcmPopoverEntry>): string {
    让字面 \n 与段首缩进原样呈现，不被 normal 折叠成一片。 */
 .mf-tcm-body { padding: 0 1.25rem; flex: 1 1 auto; overflow-y: auto; line-height: 1.7; white-space: pre-wrap; }
 .mf-tcm-table { width: 100%; border-collapse: collapse; font-size: .92em; margin-top: .25em; }
-.mf-tcm-table th, .mf-tcm-table td { text-align: left; padding: .35em .5em; border-bottom: 1px solid #eee; }
-.mf-tcm-table th { color: #6b6b6b; font-weight: 500; }
+.mf-tcm-table th, .mf-tcm-table td { text-align: left; padding: .35em .5em; border-bottom: 1px solid var(--mf-border, #eee); }
+.mf-tcm-table th { color: var(--mf-muted, #6b6b6b); font-weight: 500; }
 /* 返回键贴弹窗底边、水平居中；按钮本身复用项目胶囊按钮 .mf-detail-btn。 */
 .mf-tcm-foot {
   flex: 0 0 auto; display: flex; justify-content: center;
-  padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #eee;
+  padding: .75rem 1.25rem 1.25rem; border-top: 1px solid var(--mf-border, #eee);
 }
 </style>
 <dialog class="mf-tcm-dialog" id="mf-tcm-dialog" aria-labelledby="mf-tcm-title">
