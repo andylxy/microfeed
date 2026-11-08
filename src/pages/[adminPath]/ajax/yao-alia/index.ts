@@ -13,11 +13,11 @@ import {PERMISSION_CODES} from "@/shared/Constants";
 /**
  * `GET` 返回整张 `yao_alia` 看板；`POST` 新建一条别名。
  *
- * 独立模块（ADR-0064）：只读写 `yao_alia`，不碰 items/channels/ext_tcm_aliases，
- * 因此**不**清公共缓存——它没有任何公开站影子，也不调 `purgeAppYaoAliasesCache`。
+ * 独立模块（ADR-0064）：只读写 `yao_alia`，不碰 items/channels 与 App 别名链路，
+ * 因此**不**清公共缓存——它没有任何公开站影子，也不触达 App 缓存键。
  * 看板是后台数据，返回 `no-store`。读走 `content:yao-alia:read`、写走
- * `content:yao-alia:manage`（专属码，不复用 `content:alias:*` / `content:yao:*`，
- * ADR-0064 决策 8）。与既有 /admin/aliases/ 三态看板授权边界独立。
+ * `content:yao-alia:manage`（专属码，不复用 `content:yao:*`，ADR-0064 决策 8）。
+ * 与已退役的手工别名维护层授权边界独立（ADR-0068）。
  */
 export const GET: APIRoute = async ({locals, request}) => {
   const guard = await requireRbac(

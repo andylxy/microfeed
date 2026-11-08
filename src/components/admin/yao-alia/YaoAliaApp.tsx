@@ -116,9 +116,8 @@ function YaoAliaForm({
 /**
  * 独立「药材别名」看板（ADR-0064）：只读写 `yao_alia` 一张表。
  *
- * 与既有 `/admin/aliases/` 三态看板（items 派生 + `ext_tcm_aliases` 覆盖/隐藏 +
- * App 端点缓存）并行共存、互不读写：这里不 import tcm 读层、不清公共缓存、
- * 不碰 items/channels/settings。
+ * 与 App 别名端点（三源派生 + 24h 缓存）并行共存、互不读写：这里不 import tcm
+ * 读层、不清公共缓存、不碰 items/channels/settings。旧手工维护层已按 ADR-0068 退役。
  *
  * 左栏按正名 `yaoName` **只读派生**分组（30 个正名 / 47 行），零 settings 读写、
  * 零分组管理弹层、零改派——编辑正名后分组即时重算，这是模块的核心解耦点

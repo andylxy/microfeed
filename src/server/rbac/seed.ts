@@ -88,8 +88,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
   {code: "content:fang:read", name: "方剂查看"},
-  {code: "content:alias:read", name: "别名查看"},
-  {code: "content:alias:manage", name: "别名维护"},
   {code: "content:yao:read", name: "中药查看"},
   {code: "content:yao:manage", name: "中药维护"},
   {code: "content:term:read", name: "名词查看"},
@@ -162,8 +160,6 @@ const EDITOR_PERMISSIONS: readonly string[] = [
   // editor, which is gated by the generic item permissions): an editor can
   // open it, but composition/status editing happens on the item page.
   "content:fang:read",
-  "content:alias:read",
-  "content:alias:manage",
   // 中药 / 名词 boards own their rows' identity + publishing state (add /
   // rename / publish / soft-delete / restore), which is content work an
   // editor already does on the item page — so it also gets the `manage`
@@ -178,8 +174,8 @@ const EDITOR_PERMISSIONS: readonly string[] = [
   "content:book-chapter:read",
   "content:book-chapter:manage",
   // 药材别名（ADR-0064）：与中药/名词 board 同性质——别名的增删改是内容编辑工作，
-  // editor 已有等价能力。专属码 `content:yao-alia:*` 与旧 /admin/aliases/ 的
-  // `content:alias:*`、与 `content:yao:*` 授权边界均独立，两套模型并行共存。
+  // editor 已有等价能力。专属码 `content:yao-alia:*` 与 `content:yao:*` 授权边界
+  // 独立，不与已退役的手工别名页共用码。
   "content:yao-alia:read",
   "content:yao-alia:manage",
   // 方剂（ADR-0065）：与中药/名词/卷章 board 同性质——方剂目录与组成的增删改是

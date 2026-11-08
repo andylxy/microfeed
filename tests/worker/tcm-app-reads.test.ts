@@ -9,7 +9,7 @@ import {
   getAppChapterContent,
   getAppNav,
   getAppStyleConfig,
-  getAppYaoAliases,
+  getDerivedYaoAliases,
 } from "@/server/tcm/reads";
 
 const db = env.FEED_DB;
@@ -325,7 +325,7 @@ describe("TCM app read functions", () => {
     // Fang.ID 发「本方在本书内的 0-based 序号」而非 11 位 tcmId：App Gson 的
     // IntegerTypeAdapter 只接受数值/数值字符串，下发 tcmId 会让 App 直接崩。
     // 2026-10-03 拍板 A，依据 .scratch/tcm-import/golden/compare.mts:36-39——源 int64
-    // 按 spec §16 不落库，故值不可逐字节复现，golden 归类 known-id-numeric。
+    // 按 spec §16 不入库，故值不可逐字节复现，golden 归类 known-id-numeric。
     // 本断言在 d1023b4 写成 11 位 id，21eb535 改实现（numericIdString → String(index)）
     // 时漏改，现补齐。
     expect(fangs[0]!.ID).toBe("0");
@@ -347,12 +347,12 @@ describe("TCM app read functions", () => {
     const guiZhi = yao.find((y) => y.name === "桂枝");
     expect(guiZhi?.text).toBe("$u{桂枝} 味辛。温。");
 
-    const aliases = await getAppYaoAliases(db);
+    const aliases = await getDerivedYaoAliases(db);
     // 三源：① yaoAlias 表 ② 源 Yao.YaoList 切分 ③ 条文 BookBody.BieMing 切分（result[0]=正名）
-    expect(aliases).toContainEqual({bieming: "桂", name: "桂枝"});
-    expect(aliases).toContainEqual({bieming: "肉桂", name: "桂枝"});
-    expect(aliases).toContainEqual({bieming: "煨桂", name: "桂枝"});
-    expect(aliases).toContainEqual({bieming: "桂木", name: "牡桂"});
+    expect(aliases.get("桂")).toBe("桂枝");
+    expect(aliases.get("肉桂")).toBe("桂枝");
+    expect(aliases.get("煨桂")).toBe("桂枝");
+    expect(aliases.get("桂木")).toBe("牡桂");
 
     const terms = await getAppAllTerms(db);
     const term = terms.find((t) => t.name === "八纲辨症");

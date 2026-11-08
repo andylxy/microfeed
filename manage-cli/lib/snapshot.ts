@@ -83,8 +83,8 @@ export const SNAPSHOT_TABLES = {
     "book_chapter",
     "book_chapter_body",
     // 独立「药材别名」表（migration 0183，ADR-0064）。用户自建内容，恢复后的站点
-    // 要保留；与既有「层层叠加」的别名链路（items 口袋字段 / ext_tcm_aliases /
-    // getDerivedYaoAliases / GetAliaZhongYao）并行共存，不依赖其它 ext_* 表。
+    // 要保留；与 App 端点 GetAliaZhongYao 的三源派生别名链路并行共存，不依赖
+    // 其它 ext_* 表。
     "yao_alia",
     // 独立「方剂」两表（migration 0184，ADR-0065）。用户自建方剂目录与其组成，
     // 恢复后的站点要保留；与既有 items 方剂机制（legacy fangs 页 / tcm_kind）并行
@@ -142,9 +142,10 @@ export const SNAPSHOT_TABLES = {
     // PC web renderer (TcmMarkers) and the App GetTipsStyleConfig payload, so a
     // restored site must keep them or TCM tips lose their styling.
     "ext_annotation_markers",
-    // Manual TCM aliases (migration 0075). Admin-authored rows maintained through
-    // /admin/aliases/ that override same-name derived aliases on the App side, so a
-    // restore that dropped them would silently lose hand-entered synonyms.
+    // 手工维护的中医别名表（migration 0075），已由 migration 0190 删除（ADR-0068）。
+    // 条目必须留在本清单里，理由与上面的 ext_menu 相同：0075 到 0190 之间的
+    // 中间版本快照仍带这张表；未登记的表会让 assertClassifiedTables 拒绝恢复，
+    // 与 ext_menu_permissions 的处理方式一致。
     "ext_tcm_aliases",
     // App version floor (migration 0080). The single-row min_version_code / latest
     // version config read by GET /api/app/version and requireAppVersion is operator

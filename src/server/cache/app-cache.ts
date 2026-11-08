@@ -320,11 +320,6 @@ export async function purgeAppYaoCache(): Promise<void> {
   ]);
 }
 
-/** 只清别名桶（手工别名写入不影响中药目录本身，ADR-0049 D2）。 */
-export async function purgeAppYaoAliasesCache(): Promise<void> {
-  await deleteWorkerCacheKeys([appCacheKey(APP_YAO_ALIASES_CACHE)]);
-}
-
 /** 清掉标记样式目录桶（后台增删改一个标记就清，`version` 随之变化）。 */
 export async function purgeAppStyleConfigCache(): Promise<void> {
   await deleteWorkerCacheKeys([appCacheKey(APP_STYLE_CONFIG_CACHE)]);

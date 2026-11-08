@@ -1,11 +1,11 @@
 /**
  * 独立「药材别名」模块（ADR-0064）的 dashboard 视图类型 + Zod schema 真源。
  *
- * 这是一个与既有「层层叠加」别名链路**完全解耦**的独立表 `yao_alia`（迁移 0183）：
- * 既有链路是 `items` 口袋字段（`aliases`/`yaoNames`/`bieMing`）→ `getDerivedYaoAliases`
- * 三源合并 → `getAppYaoAliases` 叠 `ext_tcm_aliases` 覆盖/隐藏 → `GetAliaZhongYao` +
- * 24h 缓存 + `/admin/aliases/` 三态看板；本模块镜像 `ctwh/YaoAlia.sql` 的 `YaoAlia`
- * 实体，只自持一张表，两套别名模型并行共存、互不读写、互不迁移（ADR-0064 决策 1/2）。
+ * 这是一个与 App 别名链路**完全解耦**的独立表 `yao_alia`（迁移 0183）：
+ * App 链路是 `items` 口袋字段（`aliases`/`yaoNames`/`bieMing`）→ `getDerivedYaoAliases`
+ * 三源合并 → `GetAliaZhongYao` + 24h 缓存；退役的手工别名维护层见 ADR-0068。
+ * 本模块镜像 `ctwh/YaoAlia.sql` 的 `YaoAlia` 实体，只自持一张表，两套别名模型
+ * 并行共存、互不读写、互不迁移（ADR-0064 决策 1/2）。
  *
  * 类型放 `shared` 而非 `server/yao-alia/types.ts`，是为了让后台 UI
  * （`src/components/admin/yao-alia/`）与 server 用同一形状给 AJAX 载荷定型——

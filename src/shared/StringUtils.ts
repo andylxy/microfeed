@@ -574,8 +574,6 @@ export const ADMIN_URLS = {
     adminUrl("ajax/tcm/fang-references", browserAdminPath()),
   /** 方剂管理独立看板：列某书的方剂（只读看板，编辑走条目页）。 */
   ajaxFangs: () => adminUrl("ajax/fangs", browserAdminPath()),
-  /** 别名对照只读列表（移动端 GetAliaZhongYao 的后台镜像）。 */
-  ajaxAliases: () => adminUrl("ajax/aliases", browserAdminPath()),
   /** 中药 / 名词管理看板：列某书的条目（kind = yao | term）。写操作走 actionFile。 */
   ajaxTcmEntry: (kind: string) =>
     adminUrl(`ajax/${kind}`, browserAdminPath()),

@@ -455,17 +455,17 @@ describe("RBAC catalog integrity", () => {
     // editor's rich-text editor fetches the marker list for its toolbar.
     // 15 since 0073 added `content:fang:read` — the fang board is view-only
     // (rows link out to the item editor), so the editor gains read, not update.
-    // 16 since 0074 added `content:alias:read` — the alias board is read-only too.
-    // 17 since 0075 added `content:alias:manage` — editors maintain the alias list.
-    // 19 since 0077 added `content:yao:read` + `content:term:read` — the herb and
+    // 17 since 0077 added `content:yao:read` + `content:term:read` — the herb and
     // term boards are read-only too (rows link out to the item editor).
-    // 21 since 0079 added `content:yao:manage` + `content:term:manage` — the
+    // 19 since 0079 added `content:yao:manage` + `content:term:manage` — the
     // boards own their rows' identity / publishing state, which is content work.
-    // 23 since 0119/0120 added `app:version:read` + `app:announcement:read` —
+    // 21 since 0119/0120 added `app:version:read` + `app:announcement:read` —
     // default-granted to the editor under the 运营管理 leaf (see migrations 0119
     // seeding the codes and 0120 granting them to the editor).
+    // 迁移 0190（ADR-0068）移除了 0074/0075 种下的两枚别名看板授权，
+    // 因此总数停在 21 而不是 23。
     // Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(23);
+    expect(editorCount?.c).toBe(21);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -520,15 +520,15 @@ describe("RBAC administration", () => {
     const editor = board.roles.find((role) => role.code === "editor");
     // 13 since 0058 granted `media:file:manage` to the site-file managers (A1);
     // 14 since 0069 added `content:annotation-markers:read`; 15 since 0073 added
-    // `content:fang:read`; 16 since 0074 added `content:alias:read`; 17 since 0075
-    // added `content:alias:manage`; 19 since 0077 added `content:yao:read` +
-    // `content:term:read`; 21 since 0079 added `content:yao:manage` +
-    // `content:term:manage`; 23 since 0119/0120 added `app:version:read` +
+    // `content:fang:read`; 17 since 0077 added `content:yao:read` +
+    // `content:term:read`; 19 since 0079 added `content:yao:manage` +
+    // `content:term:manage`; 21 since 0119/0120 added `app:version:read` +
     // `app:announcement:read` (default-granted to editor under 运营管理 leaf).
-    // 21 on the PC console: the two App capability codes editor also holds
+    // 迁移 0190 移除了 0074/0075 的两枚别名看板授权。
+    // 19 on the PC console: the two App capability codes editor also holds
     // (`app:version:read`, `app:announcement:read`) belong to the App console
     // and are cropped from this board (ADR-0039 D2).
-    expect(editor?.permissions).toHaveLength(21);
+    expect(editor?.permissions).toHaveLength(19);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(

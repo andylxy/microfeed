@@ -109,11 +109,6 @@ export interface AppZhongYao {
   text: string;
 }
 
-export interface AppYaoAlias {
-  bieming: string;
-  name: string;
-}
-
 /** 旧后端 GetAllMingCi 响应形状（实测 golden）：小驼峰字段，mingCiList 按英文逗号劈成数组。 */
 export interface AppMingCi {
   id: string;
@@ -176,7 +171,7 @@ function titleOf(dataJson: unknown): string {
 }
 
 /** yao 条目标题在库里带 "N、" 序号前缀（后台卷面板展示用，见 import-yao.mjs）；
- * App 契约的 yao `name` 必须是裸药名（与 netcore 一致），剥离前缀。 */
+ * App 响应形状的 yao `name` 必须是裸药名（与 netcore 一致），去掉前缀。 */
 function yaoAppName(dataJson: unknown): string {
   return titleOf(dataJson).replace(/^\d+、/, "");
 }
@@ -673,7 +668,7 @@ function jingshuParagraphText(html: string): string {
  * 经疏书药条 → 正文 + 条目归属。
  *
  * 键为条目标题里逗号并列的**全部**名字（`灶心土,伏龙肝` 两条都建索引），因为 netcore 会把
- * 别名也拆成独立药味下发。`entry` 记录该名字所属条目的**首个药名**（主名），合并归属判定要用。
+ * 别名也切成独立药味下发。`entry` 记录该名字所属条目的**首个药名**（主名），合并归属判定要用。
  */
 interface JingshuEntry {
   text: string;
@@ -818,7 +813,7 @@ export async function getAppAllYao(db: D1Database): Promise<AppZhongYao[]> {
  * ① `yaoAlias` 表（中药口袋内嵌 `aliases[]`）→ {别名, 药名}；
  * ② 源 `Yao.YaoList`（口袋 `yaoNames` 原文）切分，每 token → 药名；
  * ③ 源 `BookBody.BieMing`（条文口袋 `bieMing`）切分，result[0]=正名，其余为别名。
- * 不含 ext_tcm_aliases（后台覆盖/隐藏由 getAppYaoAliases 单独合并）。
+ * 本函数不叠加任何后台覆盖或隐藏指令，App 端点直接消费三源结果。
  */
 export async function getDerivedYaoAliases(
   db: D1Database,
@@ -872,43 +867,6 @@ export async function getDerivedYaoAliases(
       }
     }
     return merged;
-  });
-}
-
-/**
- * 药名别名对照——在纯派生（三源）之上最后合并 ext_tcm_aliases（后台 /admin/aliases/ 维护）：
- *   deleted=0 → 手工覆盖别名，覆盖同名派生别名；
- *   deleted=1 → 隐藏指令，把同名派生别名从端点结果中剔除。
- * 表可能尚未迁移（旧库）→ 查询失败静默跳过，不影响三源。
- */
-export async function getAppYaoAliases(db: D1Database): Promise<AppYaoAlias[]> {
-  return withRethrow("getAppYaoAliases", async () => {
-    const merged = await getDerivedYaoAliases(db);
-    try {
-      const manual = await db
-        .prepare(
-          "SELECT bieming, name, deleted FROM ext_tcm_aliases ORDER BY bieming",
-        )
-        .all();
-      for (const row of manual.results ?? []) {
-        const bieming = str(row.bieming);
-        if (Number(row.deleted) === 1) {
-          // 隐藏指令：剔除同名派生别名（App 端点不再下发）。
-          merged.delete(bieming);
-        } else {
-          // 手工覆盖：覆盖同名派生别名。
-          merged.set(bieming, str(row.name));
-        }
-      }
-    } catch (error) {
-      // 仅吞「表尚不存在」（旧库未应用 ext_tcm_aliases 迁移）；其余 D1 故障
-      // 重抛——结果进共享桶，吞掉会让空响应写桶 24h（ADR-0049 D1）。
-      if (!(error instanceof Error) ||
-          !/no such table/u.test(error.message)) {
-        throw error;
-      }
-    }
-    return [...merged].map(([bieming, name]) => ({bieming, name}));
   });
 }
 

@@ -5,7 +5,7 @@
  * 仍在各 `.astro` 页面自己的 `requirePagePermission(Astro.locals, …, …)` 调用。
  * 测试 `tests/unit/admin-page-guards.test.ts` 的「admin page guard catalog」
  * 分组逐行核对目录与实际页面文件一致——改某页守卫码而忘同步目录时测试直接红，
- * 这正是「链路太长、容易漏改」的兜底：看目录就能知道每页要什么码，不必翻 46 个
+ * 这正是「链路太长、容易漏改」的兜底：看目录就能知道每页要什么码，不必逐个翻
  * 页面文件。
  *
  * 键 = 相对 `[adminPath]` 的路由路径（无前导斜杠，与权限树页面节点 `path`、
@@ -20,7 +20,6 @@ import {PERMISSION_CODES, type PermissionCode} from "./Constants";
 
 /** 相对 `[adminPath]` 的路由路径 → 该页守卫用的权限码。 */
 export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
-  aliases: PERMISSION_CODES.CONTENT_ALIAS_READ,
   announcements: PERMISSION_CODES.SYSTEM_ANNOUNCEMENT_READ,
   "annotation-markers": PERMISSION_CODES.CONTENT_ANNOTATION_MARKERS_MANAGE,
   api: PERMISSION_CODES.SYSTEM_API_MANAGE,
@@ -70,8 +69,8 @@ export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
   "webhooks/endpoints": PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE,
   "webhooks/events": PERMISSION_CODES.SYSTEM_WEBHOOK_MANAGE,
   yao: PERMISSION_CODES.CONTENT_YAO_READ,
-  // 独立「药材别名」页（ADR-0064）。专属码，与旧 /admin/aliases/ 的 content:alias:*
-  // 及 items-中药的 content:yao:* 授权边界均独立；路由名 yao-alia。
+  // 独立「药材别名」页（ADR-0064）。专属码，与 items-中药的 `content:yao:*`
+  // 授权边界独立；路由名 yao-alia。
   "yao-alia": PERMISSION_CODES.CONTENT_YAO_ALIA_READ,
   // 独立「方剂」页（ADR-0065）。专属码 content:fang-yao:*，与既有 items-方剂
   // （路由 fangs / content:fang:*）授权边界独立；路由名 fang-yao。

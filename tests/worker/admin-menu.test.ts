@@ -294,7 +294,6 @@ describe("readAdminMenu", () => {
       ADMIN_MENU_CODES.ALL_ITEMS,
       ADMIN_MENU_CODES.ANNOTATION_MARKERS,
       ADMIN_MENU_CODES.FANGS,
-      ADMIN_MENU_CODES.ALIASES,
       ADMIN_MENU_CODES.YAO,
       ADMIN_MENU_CODES.TERM,
       "group_review",

@@ -77,9 +77,8 @@ const C: readonly CatalogEntry[] = [
   ["POST", "/admin/ajax/annotation-markers/create", "content:annotation-markers:manage"],
   ["POST", "/admin/ajax/annotation-markers/update", "content:annotation-markers:manage"],
   ["POST", "/admin/ajax/annotation-markers/delete", "content:annotation-markers:manage"],
-  // 别名 / 方剂 / 中药 / 名词（content:alias|fang|yao|term:*）。
+  // 方剂 / 中药 / 名词（content:fang|yao|term:*）。
   // yao/term 的动词共用一个 action 文件，全部 POST、按 body 的 action 字段分发。
-  ["PUT", "/admin/ajax/aliases", "content:alias:manage"],
   ["GET", "/admin/ajax/fangs", "content:fang:read"],
   ["GET", "/admin/ajax/yao", "content:yao:read"],
   ["POST", "/admin/ajax/yao/action", "content:yao:manage"],

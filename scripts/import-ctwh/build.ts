@@ -54,7 +54,7 @@ export const BOOK_NAME_OVERRIDE: Record<string, string> = {};
 
 /**
  * 源 `Fang` 表命名冲突正名（与上面的 `BOOK_NAME_OVERRIDE` 同一手法：源快照
- * `ctwh/Fang.sql` 保持原样，修正在本层落地，重跑导入即生效）。
+ * `ctwh/Fang.sql` 保持原样，修正在本层写入，重跑导入即生效）。
  *
  * `708` 在源里名为「茯苓白术戎盐汤」，但正文是 滑石 / 乱发 / 白鱼 —— 实为
  * 「滑石乱发白鱼散」。证据链：桂林古本自己的条文（`BookBody` no=1001002877，
@@ -207,7 +207,7 @@ const MARKER_START = /^\$[a-zA-Z]+\{/;
 
 /** 煎服法起始：「上X味，以水…」——其后属煎服法/加减法，不再是要的组成。 */
 const DOSAGE_INTRO = /上[一二三四五六七八九十百千零〇\d]+味/;
-/** 段落分隔（用于无「上X味」标记时取首段）。 */
+/** 段间分隔（用于无「上X味」标记时取首段）。 */
 const PARAGRAPH_BREAK = /\r\n\r\n|\n\n|\r\r/;
 
 /**
@@ -287,7 +287,7 @@ export function parseFangTextIngredients(
       p++;
     }
     if (nameEnd < 0 && doseOpen < 0) {
-      i = uIdx + 3; // 无法判定：跳过，避免死循环
+      i = uIdx + 3; // 无法判定：跳过，避免循环不终止
       continue;
     }
     const showName = scope.slice(uIdx + 3, nameEnd >= 0 ? nameEnd : p).trim();
@@ -369,7 +369,7 @@ export function deriveSectionTitle(
       ? candidate.slice(0, cut)
       : candidate.slice(0, TITLE_MAX)).trim();
   }
-  // 截断若落在引用标记 $x{…}/$m{…} 内部，把不完整的标记尾巴去掉
+  // 截断若处于引用标记 $x{…}/$m{…} 内部，把不完整的标记尾巴去掉
   // （避免标题里出现半个「$x{」）。完整标记（含配对的 }）不会被误删。
   const dangling = candidate.lastIndexOf("$");
   if (dangling >= 0 && !candidate.slice(dangling).includes("}")) {
@@ -567,7 +567,7 @@ export function buildTargets(
           sourceImagePath: rowText(row, "ImageUrl"),
           // 源 WorkInfo.Case 原值：App 端按 caseTag 区分行为（1/2/3 隐方药页、5=伤寒显单位页）。
           case: caseCode,
-          // 源书号（WorkInfo.BookNo）：书的三级关系按 BookNo 匹配，显式落库便于校验与回溯。
+          // 源书号（WorkInfo.BookNo）：书的三级关系按 BookNo 匹配，显式入库便于校验与回溯。
           bookNo,
         },
       },
@@ -615,7 +615,7 @@ export function buildTargets(
   const bookNosWithChapters = new Set<string>();
   // netcore GetBookChapter 按源主键（BookInfoId）序返回 —— 这是唯一能同时解释
   // 两类反例的排序：9040000 的「前言」（section=904000203）排第 3（数值序会垫底），
-  // 10001 的 section 0..21 按数字序（字符串序会排成 0,1,10,11,…）。落
+  // 10001 的 section 0..21 按数字序（字符串序会排成 0,1,10,11,…）。设置
   // `_microfeed.no` = 书内主键排名，作篇章排序键（reads/extCategory/extVolume
   // 三处 ORDER BY 共用，见 src/server/tcm/ordering.ts；同 fangRankByFangId 先例）。
   const chapterRankBySource = new Map<string, number>();
@@ -793,7 +793,7 @@ export function buildTargets(
   // 源 dump 里实际存在的 `Yao.YaoId` 集合 —— FangBody 0-based YaoID 补偿后的
   // 成员闸：YaoId 不连续（dump 只截取了部分行），仅判 `<= yaoMaxId` 会放行
   // 指向集合外空洞 id 的引用，产出悬空 yaoId（金匮要略・(宋版) 实测 2 处，
-  // 2026-10-01）。成员检查让这类行像越界行一样落 null。
+  // 2026-10-01）。成员检查让这类行像越界行一样返回 null。
   const yaoSourceIdSet = new Set(
     tables.yao.map((row) => String(rowValue(row, "YaoId") ?? "")),
   );
@@ -829,7 +829,7 @@ export function buildTargets(
    * 异名 / 古名 / 异体字 → 源 `Yao.YaoName` 正名。回退解析
    * （parseFangTextIngredients）从 `Fang.FangText` 的 `$u{}` 标记抽出的药名，
    * 常是古名 / 异写 / 带后缀（芎藭 / 葶苈 / 干地黄 / 川乌 …），与 `Yao.YaoName`
-   * 不完全一致，导致 `yaoId` 算不出落点（编辑页药味组成显示空白 / 下拉错名）。
+   * 不完全一致，导致 `yaoId` 算不出对应条目（编辑页药味组成显示空白 / 下拉错名）。
    * 这些映射全部经本地库 172 味 yao 条目 + 源 `Yao.sql`（172 味）双向核验，
    * 目标正名在源内确实存在，可安全桥接（2026-10-03 防复发固化，
    * 对应 `.scratch/tcm-import/repair_fang_yao_null.mjs` 实测救回的 63 条）。
@@ -1027,7 +1027,7 @@ export function buildTargets(
   // 不与 Yao 表 join。故 4 条 `YaoName` 用短名（蜜/艾/煅灶灰；Yao 表用 石蜜/艾叶/煅灶下灰）
   // 也必须原样发出（golden 实测：{食蜜→蜜}、{艾叶→艾}、{煅灶下灰→煅灶灰}；{白蜜→蜜} 会被
   // 第二源 Yao.YaoList 覆盖为 {白蜜→石蜜}）。这些"孤儿"别名挂到**最贴近**的 yao 条目上——
-  // endpoint（reads.ts getAppYaoAliases）只遍历全部 yao 的 aliases[] 并 add(bieming, name)，
+  // endpoint（reads.ts getDerivedYaoAliases）只遍历全部 yao 的 aliases[] 并 add(bieming, name)，
   // 挂在哪条不影响输出，但 `name` 必须保持源 yaoAlias.YaoName 原样才能逐字节对齐 netcore。
   const yaoNameSet = new Set(tables.yao.map((row) => rowText(row, "YaoName")));
   const yaoListTokens = new Map(

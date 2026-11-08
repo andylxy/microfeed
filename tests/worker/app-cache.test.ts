@@ -12,7 +12,6 @@ import {
   purgeAppBookFangCache,
   purgeAppChapterContentCache,
   purgeAppStyleConfigCache,
-  purgeAppYaoAliasesCache,
   purgeAppYaoCache,
 } from "@/server/cache/app-cache";
 import {APP_CACHE_TAG} from "@/server/cache/cache-control";
@@ -140,8 +139,8 @@ describe("app chapter-content / book-fang cache buckets", () => {
     expect(zhongyaoLoads).toBe(2);
     expect(aliasLoads).toBe(2);
 
-    // 手工别名写只清别名键，目录不受影响。
-    await purgeAppYaoAliasesCache();
+    // 退役后只剩中药写入这一条清理入口；重复调用仍清两键。
+    await purgeAppYaoCache();
     await cachedAppResponse(APP_YAO_ALIASES_CACHE, async () => {
       aliasLoads += 1;
       return [];
@@ -151,7 +150,7 @@ describe("app chapter-content / book-fang cache buckets", () => {
       zhongyaoLoads += 1;
       return [];
     });
-    expect(zhongyaoLoads).toBe(2);
+    expect(zhongyaoLoads).toBe(3);
   });
 
   it("caches the style config, tags it with its bucket, and purges one key", async () => {

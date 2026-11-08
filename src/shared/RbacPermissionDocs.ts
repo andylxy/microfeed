@@ -362,16 +362,6 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     gates: ["页面 /fangs", "接口 /ajax/fangs（GET）— 方剂列表"],
     caveats: ["默认授予 editor / readonly。", "方剂板的写操作不在本码，走条目页的章节码。"],
   },
-  "content:alias:read": {
-    summary: "查看别名。",
-    gates: ["页面 /aliases", "接口 /ajax/aliases（GET）— 别名列表"],
-    caveats: ["默认授予 editor / readonly。"],
-  },
-  "content:alias:manage": {
-    summary: "维护别名（新增、改名、删除）。",
-    gates: ["页面 /aliases（维护入口）", "接口 /ajax/aliases 的写方法"],
-    caveats: ["默认授予 editor / readonly。", "别名与中药/名词共用条目模型。"],
-  },
   "content:yao:read": {
     summary: "查看中药。",
     gates: ["页面 /yao", "接口 /ajax/yao（GET）— 中药列表", "中药条目接口的读分支"],
@@ -402,7 +392,7 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     caveats: [
       "默认授予 editor / readonly。",
       "与 content:yao-alia:manage 分开授权：只有查看权时能看分组清单，不能新建、改、删。",
-      "本码专属独立模块 yao_alia（ADR-0064），与旧 /admin/aliases/ 的 content:alias:* 授权边界独立。",
+      "本码专属独立模块 yao_alia（ADR-0064），与已退役的手工别名页授权边界独立。",
     ],
   },
   "content:yao-alia:manage": {
@@ -543,7 +533,7 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     gates: ["接口 /ajax/mail-settings/save — 保存配置"],
     caveats: [
       "不默认授予 editor。",
-      "四项留空即使用出厂默认（地址回落 env.RESEND_FROM，模板回落内置模板）。",
+      "四项留空即使用出厂默认（地址回退到 env.RESEND_FROM，模板回退到内置模板）。",
       "不做缓存失效：该路径无 read-through 缓存，保存即生效。",
     ],
   },

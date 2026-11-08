@@ -7,7 +7,7 @@
  * api/v1、无 App 端点——模块只给后台用（ADR-0064 决策 8）。
  *
  * 校验真源在 `@/shared/YaoAlia`（UI 与 server 共用），这里只 import 不重写。
- * 与既有别名链路（`alias-handlers.ts`）零 import——两套模型并行共存。
+ * 与 App 别名读层零 import——两套模型并行共存。
  */
 
 import {AppError} from "@/shared/errors";

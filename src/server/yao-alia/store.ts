@@ -2,8 +2,8 @@
  * 独立「药材别名」模块（ADR-0064）的纯读写层。
  *
  * 只碰 `yao_alia` 表（迁移 0183），**不写** `items`/`channels`/`ext_*`/
- * `settings`/`ext_tcm_aliases`/`zhong_yao`/`book_chapter*`——与既有「层层叠加」
- * 的别名链路完全解耦（两套别名模型并行共存，ADR-0064 决策 1/2）。
+ * `settings`/`zhong_yao`/`book_chapter*`——与 App 三源派生别名链路完全解耦
+ * （两套别名模型并行共存，ADR-0064 决策 1/2）。
  *
  * 删除分两步（与 `purgeZhongYao` / `purgeMingCi` / `purgeAdminBook` 同口径）：
  * - `softDeleteYaoAlia`（软删）只写 `deleted_at`，行保留，看板用 `isDeleted` 区分；

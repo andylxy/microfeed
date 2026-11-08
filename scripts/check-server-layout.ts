@@ -56,8 +56,8 @@ const WHITELIST = new Set([
   // 共存、不迁移（决策 1）。2026-11-04 新增，与 `book-info`/`ming-ci` 先例同为特性目录。
   "book-chapter",
   // 独立「药材别名」模块（ADR-0064）：自持 `yao_alia` 表的纯读写层 + handler，
-  // 与既有「层层叠加」别名链路（items 口袋字段 / ext_tcm_aliases / GetAliaZhongYao）
-  // 并行共存、不迁移（决策 1/2）。2026-11-05 新增，与 `book-info`/`ming-ci`/
+  // 与 App 三源派生别名链路（items 口袋字段 / GetAliaZhongYao）并行共存、不迁移
+  // （决策 1/2）。2026-11-05 新增，与 `book-info`/`ming-ci`/
   // `zhong-yao` 先例同为特性目录。
   "yao-alia",
   // 独立「方剂」模块（ADR-0065）：自持 `fang_yao`/`fang_yao_body` 两表的纯读写层
@@ -78,7 +78,7 @@ const WHITELIST = new Set([
   "pages",
   "rbac",
   // 限流：ext_rate_limit 常备槽位与窗口/单次/裁剪逻辑（0167 限流表合并），2026-11-02 补登。
-  // 该目录在 0167 落地时即已提交，白名单此前漏登，属既有缺口，非本次改动引入。
+  // 该目录在 0167 提交时即已入仓，白名单此前漏登，属既有缺口，非本次改动引入。
   "rate-limit",
   "site-files",
   "tcm",

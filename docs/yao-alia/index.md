@@ -11,15 +11,14 @@ description: 独立于既有别名派生链路的「药材别名」表（ADR-006
 
 | 概念 | 载体 | 说明 |
 | --- | --- | --- |
-| 派生别名（旧） | `items` 口袋字段 `aliases` / `yaoNames` / `bieMing` | `getDerivedYaoAliases` 三源合并，随时间与导入内容变化 |
-| 覆盖/隐藏指令（旧） | `ext_tcm_aliases` 行（迁移 0075/0076） | `manual` / `hidden` 三态叠加，`bieming` UNIQUE |
-| App 别名端点（旧） | `GetAliaZhongYao` + 24h 缓存 | 派生 + 覆盖后的只读出口，`/admin/aliases/` 是其镜像看板 |
+| 派生别名 | `items` 口袋字段 `aliases` / `yaoNames` / `bieMing` | `getDerivedYaoAliases` 三源合并，随时间与导入内容变化 |
+| App 别名端点 | `GetAliaZhongYao` + 24h 缓存 | 三源派生的只读出口，端点过滤空正名（ADR-0068） |
 | `YaoAlia`（本模块） | `yao_alia` 行 | 47 行实体别名（别名 → 正名），后台直接维护 |
 
 不要混用两者：`yao_alia` 不参与公开站、不进 `api/v1`、不挂 App 端点、不清公共缓存、
-不依赖 `items` / `channels` / `settings` / `ext_tcm_aliases`。反向也成立——旧链路
-不知道 `yao_alia` 存在，改本表不会影响 `GetAliaZhongYao` 的输出。两套并存是准入
-条件而非过渡态：同名别名可以指向不同正名，属预期双源。
+不依赖 `items` / `channels` / `settings`。反向也成立——App 链路不知道 `yao_alia`
+存在，改本表不会影响 `GetAliaZhongYao` 的输出。两套并存是准入条件而非过渡态：
+同名别名可以指向不同正名，属预期双源。手工别名维护层已于迁移 0190 退役（ADR-0068）。
 
 ## 表结构
 
@@ -49,7 +48,7 @@ ORDER BY yao_alia_no ASC, id ASC`，是有意为之的**整表读**——看板�
 ## 后台端点
 
 模块只给后台用，无公共 api/v1、无 App 端点（ADR-0064 决策 8）。5 条 ajax 端点，
-全部用专属码 `content:yao-alia:*`（不复用 `content:alias:*`）：
+全部用专属码 `content:yao-alia:*`（与 App 别名链路、中药目录授权边界独立）：
 
 | 方法 | 路径 | 门码 | 说明 |
 | --- | --- | --- | --- |
@@ -106,8 +105,8 @@ ORDER BY yao_alia_no ASC, id ASC`，是有意为之的**整表读**——看板�
 | 菜单节点 | `page_yao_alia`（`kind='page'`，parent `group_content`，sort 115，icon `tags`）+ 两行 `kind='code'` 叶子（ADR-0038） |
 | App 端 | 无。`audience` 全为 `desktop`，不新增 app 能力码、不动 `DOMAIN_RULES` |
 
-不复用 `content:alias:*` 的理由：旧 `/admin/aliases/` 页占用那两个码，且其授权语义是
-「App 别名端点覆盖/隐藏」，与本页「维护实体别名」不是一个边界。
+专属码的理由：旧手工别名维护层已于迁移 0190 退役（ADR-0068），本页「维护实体别名」
+与 App 别名端点、中药目录的授权边界始终独立。
 
 ## 代码位置
 
@@ -131,7 +130,7 @@ ORDER BY yao_alia_no ASC, id ASC`，是有意为之的**整表读**——看板�
 `.scratch/yao-alia-module/probe-output.txt`。两处为准，本页不复述数字，避免三处
 维护同一份事实。
 
-自检覆盖七项：文件落位、迁移落库事实（行数/去重数/序号上限/查询计划）、
+自检覆盖七项：文件位置、迁移入库事实（行数/去重数/序号上限/查询计划）、
 双语键集合与占位符相等、九处横切登记、新模块对旧别名链路的 import 数为零、
 行尾空白、`git diff --check`。任一项 FAIL 即阻断验收。
 

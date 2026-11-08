@@ -232,7 +232,8 @@ export const ADMIN_MENU_CODES = {
   BOOK_CHAPTER: 'book_chapter',
   // 独立「药材别名」页（ADR-0064）。侧栏行由页面节点 `page_yao_alia` 驱动，
   // `menuCodeFromNodeCode` 去前缀得 `yao_alia`，即本菜单码。本键只用于
-  // `activeNavItem` 高亮；授权走专属码 `content:yao-alia:*`，不复用 `content:alias:*`。
+  // `activeNavItem` 高亮；授权走专属码 `content:yao-alia:*`，不与已退役的
+  // 手工别名页共用码。
   YAO_ALIA: 'yao_alia',
   // 独立「方剂」页（ADR-0065）。侧栏行由页面节点 `page_fang_yao` 驱动，
   // `menuCodeFromNodeCode` 去前缀得 `fang_yao`，即本菜单码。本键只用于
@@ -249,7 +250,6 @@ export const ADMIN_MENU_CODES = {
   SETTINGS: 'settings',
   ANNOTATION_MARKERS: 'annotation_markers',
   FANGS: 'fangs',
-  ALIASES: 'aliases',
   YAO: 'yao',
   TERM: 'term',
   DEVICES: 'devices',
@@ -320,8 +320,6 @@ export const PERMISSION_CODES = {
   CONTENT_ANNOTATION_MARKERS_READ: 'content:annotation-markers:read',
   CONTENT_ANNOTATION_MARKERS_MANAGE: 'content:annotation-markers:manage',
   CONTENT_FANG_READ: 'content:fang:read',
-  CONTENT_ALIAS_READ: 'content:alias:read',
-  CONTENT_ALIAS_MANAGE: 'content:alias:manage',
   CONTENT_YAO_READ: 'content:yao:read',
   CONTENT_YAO_MANAGE: 'content:yao:manage',
   CONTENT_TERM_READ: 'content:term:read',
@@ -331,8 +329,8 @@ export const PERMISSION_CODES = {
   // `content:book-chapter:*` 与路由 `book-chapter` 同源、授权边界独立。
   CONTENT_BOOK_CHAPTER_READ: 'content:book-chapter:read',
   CONTENT_BOOK_CHAPTER_MANAGE: 'content:book-chapter:manage',
-  // 独立「药材别名」模块（ADR-0064）。不复用 `content:alias:*`（旧 /admin/aliases/
-  // 页占用）、`content:yao:*`（yao/zhongyao 占用）也不复用 `content:book:*`；
+  // 独立「药材别名」模块（ADR-0064）。不复用已退役的手工别名页的码，也不复用
+  // `content:yao:*`（yao/zhongyao 占用）与 `content:book:*`；
   // `content:yao-alia:*` 与路由 `yao-alia` 同源、授权边界独立。
   CONTENT_YAO_ALIA_READ: 'content:yao-alia:read',
   CONTENT_YAO_ALIA_MANAGE: 'content:yao-alia:manage',
