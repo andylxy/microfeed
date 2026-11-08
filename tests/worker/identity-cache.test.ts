@@ -19,6 +19,7 @@ import {
   replaceUserRoles,
   setRbacRoleMember,
 } from "@/server/admin/rbac-handlers";
+import {refreshUserSnapshotStatements} from "@/server/rbac/snapshot";
 
 /**
  * 角色对象缓存（方案 4.3）：命中不重复查库、清理后回源、`permissions` 还原成
@@ -43,10 +44,30 @@ async function seedUser(id: string): Promise<void> {
   ).bind(id, id, `${id}@example.com`).run();
 }
 
+/**
+ * 重算一个账号的权限快照（ADR-0053）。
+ *
+ * 测试用原生 SQL 改 `ext_user_roles`，绕过了生产写路径里的快照重算；这里补上，
+ * 否则 `cachedUserAccess` 回源调 `readSnapshotAccess` 读不到行，fail-closed 返回
+ * 空权限，缓存用例全部失败。
+ */
+async function refreshSnapshot(userId: string): Promise<void> {
+  await env.FEED_DB.batch(refreshUserSnapshotStatements(env.FEED_DB, userId));
+}
+
 async function assignRole(userId: string, roleId: string): Promise<void> {
   await env.FEED_DB.prepare(
     "INSERT OR IGNORE INTO ext_user_roles (user_id, role_id) VALUES (?, ?)",
   ).bind(userId, roleId).run();
+  await refreshSnapshot(userId);
+}
+
+/** 清掉账号的角色并同步快照：聚合命中 0 行时快照行被删，回源即空权限。 */
+async function clearRoles(userId: string): Promise<void> {
+  await env.FEED_DB.prepare(
+    "DELETE FROM ext_user_roles WHERE user_id = ?",
+  ).bind(userId).run();
+  await refreshSnapshot(userId);
 }
 
 async function clearState(): Promise<void> {
@@ -59,6 +80,9 @@ async function clearState(): Promise<void> {
     ),
     env.FEED_DB.prepare("DELETE FROM ext_roles WHERE code = ?")
       .bind(MEMBER_ROLE),
+    env.FEED_DB.prepare(
+      "DELETE FROM ext_user_permissions WHERE user_id = ?",
+    ).bind(USER_ID),
   ]);
   await deleteAppCacheControlEntry();
   await purgeUsersAccess([USER_ID]);
@@ -75,9 +99,7 @@ describe("cachedUserAccess", () => {
     const first = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(first.permissions.has("content:book:create")).toBe(true);
 
-    await env.FEED_DB.prepare(
-      "DELETE FROM ext_user_roles WHERE user_id = ?",
-    ).bind(USER_ID).run();
+    await clearRoles(USER_ID);
 
     const cached = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(cached.permissions.has("content:book:create")).toBe(true);
@@ -138,9 +160,7 @@ describe("cachedUserAccess", () => {
     expect(before.permissions.has("content:book:create")).toBe(true);
     expect(before.permissions.has("stale:perm")).toBe(false);
 
-    await env.FEED_DB.prepare(
-      "DELETE FROM ext_user_roles WHERE user_id = ?",
-    ).bind(USER_ID).run();
+    await clearRoles(USER_ID);
 
     const after = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(after.permissions.size).toBe(0);
@@ -186,9 +206,7 @@ describe("RBAC write paths purge the role object", () => {
     const after = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(after.permissions.has("content:book:create")).toBe(true);
 
-    await env.FEED_DB.prepare(
-      "DELETE FROM ext_user_roles WHERE user_id = ?",
-    ).bind(USER_ID).run();
+    await clearRoles(USER_ID);
     await deleteRbacRole(env.FEED_DB, MEMBER_ROLE);
   });
 
@@ -203,9 +221,7 @@ describe("RBAC write paths purge the role object", () => {
     const after = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(after.isMember).toBe(true);
 
-    await env.FEED_DB.prepare(
-      "DELETE FROM ext_user_roles WHERE user_id = ?",
-    ).bind(USER_ID).run();
+    await clearRoles(USER_ID);
     await deleteRbacRole(env.FEED_DB, MEMBER_ROLE);
   });
 });
