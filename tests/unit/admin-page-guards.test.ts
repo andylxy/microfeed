@@ -29,7 +29,8 @@ const PAGES = join("src", "pages", "[adminPath]");
 interface PageNode {
   code: string;
   parentCode: string | null;
-  path: string;
+  /** `null` = 隐藏页（0191 `page_content_api`，无页面文件）；`""` = 仪表盘根页。 */
+  path: string | null;
   entryCode: string | null;
   /** `desktop` (the admin sidebar) or `app` (the App tab bar). */
   audience: string;
@@ -39,6 +40,17 @@ interface PageNode {
 function nullableLiteral(raw: string | undefined): string | null {
   if (!raw || raw === "NULL" || raw === "''") return null;
   return raw.slice(1, -1);
+}
+
+/**
+ * `path` 列专用：`NULL` 是隐藏页（无页面文件，0191 `page_content_api`），而
+ * `''` 是仪表盘根页（`index.astro`）——两者不能像 `nullableLiteral` 那样合并，
+ * 否则根页会被误判成隐藏页而跳过守卫校验。
+ */
+function nodePathLiteral(raw: string | undefined): string | null {
+  const text = (raw ?? "").trim();
+  if (text === "NULL") return null;
+  return leadingLiteral(text);
 }
 
 /**
@@ -126,7 +138,7 @@ function applyNodeAssignments(row: PageNode, assignments: string): void {
     const value = nullableLiteral(parsed?.groups?.value);
     if (column === "parent_code") row.parentCode = value;
     else if (column === "entry_code") row.entryCode = value;
-    else if (column === "path") row.path = value ?? "";
+    else if (column === "path") row.path = nodePathLiteral(parsed?.groups?.value);
     // 0129 在同一条语句里把三个纯 App 节点改挂到 `group_app` 并改 `audience`；
     // 不跟这一列，App 树会漏进桌面端集合，`group_app` 会被当成侧栏分组。
     else if (column === "audience" && value) row.audience = value;
@@ -295,7 +307,7 @@ function readPageNodes(): PageNode[] {
         rows.set(code, {
           code,
           parentCode: parentIndex < 0 ? null : nullableLiteral(values[parentIndex]),
-          path: pathIndex < 0 ? "" : leadingLiteral(values[pathIndex] ?? ""),
+          path: pathIndex < 0 ? "" : nodePathLiteral(values[pathIndex] ?? ""),
           entryCode: entryIndex < 0 ? null : nullableLiteral(values[entryIndex]),
           // 0127 predates the column; every row it writes is a desktop node.
           audience: audienceIndex < 0
@@ -448,6 +460,9 @@ describe("menu page guards", () => {
 
   it("guards every page node with the code its entry binds", () => {
     for (const page of pages) {
+      // 隐藏页（0191 `page_content_api`）没有 `path`，无页面文件可守卫；
+      // 它们不在侧栏，也不携带守卫码。
+      if (page.path === null) continue;
       const source = pageSource(page.path);
       if (page.entryCode === null) {
         expect(

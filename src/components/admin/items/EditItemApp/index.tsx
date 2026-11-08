@@ -253,7 +253,7 @@ export default class EditItemApp extends React.Component<Props, any> {
     const withCurrent =
       current && !names.includes(current) ? [current, ...names] : names;
     return [
-      {value: "", label: i18n.t('volumes.unfiled')},
+      {value: "", label: i18n.t('shared.volumes.unfiled')},
       ...withCurrent.map((name: string) => ({value: name, label: name})),
     ];
   }
@@ -590,7 +590,7 @@ export default class EditItemApp extends React.Component<Props, any> {
                   value: microfeed.volume ? String(microfeed.volume) : '',
                   label: microfeed.volume
                     ? String(microfeed.volume)
-                    : i18n.t('volumes.unfiled'),
+                    : i18n.t('shared.volumes.unfiled'),
                 }}
                 onChange={(option: any) => {
                   this.onUpdateItemMicrofeedMeta(

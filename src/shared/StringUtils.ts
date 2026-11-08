@@ -443,9 +443,6 @@ export const ADMIN_URLS = {
   ajaxPage: (id: string) => adminUrl(`ajax/pages/${id}`, browserAdminPath()),
   ajaxCategories: () => adminUrl("ajax/categories", browserAdminPath()),
   ajaxBooks: () => adminUrl("ajax/books", browserAdminPath()),
-  ajaxBook: (id: string) => adminUrl(`ajax/books/${id}`, browserAdminPath()),
-  ajaxBookPurge: (id: string) =>
-    adminUrl(`ajax/books/${id}/purge`, browserAdminPath()),
   ajaxBookInfo: () => adminUrl("ajax/book-info", browserAdminPath()),
   ajaxBookInfoItem: (id: string) =>
     adminUrl(`ajax/book-info/${id}`, browserAdminPath()),
@@ -558,31 +555,10 @@ export const ADMIN_URLS = {
     adminUrl("ajax/annotation-markers/update", browserAdminPath()),
   ajaxAnnotationMarkersDelete: () =>
     adminUrl("ajax/annotation-markers/delete", browserAdminPath()),
-  volumes: () => adminUrl("volumes", browserAdminPath()),
   ajaxVolumes: () => adminUrl("ajax/volumes", browserAdminPath()),
-  ajaxVolumeEntries: () =>
-    adminUrl("ajax/volumes/entries", browserAdminPath()),
-  ajaxVolumeAssign: () =>
-    adminUrl("ajax/volumes/assign", browserAdminPath()),
-  ajaxVolumeRename: () =>
-    adminUrl("ajax/volumes/rename", browserAdminPath()),
-  ajaxVolumeReorder: () =>
-    adminUrl("ajax/volumes/reorder", browserAdminPath()),
-  ajaxVolumeOrder: () => adminUrl("ajax/volumes/order", browserAdminPath()),
   /** TCM: 条文反向引用某方剂（section 的 fangList / 正文标记含方剂名）。 */
   ajaxTcmFangReferences: () =>
     adminUrl("ajax/tcm/fang-references", browserAdminPath()),
-  /** 方剂管理独立看板：列某书的方剂（只读看板，编辑走条目页）。 */
-  ajaxFangs: () => adminUrl("ajax/fangs", browserAdminPath()),
-  /** 中药 / 名词管理看板：列某书的条目（kind = yao | term）。写操作走 actionFile。 */
-  ajaxTcmEntry: (kind: string) =>
-    adminUrl(`ajax/${kind}`, browserAdminPath()),
-  /** 中药 / 名词写操作（add / update / 软删，均 POST，用 action 字段区分）。 */
-  ajaxTcmEntryAction: (kind: string) =>
-    adminUrl(`ajax/${kind}/action`, browserAdminPath()),
-  /** 恢复一个被软删的中药 / 名词条目。 */
-  ajaxTcmEntryRestore: (kind: string) =>
-    adminUrl(`ajax/${kind}/restore`, browserAdminPath()),
   /** 设备总览（跨账号），以及吊销 / 恢复单台设备。 */
   ajaxDevices: () => adminUrl("ajax/devices", browserAdminPath()),
   ajaxDeviceRevoke: () => adminUrl("ajax/devices/revoke", browserAdminPath()),
@@ -636,10 +612,6 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/audit/${id}`, browserAdminPath()),
   audit: () => adminUrl("audit", browserAdminPath()),
   auditItem: (id: string) => adminUrl(`audit/${id}`, browserAdminPath()),
-  ajaxCategoryOrder: () =>
-    adminUrl("ajax/categories/order", browserAdminPath()),
-  ajaxCategory: (id: string) =>
-    adminUrl(`ajax/categories/${id}`, browserAdminPath()),
   ajaxSiteFiles: () => adminUrl("ajax/site-files", browserAdminPath()),
   ajaxSiteFile: (id: string) =>
     adminUrl(`ajax/site-files/${id}`, browserAdminPath()),

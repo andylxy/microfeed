@@ -89,8 +89,10 @@ describe("RBAC permission resolution", () => {
     await assignRole("u1", "r_editor");
     const permissions = await resolveUserPermissions(env.FEED_DB, "u1");
     expect(permissions.has("content:book:create")).toBe(true);
-    expect(permissions.has("content:category:update")).toBe(true);
-    expect(permissions.has("content:volume:update")).toBe(true);
+    // 0191 退役 legacy 内容看板后 category 只剩只读码，写码随看板退役；
+    // 内容子模块的写权限由 book_chapter 板继续承担。
+    expect(permissions.has("content:category:read")).toBe(true);
+    expect(permissions.has("content:chapter:update")).toBe(true);
     expect(permissions.has("content:book:delete")).toBe(false);
     expect(permissions.has("*")).toBe(false);
   });
@@ -464,8 +466,11 @@ describe("RBAC catalog integrity", () => {
     // seeding the codes and 0120 granting them to the editor).
     // 迁移 0190（ADR-0068）移除了 0074/0075 种下的两枚别名看板授权，
     // 因此总数停在 21 而不是 23。
+    // 迁移 0191（ADR-0069）退役 6 个 legacy 内容看板，移除 editor 持有的
+    // content:category:update / content:volume:read / content:volume:update /
+    // content:fang:read（4 枚），因此总数从 21 降到 17。
     // Bump this when a seed deliberately widens a role.
-    expect(editorCount?.c).toBe(21);
+    expect(editorCount?.c).toBe(17);
 
     const superAdminWildcard = await env.FEED_DB.prepare(
       "SELECT COUNT(*) AS c FROM ext_role_permissions rp " +
@@ -525,10 +530,11 @@ describe("RBAC administration", () => {
     // `content:term:manage`; 21 since 0119/0120 added `app:version:read` +
     // `app:announcement:read` (default-granted to editor under 运营管理 leaf).
     // 迁移 0190 移除了 0074/0075 的两枚别名看板授权。
-    // 19 on the PC console: the two App capability codes editor also holds
+    // 迁移 0191 退役 6 个 legacy 内容看板，editor 的授权 21→17。
+    // 15 on the PC console: the two App capability codes editor also holds
     // (`app:version:read`, `app:announcement:read`) belong to the App console
     // and are cropped from this board (ADR-0039 D2).
-    expect(editor?.permissions).toHaveLength(19);
+    expect(editor?.permissions).toHaveLength(15);
     expect(editor?.permissions).toContain("content:book:create");
     expect(editor?.permissions).not.toContain("content:book:delete");
     expect(board.permissions.map((entry) => entry.code)).toContain(
@@ -536,15 +542,15 @@ describe("RBAC administration", () => {
     );
     expect(board.roles.map((role) => role.code)).toContain("super_admin");
 
-    // The permission tree is organised by the menu (migration 0052): books sits
-    // under the content group and governs all four of its codes.
+    // The permission tree is organised by the menu (migration 0191): book_info
+    // sits under the content group and governs all four of its codes.
     const content = board.groups.find((group) => group.code === "group_content");
-    const books = content?.pages.find((page) => page.code === "books");
-    expect(books?.codes).toEqual([
-      "content:book:create",
-      "content:book:delete",
+    const bookInfo = content?.pages.find((page) => page.code === "book_info");
+    expect(bookInfo?.codes).toEqual([
       "content:book:read",
+      "content:book:create",
       "content:book:update",
+      "content:book:delete",
     ]);
 
     // Nothing assignable may be invisible: every catalogue code but `*` appears
@@ -581,9 +587,6 @@ describe("RBAC administration", () => {
       "content:book:read",
       "content:book:update",
       "content:category:read",
-      "content:category:update",
-      "content:volume:read",
-      "content:volume:update",
     ], "desktop");
   });
 

@@ -217,7 +217,7 @@ export default class EditChannelApp extends React.Component<Props, any> {
         ? microfeed.genre
         : String(microfeed.genre);
     const genreOptions = [
-      {value: '', label: t('categories.noParent')},
+      {value: '', label: t('shared.categories.noParent')},
       ...this.state.genreOptions,
     ];
     const genreOption = genreOptions.find(
@@ -420,15 +420,15 @@ export default class EditChannelApp extends React.Component<Props, any> {
             </div>
           </details>
           <div className="rounded-[14px] border bg-card p-5 text-card-foreground shadow-xs">
-            <h2 className="text-lg font-semibold">{t('categories.sectionTitle')}</h2>
+            <h2 className="text-lg font-semibold">{t('shared.categories.sectionTitle')}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t('categories.intro')}
+              {t('shared.categories.intro')}
             </p>
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
               <AdminSelect
-                ariaLabel={t('categories.primaryGenre')}
-                label={t('categories.primaryGenre')}
-                placeholder={t('categories.primaryGenrePlaceholder')}
+                ariaLabel={t('shared.categories.primaryGenre')}
+                label={t('shared.categories.primaryGenre')}
+                placeholder={t('shared.categories.primaryGenrePlaceholder')}
                 options={genreOptions}
                 value={genreOption}
                 disabled={this.state.genreLoading}
@@ -438,8 +438,8 @@ export default class EditChannelApp extends React.Component<Props, any> {
                 )}
               />
               <AdminInput
-                label={t('categories.tags')}
-                placeholder={t('categories.tagsPlaceholder')}
+                label={t('shared.categories.tags')}
+                placeholder={t('shared.categories.tagsPlaceholder')}
                 value={tagsValue}
                 onChange={(e: any) => {
                   const tags = e.target.value

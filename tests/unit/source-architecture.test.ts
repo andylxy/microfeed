@@ -533,68 +533,23 @@ describe("source architecture", () => {
     expect(itemEditorRoute).not.toContain("childName:");
   });
 
-  it("lets the board decide the item editor's back link", async () => {
-    const [itemEditorRoute, volumeBoard, fangBoard, tcmEntryBoard] =
-      await Promise.all([
-        readFile(
-          path.join(
-            repositoryRoot,
-            "src",
-            "pages",
-            "[adminPath]",
-            "items",
-            "[itemId]",
-            "index.astro",
-          ),
-          "utf8",
-        ),
-        readFile(
-          path.join(
-            repositoryRoot,
-            "src",
-            "components",
-            "admin",
-            "volumes",
-            "VolumesApp.tsx",
-          ),
-          "utf8",
-        ),
-        readFile(
-          path.join(
-            repositoryRoot,
-            "src",
-            "components",
-            "admin",
-            "fangs",
-            "FangsApp.tsx",
-          ),
-          "utf8",
-        ),
-        readFile(
-          path.join(
-            repositoryRoot,
-            "src",
-            "components",
-            "admin",
-            "tcm-entry",
-            "TcmEntryBoardApp.tsx",
-          ),
-          "utf8",
-        ),
-      ]);
+  it("wires the item editor's back link through resolveAdminReturnTarget", async () => {
+    const itemEditorRoute = await readFile(
+      path.join(
+        repositoryRoot,
+        "src",
+        "pages",
+        "[adminPath]",
+        "items",
+        "[itemId]",
+        "index.astro",
+      ),
+      "utf8",
+    );
 
-    // 看板在链接上自报家门，编辑页把面包屑、侧栏高亮、删除后的跳转目标都交给
-    // 解析结果（ADR-0036）。这三处任一漏接，返回链接就退回「查看全部条目」。
-    expect(volumeBoard).toContain('adminReturnQuery("volumes"');
-    expect(fangBoard).toContain('adminReturnQuery("fangs"');
-    expect(tcmEntryBoard).toContain("adminReturnQuery(kind");
-    // 看板自己也得把选中的书读写进地址，否则返回目标指过去是一片空屏。
-    for (const board of [volumeBoard, fangBoard, tcmEntryBoard]) {
-      expect(board).toContain('readBoardParam("bookId")');
-    }
-    expect(volumeBoard).toContain('writeBoardParams({bookId: id, volume: ""})');
-    expect(fangBoard).toContain("writeBoardParams({bookId: id})");
-    expect(tcmEntryBoard).toContain("writeBoardParams({bookId: id})");
+    // 编辑页把面包屑、侧栏高亮、删除后的跳转目标都交给返回链接解析结果（ADR-0036）。
+    // 6 个 legacy 看板已退役（ADR-0069），resolveAdminReturnTarget 现恒返 null，
+    // 但 items 编辑页仍须保持接入，否则返回链接退回「查看全部条目」。
     expect(itemEditorRoute).toContain("resolveAdminReturnTarget(");
     expect(itemEditorRoute).toContain("breadcrumb={breadcrumb}");
     expect(itemEditorRoute).toContain("activeNavItem={returnTarget?.menuCode");

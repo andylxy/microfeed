@@ -68,67 +68,43 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     ],
   },
 
-  // ── content · 分类 ───────────────────────────────────────────
-  "content:category:create": {
+  // ── content · 书本卷章（独立模块，授权边界与书列表分开） ──────
+  "content:book-chapter:read": {
     summary:
-      "新建分类。分类是书的归类维度，新建后还需要 content:category:order 才能调整它在导航里的顺序。",
-    gates: ["接口 /ajax/categories（POST）— 新建分类"],
-    caveats: ["不默认授予 editor。", "与 content:category:order 分开：能建不等于能排序。"],
-  },
-  "content:category:read": {
-    summary:
-      "查看分类列表与单个分类详情。分类页、表单里的分类下拉、集成 API 的分类读取都靠它；没有它，分类页打不开。",
+      "查看书本卷章（独立模块 book_chapter）的卷章列表与正文。书本卷章看板与集成读取都靠它；没有这个码，卷章页会 403。",
     gates: [
-      "页面 /categories — 分类列表",
-      "接口 /ajax/categories（GET）— 分类列表",
-      "接口 /ajax/categories/{categoryId}（GET）— 单个分类详情",
-      "集成 API content/categories（GET）— 只读",
-    ],
-    caveats: ["默认授予 editor / readonly。"],
-  },
-  "content:category:update": {
-    summary: "编辑分类。改分类名、描述等属性。",
-    gates: ["接口 /ajax/categories/{categoryId}（PUT）— 更新单个分类"],
-    caveats: ["默认授予 editor / readonly。", "改排序不在这里，归 content:category:order。"],
-  },
-  "content:category:delete": {
-    summary: "删除分类。删除前要确认分类下没有仍要保留的书。",
-    gates: ["接口 /ajax/categories/{categoryId}（DELETE）— 删除单个分类"],
-    caveats: ["不默认授予 editor。"],
-  },
-  "content:category:order": {
-    summary: "调整分类排序。排序结果会影响前台分类导航的展示顺序。",
-    gates: ["接口 /ajax/categories/order（PUT）— 批量保存分类顺序"],
-    caveats: ["不默认授予 editor。", "排序是独立权限：能编辑分类不代表能改顺序。"],
-  },
-
-  // ── content · 卷 ─────────────────────────────────────────────
-  "content:volume:read": {
-    summary:
-      "查看卷结构。一本书下的卷列表、每卷包含哪些条目，都靠这个码读取；没有它，卷页面打不开。",
-    gates: [
-      "页面 /volumes — 卷结构",
-      "接口 /ajax/volumes（GET）— 卷列表",
-      "接口 /ajax/volumes/entries — 卷内条目",
-    ],
-    caveats: ["默认授予 editor / readonly。"],
-  },
-  "content:volume:update": {
-    summary:
-      "编辑卷结构：把条目分配到卷、调整卷顺序、重命名卷、重排卷内条目。它只动归属与顺序，不改章节正文。",
-    gates: [
-      "接口 /ajax/volumes/assign — 把条目分配到卷",
-      "接口 /ajax/volumes/order — 调整卷的先后顺序",
-      "接口 /ajax/volumes/rename — 重命名卷",
-      "接口 /ajax/volumes/reorder — 重排卷内条目",
+      "页面 /book-chapter — 书本卷章看板，进入即校验",
+      "接口 /ajax/book-chapter（GET）— 卷章列表查询",
+      "接口 /ajax/book-chapter/{chapterId}、/body/{bodyId}（GET）— 章与正文读取",
     ],
     caveats: [
       "默认授予 editor / readonly。",
-      "章节正文的增删改归 content:chapter:*，与卷结构分开。",
+      "与 content:book-chapter:manage 分开：只读码不能编辑、不能删、不能清缓存。",
+    ],
+  },
+  "content:book-chapter:manage": {
+    summary:
+      "编辑书本卷章：改章属性与正文、删除章与正文、清缓存。它只管书本卷章模块的写侧。",
+    gates: [
+      "接口 /ajax/book-chapter/{chapterId}（PUT）— 更新章",
+      "接口 /ajax/book-chapter/body/{bodyId}（PUT）— 更新正文",
+      "接口 /ajax/book-chapter/{chapterId}/purge、/body/{bodyId}/purge — 清缓存",
+    ],
+    caveats: [
+      "默认授予 editor / readonly。",
+      "删除与清缓存动作复用本码，没有单独写码。",
     ],
   },
 
-  // ── content · 章节（条目） ───────────────────────────────────
+  // ── content · 分类 ───────────────────────────────────────────
+  // 分类看板随 ADR-0069 退役；`content:category:read` 保留目录位，重挂到隐藏页
+  // page_content_api（visible=0、无菜单行），不再接可见页面，仅门控集成 API。
+  "content:category:read": {
+    summary:
+      "查看分类。分类看板已退役，本码重挂到隐藏页 page_content_api 承接目录位；不再门控可见页面，仍门控集成 API content/categories 的读取。",
+    gates: ["集成 API content/categories（GET）— 只读；写方法返回 405"],
+    caveats: ["默认授予 editor / readonly。"],
+  },
   "content:chapter:create": {
     summary:
       "新建章节（条目）。章节是实际内容单元，新建后才会出现在条目列表和卷结构里。",
@@ -355,13 +331,7 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
     caveats: ["不默认授予 editor。", "改标记后 App 下次启动才取到新配置。"],
   },
 
-  // ── content · 方剂 / 别名 / 中药 / 名词 ─────────────────────
-  "content:fang:read": {
-    summary:
-      "查看方剂。方剂板只读，行内编辑会跳到条目页，条目编辑受章节码控制。",
-    gates: ["页面 /fangs", "接口 /ajax/fangs（GET）— 方剂列表"],
-    caveats: ["默认授予 editor / readonly。", "方剂板的写操作不在本码，走条目页的章节码。"],
-  },
+  // ── content · 别名 / 中药 / 名词 ─────────────────────────────
   "content:yao:read": {
     summary: "查看中药。",
     gates: ["页面 /yao", "接口 /ajax/yao（GET）— 中药列表", "中药条目接口的读分支"],

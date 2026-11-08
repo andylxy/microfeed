@@ -118,7 +118,9 @@ describe("listPcInterfaces matches the real admin ajax routes", () => {
     // 规模钉成具体数字：增删任何一行都要在这里改数字，顺手逼一次「这是有意的」。
     // 自建账号端点（account/*、auth/credential-login 等）只要求活跃账号、不绑
     // 权限码，不在授权树里出现，因此不进这份清单。
-    expect(rows).toHaveLength(148);
+    // 注意：`/admin/ajax/feed` 是多门码条目（跨行），listPcInterfaces 按实际
+    // 端点计（ADR-0069 删 6 看板 23 个条目后为 126）。
+    expect(rows).toHaveLength(126);
   });
 
   it("keeps every path unique per method", () => {
@@ -134,7 +136,7 @@ describe("listPcInterfaces matches the real admin ajax routes", () => {
     // 站点把后台配到 /cms/ 时，叶子上显示的就是 /cms/ajax/…（目录里存的是默认基址）。
     const custom = listPcInterfaces("cms");
     expect(custom).toHaveLength(rows.length);
-    expect(custom[0]?.path).toBe("/cms/ajax/books");
+    expect(custom[0]?.path).toBe("/cms/ajax/book-info");
     expect(custom.some((row) => row.path.startsWith(`/${DEFAULT_ADMIN_PATH}/`))).toBe(false);
   });
 

@@ -21,11 +21,6 @@ import {adminBasePath, DEFAULT_ADMIN_PATH} from "@/shared/AdminPath";
 type CatalogEntry = readonly [method: string, path: string, ...codes: string[]];
 
 const C: readonly CatalogEntry[] = [
-  // 书籍（content:book:*）
-  ["GET", "/admin/ajax/books", "content:book:read"],
-  ["POST", "/admin/ajax/books", "content:book:create"],
-  ["PUT", "/admin/ajax/books/[bookId]", "content:book:update"],
-  ["DELETE", "/admin/ajax/books/[bookId]", "content:book:delete"],
   // 书本信息（content:book:*，独立表 book_info，ADR-0058——复用书码，不加新码）
   ["GET", "/admin/ajax/book-info", "content:book:read"],
   ["POST", "/admin/ajax/book-info", "content:book:create"],
@@ -39,20 +34,6 @@ const C: readonly CatalogEntry[] = [
   // 状态清单（迁移 0173/0174——settings 独立状态，复用书码，不加新码）
   ["GET", "/admin/ajax/book-info/statuses", "content:book:read"],
   ["PUT", "/admin/ajax/book-info/statuses", "content:book:update"],
-  // 分类（content:category:*）
-  ["GET", "/admin/ajax/categories", "content:category:read"],
-  ["GET", "/admin/ajax/categories/[categoryId]", "content:category:read"],
-  ["POST", "/admin/ajax/categories", "content:category:create"],
-  ["PUT", "/admin/ajax/categories/[categoryId]", "content:category:update"],
-  ["DELETE", "/admin/ajax/categories/[categoryId]", "content:category:delete"],
-  ["POST", "/admin/ajax/categories/order", "content:category:order"],
-  // 卷（content:volume:*）
-  ["GET", "/admin/ajax/volumes", "content:volume:read"],
-  ["GET", "/admin/ajax/volumes/entries", "content:volume:read"],
-  ["POST", "/admin/ajax/volumes/assign", "content:volume:update"],
-  ["POST", "/admin/ajax/volumes/order", "content:volume:update"],
-  ["POST", "/admin/ajax/volumes/rename", "content:volume:update"],
-  ["POST", "/admin/ajax/volumes/reorder", "content:volume:update"],
   // 章节（content:chapter:*）。feed POST 按 body 分发 create / update / delete，
   // 三枚码同挂一行；delete 不是独立的 DELETE 方法。
   ["GET", "/admin/ajax/items", "content:chapter:read"],
@@ -77,15 +58,6 @@ const C: readonly CatalogEntry[] = [
   ["POST", "/admin/ajax/annotation-markers/create", "content:annotation-markers:manage"],
   ["POST", "/admin/ajax/annotation-markers/update", "content:annotation-markers:manage"],
   ["POST", "/admin/ajax/annotation-markers/delete", "content:annotation-markers:manage"],
-  // 方剂 / 中药 / 名词（content:fang|yao|term:*）。
-  // yao/term 的动词共用一个 action 文件，全部 POST、按 body 的 action 字段分发。
-  ["GET", "/admin/ajax/fangs", "content:fang:read"],
-  ["GET", "/admin/ajax/yao", "content:yao:read"],
-  ["POST", "/admin/ajax/yao/action", "content:yao:manage"],
-  ["POST", "/admin/ajax/yao/restore", "content:yao:manage"],
-  ["GET", "/admin/ajax/term", "content:term:read"],
-  ["POST", "/admin/ajax/term/action", "content:term:manage"],
-  ["POST", "/admin/ajax/term/restore", "content:term:manage"],
   // 页面（content:page:manage）
   ["GET", "/admin/ajax/pages", "content:page:manage"],
   ["POST", "/admin/ajax/pages", "content:page:manage"],

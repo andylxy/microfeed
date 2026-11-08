@@ -109,9 +109,10 @@ describe("admin menu seed", () => {
     expect(
       seeded.some((row) => row.code === `page_${ADMIN_MENU_CODES.ADMIN_HOME}`),
     ).toBe(false);
-    // `page_media` is the deliberate exception: `media` only carries codes and
-    // is not in the sidebar, so it binds no code either.
-    const unbindable = new Set(["page_media"]);
+    // `page_media` 是刻意的例外：`media` 只携带码、不在侧栏，故也不绑定码。
+    // `page_content_api`（ADR-0069）同类隐藏节点——携带码但不在侧栏，
+    // 故 `entry_code`/`path` 保持为空。
+    const unbindable = new Set(["page_media", "page_content_api"]);
 
     const permissions = await env.FEED_DB.prepare(
       "SELECT code FROM ext_permissions",
@@ -188,11 +189,20 @@ describe("readAdminMenu", () => {
     const codes = menuIds(menu);
 
     // 2026-10-16 起 readonly 与 editor 相同（用户要求同步）：content + pages + site-files。
+    // ADR-0069 后 books/volumes/categories/fangs/yao/term 六看板退役，content 组只剩
+    // 独立模块板。readonly/editor 能看到其中三个（book_info / ming_ci / zhong_yao），
+    // 因为它们的入口码（content:book/term/yao:read）在迁移播种的角色授权里；而
+    // book_chapter / yao_alia / fang_yao 三个板的专属入口码（content:book-chapter/
+    // yao-alia/fang-yao:read）从未通过迁移播种给 editor 角色（seed.ts 目录有、
+    // 0031 及独立模块迁移实际无——既有漂移，见 ADR-0060/0062/0064/0065），故不可见。
     expect(codes).toContain(ADMIN_MENU_CODES.ADMIN_HOME);
     expect(codes).toContain(ADMIN_MENU_CODES.ALL_ITEMS);
-    expect(codes).toContain(ADMIN_MENU_CODES.BOOKS);
-    expect(codes).toContain(ADMIN_MENU_CODES.CATEGORIES);
-    expect(codes).toContain(ADMIN_MENU_CODES.VOLUMES);
+    expect(codes).toContain(ADMIN_MENU_CODES.BOOK_INFO);
+    expect(codes).toContain(ADMIN_MENU_CODES.MING_CI);
+    expect(codes).toContain(ADMIN_MENU_CODES.ZHONG_YAO);
+    expect(codes).not.toContain(ADMIN_MENU_CODES.BOOK_CHAPTER);
+    expect(codes).not.toContain(ADMIN_MENU_CODES.YAO_ALIA);
+    expect(codes).not.toContain(ADMIN_MENU_CODES.FANG_YAO);
     expect(codes).toContain(ADMIN_MENU_CODES.PAGES);
     expect(codes).toContain(ADMIN_MENU_CODES.SITE_FILES);
     // Admin-only menus stay hidden (no system:*/content:review/audit/settings/api codes).
@@ -260,11 +270,11 @@ describe("readAdminMenu", () => {
       env.FEED_DB,
       locals(EDITORS, "user", permissions),
       ADMIN_PATH,
-      ADMIN_MENU_CODES.BOOKS,
+      ADMIN_MENU_CODES.BOOK_INFO,
       false,
     );
     const home = findItem(menu, ADMIN_MENU_CODES.ADMIN_HOME);
-    const books = findItem(menu, ADMIN_MENU_CODES.BOOKS);
+    const books = findItem(menu, ADMIN_MENU_CODES.BOOK_INFO);
     expect(home?.disabled).toBe(false);
     expect(books?.disabled).toBe(true);
     expect(books?.active).toBe(true);
@@ -286,16 +296,19 @@ describe("readAdminMenu", () => {
     expect(menuIds(menu)).toEqual([
       ADMIN_MENU_CODES.ADMIN_HOME,
       "group_content",
-      ADMIN_MENU_CODES.BOOKS,
-      // 0142: the book status dictionary sits right after the books board.
+      // ADR-0069：六看板（books/volumes/categories/fangs/yao/term）退役后，book_statuses
+      // 升为「内容」组首项；其后依次是独立模块板（all_items 与 annotation_markers
+      // 沿用 0142/0127 的相对位置，book_info 之后接 ming_ci/zhong_yao/book_chapter/
+      // yao_alia/fang_yao，按各模块迁移的 sort）。
       ADMIN_MENU_CODES.BOOK_STATUSES,
-      ADMIN_MENU_CODES.VOLUMES,
-      ADMIN_MENU_CODES.CATEGORIES,
       ADMIN_MENU_CODES.ALL_ITEMS,
       ADMIN_MENU_CODES.ANNOTATION_MARKERS,
-      ADMIN_MENU_CODES.FANGS,
-      ADMIN_MENU_CODES.YAO,
-      ADMIN_MENU_CODES.TERM,
+      ADMIN_MENU_CODES.BOOK_INFO,
+      ADMIN_MENU_CODES.MING_CI,
+      ADMIN_MENU_CODES.ZHONG_YAO,
+      ADMIN_MENU_CODES.BOOK_CHAPTER,
+      ADMIN_MENU_CODES.YAO_ALIA,
+      ADMIN_MENU_CODES.FANG_YAO,
       "group_review",
       ADMIN_MENU_CODES.REVIEW,
       ADMIN_MENU_CODES.AUDIT,
@@ -329,7 +342,8 @@ describe("readAdminMenu", () => {
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});
     // A group has no landing page: it links to its first visible child.
-    expect(findItem(menu, "group_content")?.url).toBe("/admin/books/");
+    // ADR-0069 后「内容」组首个可见子项是 book_statuses（原 books 已退役）。
+    expect(findItem(menu, "group_content")?.url).toBe("/admin/book-statuses/");
     expect(findItem(menu, "group_account")?.url).toBe("/admin/rbac/");
     expect(findItem(menu, "group_operations")?.url).toBe("/admin/devices/");
   });

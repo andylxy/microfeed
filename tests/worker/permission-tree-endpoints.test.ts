@@ -17,6 +17,9 @@ import type {PermissionNodeRow, PermissionTreeOp} from "@/shared/PermissionTreeO
  * 移空的兜底行，0130 补上 `system:app-capability:manage` 的叶子——两端合计 90 行，
  * PC 端 78 行、App 端 12 行。写路径只用自建分组（`pm_` 前缀行）与自恢复的 code
  * 行改父来验证；种子结构在用例内还原，等价回归测试不受影响。
+ * 0191（ADR-0069）退役 6 个 legacy 内容看板：删 6 页 + 16 码叶、9 枚复用码叶
+ * 重建到 page_book_info / page_ming_ci / page_zhong_yao、新建隐藏页 page_content_api；
+ * PC 端行数由 82 → 86（实测，含 0150/0154 的登录方式与邮件设置行）。
  */
 
 interface ResponseRow extends PermissionNodeRow {
@@ -59,12 +62,12 @@ afterEach(async () => {
   await env.FEED_DB
     .prepare(`DELETE FROM ext_permission_nodes WHERE id LIKE 'pm_%'`)
     .run();
-  // code 行改父用例若中途失败，这里把种子映射还原回 0127 的初始父级。
+  // code 行改父用例若中途失败，这里把种子映射还原回 0191 重建的初始父级。
   await env.FEED_DB
     .prepare(
-      "UPDATE ext_permission_nodes SET parent_code = 'page_volumes' WHERE code = ?",
+      "UPDATE ext_permission_nodes SET parent_code = 'page_book_info' WHERE code = ?",
     )
-    .bind("content:volume:read")
+    .bind("content:book:read")
     .run();
 });
 
@@ -80,12 +83,13 @@ describe("GET /ajax/rbac/permission-tree", () => {
     const rows = await rowsFrom(response);
     const codes = new Set(rows.map((row) => row.code));
     expect(codes.has("group_content")).toBe(true);
-    expect(codes.has("page_books")).toBe(true);
+    // 0191（ADR-0069）退役 6 个 legacy 内容看板后，book 码叶重建到 page_book_info。
+    expect(codes.has("page_book_info")).toBe(true);
     expect(codes.has("content:book:read")).toBe(true);
-    // 两端合计 97 行（PC 82 + App 15）；菜单管理页的两行已随 0135 退役，
+    // 两端合计 101 行（PC 86 + App 15）；菜单管理页的两行已随 0135 退役，
     // 书籍状态字典的页行与码叶子随 0142 进入 PC 端，关于页的 1 页行 + 2 码行
-    // 随 0145 进入 PC 端。
-    expect(rows).toHaveLength(82);
+    // 随 0145 进入 PC 端；0150/0154 加入登录方式与邮件设置；0191 删 22 行建 10 行。
+    expect(rows).toHaveLength(86);
     // App 端的行不在 PC 端的树里。
     expect(codes.has("group_app")).toBe(false);
     expect(codes.has("app:nav:read")).toBe(false);
@@ -292,26 +296,26 @@ describe("POST /ajax/rbac/permission-tree/save", () => {
     // 跨页改父 = 移动权限对象的位置（ADR-0038 的核心动作）。
     const {response, rows} = await save([
       {
-        code: "content:volume:read",
+        code: "content:book:read",
         op: "update",
-        patch: {parentCode: "page_books"},
+        patch: {parentCode: "page_book_statuses"},
       },
     ]);
     expect(response.status).toBe(200);
-    const moved = rows.find((row) => row.code === "content:volume:read");
-    expect(moved?.parentCode).toBe("page_books");
+    const moved = rows.find((row) => row.code === "content:book:read");
+    expect(moved?.parentCode).toBe("page_book_statuses");
 
-    // 自恢复：还回 0127 种子的初始父级，等价回归测试看到的结构不变。
+    // 自恢复：还回 0191 重建的初始父级，等价回归测试看到的结构不变。
     const back = await save([
       {
-        code: "content:volume:read",
+        code: "content:book:read",
         op: "update",
-        patch: {parentCode: "page_volumes"},
+        patch: {parentCode: "page_book_info"},
       },
     ]);
     expect(back.response.status).toBe(200);
-    expect(back.rows.find((row) => row.code === "content:volume:read")?.parentCode)
-      .toBe("page_volumes");
+    expect(back.rows.find((row) => row.code === "content:book:read")?.parentCode)
+      .toBe("page_book_info");
   });
 
   it("refuses to hang a code row under a group (only pages hold codes)", async () => {

@@ -43,8 +43,10 @@ describe("permission tree self-hosted invariants (ADR-0038)", () => {
     const content = desktop.find((group) => group.code === "group_content");
     expect(content?.nameZh).toBe("内容");
     expect(content?.nameEn).toBe("Content");
-    const books = content?.pages.find((page) => page.code === "books");
-    expect(books?.nameZh).toBe("书籍");
+    // 0191（ADR-0069）退役 6 个 legacy 内容看板后，book 码叶挂 page_book_info
+    // （0171 播种），不再是退役的 page_books。
+    const bookInfo = content?.pages.find((page) => page.code === "book_info");
+    expect(bookInfo?.nameZh).toBe("书本信息");
 
     // App 端的节点行在 0129 收拢到 `group_app` 下，名字同样入库；0131 并页后
     // 版本叶子挂在 app访问、名词叶子挂在 app搜索，独立页行随之退役。

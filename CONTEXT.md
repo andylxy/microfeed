@@ -197,12 +197,8 @@ _Avoid_: 配置版本、configVersion（App 内部那个计数器叫这个名字
 _Avoid_: 分卷、册、目录章节（都不是本语境的单位）
 
 **卷键**：
-一个卷在接口上被指认的方式，两种书共用同一个 `key` 字段，所以前端不需要分辨书的种类：TCM 典籍是那行篇章的 11 字符 id，小说类书是 `_microfeed.volume` 里的卷名本身。卷改名不断链靠的是「卷键 = 篇章 id」这一条；小说类书没有篇章行，卷名就是它唯一的键，所以改卷名会让带着旧卷名的地址查不到卷（看板按「这本书没有这一卷」处理）。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+一个卷在接口上被指认的方式，两种书共用同一个 `key` 字段：TCM 典籍是那行篇章的标识，小说类书是卷名本身。卷改名不断链靠的是「卷键 = 篇章标识」；小说类书没有篇章行，改卷名会让带旧卷名的地址查不到卷。
 _Avoid_: 卷 id（小说类书没有 id）、卷序号（序号会随中间插入新卷指错卷）
-
-**卷看板**：
-后台按书整理卷与条目的那一页（`/[adminPath]/volumes/`）：选书 → 列这本书的卷 → 展开一卷读它的条目。它的展开态（书 + 卷键）存在地址里，所以刷新、后退、把链接发给同事都回到同一卷；条目编辑页的返回目标也由它报出（[ADR-0036](docs/novel-cms/adr/0036-admin-editor-return-target.md)）。读取口径见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
-_Avoid_: 目录（读者侧的「目录」指书页目录，是另一件事）、章节管理（页面名是「卷章管理」）
 
 **篇章**：
 TCM 典籍里承载卷的那一行 `items`（`tcm_kind = 'chapter'`）。它是实体、有 11 字符 id，卷名就是它的 `title`；条文靠 `tcm_parent_id` 挂在它下面。
@@ -217,16 +213,16 @@ _Avoid_: 章节、小节、条目
 _Avoid_: 注释、笔记、解说（「解说」在样式目录里是标记码 `n` 的显示名，指行内标记）；与「标注标记」是两回事
 
 **扁平条目**：
-没有篇章层的 TCM 书（中药 / 名词）里的条目（`tcm_kind` 为 `yao` / `term`），直接按 `items.book_id` 归属。这类书**没有卷页**，书页保持平铺目录；它们各有一行根篇章，`tcm_parent_id` 为空、`title` 就是书名，条目挂在它下面——所以后台卷看板把它们列成一卷，逐卷计数与写入守卫都要把 `yao` / `term` 算进所属卷，只认 `section` 会把整批条目漏在写入口之外。
+没有篇章层的 TCM 书（中药 / 名词）里的条目，直接归属书。这类书没有卷，书页保持平铺目录。
 _Avoid_: 无卷书、平铺书（都指同一件事，但「扁平条目」强调条目本身没有父层）
 
 **未归类桶**：
-分组键不指向本书任何一行篇章的那些条文（`tcm_parent_id` 为空、指向别的书、或指向已不存在的行），在看板上作为一个卷行展示、恒排最后，卷名是空串、键是 `UNFILED_VOLUME_KEY`（`"unfiled"`）。挂在**被软删的篇章**下的条文不算未归类：那条篇章查询刻意不带 `status` 条件，被删篇章的 id 仍是合法分组键。未归类只数 `section`——方剂（`fang`）带着本书的 `book_id` 却没有父项，属于独立的方剂目录，混进来会凭空造出一个几百条的桶。小说类书里未归类就是 `_microfeed.volume` 为空的那些章。见 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
+分组键不指向本书任何一行篇章的那些条文，恒排最后、卷名为空串。挂在被软删篇章下的条文不算未归类；方剂没有父项但自成目录，混进来会凭空造出一个桶。
 _Avoid_: 孤儿条文（读不出「还没归档」这层意思）、散章
 
 **题材分类**：
-前台站点组织书的一级分类，读者在头部导航点它进入分类页、看该分类下的书。它的真源是书本分组的 `key`（见「书本分组」），分类页地址 `/category/<key>/` 里的段就是这个 `key`。它与后台 `/admin/categories/` 管的旧「分类」不是同一套数据。
-_Avoid_: 分类（泛指时会和旧 `ext_category` 混淆）、书籍分类（那是后台 `case_division` 字段名）
+前台站点组织书的一级分类，读者在头部导航点它进入分类页、看该分类下的书。它的真源是书本分组的 `key`（见「书本分组」）。
+_Avoid_: 分类（泛指时会和旧分类混淆）、书籍分类（那是书本上的另一套字段）
 
 **书本信息**：
 一本书在前台的完整描述：书名、作者、封面、成书时间、题材分类归属、编号等。真源是 `book_info` 表一行。它与 `channels` 行是两个概念——`channels` 是旧 novel-cms 的书，`book_info` 是前台站点现在读的书；两者靠相同的主键值对应，但前台只认 `book_info`。
@@ -249,7 +245,7 @@ _Avoid_: 公共布局（会和 `PublicLayout` 混淆）、主题（那只管外�
 _Avoid_: 解耦（泛指）、无耦合（不指明范围时无意义）
 
 **反向引用索引**：
-「哪些条文引用了这个方剂/中药」的物化表 `ext_marker_citations`。由旧前台在卷页渲染时整本扫 `items` 写入，`section_id` 是 `items.id`、`section_seq` 是 items 的 rowid、`book_id` 是 `channels.id`。切换后前台不再读也不再写，表与数据原地冻结，后台方剂编辑器的反向引用视图继续读它。条目浮层里对应的「引用此方剂 / 引用此中药的条文」一段随之取消——换新表要动 schema 与后台写入链，越出「只改前端主题」。
+「哪些条文引用了这个方剂/中药」的物化表。前台切换后不再读也不再写，表与数据原地冻结。
 _Avoid_: 引用索引（不说正/反向时含糊）、citation 表（英文混写，书面统一用「反向引用索引」）
 
 **前台可见口径**：
@@ -261,7 +257,7 @@ _Avoid_: 启用状态（会和 `is_enable` 的字面意思混淆）、发布状�
 _Avoid_: 正文（不分列时以为 `section_text` 就是全部正文）
 
 **容器书**：
-旧 novel-cms 体系里承载中药、名词条目的两本「假书」（`4KbG9bDqdz3` 中药、`tcmterm0001` 名词），条目靠 `items.book_id` 挂上去。它们在 `book_info` 里两行已于 2026-11-06 软删，前台按 `deleted_at IS NULL` 不再出现；中药 172 条、名词 17 条改为各自单条路由可达（`/zhongyao/<id>/`、`/ming-ci/<id>/`），不再有聚合书页。`CONTAINER_CHANNEL_IDS` 与 `isTcmContainerChannel` 一并退场。
+旧内容体系里承载中药、名词条目的两本「假书」，条目挂上去只为给它一个归属。前台切换后它们不再出现，中药与名词条目改为各自单条路由可达，不再有聚合书页。
 _Avoid_: 空书、占位书（都不点明它承载的是条目而不是内容）
 
 ## 数据层（D1）
@@ -270,7 +266,7 @@ _Avoid_: 空书、占位书（都不点明它承载的是条目而不是内容�
 查询无法用索引定位行、必须读整表（或整个索引）再逐行判断。在 D1 上表现为读放大与延迟，是本语境要消除的主要缺陷。2026-10-12 全量审计确认 `items` 上已不存在（见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)）。
 
 **整本读取**：
-一次页面加载读取某本书的全部条目——阅读页标注层、以及引用表**脏标记后的那一次懒自举重算**都如此（书页目录自 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md) 起不再如此，后台卷看板自 [ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md) 起不再如此，都改为按需读取）。它的上界由**书的大小**决定，与表大小无关；是全表扫描被消除后剩余的主要读代价来源，靠边缘缓存兜底。判断它贵不贵同样看 `rows_read`（实测素问书页 ≈3,045，整本 2,964 行 / 1,233,002 字节）。小说类书的卷列表仍是整本读取：卷名在 `data` 里，没有可用索引，这条分支不加派生真实列。见 [ADR-0024](docs/novel-cms/adr/0024-d1-read-cost-baseline-no-full-scans.md)。
+一次页面加载读取某本书的全部条目。读代价的上界由书的大小决定，与表的总行数无关，靠边缘缓存兜底。
 
 **按需读取**：
 一次请求只读当前要展示的那一段范围——点书读那本书的卷（含逐卷条数，走覆盖索引，不回表读正文），点卷只读那一卷的条目；写操作的归属判定同样按提交的每条 id 各做一次主键点查，而不是读全书攒集合。判据是行读随**所选范围**增长而不是随书的大小增长，客户端切片不产生任何行读，所以按需读取与分页控件没有关系。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)、[ADR-0027](docs/novel-cms/adr/0027-admin-volume-board-on-demand-reads.md)。
@@ -314,7 +310,7 @@ TCM 条目归属的源书标识（`_microfeed.sourceBookId`），与 `items.book
 公开读路径有两层且互不借力——CDN 边缘缓存（`Cloudflare-CDN-Cache-Control` 控制，覆盖 `isPublicPagePath` 的公开 HTML）与 Worker Cache API（`caches.default`，`cachedAppResponse` 持有，供被中间件强制 `no-store` 的 `/api/*` 用）。`/api/*` 一律不可 CDN 缓存；可 Worker 缓存的前提是返回体与调用者身份无关（`GetAllMingCi` 因按权限裁剪反被排除；身份只到「会员/公开」粒度的端点按 tier 分桶——ADR-0044 的 GetNav/GetBookChapter 与 ADR-0048 的 GetChapterContent/GetBookIdFang 都是这一形态，tier 进键、写路径显式清桶）。Cache API 另有两个坑：`cache.put`/`match` 不支持 `stale-while-revalidate` 与 `stale-if-error`，且 `cache.put` 不兼容 tiered caching。
 
 **写时清理完整性**：
-缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都打上 `Cache-Tag` 并 purge——漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。清理点集中在 `FeedDb.putContent` 与 `purgePublicCache` 的调用处；绕过它们直接 `FEED_DB.batch()` 的写入（如卷板的四个处理器）必须自带清理。App 侧章节正文与方剂两桶（ADR-0048 D2）的清理路径有三条合并覆盖：`FeedCrudManager` 写后按 `tcm_kind` 分派、卷板四处理器按书全量清正文桶、书的写函数在状态变更（含软删/物理删）时按书清两桶。中药目录与别名两桶（ADR-0049 D2）由 tcm-entry 的 yao 写、别名板写与 `FeedCrudManager` 的 section 分派清理。
+缓存 TTL 能拉多长，取决于写路径是否把每个受影响 URL 都标上清理标记并触发清理；漏清理的实际后果是「编辑后最长陈旧整个 TTL 窗口」。所有绕过统一写入口的写入都必须自带清理。
 
 **章节回跳锚点**：
 阅读页与目录之间唯一保留的阅读导航，靠一条两侧都要遵守的约定实现：阅读页的 `toc_url` 是 `/book/<bookId>/v/<篇章 id>/#mf-toc-<条 id>`（TCM 书；扁平条目书没有篇章，退回 `/book/<bookId>#mf-toc-<条 id>`），卷页给每个条文设 `id="mf-toc-<条 id>"`。哈希不能只在一侧改——收尾脚本（`web-body-end`）会在目录重建后按 `location.hash` 补一次滚动。约定存在是为了不读整本书的章节列表。见 [ADR-0025](docs/novel-cms/adr/0025-volume-as-reading-unit.md)。

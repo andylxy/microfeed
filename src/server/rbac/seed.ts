@@ -57,13 +57,7 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:book:update", name: "编辑书"},
   {code: "content:book:delete", name: "删除书"},
   {code: "content:book-status:manage", name: "书籍状态管理"},
-  {code: "content:category:create", name: "新建分类"},
   {code: "content:category:read", name: "查看分类"},
-  {code: "content:category:update", name: "编辑分类"},
-  {code: "content:category:delete", name: "删除分类"},
-  {code: "content:category:order", name: "分类排序"},
-  {code: "content:volume:update", name: "卷结构编辑"},
-  {code: "content:volume:read", name: "查看卷"},
   {code: "content:chapter:create", name: "新建章节"},
   {code: "content:chapter:read", name: "查看章节"},
   {code: "content:chapter:update", name: "编辑章节"},
@@ -87,7 +81,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "app:zhongyao:read", name: "App 中药读取"},
   {code: "content:annotation-markers:read", name: "标注标记查看"},
   {code: "content:annotation-markers:manage", name: "标注标记管理"},
-  {code: "content:fang:read", name: "方剂查看"},
   {code: "content:yao:read", name: "中药查看"},
   {code: "content:yao:manage", name: "中药维护"},
   {code: "content:term:read", name: "名词查看"},
@@ -137,9 +130,6 @@ const EDITOR_PERMISSIONS: readonly string[] = [
   "content:book:update",
   "content:book:create",
   "content:category:read",
-  "content:category:update",
-  "content:volume:read",
-  "content:volume:update",
   // Content menus bind `content:chapter:read` / `content:chapter:create`, so
   // an editor without these cannot even see the item list or the import
   // page. `content:chapter:update` was already required by the feed write
@@ -156,10 +146,6 @@ const EDITOR_PERMISSIONS: readonly string[] = [
   // fetches the marker list (`:read`) to build its `$X{...}` toolbar
   // buttons. Managing the list stays admin-only.
   "content:annotation-markers:read",
-  // Fang (方剂) board is read-only on the page (rows link out to the item
-  // editor, which is gated by the generic item permissions): an editor can
-  // open it, but composition/status editing happens on the item page.
-  "content:fang:read",
   // 中药 / 名词 boards own their rows' identity + publishing state (add /
   // rename / publish / soft-delete / restore), which is content work an
   // editor already does on the item page — so it also gets the `manage`

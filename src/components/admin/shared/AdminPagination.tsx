@@ -57,7 +57,7 @@ export default function AdminPagination({disabled, page, totalPages, onChange}: 
   if (totalPages <= 1) return null;
   return (
     <nav
-      aria-label={t("volumes.paginationAria")}
+      aria-label={t("shared.volumes.paginationAria")}
       className="mt-6 flex items-center justify-center gap-2"
     >
       <Button
@@ -68,10 +68,10 @@ export default function AdminPagination({disabled, page, totalPages, onChange}: 
         variant="outline"
       >
         <ChevronLeftIcon aria-hidden="true" />
-        {t("volumes.previous")}
+        {t("shared.volumes.previous")}
       </Button>
       <span className="text-sm text-muted-foreground">
-        {t("volumes.pageIndicator", {current: page + 1, total: totalPages})}
+        {t("shared.volumes.pageIndicator", {current: page + 1, total: totalPages})}
       </span>
       <Button
         disabled={disabled || page >= totalPages - 1}
@@ -80,7 +80,7 @@ export default function AdminPagination({disabled, page, totalPages, onChange}: 
         type="button"
         variant="outline"
       >
-        {t("volumes.next")}
+        {t("shared.volumes.next")}
         <ChevronRightIcon aria-hidden="true" />
       </Button>
     </nav>

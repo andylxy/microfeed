@@ -94,7 +94,9 @@ describe("cachedUserAccess", () => {
 
     const cached = await cachedUserAccess(env.FEED_DB, USER_ID);
     expect(cached.permissions).toBeInstanceOf(Set);
-    expect(cached.permissions.has("content:category:update")).toBe(true);
+    // 0191 退役 legacy 内容看板后 editor 不再持 content:category:update，
+    // 改用仍在 editor 授权里的 book 码验证 Set 还原。
+    expect(cached.permissions.has("content:book:update")).toBe(true);
   });
 
   it("treats a bad cache entry as a miss", async () => {
