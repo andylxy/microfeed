@@ -2,7 +2,7 @@
 
 ADR-0069 退役 6 个 legacy 内容看板、ADR-0068 退役 alias 模块后，`items` 表上一批专为看板查询建立的索引失去了全部活跃调用方，`extVolume` / `extFang` / `extTcmEntries` / `tcmSections` 四个 feed 数据层文件与 `extCategory` 的 6 个 TCM 专用函数成了无活跃调用者的孤儿代码。本决策删除这些不再被任何活跃查询使用的索引（5 个 DROP + `items_book_kind` 回退去掉 0116 追加的 `tcm_parent_id`），并删除对应的孤儿数据层文件与函数；不删任何表、不动任何仍有活跃调用方的索引与公开函数。
 
-- 状态：Proposed（2026-11-09 方案定稿，待用户批准后实施；实施主体 = 迁移 `0193` + 代码删除提交，见「实施范围」）
+- 状态：Accepted（2026-11-09 实施完成；迁移 `0193` = commit `a705b3e`，代码删除提交 = commit `913b2d6`，见「实施范围」）
 - 关联：ADR-0069（退役 6 看板，决策 1/2 保留共享数据层——本决策是其后清理，不推翻「不删表」）、ADR-0068（退役 alias，`DROP TABLE ext_tcm_aliases` 后无遗留索引）、ADR-0025 / 0027（卷看板与索引取舍）、迁移 0091（删除冗余索引先例）、0092 / 0094 / 0095 / 0107 / 0108 / 0112 / 0116 / 0136（本决策涉及索引的建迁）
 - 证据范围：本地真库只读探针 2026-11-09，实例 `ctwh-881019-xyz`（主库 `e60aa88…`，80 表 / 148 显式索引 / 台账 190 条止 0192）；代码调用链只读调查（`src/server/feed/*`、`src/server/tcm/reads.ts`、`src/server/items/admin-list.ts`、`src/server/api/content-read.ts`）
 
@@ -46,11 +46,11 @@ ADR-0068（0190）退役 alias 模块是 `DROP TABLE ext_tcm_aliases`——索�
 
 1. **D1 迁移 `0193_index_drop_retired_dashboard_indexes.sql`**（`index` 类，MIG-003 合法、MIG-004 不强制 rollback 块）：`DROP INDEX` 5 个 + `items_book_kind` 原地重建去 `tcm_parent_id`；文件头注释写清回滚方式（重建 5 索引 / 加回 `tcm_parent_id`）与「纯结构、不丢数据」。删前先导出 5 索引 + `items_book_kind` 完整 `CREATE` 定义到 `.scratch/backups/` 作回滚依据。
 2. **代码删除提交**（与迁移分开提交）：删 4 文件 + `extCategory.ts` 删 import / `mapTcmSectionRow` / 6 函数 + 测试调整（删 `extVolume.test.ts`、改 `extCategory.test.ts`）。
-3. **验证**：`migrations:check` OK；`tsc --noEmit` exit 0；`source-architecture` / `AdminReturnTarget` / `admin-page-guards` 等既有测试绿；删后对保留索引（`items_section_order_kind` / `items_fang_order_v2` / `items_book_kind` 4 列形态）跑 `EXPLAIN QUERY PLAN` 确认无活跃查询受损。
+3. **验证**：`migrations:check` OK；`tsc --noEmit` exit 0；`source-architecture` / `AdminReturnTarget` / `admin-page-guards` 等既有测试绿；删后对保留索引（`items_section_order_kind` / `items_fang_order_v2` / `items_book_kind` 4 列形态）跑 `EXPLAIN QUERY PLAN` 确认无活跃查询受损。**已实测**（0193 应用到快照副本 `e60aa88…`）：`items` 索引 25 → 20；4 个活跃查询——fang-references 草稿 / App 书页最近更新 / extBook 章 id / reads 682——全部仍命中 `items_book_kind`，无任何活跃查询受损。
 
 ## 后果
 
-- `items` 索引数 23 → 17（5 删 + book_kind 重建同数）；写入放大下降，D1 写额度与 `rows_read` 受益。
+- `items` 索引数 25 → 20（含 1 个 `sqlite_autoindex_items_1` 隐式索引；5 个 DROP + `items_book_kind` 原地重建，净减 5）；写入放大下降，D1 写额度与 `rows_read` 受益。
 - `items` 表与全部数据**不删**（ADR-0069 决策 1/2 不变）；App 8 端点与前台独立引擎的活跃查询不受影响。
 - 孤儿数据层文件删除后，若未来要恢复卷 / 方剂 / 术语管理，需从 git 历史取回文件（文件本身是领域知识，删除是刻意为之，非数据丢失）。
 - 「无活跃调用链」判据基于当前代码；若未来新增查询重新用到某列组合，需重建对应索引（回滚方式已在迁移注释写明）。
