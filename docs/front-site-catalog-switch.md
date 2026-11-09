@@ -363,7 +363,7 @@ export interface FrontSite {
 **与 ①② 的差别**（备查）：① 会让 `<html lang>` 变 `zh-CN` 且 `language` 硬编码；② 让 `site.ts` 保留一条 `channels` 点查，例外从 2 处变 3 处。③ 是唯一既零读 `channels` 又不改显示的路，代价是开一条 data 迁移 + 4 个键暂时没有后台入口。
 ### 3.5 明确不动
 
-`extCategory.ts`（公开 API `content-read.ts` 仍用）、`bookWordCount.ts`（后台仍用）、所有后台页与 ajax 端点（含 `ajax/tcm/fang-references` 反向引用视图与 `extBook.ts` 删书清理）、权限码、OpenAPI 契约、`content-read.ts`、`zhong_yao`/`ming_ci`/`fang_yao` 后台模块、`siteNav.ts`、`themes/**`、`Theme` 类、`src/middleware.ts`、`src/server/site-files/public.ts`。
+`extCategory.ts`（公开 API `content-read.ts` 仍用）、`bookWordCount.ts`（后台仍用）、所有后台页与 ajax 端点（含 `ajax/tcm/fang-references` 反向引用视图；`extBook.ts` 已于 2026-11-09 移除，其删书清理路径不存在，见 ADR-0071）、权限码、OpenAPI 契约、`content-read.ts`、`zhong_yao`/`ming_ci`/`fang_yao` 后台模块、`siteNav.ts`、`themes/**`、`Theme` 类、`src/middleware.ts`、`src/server/site-files/public.ts`。
 
 `siteNav.ts` 内含 `listCategoryNav`（`ext_category JOIN channels`），但它**不在零耦合不变式的作用域里**——判据是「前台页面不再调用 `loadSiteNav`」，而不是「这个文件里没有旧表名」。它保留是因为后台 `ajax/fangs`、`ajax/volumes` 仍在用，静态检查不扫它。
 
@@ -483,7 +483,7 @@ SQL 过滤只加 `deleted_at IS NULL`（**不加 `is_enable`**，否则 1001000 
 | --- | --- |
 | 建 `ext_citation_index` + `_state` 两张表 | 数据库 schema（迁移） |
 | 后台保存正文后按书重算 | 后台写入链 |
-| 后台方剂编辑器的反向引用视图改读新表（`ajax/tcm/fang-references`），删书清理改清新表（`extBook.ts`） | 后台 / ajax |
+| 后台方剂编辑器的反向引用视图改读新表（`ajax/tcm/fang-references`）；删书清理路径随 `extBook.ts` 移除（ADR-0071）而失效 | 后台 / ajax |
 
 用户裁决「换不了的砍掉不要了」+「后端 / admin 不需要改动」，因此**前台直接不再提供这一块**：
 
@@ -652,7 +652,7 @@ SQL 过滤只加 `deleted_at IS NULL`（**不加 `is_enable`**，否则 1001000 
 - **改动范围（只有这些）**：四个前台页面改写、三条条目路由新建、`i/[slug]` 删除、`[...path].astro` 删除、`404.astro` 去掉自定义页查询并接住后台 404 分支、`src/server/catalog/` 七个只读模块、`FrontLayout` 与六个前台组件、`front-site.css`、`front-site.ts`、`markerPopover.ts`、`sitemap.xml.ts` 改源、`rss`/`json`/`llms*` 八个路由文件删除、1 个静态检查脚本、**1 条 `data` 迁移**（写站点外壳 4 个键 + `favicon`）。**零 DDL、零后端与 admin 代码改动。**
 - **唯一的库改动**：`migrations/NNNN_data_front_site_settings.sql`，只 `json_set`/`json_remove` `settings` 行，不建表、不加列、不改既有 key 形状，且带 `-- rollback:` 可回退。这条迁移独立于页面改造，可先跑先观察。
 - **已知缺口**：迁移写入的 4 个键在 `/admin` 站点设置表单里没有编辑入口，写入后只能改库；补齐表单属独立工作，不在本次。
-- **排除范围**：所有后台页面与 ajax 端点（含 `ajax/tcm/fang-references`、`extBook.ts` 删书清理、后台写入链）、公开 API（`content-read.ts`/OpenAPI）、`extCategory.ts`、`bookWordCount.ts`、权限码、`zhong_yao`/`ming_ci`/`fang_yao` 后台模块、`themes/**`、`Theme` 类、`siteNav.ts`、`src/middleware.ts`、`src/server/site-files/public.ts`。
+- **排除范围**：所有后台页面与 ajax 端点（含 `ajax/tcm/fang-references`、后台写入链；`extBook.ts` 已于 2026-11-09 移除，见 ADR-0071）、公开 API（`content-read.ts`/OpenAPI）、`extCategory.ts`、`bookWordCount.ts`、权限码、`zhong_yao`/`ming_ci`/`fang_yao` 后台模块、`themes/**`、`Theme` 类、`siteNav.ts`、`src/middleware.ts`、`src/server/site-files/public.ts`。
 - **硬边界**：作用域内不得出现 `items`/`channels`/`ext_category`/`ext_book_stats`/`ext_book_status`，也不得出现 `loadPublishedFeed`/`loadFeed`/`publicFeed`/`new Theme`/`themeContext`/`renderThemeTemplate`（ADR-0066「零耦合不变式」）。三件事同样算越界：为旧地址回查 `items`、给新表补 `legacy_item_id`、建 `旧 id → 新 id` 的重定向表或静态清单（R10）。把新数据组装成 `publicFeed` 形状喂给旧模板，同样算越界（R11）。
 - **唯一允许的 `ext_*` 读取**：`ext_annotation_markers`（标记语法字典，15 行配置）。其余 `ext_*` 表在前台一律不可读，包括 `ext_marker_citations`。
 - **旧表与旧数据一行不动**：`channels`/`items`/`ext_category`/`ext_book_stats`/`ext_marker_citations` 全部原地保留，不删表、不写清理迁移、不改数据。
