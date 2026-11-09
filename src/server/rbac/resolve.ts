@@ -11,7 +11,12 @@
 
 import {PERMISSION_CODES} from "@/shared/Constants";
 
-import {readSnapshotGate} from "./snapshot";
+import {
+  snapshotGateFromRow,
+  snapshotGateStatement,
+  type SnapshotGate,
+  type SnapshotGateRow,
+} from "./snapshot";
 
 export const RBAC_WILDCARD = "*";
 
@@ -202,6 +207,12 @@ export function deviceRevokedFromRow(
   return Boolean(row && row.status === "revoked");
 }
 
+/** 从 `db.batch` 的一个结果里取第一行；空结果返回 null。 */
+function rowOfBatch<T>(result: D1Result | undefined): T | null {
+  const row = result?.results?.[0];
+  return row === undefined ? null : row as T;
+}
+
 export async function isDeviceRevoked(
   db: D1Database,
   userId: string,
@@ -291,17 +302,38 @@ export async function userMayEnterAdmin(
  * inside Better Auth — D-09 keeps `better-auth.ts` untouched.
  *
  * 权限、会员标记、后台准入三者出自权限快照表的一行（ADR-0053），封禁位与待改密
- * 也在同一条点查里 LEFT JOIN 出来。这条路径因此只有一条语句、一个往返，读回一行。
+ * 也在同一条点查里 LEFT JOIN 出来。快照点查与设备吊销检查互不依赖，带
+ * `x-device-id` 时并进一次 `db.batch` 往返；不带时只有快照一条语句。设备心跳的
+ * UPSERT 排在吊销检查**之后**（先查再登记，吊销才不会被心跳洗掉）。
  */
 export async function resolveRbacContext(
   db: D1Database,
   userId: string,
   request: Request,
 ): Promise<RbacResolved> {
-  const gate = await readSnapshotGate(db, userId);
+  const deviceId = deviceIdFromRequest(request);
+  const gateStatement = snapshotGateStatement(db, userId);
+  const deviceStatement = deviceId === null
+    ? null
+    : db
+      .prepare(
+        "SELECT status FROM ext_user_devices WHERE user_id = ? AND device_id = ?",
+      )
+      .bind(userId, deviceId);
 
-  // Revocation is checked before the upsert, so a revoked device stays revoked.
-  const deviceRevoked = await isDeviceRevoked(db, userId, request);
+  let gate: SnapshotGate | null;
+  let deviceRevoked = false;
+  if (deviceStatement === null) {
+    gate = snapshotGateFromRow(
+      await gateStatement.first<SnapshotGateRow>(),
+    );
+  } else {
+    const [gateResult, deviceResult] = await db.batch([gateStatement, deviceStatement]);
+    gate = snapshotGateFromRow(rowOfBatch<SnapshotGateRow>(gateResult));
+    deviceRevoked = deviceRevokedFromRow(
+      rowOfBatch<{status: string}>(deviceResult),
+    );
+  }
   await registerUserDevice(db, userId, request);
 
   return {

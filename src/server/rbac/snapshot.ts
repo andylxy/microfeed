@@ -47,17 +47,17 @@ function parseCodes(raw: string | null): Set<string> {
 }
 
 /**
- * 读一个账号的快照，连同它的封禁位与待改密标记。
+ * 快照点查的语句构造器，供放进 `db.batch([...])`。
  *
- * 返回 `null` 表示账号本身不存在 —— 调用方按封禁处理，与 `accountIsBlocked`
- * 口径一致。账号存在但没有快照行（零角色）时返回非 null 且权限为空集合，
- * 也就是「无权限」，与 ADR-0053 约束 3 一致。
+ * 后台每请求的快照点查与设备吊销检查互不依赖，调用方（`resolveRbacContext`）
+ * 借这个构造器把两者并进一次往返。`readSnapshotGate` 复用同一语句与解析，
+ * 两种取数路径不会各写一份 SQL 而漂移。
  */
-export async function readSnapshotGate(
+export function snapshotGateStatement(
   db: D1Database,
   userId: string,
-): Promise<SnapshotGate | null> {
-  const row = await db
+): D1PreparedStatement {
+  return db
     .prepare(
       `SELECT u.banned AS banned,
               COALESCE(sec.must_change_password, 0) AS mustChange,
@@ -69,14 +69,24 @@ export async function readSnapshotGate(
          LEFT JOIN ext_user_permissions s ON s.user_id = u.id
          WHERE u.id = ?`,
     )
-    .bind(userId)
-    .first<{
-      adminLoginAllowed: number | null;
-      banned: number | null;
-      codes: string | null;
-      isMember: number | null;
-      mustChange: number;
-    }>();
+    .bind(userId);
+}
+
+/** 快照点查一行的原始列形状（`codes` 仍是 JSON 字符串）。 */
+export interface SnapshotGateRow {
+  adminLoginAllowed: number | null;
+  banned: number | null;
+  codes: string | null;
+  isMember: number | null;
+  mustChange: number;
+}
+
+/**
+ * 从一行快照点查结果解析出鉴权判定。坏值就地抛出（见 `parseCodes`）。
+ */
+export function snapshotGateFromRow(
+  row: SnapshotGateRow | null,
+): SnapshotGate | null {
   if (!row) return null;
   return {
     adminLoginAllowed: Number(row.adminLoginAllowed) === 1,
@@ -85,6 +95,22 @@ export async function readSnapshotGate(
     mustChangePassword: Number(row.mustChange) === 1,
     permissions: parseCodes(row.codes),
   };
+}
+
+/**
+ * 读一个账号的快照，连同它的封禁位与待改密标记。
+ *
+ * 返回 `null` 表示账号本身不存在 —— 调用方按封禁处理，与 `accountIsBlocked`
+ * 口径一致。账号存在但没有快照行（零角色）时返回非 null 且权限为空集合，
+ * 也就是「无权限」，与 ADR-0053 约束 3 一致。
+ */
+export async function readSnapshotGate(
+  db: D1Database,
+  userId: string,
+): Promise<SnapshotGate | null> {
+  const row = await snapshotGateStatement(db, userId)
+    .first<SnapshotGateRow>();
+  return snapshotGateFromRow(row);
 }
 
 /**
@@ -160,6 +186,24 @@ export function refreshUserSnapshotStatements(
       )
       .bind(userId),
   ];
+}
+
+/**
+ * 查持有某个角色的账号 id。
+ *
+ * 「角色本身变了」的三条路径既要重算快照、也要清这些账号的角色对象缓存，
+ * 两处需要同一份成员名单。batch 前查一次、两处共用，省掉 purge 侧的重复反查。
+ * 这三条路径的 batch 都不改成员表，所以 batch 前查到的名单在 purge 时仍然有效。
+ */
+export async function roleMemberIds(
+  db: D1Database,
+  roleId: string,
+): Promise<string[]> {
+  const members = await db
+    .prepare("SELECT user_id FROM ext_user_roles WHERE role_id = ?")
+    .bind(roleId)
+    .all<{user_id: string}>();
+  return (members.results ?? []).map((row) => row.user_id);
 }
 
 /**
