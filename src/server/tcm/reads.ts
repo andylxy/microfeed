@@ -15,7 +15,7 @@
  * deterministic wrapping.
  */
 
-import {MEMBER_BOOK_STATUS} from "@/shared/ExtBook";
+import {MEMBER_BOOK_STATUS} from "@/shared/Constants";
 import {DEFAULT_SMALL_FONT_SCALE} from "@/shared/TcmMarkers";
 import {ZHONG_YAO_LIST_SPLIT_PATTERN as ALIAS_SPLIT_PATTERN} from "@/shared/ZhongYao";
 import {TCM_CHAPTER_ORDER_SQL} from "./ordering";

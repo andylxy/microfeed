@@ -42,7 +42,6 @@
 | `app-versions` | `system:app-version:read` | `ext_app_version` + `ext_app_rollout` |
 | `audit` | `content:audit:read` | `ext_content_audit` + `ext_content_review` + `items` |
 | `audit/[itemId]` | `content:audit:read` | `ext_content_audit` + `ext_content_review` + `items` |
-| `book-statuses` | `content:book-status:manage` | `ext_book_status` + `channels` |
 | `books` | `content:book:read` | `channels` + `items` + `ext_book_stats` + `ext_marker_citations` + `ext_marker_citation_state` |
 | `cache` | `system:cache:manage` | `settings`（`category='app_cache_control'`） |
 | `categories` | `content:category:read` | `ext_category` + `channels` |

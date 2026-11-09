@@ -1,0 +1,41 @@
+{
+  "mode": "build+emit-migration",
+  "rows": 8066,
+  "sourceChapterRows": 445,
+  "chapterMapping": 445,
+  "orphanChapters": 0,
+  "markers": {
+    "$a{": 265,
+    "$m{": 34,
+    "$n{": 36,
+    "$x{": 49,
+    "$r{": 0
+  },
+  "bencao": {
+    "rows": 930,
+    "distinctYaoNames": 704,
+    "hitZhongYao": 132,
+    "levelMain": 545,
+    "levelAlt": 385
+  },
+  "format": {
+    "lfSectionText": 392,
+    "lfSectionNote": 1214,
+    "crSectionTextRows": 4,
+    "crSectionTextChars": 19,
+    "indentSectionText": 37,
+    "indentSectionNote": 1026,
+    "trailSpaceSectionText": 451,
+    "trailSpaceSectionNote": 549,
+    "ext1Rows": 5,
+    "lfExt1Rows": 3,
+    "lfExt1Chars": 29,
+    "crExt1Chars": 0,
+    "tabExt1Chars": 0,
+    "indentExt1": 1,
+    "trailSpaceExt1": 1,
+    "allColumnLfChars": 18046
+  },
+  "fangJiNull": 6727,
+  "failures": []
+}

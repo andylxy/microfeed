@@ -34,7 +34,6 @@ export const ADMIN_PAGE_GUARDS: Readonly<Record<string, PermissionCode>> = {
   // 独立「书本卷章」页（ADR-0062）：专属码，与小说章节 `content:chapter:*` 分开。
   "book-chapter": PERMISSION_CODES.CONTENT_BOOK_CHAPTER_READ,
   "ming-ci": PERMISSION_CODES.CONTENT_TERM_READ,
-  "book-statuses": PERMISSION_CODES.CONTENT_BOOK_STATUS_MANAGE,
   cache: PERMISSION_CODES.SYSTEM_CACHE_MANAGE,
   "channels/primary": PERMISSION_CODES.CONTENT_CHANNEL_MANAGE,
   "cloud-usage": PERMISSION_CODES.SYSTEM_CLOUD_USAGE_READ,

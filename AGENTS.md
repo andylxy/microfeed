@@ -71,6 +71,7 @@ npx wrangler d1 migrations apply FEED_DB --local --persist-to "$PERSIST" --confi
 
 ## 硬性红线（常驻，违反即违规）
 
+- **D1 导入一律绑定参数**：`?` 占位、值走 `params`，不占 SQL 文本长度。见 `docs/zh/08-db-schema.md`。
 - **绝不在 `main` 上直接改**。建分支 `<type>/<short-kebab-case>`（`feature` | `fix` | `docs` | `refactor` | `test` | `ci` | `chore`）。
 - **保留不相关改动**。绝不用 `stash` / `reset` / `discard` / `stage` 去“清理”分支；必要时用独立 worktree。
 - **绝不手改 OpenAPI JSON/YAML、Scalar 输入、`llms.txt`、`llms-full.txt`** 作为独立契约——必须由 `OPENAPI_DOCUMENT` 生成。

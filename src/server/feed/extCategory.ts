@@ -1,7 +1,6 @@
 import {bodyToPlainText} from "@/shared/BodyFormat";
 import {STATUSES} from "@/shared/Constants";
 import {PUBLIC_URLS, randomShortUUID} from "@/shared/StringUtils";
-import {listPublicVisibleStatusCodes} from "@/server/feed/extBookStatus";
 import {purgeAppNavCache} from "@/server/cache/app-cache";
 import {
   bookWordCounts,
@@ -40,9 +39,10 @@ export interface CategoryDb {
   prepare(query: string): CategoryDbPreparedStatement;
 }
 
-/** `status IN (?, ?)` for the dictionary's public-visible codes (migration
- *  0142/0143): the four public listings below share this shape, so the
- *  placeholder list is built once here instead of four times. */
+/** `status IN (?, ?)` for the public-visible codes (the constant set; the
+ *  `ext_book_status` dictionary retired in ADR-0072): the four public listings
+ *  below share this shape, so the placeholder list is built once here instead
+ *  of four times. */
 function publicStatusClause(publicCodes: readonly number[]): string {
   return `status IN (${publicCodes.map(() => "?").join(", ")})`;
 }
@@ -51,13 +51,13 @@ function publicStatusClause(publicCodes: readonly number[]): string {
  * feed, but novel samples and future multi-book channels can still be listed
  * from the published channels table without changing the feed contract.
  *
- * Which statuses count as published is data now (`ext_book_status.public_visible`,
- * migration 0142): the code list is one small read, then the channel query is
+ * Which statuses count as published is the constant `STATUSES.PUBLISHED` (the
+ * `ext_book_status` dictionary retired in ADR-0072): the channel query is
  * unchanged in shape. */
 export async function listPublishedBookSamples(
   db: CategoryDb,
 ): Promise<ChannelBookSummary[]> {
-  const publicCodes = await listPublicVisibleStatusCodes(db);
+  const publicCodes: readonly number[] = [STATUSES.PUBLISHED];
   if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     "SELECT id, data, genre FROM channels " +
@@ -134,7 +134,7 @@ export async function searchPublishedBooks(
 ): Promise<ChannelBookSummary[]> {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return [];
-  const publicCodes = await listPublicVisibleStatusCodes(db);
+  const publicCodes: readonly number[] = [STATUSES.PUBLISHED];
   if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     "SELECT id, data, genre FROM channels " +
@@ -397,9 +397,9 @@ export async function setCategoryVisible(
  * so counting one would inflate the category the way it inflated the shelf.
  */
 export async function listCategoryNav(db: CategoryDb): Promise<Category[]> {
-  // 计数口径与书架/分类页/详情页同源：前台可见的状态码来自字典（迁移 0142），
-  // 否则运营新开一个前台可见状态时，这里会仍按旧常量数出 0。
-  const publicCodes = await listPublicVisibleStatusCodes(db);
+  // 计数口径与书架/分类页/详情页同源：前台可见的状态码是常量 STATUSES.PUBLISHED
+  // （`ext_book_status` 字典已随 ADR-0072 退役，不再由数据表决定）。
+  const publicCodes: readonly number[] = [STATUSES.PUBLISHED];
   if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     "SELECT c.id, c.name, c.slug, c.parent_id, c.sort, c.visible, c.created_at, " +
@@ -416,13 +416,13 @@ export async function listCategoryNav(db: CategoryDb): Promise<Category[]> {
 }
 
 /** Books (channels) assigned to a given genre (category id), for the public
- *  category page. Only published channels are returned — the set comes from
- *  `ext_book_status.public_visible` (migration 0142), not a constant. */
+ *  category page. Only published channels are returned — the set is the
+ *  constant `STATUSES.PUBLISHED` (`ext_book_status` retired in ADR-0072). */
 export async function listChannelsByGenre(
   db: CategoryDb,
   genre: string,
 ): Promise<ChannelBookSummary[]> {
-  const publicCodes = await listPublicVisibleStatusCodes(db);
+  const publicCodes: readonly number[] = [STATUSES.PUBLISHED];
   if (publicCodes.length === 0) return [];
   const result = await db.prepare(
     // `channels.status` is the numeric STATUSES value, not the status name.
@@ -501,12 +501,12 @@ function safeParseJson(value: unknown): Record<string, unknown> {
 /** A single book (channel) by id, for the public book detail page. Returns the
  *  same summary shape as the shelf/category listings, plus the raw `_microfeed`
  *  pocket so the detail header can render genre/tags/serial status. The
- *  visibility set is `ext_book_status.public_visible` (migration 0142). */
+ *  visibility set is the constant `STATUSES.PUBLISHED` (ADR-0072). */
 export async function getBookById(
   db: CategoryDb,
   id: string,
 ): Promise<ChannelBookSummary | null> {
-  const publicCodes = await listPublicVisibleStatusCodes(db);
+  const publicCodes: readonly number[] = [STATUSES.PUBLISHED];
   if (publicCodes.length === 0) return null;
   const row = await db.prepare(
     "SELECT id, data, genre FROM channels WHERE id = ? " +

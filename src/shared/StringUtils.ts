@@ -499,10 +499,6 @@ export const ADMIN_URLS = {
     adminUrl(`ajax/fang-yao/body/${bodyId}`, browserAdminPath()),
   ajaxFangYaoBodyPurge: (bodyId: string) =>
     adminUrl(`ajax/fang-yao/body/${bodyId}/purge`, browserAdminPath()),
-  ajaxBookStatuses: () =>
-    adminUrl("ajax/book-statuses", browserAdminPath()),
-  ajaxBookStatus: (code: number) =>
-    adminUrl(`ajax/book-statuses/${code}`, browserAdminPath()),
   ajaxRbacRolePermissions: () =>
     adminUrl("ajax/rbac/role-permissions", browserAdminPath()),
   ajaxRbacUsers: () => adminUrl("ajax/rbac/users", browserAdminPath()),

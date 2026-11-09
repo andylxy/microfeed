@@ -22,6 +22,9 @@ description: microfeed 的 Cloudflare D1 数据库规范：迁移文件、建表
   - 业务约束/上限：`CREATE TRIGGER IF NOT EXISTS ... BEFORE INSERT ... WHEN ... BEGIN SELECT RAISE(ABORT, '<code>'); END;`（如 `webhook_endpoint_limit_insert`，20 条上限）。
   - 状态枚举：`status TEXT NOT NULL DEFAULT 'active' CHECK (status IN (...))`，或 `TINYINT`。
 - **SQL 字面量上限（通用约束）**：D1 单条 SQL 语句的字面量长度上限**实测约 100KB**。**严禁**把大列（如 `bundle_json`、`preview_fixture_json`）用模板插值拼进 SQL 字面量；大列一律经**绑定参数**（`?` 占位）传入，整行数据用单条 `INSERT` 写入，不做为绕过上限而做的分块 `UPDATE`。
+- **数据导入通道必须用绑定参数**（同步场景的完整条文与主题安装确认清单一并见 `docs/agents/d1-sync.md`）：一切向 D1 导入数据行的路径（本地→远程同步、整库覆盖、差量补推、主题安装 / 发布 / 草稿、`.scratch` 下的一次性脚本）都用绑定参数——SQL 文本只写 `?` 占位，值经 `.bind(...)` / `queryD1WithParameters(...)` / D1 REST `{sql, params}` 传递。**绑定参数不计入 SQL 语句文本长度**：2026-11-09 真库实测 `themes.bundle_json` 最大 121,180 B、整行序列化最大 141,169 B，均超过单语句约 100KB 上限，但走 `params` 时一条 `INSERT` 即可入库，不触发 `SQLITE_TOOBIG`。把大列拼成 SQL 字面量（`VALUES ('<大列文本>')`）以及「占位 INSERT + 分块 UPDATE 拼列」属历史应急通道，不作为常规方案。
+- **静态种子迁移是例外通道**：`wrangler d1 migrations apply` 读的是 SQL 文件，只有 `{sql}`、没有 `params`，因此 100KB 上限对它是硬约束；文件内按 **<80KB 分块**（实测 41 支待应用迁移共 268 条语句、最长 81,842 B，均在 100KB 内）。判断迁移是否超限须按 SQL 词法切分：逐字符跟踪单引号字符串（`''` 转义）、跳过 `--` 行内注释，只在字符串外的 `;` 处切分；**不要用 `/;\s*\n/` 正则**，seed 迁移每条 INSERT 结尾常是 `'); -- 行内注释`，会被合并误报超限。
+- **安装或同步主题前的确认清单**（三条全满足才通过）：① 写库 SQL 文本只有 `?` 占位、无大列字面量；② 全部值（含 `bundle_json`、`preview_fixture_json`）经绑定参数；③ 预期一条 INSERT 入库，不出现为绕开文本长度上限而做的分块 UPDATE。不满足先改造通道再执行。
 - **注意**：不要手改已发布的迁移；新需求用新迁移（含 `ALTER TABLE`）；迁移里的触发器/检查约束是业务规则，改动需同步契约与测试；本地改库造场景后要**还原**，避免污染后续联调。
 
 ## D1 额度与全表扫描治理（资源保护）

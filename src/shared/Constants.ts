@@ -7,6 +7,12 @@ export const STATUSES = {
   UNLISTED: 4,
 };
 
+/**
+ * 会员书状态码（原 `ext_book_status` 0143 种子行 code=10；该字典随 ADR-0072 退役，
+ * 改由常量承载，`tcm/reads.ts` 的会员门用它判 `channels.status`）。
+ */
+export const MEMBER_BOOK_STATUS = 10;
+
 export const SETTINGS_CATEGORIES = {
   SUBSCRIBE_METHODS: 'subscribeMethods',
   WEB_GLOBAL_SETTINGS: 'webGlobalSettings',
@@ -219,7 +225,6 @@ export const ADMIN_MENU_CODES = {
   AUDIT: 'audit',
   PAGES: 'pages',
   BOOK_INFO: 'book_info',
-  BOOK_STATUSES: 'book_statuses',
   MING_CI: 'ming_ci',
   // 独立「本草」页（ADR-0061）。侧栏行由页面节点 `page_zhong_yao` 驱动，
   // `menuCodeFromNodeCode` 去前缀得 `zhong_yao`，即本菜单码（与 MING_CI 同款）。
@@ -271,7 +276,6 @@ export const PERMISSION_CODES = {
   CONTENT_BOOK_READ: 'content:book:read',
   CONTENT_BOOK_UPDATE: 'content:book:update',
   CONTENT_BOOK_DELETE: 'content:book:delete',
-  CONTENT_BOOK_STATUS_MANAGE: 'content:book-status:manage',
   // 分类只剩读码（`content:category:read`）：分类看板随 ADR-0069 退役，该码重挂到
   // 隐藏页 page_content_api；写码（create/update/delete/order）一并退役。
   CONTENT_CATEGORY_READ: 'content:category:read',

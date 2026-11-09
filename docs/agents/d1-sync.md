@@ -29,7 +29,7 @@
 - 报出「真不一致」时先确定改动在哪一侧，再决定要不要推：把同一张表在历次报告里的内容哈希排成时间线，本地哈希全程不变而远程哈希在补推之后又动过，说明是有人在生产后台改了数据，按本地补推会覆盖那次改动，必须先向用户报明两侧的值与时刻。2026-10-22 实测：`ext_permission_nodes` 本地哈希 `08d27c316b` 从 07:54 到 08:48 未变，远程 `d49620adc9 → 08d27c316b`（补推生效）`→ 6d11b2a359`（08:06–08:48 之间产生），差异是 `page_all_items.name_zh` 一行一列，远程值「全部条目」、本地值（迁移 0127 种子）「查看全部条目」。
 - 结论只建立在阶段 4 的复核报告上，不建立在过程日志上。
 - 核对范围随本地表清单更新：2026-10-26 迁移 0151 之后本地 76 张表（扣除 `sync-table-classification.mjs` 的 `EXCLUDE` 两张平台内部表 `d1_migrations`、`_cf_METADATA` 共 **74 张**参与核对；退役前 88 张 / 86 张），其中派生表只剩 `ext_admin_typeahead_*` **6 张 / 28,821 行**（退役前 20 张 / 97,086 行）。`reconcile-local-remote.mjs` 与 `sync-tables.mjs` 的 `DERIVED`、`RUNTIME_DRIFT`、`ENV_BOUND`、`LAZY_INDEX`、`DEEP_TABLES` 五个集合现在都由 `.scratch/backups/sync-table-classification.mjs` 单点导出，与 `.scratch/backups/realtables.txt` 一起每次同步前按本地实测刷新，否则新表会被漏检。
-- 2026-10-26 的刷新结果（本地实测 `.scratch/d1-sync-20261026/probe-cost-20261026.stdout.txt`）：`DEEP_TABLES` 32 张（移出已退役的 `item_search_metadata` 与改为 `ENV_BOUND` 的 `ext_login_credentials`，补入迁移 0145 / 0142 新增的 `ext_app_about_info`、`ext_book_status`）；`RUNTIME_DRIFT` 20 张（迁移 0166 把 `ext_app_request_quota`、`ext_auth_throttle`、`ext_login_credential_attempts`、`ext_replay_nonces` 四张换成一张 `ext_rate_limit`，从 23 张降到 20 张）；`ENV_BOUND` 5 张（补入 `api_keys`、`ext_login_credentials`）；判定范围内的内容表 37 张 / 本地 9,915 行，整表重推的写额度上界 19,830 行写（日额度的 19.8%）。只比行数、不做内容哈希的内容表 5 张：`ext_api_key_owners`、`ext_content_correction`、`ext_content_report`、`passkey`、`theme_drafts`。
+- 2026-10-26 的刷新结果（本地实测 `.scratch/d1-sync-20261026/probe-cost-20261026.stdout.txt`）：`DEEP_TABLES` 32 张（移出已退役的 `item_search_metadata` 与改为 `ENV_BOUND` 的 `ext_login_credentials`，补入迁移 0145 / 0142 新增的 `ext_app_about_info`、`ext_book_status`）；**`ext_book_status` 于 2026-11-09 随迁移 0194 退役（ADR-0072）——条目保留在 `DEEP_TABLES`（ADR-0068 先例：旧表名仍须留在清单），工具对不在本地清单里的成员打 `[跳过]` 并继续，不打断核对报告**；`RUNTIME_DRIFT` 20 张（迁移 0166 把 `ext_app_request_quota`、`ext_auth_throttle`、`ext_login_credential_attempts`、`ext_replay_nonces` 四张换成一张 `ext_rate_limit`，从 23 张降到 20 张）；`ENV_BOUND` 5 张（补入 `api_keys`、`ext_login_credentials`）；判定范围内的内容表 37 张 / 本地 9,915 行，整表重推的写额度上界 19,830 行写（日额度的 19.8%）。只比行数、不做内容哈希的内容表 5 张：`ext_api_key_owners`、`ext_content_correction`、`ext_content_report`、`passkey`、`theme_drafts`。
 - `DEEP_TABLES` 与 `RUNTIME_DRIFT` 必须互斥：`auth_session` 同时属于两者时，两侧 Worker 各自的会话会让全列内容哈希永远报「真不一致」。2026-10-22 实测把 `auth_session` 从 `DEEP_TABLES` 移出后，深校验项从 162 降到 160。2026-10-26 起 `reconcile-local-remote.mjs` 对不在本地清单里的 `DEEP_TABLES` 成员打 `[跳过]` 并继续（表退役时不再让本地取数那一步抛 `no such table` 打断整份报告），互斥性由 `.scratch/d1-sync-20261026/probe-cost-20261026.mjs` 只读校验。
 
 ## 不参与一致性判定的四类表
@@ -79,9 +79,20 @@
 - 阶段 0 / 2 / 4 的只读查询、阶段 1 的部署、阶段 3 的补推，都要用户当场指令；执行前复述命令、影响范围与写入行数。
 - 部署从当前工作树构建，未提交的改动会一同上线；要让生产只运行已提交代码，先完成手动提交再部署。
 
-## 主题写库必须用绑定参数（完整条文）
+## 一切 D1 数据导入必须用绑定参数（完整条文）
 
-`AGENTS.md` 常驻区只保留这条规则的四条结论，以下是完整条文与量化理由。数字与常驻区同源，改动时两处一起改。
+`AGENTS.md` 常驻区只放一行指针，以下是完整条文与量化理由；数字与 `docs/zh/08-db-schema.md` 同源，改动时两处一起改。
+
+| | 通道 1：D1 REST 批量 | 通道 2：静态迁移 / SQL 文件 |
+| --- | --- | --- |
+| 载体 | `{sql, params}`，请求体 `{batch}` | `wrangler d1 migrations apply` / `d1 execute --file` |
+| SQL 文本 | 只有 `?` 占位；工具护栏单条 ≤64KB | 字面量 SQL，**无 params** |
+| 100KB 上限 | **不占**（值在 `params` 数组，不计入语句文本） | **占**，实测 75KB 通过 / 135KB 报 `SQLITE_TOOBIG` |
+| 校验 | `?` 个数 == `params` 个数 | 文件内按 <80KB 分块 |
+| 适用 | 差异行补推、整行覆盖、主题大列 | 建表 / 删表 / 索引 / 触发器 / 默认种子 |
+| 额度回报 | 逐批 `meta.rows_read` / `rows_written` | 不回报，写入量是推断值 |
+
+判定迁移是否超限时，按 SQL 词法切分（逐字符跟踪单引号状态、`''` 转义、跳过 `--` 行内注释，只在字符串外的 `;` 处切分）；**不要用 `/;\s*\n/` 正则**——seed 迁移每条 INSERT 结尾形如 `'); -- 行内注释`，分号后不是换行，会把多条合并误报为一条超长语句。2026-11-09 用正确切分法复核：41 支待应用迁移共 268 条语句、最长 81,842 B（0186）、`>100KB` 为 0；`0180` 本身 18 条分批 INSERT、最长 8,739 B。
 
 - 一切向 `themes` / `theme_drafts` 写行的代码——Worker `src/server/themes/ThemeStore.ts`、管理 CLI `manage-cli/theme.ts`，以及任何后续新增的主题安装 / 发布 / 草稿 / 迁移路径——都必须使用**绑定参数**：SQL 里只写 `?` 占位，值经 `.bind(...)` / `queryD1WithParameters(...)` 传。严禁把 `bundle_json` 等大列用模板插值拼进 SQL 字面量。
 - 理由（量化）：D1 对**单条 SQL 语句的字面量长度有上限，实测约 100KB**（75KB 可通过、135KB 报 `SQLITE_TOOBIG`）。中文主题 `feed-zh` 的 `bundle_json` 按 2026-10-26 本地 `themes` 表实测：未删除 9 行最大 **119,974 字节**（激活行 `local.feed-zh@0.1.54`）、合计 513,506 字节；含 3 行墓碑的 12 行最大 121,180 字节、合计 816,400 字节。按字面量拼必失败；绑定参数不计入 SQL 文本长度，可正常入库。

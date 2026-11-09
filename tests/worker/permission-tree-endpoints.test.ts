@@ -86,10 +86,11 @@ describe("GET /ajax/rbac/permission-tree", () => {
     // 0191（ADR-0069）退役 6 个 legacy 内容看板后，book 码叶重建到 page_book_info。
     expect(codes.has("page_book_info")).toBe(true);
     expect(codes.has("content:book:read")).toBe(true);
-    // 两端合计 101 行（PC 86 + App 15）；菜单管理页的两行已随 0135 退役，
+    // 两端合计 99 行（PC 84 + App 15）；菜单管理页的两行已随 0135 退役，
     // 书籍状态字典的页行与码叶子随 0142 进入 PC 端，关于页的 1 页行 + 2 码行
-    // 随 0145 进入 PC 端；0150/0154 加入登录方式与邮件设置；0191 删 22 行建 10 行。
-    expect(rows).toHaveLength(86);
+    // 随 0145 进入 PC 端；0150/0154 加入登录方式与邮件设置；0191 删 22 行建 10 行；
+    // 0194（ADR-0072）退役 book-statuses，删 page_book_statuses + content:book-status:manage 2 行。
+    expect(rows).toHaveLength(84);
     // App 端的行不在 PC 端的树里。
     expect(codes.has("group_app")).toBe(false);
     expect(codes.has("app:nav:read")).toBe(false);
@@ -294,16 +295,18 @@ describe("POST /ajax/rbac/permission-tree/save", () => {
 
   it("reparents a code row across pages and restores it afterwards", async () => {
     // 跨页改父 = 移动权限对象的位置（ADR-0038 的核心动作）。
+    // 0194（ADR-0072）退役 page_book_statuses 后，改用仍存在的 page_ming_ci
+    // 作为目标页（0191 重建，未被 0194 删），再恢复回初始父级 page_book_info。
     const {response, rows} = await save([
       {
         code: "content:book:read",
         op: "update",
-        patch: {parentCode: "page_book_statuses"},
+        patch: {parentCode: "page_ming_ci"},
       },
     ]);
     expect(response.status).toBe(200);
     const moved = rows.find((row) => row.code === "content:book:read");
-    expect(moved?.parentCode).toBe("page_book_statuses");
+    expect(moved?.parentCode).toBe("page_ming_ci");
 
     // 自恢复：还回 0191 重建的初始父级，等价回归测试看到的结构不变。
     const back = await save([

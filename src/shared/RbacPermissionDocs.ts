@@ -520,15 +520,6 @@ export const RBAC_PERMISSION_DOCS: Readonly<Record<string, RbacPermissionDoc>> =
       "清空间隔至少 10 秒、每日上限 30 次；清空后首次请求回源约 22,013 行读。",
     ],
   },
-  "content:book-status:manage": {
-    summary: "书籍状态管理（预留码）。",
-    gates: ["代码中暂无守卫引用"],
-    caveats: [
-      "目录已播种，但当前没有页面或端点校验它。",
-      "书籍状态的定义与配色走迁移种子（0142/0143），尚无运行时管理入口。",
-    ],
-  },
-
   // ── App 能力 · 搜索 / 名词 / 版本 / 公告 ────────────────────
   "app:search:global": {
     summary:

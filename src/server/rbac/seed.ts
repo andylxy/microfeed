@@ -56,7 +56,6 @@ export const RBAC_PERMISSIONS: RbacPermissionDef[] = [
   {code: "content:book:read", name: "查看书"},
   {code: "content:book:update", name: "编辑书"},
   {code: "content:book:delete", name: "删除书"},
-  {code: "content:book-status:manage", name: "书籍状态管理"},
   {code: "content:category:read", name: "查看分类"},
   {code: "content:chapter:create", name: "新建章节"},
   {code: "content:chapter:read", name: "查看章节"},

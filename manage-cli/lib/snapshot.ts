@@ -168,9 +168,10 @@ export const SNAPSHOT_TABLES = {
     // the mobile app's About screen; like announcements above, the rows are content —
     // a restored site must keep them or the About screen goes back to empty.
     "ext_app_about_info",
-    // Book status designations (migrations 0142, 0143). Operator-curated status codes
-    // (name, color) that the books board and the App's status filter render; a
-    // restored site keeping items but not their statuses would mislabel every book.
+    // Book status designations (migrations 0142, 0143). Table dropped in 0194
+    // (ADR-0072) but the name stays: historical snapshots made before 0194 still
+    // contain the table, and removing the entry breaks their restore on two
+    // hard checks (ADR-0068 precedent — same as ext_tcm_aliases / ext_menu).
     "ext_book_status",
     // ext_user_oauth 已随 ADR-0055 并入 auth_account（迁移 0165 删表）：QQ 绑定
     // 现在是 auth_account 的 providerId='qq' 行，随 durable 清单里的 auth_account

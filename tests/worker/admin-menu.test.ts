@@ -296,11 +296,9 @@ describe("readAdminMenu", () => {
     expect(menuIds(menu)).toEqual([
       ADMIN_MENU_CODES.ADMIN_HOME,
       "group_content",
-      // ADR-0069：六看板（books/volumes/categories/fangs/yao/term）退役后，book_statuses
-      // 升为「内容」组首项；其后依次是独立模块板（all_items 与 annotation_markers
-      // 沿用 0142/0127 的相对位置，book_info 之后接 ming_ci/zhong_yao/book_chapter/
-      // yao_alia/fang_yao，按各模块迁移的 sort）。
-      ADMIN_MENU_CODES.BOOK_STATUSES,
+      // ADR-0069 六看板退役、ADR-0072 退役 book_statuses 后，「内容」组首项是
+      // all_items；其后依次是 annotation_markers / book_info / ming_ci / zhong_yao /
+      // book_chapter / yao_alia / fang_yao（按各模块迁移的 sort）。
       ADMIN_MENU_CODES.ALL_ITEMS,
       ADMIN_MENU_CODES.ANNOTATION_MARKERS,
       ADMIN_MENU_CODES.BOOK_INFO,
@@ -342,8 +340,9 @@ describe("readAdminMenu", () => {
     expect(findItem(menu, ADMIN_MENU_CODES.WEBHOOKS))
       .toMatchObject({active: true, url: "/admin/webhooks/"});
     // A group has no landing page: it links to its first visible child.
-    // ADR-0069 后「内容」组首个可见子项是 book_statuses（原 books 已退役）。
-    expect(findItem(menu, "group_content")?.url).toBe("/admin/book-statuses/");
+    // ADR-0069 六看板退役、ADR-0072 退役 book_statuses 后，「内容」组首项是
+    // all_items（/admin/items/list/）。
+    expect(findItem(menu, "group_content")?.url).toBe("/admin/items/list/");
     expect(findItem(menu, "group_account")?.url).toBe("/admin/rbac/");
     expect(findItem(menu, "group_operations")?.url).toBe("/admin/devices/");
   });
